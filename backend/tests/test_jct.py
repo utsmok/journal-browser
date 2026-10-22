@@ -1,11 +1,13 @@
 """Unit tests for the JCT dump parsers (fixtures inline, no network)."""
 
+import httpx
 from sqlalchemy import func, select
 
 from conftest import requires_db
 from journal_browser.harvest.common import parse_csv_rows
 from journal_browser.harvest.jct import (
     INDEX_URL,
+    _download_failure,
     _store_agreement,
     parse_agreement,
     parse_index,
@@ -80,6 +82,24 @@ def test_row_issn_prefers_online():
     # broken online falls back to print
     assert row_issn({"ISSN (Online)": "junk", "ISSN (Print)": "00431397"}) == "0043-1397"
     assert row_issn({"ISSN (Online)": "", "ISSN (Print)": ""}) is None
+
+
+def test_download_failure_details():
+    request = httpx.Request("GET", "https://example.com/kar.csv")
+    response = httpx.Response(403, text="Forbidden: quota exceeded", request=request)
+    exc = httpx.HTTPStatusError("403", request=request, response=response)
+    assert _download_failure("kar2026caul", "https://example.com/kar.csv", exc) == {
+        "esac_id": "kar2026caul",
+        "url": "https://example.com/kar.csv",
+        "status": 403,
+        "body_snippet": "Forbidden: quota exceeded",
+    }
+
+
+def test_download_failure_transport_error_has_no_status():
+    failure = _download_failure("x2026", "https://example.com/x.csv", httpx.ConnectError("boom"))
+    assert failure["status"] is None
+    assert "boom" in failure["body_snippet"]
 
 
 @requires_db

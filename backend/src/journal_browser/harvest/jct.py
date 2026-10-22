@@ -9,6 +9,7 @@ normalization; publisher names are placeholder codes until reconcile.
 
 import asyncio
 import logging
+import random
 import re
 from datetime import UTC, date, datetime
 from typing import Any
@@ -129,6 +130,17 @@ def _parse_date(value: str) -> date | None:
 
 def _clean(value: str | None) -> str | None:
     return (value or "").strip() or None
+
+
+def _download_failure(esac_id: str, url: str, exc: Exception) -> dict[str, Any]:
+    """Stats record for a sheet download that exhausted its retries."""
+    response = getattr(exc, "response", None)
+    return {
+        "esac_id": esac_id,
+        "url": url,
+        "status": getattr(response, "status_code", None),
+        "body_snippet": (getattr(response, "text", None) or str(exc))[:200],
+    }
 
 
 async def _upsert_publisher(session: AsyncSession, code: str) -> int:
@@ -267,49 +279,66 @@ async def main(session: AsyncSession, limit: int | None = None) -> dict[str, Any
         stats: dict[str, Any] = {
             "agreements": 0,
             "agreements_failed": 0,
+            "failed_downloads": [],
+            "parse_failures": [],
             "journals": 0,
             "institutions": 0,
             "skipped_no_issn": 0,
         }
         for agreement in agreements:
-            for attempt in range(2):
-                try:
-                    csv_data, _ = await download_to_landing(
-                        session,
-                        ingest,
-                        "jct",
-                        "agreement",
-                        agreement["data_url"],
-                        suffix=".csv",
-                        source_pk=agreement["esac_id"],
-                    )
-                    journals, institutions, skipped = parse_agreement(parse_csv_rows(csv_data))
-                    await ingest.ingest_record(
-                        agreement["esac_id"],
-                        payload={
-                            "index_row": agreement["raw"],
-                            "journals": journals,
-                            "institutions": institutions,
-                        },
-                    )
-                    await _store_agreement(session, agreement, journals, institutions, fetched_at)
-                except Exception:
-                    await session.rollback()
-                    if attempt == 0:
-                        # Google throttles bursts of published-CSV fetches; try once more
-                        await asyncio.sleep(5)
-                        continue
-                    await ingest.record_parse_failure(
-                        {"source_pk": agreement["esac_id"], "reason": "fetch/parse/store failed"}
-                    )
-                    stats["agreements_failed"] += 1
-                    break
-                stats["agreements"] += 1
-                stats["journals"] += len(journals)
-                stats["institutions"] += len(institutions)
-                stats["skipped_no_issn"] += skipped
-                await ingest.commit()
-                break
+            # Google throttles bursts of published-CSV fetches; pace with jitter.
+            await asyncio.sleep(random.uniform(0.5, 1.5))
+            try:
+                csv_data, _ = await download_to_landing(
+                    session,
+                    ingest,
+                    "jct",
+                    "agreement",
+                    agreement["data_url"],
+                    suffix=".csv",
+                    source_pk=agreement["esac_id"],
+                    retries=5,
+                )
+            except Exception as exc:
+                await session.rollback()
+                stats["agreements_failed"] += 1
+                stats["failed_downloads"].append(
+                    _download_failure(agreement["esac_id"], agreement["data_url"], exc)
+                )
+                await ingest.record_parse_failure(
+                    {"source_pk": agreement["esac_id"], "reason": "download failed"}
+                )
+                continue
+            try:
+                journals, institutions, skipped = parse_agreement(parse_csv_rows(csv_data))
+                await ingest.ingest_record(
+                    agreement["esac_id"],
+                    payload={
+                        "index_row": agreement["raw"],
+                        "journals": journals,
+                        "institutions": institutions,
+                    },
+                )
+                await _store_agreement(session, agreement, journals, institutions, fetched_at)
+            except Exception as exc:
+                await session.rollback()
+                stats["agreements_failed"] += 1
+                stats["parse_failures"].append(
+                    {
+                        "esac_id": agreement["esac_id"],
+                        "url": agreement["data_url"],
+                        "error": str(exc)[:200],
+                    }
+                )
+                await ingest.record_parse_failure(
+                    {"source_pk": agreement["esac_id"], "reason": "parse/store failed"}
+                )
+                continue
+            stats["agreements"] += 1
+            stats["journals"] += len(journals)
+            stats["institutions"] += len(institutions)
+            stats["skipped_no_issn"] += skipped
+            await ingest.commit()
 
         twente_ror = get_settings().institution_ror
         twente_esac_ids = list(
@@ -337,4 +366,6 @@ async def main(session: AsyncSession, limit: int | None = None) -> dict[str, Any
         f"twente_deals={stats.get('twente_deals')}"
     )
     print(f"jct twente esac_ids: {stats.get('twente_esac_ids')}")
+    for failure in stats.get("failed_downloads", []):
+        print(f"jct failed download: {failure}")
     return stats
