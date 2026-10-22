@@ -6,11 +6,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from . import __version__
 from .config import get_settings
 from .db import get_session
+from .routers import deals, journals, meta
 
-router = APIRouter(prefix="/api/v1")
+api_router = APIRouter(prefix="/api/v1")
+api_router.include_router(journals.router)
+api_router.include_router(deals.router)
+api_router.include_router(meta.router)
 
 
-@router.get("/healthz")
+@api_router.get("/healthz")
 async def healthz(session: AsyncSession = Depends(get_session)) -> dict:
     await session.execute(text("SELECT 1"))
     return {"status": "ok", "version": __version__}
@@ -27,7 +31,7 @@ def create_app() -> "FastAPI":  # noqa: F821
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    app.include_router(router)
+    app.include_router(api_router)
     return app
 
 
