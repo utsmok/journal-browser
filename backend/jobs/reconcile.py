@@ -9,7 +9,11 @@ import json
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
-from journal_browser.harvest.reconcile import reconcile_deals, render_curation_report
+from journal_browser.harvest.reconcile import (
+    enforce_unique_agreement_data,
+    reconcile_deals,
+    render_curation_report,
+)
 
 
 async def main() -> None:
@@ -17,9 +21,12 @@ async def main() -> None:
     maker = async_sessionmaker(engine, expire_on_commit=False)
     async with maker() as session:
         stats = await reconcile_deals(session)
-        report = await render_curation_report(session)
+        actions = await enforce_unique_agreement_data(session)
+        report = await render_curation_report(session, actions)
     await engine.dispose()
     print(json.dumps(stats))
+    if actions:
+        print(json.dumps({"duplicate_data_guard": actions}, indent=1))
     print(f"curation report: {report}")
 
 

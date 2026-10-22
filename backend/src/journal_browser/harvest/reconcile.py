@@ -13,11 +13,21 @@ import re
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlalchemy import select, update
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
-from ..models import Deal, DealInstitution, DealJournal, Institution, ManualOverride, Publisher
+from ..models import (
+    Deal,
+    DealInstitution,
+    DealJournal,
+    Institution,
+    IssnMap,
+    Journal,
+    ManualOverride,
+    Publisher,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -295,7 +305,122 @@ def _esc(text: str | None) -> str:
     return (text or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-async def render_curation_report(session: AsyncSession) -> Path:
+async def enforce_unique_agreement_data(session: AsyncSession) -> list[dict[str, str]]:
+    """Detect agreements whose JCT journal lists are near-identical and fix.
+
+    The JCT public dump sometimes links two agreements to the same Google
+    Sheet (live case 2026-10: eme2025ukb served the Elsevier UKB sheet, so
+    Emerald's coverage silently doubled as Elsevier). For each suspect pair,
+    the agreement whose publisher matches the shared list's dominant
+    publisher keeps its rows; the other gets its derived journal/institution
+    rows removed (verbatim evidence stays in source_records + landing) and a
+    needs_curation flag until the JCT curators publish the correct sheet.
+
+    Returns the actions taken, for the curation report.
+    """
+    actions: list[dict[str, str]] = []
+    jct_deals = await _jct_deals(session)
+    if not jct_deals:
+        return actions
+    lists: dict[int, frozenset[str]] = {}
+    for d in jct_deals:
+        rows = await session.execute(
+            select(DealJournal.issn).where(DealJournal.deal_id == d.id)
+        )
+        issns = frozenset(r[0] for r in rows.all() if r[0])
+        if len(issns) >= 50:
+            lists[d.id] = issns
+    items = sorted(lists.items())
+    by_id = {d.id: d for d in jct_deals}
+    # Collect cross-publisher suspect pairs, then resolve each deal once
+    # against its highest-overlap partner (a wrong sheet can duplicate
+    # several legitimate agreements of the same publisher).
+    best: dict[int, tuple[float, int]] = {}
+    for i, (ida, sa) in enumerate(items):
+        for idb, sb in items[i + 1 :]:
+            overlap = len(sa & sb) / max(1, min(len(sa), len(sb)))
+            if overlap < 0.9:
+                continue
+            # Same-publisher agreements legitimately share most of their
+            # journal corpus across consortia; only cross-publisher
+            # duplication signals a mis-linked sheet.
+            if _code_of(by_id[ida].esac_id) == _code_of(by_id[idb].esac_id):
+                continue
+            for low, high, o in ((ida, idb, overlap), (idb, ida, overlap)):
+                if low not in best or o > best[low][0]:
+                    best[low] = (o, high)
+    actions: list[dict[str, str]] = []
+    for loser_id, (overlap, keeper_id) in sorted(best.items()):
+        if loser_id not in by_id:
+            continue
+        keeper, loser = await _resolve_pair(
+            session, by_id[keeper_id], by_id[loser_id], lists[keeper_id] | lists[loser_id]
+        )
+        if loser is None:
+            continue
+        await session.execute(
+            sa_delete(DealJournal).where(DealJournal.deal_id == loser.id)
+        )
+        await session.execute(
+            sa_delete(DealInstitution).where(DealInstitution.deal_id == loser.id)
+        )
+        reason = (
+            f"JCT data CSV is a duplicate of {keeper.esac_id} "
+            f"({overlap:.0%} identical ISSNs) - upstream index error; "
+            "awaiting the correct sheet from the JCT curators"
+        )
+        loser.needs_curation = True
+        loser.needs_curation_reason = reason
+        actions.append(
+            {
+                "keeper": keeper.esac_id or str(keeper.id),
+                "loser": loser.esac_id or str(loser.id),
+                "overlap": f"{overlap:.0%}",
+                "action": "purged derived rows + flagged needs_curation",
+            }
+        )
+    await session.commit()
+    return actions
+
+
+async def _resolve_pair(
+    session: AsyncSession, a: Deal, b: Deal, combined: frozenset[str]
+) -> tuple[Deal, Deal | None]:
+    """Pick keeper/loser for a duplicate pair by dominant publisher match.
+
+    Returns (a, b) ordered so the keeper comes first; (a, None) when the
+    dominant publisher cannot be determined (keep both, report only).
+    """
+    # Dominant publisher of the shared journal list, by journal count.
+    rows = await session.execute(
+        select(Journal.publisher_name, func.count())
+        .join(IssnMap, IssnMap.issn_l == Journal.issn_l)
+        .where(IssnMap.issn.in_(combined))
+        .group_by(Journal.publisher_name)
+        .order_by(func.count().desc())
+        .limit(1)
+    )
+    row = rows.first()
+    dominant = (row[0] or "").casefold() if row else ""
+    if not dominant:
+        return a, None
+    names = {a.id: (await _publisher_names(session)).get(a.publisher_id) or "",
+             b.id: (await _publisher_names(session)).get(b.publisher_id) or ""}
+    def _matches(d: Deal) -> bool:
+        name = names[d.id].casefold()
+        alias = (_canonical_name(_code_of(d.esac_id), name) or "").casefold()
+        return dominant in name or dominant in alias or alias in dominant
+    a_match, b_match = _matches(a), _matches(b)
+    if a_match and not b_match:
+        return a, b
+    if b_match and not a_match:
+        return b, a
+    return a, None
+
+
+async def render_curation_report(
+    session: AsyncSession, data_guard_actions: list[dict[str, str]] | None = None
+) -> Path:
     """Read-only HTML report for library staff."""
     publisher_names = await _publisher_names(session)
     deals = list((await session.execute(select(Deal))).scalars())
@@ -361,38 +486,18 @@ async def render_curation_report(session: AsyncSession) -> Path:
             f"<p>{skipped} JCT agreements are not Twente-affiliated and are out of "
             "scope for this browser; they stay in the database for provenance.</p>"
         )
-    # Upstream sanity: JCT agreement CSVs sometimes carry another
-    # publisher's journal list (eme2025ukb ships Elsevier's list verbatim).
-    # Flag Twente-relevant pairs with near-identical ISSN sets.
-    twente_deals = [d for d in deals if d.id in twente_deal_ids]
-    lists = {}
-    for d in twente_deals:
-        rows = await session.execute(
-            select(DealJournal.issn).where(DealJournal.deal_id == d.id)
-        )
-        sets = frozenset(r[0] for r in rows.all())
-        if len(sets) >= 50:
-            lists[d] = sets
-    seen: set[tuple[int, int]] = set()
-    overlaps: list[str] = []
-    items = sorted(lists.items(), key=lambda kv: kv[0].esac_id or "")
-    for i, (da, sa) in enumerate(items):
-        for db_, sb in items[i + 1 :]:
-            pair = (min(da.id, db_.id), max(da.id, db_.id))
-            if pair in seen:
-                continue
-            seen.add(pair)
-            j = len(sa & sb) / max(1, min(len(sa), len(sb)))
-            if j >= 0.9:
-                overlaps.append(
-                    f"<li>{_esc(da.esac_id or '')} vs {_esc(db_.esac_id or '')}: "
-                    f"{j:.0%} identical ISSN sets ({len(sa)} vs {len(sb)}) — likely "
-                    "an upstream data error; verify with the JCT curators</li>"
-                )
-    if overlaps:
+    # Duplicate-agreement guard: enforce_unique_agreement_data runs before
+    # the report and returns the purge/flag actions it took.
+    if data_guard_actions:
         sections.append(
-            "<h2>Suspicious journal-list overlap between Twente-relevant agreements</h2><ul>"
-            + "".join(overlaps)
+            "<h2>Duplicate agreement data (auto-guarded)</h2><ul>"
+            + "".join(
+                f"<li>{_esc(a['keeper'])} vs {_esc(a['loser'])}: "
+                f"{_esc(a['overlap'])} identical ISSN sets — kept the former, "
+                f"{_esc(a['action'])}. The loser's JCT CSV is an upstream index "
+                "error; request the correct sheet from the JCT curators.</li>"
+                for a in data_guard_actions
+            )
             + "</ul>"
         )
     if unresolvable:

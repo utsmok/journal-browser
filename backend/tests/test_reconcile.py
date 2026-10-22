@@ -275,3 +275,59 @@ async def test_curation_report_lists_unmatched(maker):
     assert "no matching JCT agreement" in text
     assert "not Twente-affiliated" in text  # unmatched JCT row, no Twente membership
     path.unlink()
+
+
+async def test_duplicate_data_guard_purges_cross_publisher(maker):
+    """A cross-publisher sheet twin loses its rows; same-publisher twins stay."""
+    from journal_browser.harvest.reconcile import enforce_unique_agreement_data
+    from journal_browser.models import IssnMap, Journal
+
+    async with maker() as session:
+        pub_els = await _publisher(session, "Elsevier")
+        pub_eme = await _publisher(session, "Emerald")
+        els = await _deal(session, pub_els.id, esac_id="els2025ukb")
+        eme = await _deal(session, pub_eme.id, esac_id="eme2025ukb")
+        els2 = await _deal(session, pub_els.id, esac_id="els2024vanderbilt")
+        for d in (els, eme, els2):
+            d.start_year, d.end_year = 2025, 2027
+        issns = [f"{i:04d}-0000" for i in range(60)]
+        for target in (els, eme, els2):
+            for i, issn in enumerate(issns):
+                session.add(
+                    DealJournal(
+                        deal_id=target.id, issn=issn, journal_name=f"J{i}",
+                        source="jct",
+                    )
+                )
+        j = Journal(
+            issn_l="0000-0000", title="Elsevier Journal",
+            publisher_name="Elsevier",
+        )
+        session.add(j)
+        for issn in issns[:5]:
+            session.add(IssnMap(issn=issn, issn_l="0000-0000", source="jct"))
+        await session.commit()
+
+    async with maker() as s2:
+        actions = await enforce_unique_agreement_data(s2)
+    losers = {a["loser"] for a in actions}
+    assert losers == {"eme2025ukb"}
+
+    async with maker() as s3:
+        for esac, expected in (
+            ("els2025ukb", 60), ("els2024vanderbilt", 60), ("eme2025ukb", 0)
+        ):
+            deal = (await s3.execute(
+                select(Deal).where(Deal.esac_id == esac)
+            )).scalar_one()
+            n = len((await s3.execute(
+                select(DealJournal).where(DealJournal.deal_id == deal.id)
+            )).all())
+            assert n == expected, esac
+        flagged = (await s3.execute(
+            select(Deal).where(Deal.esac_id == "eme2025ukb")
+        )).scalar_one()
+        assert flagged.needs_curation is True
+        assert "els2025ukb" in flagged.needs_curation_reason or "els2024" in (
+            flagged.needs_curation_reason or ""
+        )
