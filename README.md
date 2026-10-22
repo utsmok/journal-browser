@@ -3,15 +3,11 @@
 A public search tool that helps researchers at the University of Twente find where to
 publish: which journals are covered by open access deals, what publishing there costs,
 how Twente publishes in them, and what they are about. Replaces the WUR-hosted
-[Open Access Journal Browser](https://library.wur.nl/WebQuery/utbrowser) with OpenAlex
-as the single bibliometric data source. Built as a proof of concept for Twente first,
-then released as an open-source project other universities can run.
+[Open Access Journal Browser](https://library.wur.nl/WebQuery/utbrowser) using ONLY openly 
+available data. Built as a proof of concept for Twente first, maybe i'll tinker with it
+so it's easy for other universities to run. The basic stack should transfer over, but
+it'll need a lot of hand-tuning at this stage to deploy for other institutes. 
 
-- **Scope & background**: [docs/scope.md](docs/scope.md)
-- **Implementation plan**: [docs/plan.md](docs/plan.md)
-- **Research**: [docs/research/](docs/research/) — current browser, openaccess.nl, deal
-  data sources (JCT/ESAC), OpenAlex, OpenAPC/Jisc, prior art, aletheca/ut-metadata
-- **Decisions & open questions**: [docs/decisions.md](docs/decisions.md)
 
 ## Stack
 
@@ -25,15 +21,14 @@ then released as an open-source project other universities can run.
 | Frontend | Next.js (App Router), TypeScript |
 | Deployment | Docker Compose (LAN server for the PoC) |
 
-Data window: publication years 2020 to now. OpenAlex cursor-paged harvests use the
-`OPENALEX_API_KEY` environment variable; single-entity lookups stay keyless.
+Currently selected data window: publication years 2020 to now. OpenAlex cursor-paged harvests use the
+`OPENALEX_API_KEY` environment variable; single-entity lookups don't need the API key.
 
 ## Layout
 
 ```
 backend/            FastAPI API (src/journal_browser) + jobs/ (ingestion) + tests/
 frontend/           Next.js app (app router)
-docs/               scope, plan, decisions, research/
 docker-compose.yml  db + backend + frontend
 ```
 
@@ -55,8 +50,8 @@ uv run uvicorn journal_browser.main:create_app --factory --reload
 cd frontend && npm install && npm run dev
 ```
 
-Copy `.env.example` to `.env` and set `JB_OPENALEX_API_KEY` before running harvest
-jobs (only cursor-paged harvests use the key; single-entity lookups are keyless).
+Copy `.env.example` to `.env` and set the API keys before running harvest
+jobs.
 
 ## Data pipeline (run order)
 
@@ -72,24 +67,8 @@ uv run python jobs/harvest_stats.py          # Twente works 2020+ -> per-journal
 uv run python jobs/backfill_flags.py         # recompute works_2020_plus / last_active_year
 ```
 
-**Deals are manual.** The deal register is exactly the owner-verified deals carrying a
-`deal_institutions` link to the home institution (16 as of 2026-10-23). Nothing
-auto-writes deals: the JCT/openaccess.nl/reconcile harvesters were removed on
-2026-10-23 (owner decision; see decisions.md #14), and `jobs/purge_non_twente_deals.py`
-deletes any deal without a home link. New or changed deals go in through a curation
-job like `jobs/apply_curation_2026_10_22.py`; raw JCT/openaccess.nl copies stay in
-`landing/` for reference.
+**Deals are manually added.** New or changed deals should go in through a curation
+job like `jobs/apply_curation_2026_10_22.py`. This is because it's apparently 
+extremely hard for publishers to just give a list of journals that are covered
+in a publishing deal. (yet another reason to get ri.. uh, i mean move to diamond OA)
 
-The search corpus is everything with more than 3 publications since 2020
-(`works_2020_plus > 3`, owner decision; see decisions.md #15). Green-OA (Jisc) and
-cited-by-Twente harvests are scaffolded behind config flags and stay off until
-keys/approval land.
-
-## Status
-
-Phases 0-10 of [docs/plan.md](docs/plan.md) are built: the OpenAlex sources sweep,
-scimagojr metrics, Pure-canonical Twente statistics (Pure OAI + OpenAIRE/Crossref
-enrichment), the search API, and the frontend with the limitations/caveat system.
-Deal data is a manually maintained register (decisions.md #14); the corpus presents
-journals with >3 works since 2020 (decisions.md #15). Post-review fixes and the
-owner-decision changes are described in [docs/review-2026-10-22.md](docs/review-2026-10-22.md).
