@@ -27,7 +27,6 @@ export type JournalSearchParams = {
   doaj?: boolean;
   quartile?: string;
   topic?: string;
-  scope?: "quality" | "all";
   sort?: SortKey;
   cursor?: string;
   limit?: number;

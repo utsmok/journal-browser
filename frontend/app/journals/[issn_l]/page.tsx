@@ -9,7 +9,6 @@ import {
   DealBadge,
   OaFlag,
   QuartileBadge,
-  QualityBarBadge,
 } from "@/components/badges";
 import { SourceNote } from "@/components/source-note";
 import { OaSplit, StatBars } from "@/components/stat-bars";
@@ -22,7 +21,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useJournal } from "@/hooks/use-api";
-import type { Attribution, DealOut } from "@/lib/api";
+import type {
+  Attribution,
+  DealOut,
+  JournalDetailResponse,
+} from "@/lib/api";
 
 type NamedTopic = { display_name?: string };
 type CountByYear = { year?: number; works_count?: number };
@@ -144,7 +147,7 @@ function DealPanel({
           )}
           {deal.contract_url && <External href={deal.contract_url}>Contract</External>}
           {deal.jct_data_url && <External href={deal.jct_data_url}>JCT data</External>}
-          <SourceNote {...attribution} />
+          <SourceNote {...attribution} codes={attribution.caveat_codes} />
         </div>
       </CardContent>
     </Card>
@@ -178,7 +181,7 @@ export default function JournalPage() {
       </div>
     );
 
-  const { journal, stats, deals, attribution, summary_stats } = data;
+  const { journal, stats, deals, attribution, summary_stats, stats_totals: totals } = data;
   const recent = stats.filter((s) => s.year >= 2020);
   // Pure-canonical counts are the primary series (phase 10); years without
   // a pure_canon row fall back to the OpenAlex institution-filter cut.
@@ -237,7 +240,6 @@ export default function JournalPage() {
           <h1 className="text-3xl font-bold">{journal.title ?? journal.issn_l}</h1>
           <OaFlag isOa={journal.is_oa} />
           <QuartileBadge quartile={journal.quartile ?? null} />
-          {!journal.in_quality_bar && <QualityBarBadge />}
         </div>
         <p className="mt-1.5 text-[var(--muted-foreground)]">
           {journal.publisher_name ?? "Unknown publisher"}
@@ -277,7 +279,10 @@ export default function JournalPage() {
                 </External>{" "}
                 for green OA routes.
                 <div className="mt-2">
-                  <SourceNote {...(attribution.deals ?? {})} />
+                  <SourceNote
+                    {...(attribution.deals ?? {})}
+                    codes={attribution.deals?.caveat_codes}
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -302,7 +307,10 @@ export default function JournalPage() {
                 </p>
               )}
               <div className="mt-3">
-                <SourceNote {...(attribution.oa_status ?? {})} />
+                <SourceNote
+                  {...(attribution.oa_status ?? {})}
+                  codes={attribution.oa_status?.caveat_codes}
+                />
               </div>
             </CardContent>
           </Card>
@@ -342,15 +350,17 @@ export default function JournalPage() {
                 </p>
               )}
               <p className="mt-3 text-sm">
-                {journal.twente_works.toLocaleString("en")} UT works total
-                since 2020{" "}
-                <span className="text-[var(--muted-foreground)]">
-                  ({worksSource})
-                </span>
-                .
+                {totals.pure_canon.toLocaleString("en")} UT works total since
+                2020 <span className="text-[var(--muted-foreground)]">(Pure)</span>{" "}
+                · OpenAlex institution filter:{" "}
+                {totals.openalex_institution_filter.toLocaleString("en")}{" "}
+                <span className="text-[var(--muted-foreground)]">(cross-check)</span>.
               </p>
               <div className="mt-2">
-                <SourceNote {...(barsSource.note ?? {})} />
+                <SourceNote
+                  {...(barsSource.note ?? {})}
+                  codes={barsSource.note?.caveat_codes}
+                />
               </div>
             </CardContent>
           </Card>
@@ -378,7 +388,10 @@ export default function JournalPage() {
                   value={num("i10_index")?.toLocaleString("en") ?? "—"}
                 />
               </div>
-              <SourceNote {...(attribution.metrics ?? {})} />
+              <SourceNote
+                {...(attribution.metrics ?? {})}
+                codes={attribution.metrics?.caveat_codes}
+              />
               {latestSjr && (
                 <div className="border-t border-[var(--border)] pt-4">
                   <div className="grid grid-cols-3 gap-4">
@@ -397,7 +410,10 @@ export default function JournalPage() {
                     />
                   </div>
                   <div className="mt-3">
-                    <SourceNote {...(attribution.scimagojr ?? {})} />
+                    <SourceNote
+                      {...(attribution.scimagojr ?? {})}
+                      codes={attribution.scimagojr?.caveat_codes}
+                    />
                   </div>
                 </div>
               )}
@@ -449,7 +465,10 @@ export default function JournalPage() {
                   </p>
                 )}
                 <div className="mt-3">
-                  <SourceNote {...(attribution.apc_evidence ?? {})} />
+                  <SourceNote
+                    {...(attribution.apc_evidence ?? {})}
+                    codes={attribution.apc_evidence?.caveat_codes}
+                  />
                 </div>
               </CardContent>
             </Card>

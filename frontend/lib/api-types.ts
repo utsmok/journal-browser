@@ -214,11 +214,6 @@ export interface components {
             /** Needs Curation Reason */
             needs_curation_reason: string | null;
             /**
-             * Twente Relevant
-             * @default false
-             */
-            twente_relevant: boolean;
-            /**
              * Journal Count
              * @default 0
              */
@@ -311,6 +306,13 @@ export interface components {
              */
             stats: components["schemas"]["StatsYear"][];
             /**
+             * Stats Totals
+             * @default {}
+             */
+            stats_totals: {
+                [key: string]: number;
+            };
+            /**
              * Trend
              * @default []
              */
@@ -357,11 +359,6 @@ export interface components {
             in_scimago: boolean;
             /** Last Active Year */
             last_active_year?: number | null;
-            /**
-             * In Quality Bar
-             * @default true
-             */
-            in_quality_bar: boolean;
             /**
              * Deal Covered
              * @default false
@@ -476,7 +473,6 @@ export interface operations {
                 doaj?: boolean | null;
                 quartile?: string | null;
                 topic?: string | null;
-                scope?: string;
                 sort?: string;
                 cursor?: string | null;
                 limit?: number;
@@ -542,7 +538,6 @@ export interface operations {
         parameters: {
             query?: {
                 status?: string;
-                scope?: string;
             };
             header?: never;
             path?: never;

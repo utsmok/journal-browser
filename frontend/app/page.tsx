@@ -11,9 +11,8 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
-import { DealBadge, OaFlag, QuartileBadge, QualityBarBadge } from "@/components/badges";
+import { DealBadge, OaFlag, QuartileBadge } from "@/components/badges";
 import { SourceNote } from "@/components/source-note";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -35,7 +34,7 @@ const SORTS: { value: SortKey; label: string }[] = [
   { value: "2yr_mean_citedness", label: "2yr mean citedness" },
 ];
 
-type FacetValue = { value: string; count: number; label?: string };
+type FacetValue = { value: string; count?: number; label?: string };
 
 export default function HomePage() {
   // useSearchParams needs a Suspense boundary during prerender.
@@ -52,8 +51,9 @@ function SearchView() {
   const pathname = usePathname();
 
   const spQ = sp.get("q") ?? "";
-  const scope: "quality" | "all" = sp.get("scope") === "all" ? "all" : "quality";
-  const sort = (sp.get("sort") ?? "relevance") as SortKey;
+  // A browse-all with no query has nothing to rank, so UT works is the
+  // sensible default order.
+  const sort = (sp.get("sort") ?? (spQ ? "relevance" : "institution_works")) as SortKey;
   const deal = sp.get("deal") ?? "";
   const oa = sp.get("oa");
   const doaj = sp.get("doaj");
@@ -100,7 +100,6 @@ function SearchView() {
     doaj: doaj === null ? undefined : doaj === "true",
     quartile: quartile || undefined,
     topic: topic || undefined,
-    scope,
     sort,
     cursor,
     limit: 20,
@@ -133,19 +132,21 @@ function SearchView() {
             }
           >
             {f.label ?? f.value}
-            <span className="ml-1 tabular-nums opacity-70">{f.count}</span>
+            {f.count !== undefined && (
+              <span className="ml-1 tabular-nums opacity-70">{f.count}</span>
+            )}
           </button>
         );
       })}
     </div>
   );
 
-  const topicValues = Object.entries(facets.topic ?? {})
+  const topicValues: FacetValue[] = Object.entries(facets.topic ?? {})
     .sort((a, b) => b[1] - a[1])
     .slice(0, 8)
     .map(([value, count]) => ({ value, count }));
   if (topic && !topicValues.some((t) => t.value === topic))
-    topicValues.unshift({ value: topic, count: 0 });
+    topicValues.unshift({ value: topic });
 
   const columns = React.useMemo<ColumnDef<JournalListItem>[]>(
     () => [
@@ -164,9 +165,6 @@ function SearchView() {
               </Link>
               <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
                 <span>{row.publisher_name ?? "Unknown publisher"}</span>
-                {scope === "all" && !row.in_quality_bar && (
-                  <QualityBarBadge />
-                )}
               </div>
             </div>
           );
@@ -214,7 +212,7 @@ function SearchView() {
         },
       },
     ],
-    [scope],
+    [],
   );
 
   const rows = data?.items ?? [];
@@ -261,17 +259,6 @@ function SearchView() {
 
       <section className="mb-6 space-y-2.5 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <label className="flex cursor-pointer items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={scope === "all"}
-              onChange={(event) =>
-                update({ scope: event.target.checked ? "all" : undefined })
-              }
-              className="size-4 accent-[var(--primary)]"
-            />
-            Include all journals
-          </label>
           <div className="flex items-center gap-2 text-sm">
             <label htmlFor="sort">Sort by</label>
             <select
@@ -289,7 +276,7 @@ function SearchView() {
           </div>
         </div>
         {facetGroup(
-          "deal_coverage",
+          "deal",
           Object.entries(facets.deal_coverage ?? {}).map(([value, count]) => ({
             value,
             count,

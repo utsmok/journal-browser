@@ -28,7 +28,6 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
           ) : (
             <Badge variant="secondary">Current</Badge>
           )}
-          {deal.twente_relevant && <Badge variant="muted">UT relevant</Badge>}
           {deal.needs_curation && (
             <Badge
               variant="outline"
