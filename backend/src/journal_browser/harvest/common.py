@@ -116,6 +116,19 @@ async def resolve_issn_l(session: AsyncSession, issn: str | None) -> str | None:
     return row.issn_l if row else issn
 
 
+async def lookup_issn_l(session: AsyncSession, issn: str | None) -> str | None:
+    """Strict ISSN → ISSN-L via issn_map only; None when unmapped.
+
+    Use for third-party data (scimagojr, OpenAPC fallback) where the input
+    ISSN is not known to be a linking ISSN.
+    """
+    issn = normalize_issn(issn)
+    if issn is None:
+        return None
+    row = await session.get(IssnMap, issn)
+    return row.issn_l if row else None
+
+
 async def upsert_issn_map(
     session: AsyncSession, issns: list[str] | None, issn_l: str | None, source: str
 ) -> None:

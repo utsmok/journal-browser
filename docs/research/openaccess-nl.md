@@ -52,3 +52,24 @@ publisher pages → deal pages). Risks: free-text variance across ~60 deals, pro
 institution lists, and edits-over-time (update notes inside text bodies). A **hybrid
 approach** fits: scrape as raw material → human-curated structured records in our DB →
 scraper alerts us when upstream text changes.
+
+## Implementation (2026-10-22)
+
+Implemented in `backend/src/journal_browser/harvest/openaccess_nl.py` +
+`backend/jobs/scrape_openaccess_nl.py` (run: `uv run python jobs/scrape_openaccess_nl.py
+[--limit N]`, sequential fetches). Overview + publisher + deal HTML land in the landing
+store before parsing; deal pages become `source_records` (source `openaccess.nl`).
+Domain upserts: `publishers.openaccess_nl_slug`; `deals` by natural key
+(publisher, duration) with status/start/end years, per-year OA counts, summary,
+conditions/workflow text, article-type and cap sentences, cap numbers (only unambiguous
+year:number pairs), first openaccess.nl-hosted contract PDF, provenance, and
+`needs_curation` when a deal page lacks a section or cap numbers are ambiguous.
+Deals are NOT linked to JCT here — the reconcile job owns that.
+
+Findings vs. the structure above: section markers are `<p><em><strong>Title</strong></em></p>`
+with two title variants ("License and conditions" — sometimes with a trailing " :" —
+and AIP's "Details and conditions of the licence"); PLOS's deal URL has no year suffix
+(`/en/publisherdeal/plos`); IOP's page marks both its licences "Archive" although the
+overview lists it under Current; archive-only publishers (BMJ, Brill, Frontiers,
+Walter de Gruyter) are crawled too, and their older deal pages often lack sections
+(flagged for curation, never fabricated).

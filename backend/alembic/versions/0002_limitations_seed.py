@@ -1,7 +1,7 @@
 """Seed the limitations registry.
 
 Revision ID: 0002_limitations
-Revises: a67cb288af46
+Revises: 05b5e211b8c9
 Create Date: 2026-10-22
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision: str = "0002_limitations"
-down_revision: Union[str, None] = "a67cb288af46"
+down_revision: Union[str, None] = "05b5e211b8c9"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -124,10 +124,12 @@ def upgrade() -> None:
         "ON CONFLICT (code) DO NOTHING"
     )
     for row in ROWS:
-        op.execute(stmt.bindparams(
-            code=row[0], source=row[1], scope=row[2], hint=row[3],
-            severity=row[4], url=row[5],
-        ))
+        op.execute(
+            stmt.bindparams(
+                code=row[0], source=row[1], scope=row[2], hint=row[3],
+                severity=row[4], url=row[5],
+            )
+        )
 
 
 def downgrade() -> None:
