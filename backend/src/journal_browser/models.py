@@ -15,10 +15,13 @@ from sqlalchemy import (
     CheckConstraint,
     Computed,
     Date,
+    DateTime,
     ForeignKey,
+    Float,
     Index,
     Integer,
     Numeric,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -382,6 +385,64 @@ class InstitutionTrend(Base):
 
 
 # ── Limitations registry + manual overrides ────────────────────────────────
+
+
+class UtWork(Base):
+    """Canonical UT work harvested from Pure (ris.utwente.nl) via OAI-PMH."""
+
+    __tablename__ = "ut_works"
+
+    pure_uuid: Mapped[str] = mapped_column(Text, primary_key=True)
+    doi_normalized: Mapped[str | None] = mapped_column(Text, nullable=True, unique=True)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    norm_title: Mapped[str] = mapped_column(Text, nullable=False)
+    year: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    work_type: Mapped[str | None] = mapped_column(Text, nullable=True)
+    publisher: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cerif_issn: Mapped[str | None] = mapped_column(Text, nullable=True)
+    oa_status: Mapped[str | None] = mapped_column(Text, nullable=True)
+    journal_issn_l: Mapped[str | None] = mapped_column(
+        ForeignKey("journals.issn_l"), nullable=True
+    )
+    first_seen_run: Mapped[int] = mapped_column(
+        ForeignKey("harvest_runs.id"), nullable=False
+    )
+    last_seen_run: Mapped[int] = mapped_column(
+        ForeignKey("harvest_runs.id"), nullable=False
+    )
+    retired_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    updated_at: Mapped[datetime] = _tstamp()
+
+
+class WorkIdentity(Base):
+    """Cross-source identity link between an external record and a UT work.
+
+    matched_by: 'doi' (auto-confirm), 'trgm:<threshold>[+v][+a]' (fuzzy,
+    curation candidates), or 'verbatim' (shared source string).
+    """
+
+    __tablename__ = "work_identity"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    source: Mapped[str] = mapped_column(Text, nullable=False)
+    source_pk: Mapped[str] = mapped_column(Text, nullable=False)
+    ut_work_id: Mapped[str] = mapped_column(
+        ForeignKey("ut_works.pure_uuid", ondelete="CASCADE"), nullable=False
+    )
+    matched_by: Mapped[str] = mapped_column(Text, nullable=False)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    status: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default="candidate"
+    )
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = _tstamp()
+    updated_at: Mapped[datetime] = _tstamp()
+
+    __table_args__ = (
+        UniqueConstraint("source", "source_pk", name="uq_work_identity_source"),
+    )
 
 
 class Limitation(Base):

@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     enable_jisc: bool = False
     jisc_api_key: str = ""
 
+    # Pure OAI-PMH endpoint (anonymous) and request pacing.
+    pure_oai_base_url: str = "https://ris.utwente.nl/ws/oai"
+    pure_oai_min_spacing: float = 1.0
+
     @property
     def ror_id(self) -> str:
         """Bare ROR id ('006hf6230') from the full ROR URL."""
