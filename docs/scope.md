@@ -2,52 +2,82 @@
 
 ## One-paragraph description
 
-A public search tool that helps researchers at our university answer one question:
-**"Where should I publish, and what will it cost me?"** For every journal it shows whether
-the journal falls under an open access publishing agreement (a "deal"), what that means in
-practice (discounts, caps, article types, workflow), how our university publishes in the
-journal (papers per year, OA status), and what the journal is about (subjects, metrics,
-similar journals). It replaces the WUR-hosted Journal Browser
-(`library.wur.nl/WebQuery/utbrowser` et al.) with OpenAlex as the sole bibliometric data
-source, dropping all Scopus dependencies.
+A public search tool that helps researchers at the University of Twente (ROR
+`https://ror.org/006hf6230`) answer one question: **"Where should I publish, and what
+will it cost me?"** For every journal it shows whether the journal falls under an open
+access publishing agreement (a "deal"), what that means in practice (discounts, caps,
+article types, workflow), how Twente publishes in the journal (papers per year, OA
+status, APCs actually paid), and what the journal is about (subjects, metrics, similar
+journals). It replaces the WUR-hosted Journal Browser
+(`library.wur.nl/WebQuery/utbrowser`) with OpenAlex as the sole bibliometric data
+source. The goal is a proof-of-concept demo for Twente first, then an open-source
+project other universities can launch and run for themselves.
+
+## Data scope
+
+- **Time window: publication years 2020 to now, everywhere.** All works queries,
+  statistics, and ingestion filters restrict to this window. Earlier data stays out
+  until explicitly expanded.
+- **Collect, do not derive (v1).** The system registers what sources natively provide
+  (OpenAlex `summary_stats`, scimagojr SJR/quartiles, OpenAPC costs). It does not
+  compute substitute metrics (CiteScore-lookalikes etc.) in v1.
+- **Known data limitations are first-class data.** Every source's caveats are registered
+  in a limitations registry (see plan.md), logged, and surfaced as caveat hints in the
+  frontend so users see where numbers come from and what they miss.
+- **Local copies of crucial data are always stored** (raw landing zone), so a source
+  disappearing or changing never loses information.
+
+## Data sources
+
+| Source | Access | Provides |
+|---|---|---|
+| OpenAlex | `aletheca` (our bibliofabric-based client) | journals (sources), works/stats, topics, OA flags, APC list prices, summary stats |
+| OpenAIRE | `aireloom` | OA versions, project/funder links, alternate records |
+| Crossref | `stavrophora` | journal metadata, licenses, funder refs |
+| cOAlition S JCT dump | CSV download (CC0) | deal → journal ISSN lists + institution RORs |
+| ESAC registry | web | agreement metadata (durations, parties) |
+| openaccess.nl | scrape + curation | NL deal narrative: caps, workflows, status, per-year OA counts |
+| OpenAPC | CSV download (ODbL) | article-level APC/TA costs (Twente rows exist), contracts |
+| scimagojr | CSV download | SJR, quartiles per ISSN |
+| Jisc Open Policy Finder | REST API (`x-api-key`, key pending) | green OA / self-archiving policies; replaces the Sherpa feed the old tool proxied |
 
 ## In scope
 
-1. **Deal data (the core)**: structured database of open publishing deals relevant to our
-   institution — parties, duration, status, journal lists (ISSN-level), caps, article
-   types, workflow text, contract links — assembled from the cOAlition S JCT public data
-   (CC0), the ESAC registry, and scraped/curated openaccess.nl content.
-2. **Journal search & browse**: free-text + facet search over ~200k OpenAlex sources
-   (facets: deal coverage, OA status, DOAJ listing, subject/topic); journal detail pages.
-3. **Institution statistics**: papers per year in each journal by our authors, OA-status
-   breakdown, and institution-level trend charts — computed from OpenAlex works.
-4. **Journal context**: OpenAlex metrics (`2yr_mean_citedness`, `h_index`), topics,
-   counts-by-year trends, APC list prices, SJR/quartiles via the open scimagojr CSV,
-   similar journals (co-citation by our staff + topic similarity).
-5. **Refresh infrastructure**: scheduled ingestion jobs (OpenAlex, JCT dump, scimagojr,
-   openaccess.nl scrape) with a raw-landing-zone + normalized-tables design and a
-   curation workflow for deal data that cannot be derived automatically.
+1. **Deal data (the core)**: structured database of open publishing deals relevant to
+   Twente, assembled from the JCT dump, ESAC, openaccess.nl, amended with OpenAPC
+   cost evidence. Go to the original sources; never scrape the old journal browser.
+2. **Journal search & browse**: free-text + facet search over OpenAlex sources (facets:
+   deal coverage, OA status, DOAJ listing, topic); journal detail pages.
+3. **Institution statistics**: Twente papers per year per journal (2020+), OA-status
+   breakdown, institution-level trends, actual APC spend from OpenAPC.
+4. **Journal context**: OpenAlex native metrics, topics, counts-by-year, APC prices,
+   scimagojr SJR/quartile, similar journals (framework included; co-citation batch job
+   is a secondary step, run only on request).
+5. **Caveat system**: limitation registry per data source + frontend hint components.
+6. **Refresh infrastructure**: scheduled ingestion with raw landing zone + normalized
+   tables and a curation workflow for deal data that cannot be derived automatically.
 
 ## Out of scope (for v1)
 
-- Multi-tenant/multi-institution views (the old tool serves all Dutch universities; v1
-  targets our institution only) — the schema keeps institution as data, so expansion is
-  configuration, not surgery.
-- User accounts, marked lists, email alerts (old tool has them; revisit after v1).
-- Green-OA/self-archiving policy display (Sherpa replacement) — separate integration,
-  noted as follow-up.
-- JCR/Scopus metric parity — intentionally replaced by open metrics.
+- Per-faculty breakdowns (the old tool's WUR science-group splits; Twente equivalents
+  are not part of v1).
+- Multi-tenant deployment; the schema keeps institution as data (ROR-keyed) so the
+  open-source release can make it a configuration option.
+- User accounts, marked lists, email alerts.
+- Any metric derivation beyond collecting what sources publish.
 
 ## Success criteria
 
 - A researcher can find a journal by title/ISSN and see within one page: deal coverage
-  for our institution, cost implication, caps if any, and where to read the details.
-- Every deal shown links to its openaccess.nl page and contract PDF; the deal's journal
-  list is traceable to its source (JCT data URL or manual curation record).
-- Journal statistics verified against OpenAlex queries for a sample of known journals.
-- Public read-only API (`/api/v1/...`) — no more screen-scraping a Perl app.
+  for Twente, cost implication, caps if any, and where to read the details.
+- Every deal links to openaccess.nl and the contract PDF; every journal list is
+  traceable to its source (JCT data URL or curation record).
+- Every displayed number carries its source and its registered caveats.
+- A demo for Twente runs with `docker compose up` on a LAN server, and the README is
+  good enough for another university to stand up their own instance.
 
 ## Key users
 
-- Researchers choosing a venue (primary).
-- Library/open-access staff maintaining deal information (curation interface, v1.1).
+- Twente researchers choosing a venue (primary; demo audience).
+- Library/open-access staff maintaining deal information (curation report).
+- Other universities (open-source adopters, post-PoC).

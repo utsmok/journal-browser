@@ -19,7 +19,6 @@ services:
     build: ./backend
     environment:
       JB_DATABASE_URL: postgresql+asyncpg://journal:journal@db:5432/journalbrowser
-      JB_OPENALEX_MAILTO: ${JB_OPENALEX_MAILTO:-}
     ports:
       - "8000:8000"
     depends_on:
