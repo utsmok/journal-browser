@@ -75,8 +75,9 @@ ATTRIBUTION = {
         source="openalex", caveat_codes=["openalex-oa-status", "openalex-coverage"]
     ),
     "stats": Attribution(
-        source="openalex",
-        caveat_codes=["window-2020", "institution-affiliation", "openalex-coverage"],
+        source="pure (primary) + openalex (cross-check)",
+        url="https://research.utwente.nl",
+        caveat_codes=["window-2020", "pure-canon-primary", "institution-affiliation"],
     ),
     "deals": Attribution(
         source="owner-curated register (openaccess.nl + JCT)",
