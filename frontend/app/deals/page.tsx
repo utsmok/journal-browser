@@ -32,10 +32,10 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
           {deal.needs_curation && (
             <Badge
               variant="outline"
-              className="border-[var(--destructive)] text-[var(--destructive)] normal-case"
+              className="border-[var(--primary)] text-[var(--primary-hover)] normal-case"
               title={deal.needs_curation_reason ?? undefined}
             >
-              needs curation
+              curation pending
             </Badge>
           )}
         </CardTitle>

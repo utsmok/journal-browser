@@ -4,6 +4,8 @@
 
 1. **Deal journal lists come from the cOAlition S JCT public dump (CC0), amended with
    openaccess.nl data.** Never scrape the old journal browser; go to the sources.
+   *(Superseded in part by decision 13 (2026-10-22): openaccess.nl is the canonical
+   deal register; JCT is enrichment only.)*
 2. **Stack**: FastAPI + SQLAlchemy 2 (async) + asyncpg on Postgres 17, Next.js,
    docker compose, `uv`.
 3. **Ingestion as plain `uv run` jobs** in `backend/jobs/` with a raw landing zone,
@@ -38,6 +40,26 @@
     corpus; the frontend defaults to the quality bar with a visible "include all
     journals" toggle and an "outside quality bar" badge in all-scope view.
     Expected band: ~50-70k in the default scope vs ~168k for the full corpus.
+13. **Deal source hierarchy + reliability (2026-10-22)**: openaccess.nl
+    publisher-deals pages are the **canonical register for Dutch deals**
+    (existence, parties, periods, public terms). The cOAlition S JCT public dump is
+    **enrichment only** (esac_id, machine-readable journal lists); JCT absence is
+    never evidence a deal does not exist. On conflicts, prefer openaccess.nl and
+    record the conflict in provenance/`needs_curation_reason` — never silently pick
+    a winner. Contract PDFs stay linked via `deals.contract_url` and are read by
+    the human curator; **no PDF auto-parse** — structured terms are recorded only
+    after human confirmation. Consequence for visibility: the deals listing shows
+    every canonical (openaccess.nl-verified) current Twente deal even when
+    `needs_curation=true`, with the uncertainty surfaced as a "curation pending"
+    badge instead of hiding the row.
+    **Curation queue (prioritized)**:
+    1. ACM (Twente 2026-2028; note JCT has no Twente ACM registration while
+       Eindhoven/Delft/Radboud/Leiden/UvA/Groningen do),
+    2. ACS (2026-2028, capped),
+    3. IOS Press.
+    Journal lists may come from openaccess.nl attachments or publisher pages;
+    contract PDF terms are curator-read only (structured fields recorded after
+    human confirmation, per the hierarchy above).
 
 ## Open questions
 

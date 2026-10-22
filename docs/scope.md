@@ -44,7 +44,8 @@ project other universities can launch and run for themselves.
 ## In scope
 
 1. **Deal data (the core)**: structured database of open publishing deals relevant to
-   Twente, assembled from the JCT dump, ESAC, openaccess.nl, amended with OpenAPC
+   Twente, assembled with openaccess.nl as the canonical deal register (decision 13),
+   enriched by the JCT dump (journal lists, esac IDs) and ESAC, amended with OpenAPC
    cost evidence. Go to the original sources; never scrape the old journal browser.
 2. **Journal search & browse**: free-text + facet search over OpenAlex sources (facets:
    deal coverage, OA status, DOAJ listing, topic); journal detail pages.
@@ -84,7 +85,7 @@ Verified end-to-end on 2026-10-22 against a fresh `docker compose up` stack
 | Capability | Live tool | v1 (this project) |
 |---|---|---|
 | Journal search + facets + sorting | yes | yes (facets: deal coverage, OA status, DOAJ, topic, quartile; quality-bar scope by default per decision 12, full corpus behind `scope=all`) |
-| Deal coverage + cost implication per journal | yes | yes (JCT + openaccess.nl; better structured) |
+| Deal coverage + cost implication per journal | yes | yes (openaccess.nl-canonical + JCT enrichment; better structured) |
 | SJR + quartile | yes (Scopus-based) | yes (scimagojr) |
 | CiteScore / SNIP / JCR IF | yes | no; OpenAlex `2yr_mean_citedness` + `h_index` instead, labeled |
 | Publications per year per journal (institution) | yes | yes (2020+ window) |

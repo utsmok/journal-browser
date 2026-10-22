@@ -3,7 +3,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
@@ -50,7 +50,15 @@ async def list_deals(
         query = query.where(Deal.status == status)
     relevant_ids = await _twente_deal_ids(session)
     if scope == "home":
-        query = query.where(Deal.id.in_(relevant_ids or {-1}))
+        # Decision 13: openaccess.nl rows are the canonical deal register — a
+        # missing JCT institution link hides nothing; uncertainty stays visible
+        # via needs_curation, never dropped.
+        query = query.where(
+            or_(
+                Deal.id.in_(relevant_ids or {-1}),
+                Deal.openaccess_nl_url.is_not(None),
+            )
+        )
     rows = (await session.execute(query)).all()
     return [
         _deal_out(deal, name, int(count or 0), deal.id in relevant_ids)

@@ -65,7 +65,9 @@ Jobs:
    cost information wherever a deal gives no explicit price.
 4. `reconcile`: match openaccess.nl deals ↔ JCT deals (publisher × duration); emit a
    curation report (HTML) of unmatched or conflicting rows (ACM local deals, non-Plan-S
-   deals, OpenAPC agreements without JCT counterpart).
+   deals, OpenAPC agreements without JCT counterpart). Per decision 13, openaccess.nl
+   is the canonical register and JCT is enrichment only: conflicts are recorded in
+   provenance/`needs_curation_reason`, contract PDFs are never auto-parsed.
 
 Acceptance: for each current openaccess.nl deal the DB shows a deal record with journal
 list (or an explicit needs-curation flag), institutions, cap info, and source links;
