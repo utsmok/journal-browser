@@ -98,13 +98,23 @@ def base_query(
 ):
     """Filtered select with computed columns; search + facet counts share it."""
     J = Journal
-    twoyr = cast(J.summary_stats.op("->>")("2yr_mean_citedness"), Numeric).label("twoyr")
+    # OpenAlex publishes this metric as "two_yr_mean_citedness".
+    twoyr = cast(J.summary_stats.op("->>")("two_yr_mean_citedness"), Numeric).label("twoyr")
     covered = DEAL_COVERED.correlate(J).label("deal_covered")
-    rank = (
-        func.ts_rank(J.search_vector, func.websearch_to_tsquery(text("'english'"), q))
-        if q
-        else cast(text("0"), Numeric).label("rank")
-    )
+    if q:
+        qstr = q.strip()
+        # Relevance = title-prefix match tier + FTS rank + prominence nudge
+        # from 2yr mean citedness. One expression so keyset pagination can
+        # compare (rank, issn_l) tuples; the tier spacing dwarfs FTS-rank and
+        # citedness ranges, so title matches always sort first, prominence
+        # orders within the tier.
+        rank = (
+            case((J.title.ilike(f"{qstr}%"), 100.0), else_=0.0)
+            + func.ts_rank(J.search_vector, func.websearch_to_tsquery(text("'english'"), qstr))
+            + func.coalesce(twoyr, 0.0) * 0.1
+        ).label("rank")
+    else:
+        rank = cast(text("0"), Numeric).label("rank")
     query = select(
         J.issn_l,
         J.title,

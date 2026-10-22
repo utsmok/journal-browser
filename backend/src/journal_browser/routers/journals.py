@@ -97,11 +97,14 @@ ATTRIBUTION = {
 
 
 def _to_list_item(data: dict) -> JournalListItem:
+    # Service output is already converted (twoyr renamed, rank popped);
+    # only raw rows (detail endpoint) need the rename here.
     data = dict(data)
-    data["twoyr_mean_citedness"] = (
-        float(data.pop("twoyr")) if data.get("twoyr") is not None else None
-    )
-    data.pop("rank", None)
+    if "twoyr" in data:
+        data["twoyr_mean_citedness"] = (
+            float(data.pop("twoyr")) if data.get("twoyr") is not None else None
+        )
+        data.pop("rank", None)
     return JournalListItem(**data)
 
 
@@ -224,7 +227,7 @@ async def journal_detail(issn_l: str, session: SessionDep) -> JournalDetailRespo
             deal_covered=bool(deals),
             twente_works=sum(s.works_count for s in stats),
             quartile=sjr_rows[-1].best_quartile if sjr_rows else None,
-            twoyr_mean_citedness=summary_stats.get("2yr_mean_citedness"),
+            twoyr_mean_citedness=summary_stats.get("two_yr_mean_citedness"),
         ),
         issns=journal.issns or [],
         alternate_titles=journal.alternate_titles or [],

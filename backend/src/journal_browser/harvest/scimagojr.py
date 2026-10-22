@@ -7,6 +7,8 @@ the file at landing/scimagojr/export_<year>.csv. Everything downstream
 works from that landed copy.
 """
 
+import csv
+import io
 import logging
 import re
 from pathlib import Path
@@ -39,14 +41,18 @@ COLUMNS = {
 def parse_export(data: bytes) -> list[dict[str, str]]:
     """Parse a scimagojr yearly export into row dicts (verbatim strings)."""
     text = data.decode("latin-1", errors="replace")
-    lines = text.splitlines()
-    start = next(i for i, line in enumerate(lines) if line.startswith("Rank"))
-    header = [h.strip() for h in lines[start].split(";")]
+    reader = csv.reader(io.StringIO(text), delimiter=";", quotechar='"')
     rows = []
-    for line in lines[start + 1 :]:
-        if not line.strip():
+    header = None
+    for values in reader:
+        if not values or not any(v.strip() for v in values):
             continue
-        values = [v.strip() for v in line.split(";")]
+        if header is None:
+            if values[0].strip() != "Rank":
+                continue  # preamble lines
+            header = [h.strip() for h in values]
+            continue
+        values = [v.strip() for v in values]
         if len(values) < len(header):
             values += [""] * (len(header) - len(values))
         rows.append(dict(zip(header, values, strict=False)))

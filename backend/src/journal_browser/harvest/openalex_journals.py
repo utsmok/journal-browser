@@ -85,9 +85,9 @@ async def _upsert_journal(session: AsyncSession, payload: dict[str, Any]) -> str
         for t in (payload.get("topics") or [])[:5]
     ]
     counts = payload.get("counts_by_year") or []
-    # counts_by_year entries are {year, works}; latest year with works > 0.
+    # counts_by_year entries are {year, works_count, ...}; latest year with works > 0.
     last_active = max(
-        (int(e["year"]) for e in counts if int(e.get("works") or 0) > 0),
+        (int(e["year"]) for e in counts if int(e.get("works_count") or 0) > 0),
         default=None,
     )
     values = dict(

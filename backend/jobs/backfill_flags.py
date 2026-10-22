@@ -23,7 +23,7 @@ UPDATE = text(
     FROM (
         SELECT issn_l, max((e->>'year')::int) AS latest
         FROM journals, jsonb_array_elements(counts_by_year) e
-        WHERE coalesce((e->>'works')::int, 0) > 0
+        WHERE coalesce((e->>'works_count')::int, 0) > 0
         GROUP BY issn_l
     ) y
     WHERE journals.issn_l = y.issn_l
