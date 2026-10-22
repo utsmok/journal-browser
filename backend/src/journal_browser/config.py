@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -7,7 +8,10 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_prefix="JB_", extra="ignore")
 
     database_url: str = "postgresql+asyncpg://journal:journal@localhost:5433/journalbrowser"
-    openalex_api_key: str = ""
+    # Reads the JB_-prefixed name or the common bare export in ~/.zshrc.
+    openalex_api_key: str = Field(
+        "", validation_alias=AliasChoices("JB_OPENALEX_API_KEY", "OPENALEX_API_KEY")
+    )
     cors_origins: list[str] = ["http://localhost:3000"]
 
     # The browser's home institution. ROR + name are configuration, never
