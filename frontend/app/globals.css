@@ -1,9 +1,72 @@
-* {
-  box-sizing: border-box;
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* Theme switching is class-based; the dark: variant must follow the class. */
+@custom-variant dark (&:is(.dark *));
+
+/*
+  openaccess.nl-inspired theme (docs/research/frontend-design.md).
+  Re-theme by replacing this token block: values map onto shadcn semantic
+  names, so components never hardcode colors.
+*/
+:root {
+  --background: #f8f9fc;
+  --foreground: #12110c;
+  --card: #ffffff;
+  --card-foreground: #12110c;
+  --muted: #f2f4f7;
+  --muted-foreground: #515c65;
+  --primary: #f06e00;
+  --primary-foreground: #ffffff;
+  --primary-hover: #d46200;
+  --secondary: #14274c;
+  --secondary-foreground: #ffffff;
+  --accent: #14274c;
+  --accent-foreground: #ffffff;
+  --destructive: #dc3545;
+  --destructive-foreground: #ffffff;
+  --border: #dee2e6;
+  --input: #dee2e6;
+  --ring: #f06e00;
+  --radius: 0.5rem;
 }
 
-body {
-  margin: 0;
-  color: #1a1a1a;
-  background: #fff;
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-base: var(--radius);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-montserrat), var(--font-inter), ui-sans-serif, system-ui,
+    sans-serif;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-heading);
+  }
 }

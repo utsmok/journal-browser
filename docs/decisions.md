@@ -23,6 +23,11 @@
    concerns deferred.
 10. **Licensing/attribution**: project private for now; no explicit attribution UI yet,
     but every record links to its upstream source and stores a local raw copy.
+11. **Frontend styling (2026-10-22)**: openaccess.nl-inspired theme for the initial
+    implementation, built on Tailwind v4 CSS variables + shadcn-style components +
+    TanStack Query/Table, patterns copied from the TCRC frontend. Re-theming to UT
+    branding is a token-block swap (TCRC's audited UT palette is prepared for that).
+    Typography: Inter + Montserrat (both SIL OFL, self-hosted via next/font).
 
 ## Open questions
 

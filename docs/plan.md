@@ -105,6 +105,14 @@ links. `/api/v1/meta/limitations` — the caveat registry. OpenAPI auto-document
 
 ## Phase 5 — Frontend (Next.js)
 
+Stack decision (details and sources in `docs/research/frontend-design.md`): Tailwind v4
+with a CSS-variable theme mapped onto shadcn semantic tokens, openaccess.nl-inspired
+palette (orange `#f06e00`, ink `#12110c`, surfaces `#f8f9fc`/`#f2f4f7`, navy `#14274c`),
+Inter + Montserrat via `next/font`. TanStack Query for server state (key factory +
+`keepPreviousData`), TanStack Table for the results list, openapi-typescript against the
+FastAPI schema. Re-theming to UT house style later means swapping the token block
+(TCRC's audited UT palette is the ready target); components never hardcode colors.
+
 - Home: search bar + facet chips + results list (title, publisher, deal badge, OA flag,
   Twente works count).
 - Journal page: deal panel (cost implication for Twente authors, cap status, article
