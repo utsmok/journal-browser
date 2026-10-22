@@ -173,6 +173,9 @@ async def journal_detail(issn_l: str, session: SessionDep) -> JournalDetailRespo
                 .where(
                     InstitutionWorksStats.issn_l == journal.issn_l,
                     InstitutionWorksStats.institution_id == HOME_INST,
+                    # pure_canon rows exist for the verify job cross-check;
+                    # the displayed OA split stays OpenAlex-derived.
+                    InstitutionWorksStats.source == "openalex_institution_filter",
                 )
                 .order_by(InstitutionWorksStats.year)
             )

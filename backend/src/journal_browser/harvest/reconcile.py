@@ -27,6 +27,8 @@ from ..models import (
     Journal,
     ManualOverride,
     Publisher,
+    UtWork,
+    WorkIdentity,
 )
 
 logger = logging.getLogger(__name__)
@@ -418,6 +420,10 @@ async def _resolve_pair(
     return a, None
 
 
+def _conf(value: float | None) -> str:
+    return f"{value:.2f}" if value is not None else "—"
+
+
 async def render_curation_report(
     session: AsyncSession, data_guard_actions: list[dict[str, str]] | None = None
 ) -> Path:
@@ -488,6 +494,39 @@ async def render_curation_report(
         )
     # Duplicate-agreement guard: enforce_unique_agreement_data runs before
     # the report and returns the purge/flag actions it took.
+    # Phase 10: trigram-matched work identities awaiting curation.
+    candidate_rows = (
+        await session.execute(
+            select(
+                WorkIdentity.source,
+                WorkIdentity.source_pk,
+                WorkIdentity.matched_by,
+                WorkIdentity.confidence,
+                WorkIdentity.note,
+                UtWork.title,
+            )
+            .join(UtWork, UtWork.pure_uuid == WorkIdentity.ut_work_id)
+            .where(WorkIdentity.status == "candidate")
+            .order_by(WorkIdentity.confidence.desc())
+            .limit(500)
+        )
+    ).all()
+    if candidate_rows:
+        sections.append(
+            "<h2>Work-identity candidates needing curation</h2><ul>"
+            + "".join(
+                f"<li>{_esc(r.source)}/{_esc(r.source_pk)} → “{_esc((r.title or '')[:90])}” "
+                f"[{_esc(r.matched_by)}, {_esc(_conf(r.confidence))}]"
+                f"{(' — ' + _esc(r.note[:90])) if r.note else ''}</li>"
+                for r in candidate_rows
+            )
+            + (
+                f"<li>… and more (showing {len(candidate_rows)})</li>"
+                if len(candidate_rows) == 500
+                else ""
+            )
+            + "</ul>"
+        )
     if data_guard_actions:
         sections.append(
             "<h2>Duplicate agreement data (auto-guarded)</h2><ul>"

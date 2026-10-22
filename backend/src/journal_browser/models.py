@@ -354,6 +354,9 @@ class InstitutionWorksStats(Base):
     __tablename__ = "institution_works_stats"
 
     institution_id: Mapped[int] = mapped_column(ForeignKey("institutions.id"), primary_key=True)
+    # 'pure_canon' (works harvested from the institution's Pure) or
+    # 'openalex_institution_filter' (OpenAlex works filter cross-check).
+    source: Mapped[str] = mapped_column(Text, primary_key=True)
     issn_l: Mapped[str] = mapped_column(String(9), primary_key=True)
     year: Mapped[int] = mapped_column(Integer, primary_key=True)
     works_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")

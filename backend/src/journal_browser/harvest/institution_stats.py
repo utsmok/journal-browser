@@ -14,12 +14,12 @@ from datetime import UTC, datetime
 from typing import Any
 
 from aletheca import AlethecaClient
-from sqlalchemy import delete, insert, select
+from sqlalchemy import delete, func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..ingest import IngestSession
-from ..models import InstitutionTrend, InstitutionWorksStats, Journal
+from ..models import InstitutionTrend, InstitutionWorksStats, Journal, UtWork
 from .common import get_home_institution
 from .openalex_journals import resolve_home_institution_id
 
@@ -130,22 +130,71 @@ async def _write_journal_stats(
     session: AsyncSession,
     institution_id: int,
     per_journal_year: Counter[tuple[str, int, str]],
+    *,
+    source: str = "openalex_institution_filter",
 ) -> None:
     """Full replace of this institution's per-journal stats rows."""
     rows: dict[tuple[str, int], dict[str, Any]] = {}
     for (issn_l, year, status), count in per_journal_year.items():
         row = rows.setdefault(
-            (issn_l, year), _zero_row(institution_id, {"issn_l": issn_l, "year": year})
+            (issn_l, year),
+            _zero_row(institution_id, {"source": source, "issn_l": issn_l, "year": year}),
         )
         row[f"oa_{status}"] = count
     for row in rows.values():
         row["works_count"] = sum(row[f"oa_{s}"] for s in OA_FIELDS)
     await session.execute(
-        delete(InstitutionWorksStats).where(InstitutionWorksStats.institution_id == institution_id)
+        delete(InstitutionWorksStats).where(
+            InstitutionWorksStats.institution_id == institution_id,
+            InstitutionWorksStats.source == source,
+        )
     )
     if rows:
         await session.execute(insert(InstitutionWorksStats), list(rows.values()))
-    logger.info("institution_works_stats rows: %d", len(rows))
+    logger.info("institution_works_stats[%s] rows: %d", source, len(rows))
+
+
+async def write_pure_canon_stats(session: AsyncSession, institution_id: int) -> int:
+    """Per-journal/year work counts straight from canonical ut_works.
+
+    Cross-check dimension for the verify job: the OA split is left at zero
+    because Pure's access states (eprints/COAR) are not OpenAlex-compatible;
+    the OpenAlex dimension remains the OA-split source of truth.
+    """
+    rows = (
+        await session.execute(
+            select(
+                UtWork.journal_issn_l,
+                UtWork.year,
+                func.count(),
+            )
+            .where(
+                UtWork.retired_at.is_(None),
+                UtWork.journal_issn_l.is_not(None),
+            )
+            .group_by(UtWork.journal_issn_l, UtWork.year)
+        )
+    ).all()
+    payload = [
+        {
+            "institution_id": institution_id,
+            "source": "pure_canon",
+            "issn_l": issn_l,
+            "year": year,
+            "works_count": count,
+        }
+        for issn_l, year, count in rows
+    ]
+    await session.execute(
+        delete(InstitutionWorksStats).where(
+            InstitutionWorksStats.institution_id == institution_id,
+            InstitutionWorksStats.source == "pure_canon",
+        )
+    )
+    if payload:
+        await session.execute(insert(InstitutionWorksStats), payload)
+    logger.info("institution_works_stats[pure_canon] rows: %d", len(payload))
+    return len(payload)
 
 
 async def _corresponding_counts(client: AlethecaClient, inst_id: str) -> dict[int, int]:

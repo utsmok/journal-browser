@@ -292,7 +292,7 @@ def _cerif_publication_fields(metadata_el: ET.Element | None) -> dict[str, Any]:
         elif name == "Type":
             fields["type"] = text.rsplit(":", 1)[-1]
         elif name == "Access":
-            fields["oa_status"] = text.rsplit(":", 1)[-1]
+            fields["oa_status"] = text
         elif name == "Publishers":
             for pub in child:
                 for sub in pub:
@@ -334,6 +334,23 @@ def _norm_title(title: str) -> str:
     """Case/punctuation-folded title for fuzzy matching."""
     folded = title.casefold()
     return re.sub(r"[^0-9a-z]+", " ", folded).strip()
+
+
+def _normalize_access(raw: str | None) -> str | None:
+    """Compact access-status literal from Pure's vocabularies.
+
+    Eprints (oai_dc rights): info:eu-repo/semantics/openAccess -> openAccess.
+    COAR (cerif Access): .../access_right/c_abf2 -> coar:c_abf2.
+    """
+    if not raw:
+        return None
+    raw = raw.strip()
+    if "info:eu-repo/semantics/" in raw:
+        return raw.rsplit("/", 1)[-1] or None
+    if "coar/access_right/" in raw:
+        code = raw.rsplit("/", 1)[-1]
+        return f"coar:{code}" if code else None
+    return raw
 
 
 def _dc_first(value: Any) -> str | None:
@@ -382,7 +399,9 @@ async def upsert_ut_work(
                 doi, owner, uuid, uuid,
             )
             doi = None
-    oa_status = _dc_first(cerif.get("oa_status")) or _dc_first(dc.get("rights"))
+    oa_status = _normalize_access(
+        _dc_first(cerif.get("oa_status")) or _dc_first(dc.get("rights"))
+    )
     stmt = (
         pg_insert(UtWork)
         .values(
@@ -421,7 +440,11 @@ async def upsert_ut_work(
 async def backfill_cerif(
     session: AsyncSession, uuid: str, cerif: dict[str, Any]
 ) -> None:
-    """Backfill cerif-derived fields onto an existing ut_work; never nulls."""
+    """Backfill cerif-derived fields onto an existing ut_work; never nulls.
+
+    doi_normalized is UNIQUE across works and cerif records can repeat a
+    DOI another uuid already claimed, so the DOI is only set when free.
+    """
     values: dict[str, Any] = {"updated_at": datetime.now(UTC)}
     if issn := _dc_first(cerif.get("issn")):
         values["cerif_issn"] = issn
@@ -430,7 +453,13 @@ async def backfill_cerif(
     if oa := _dc_first(cerif.get("oa_status")):
         values["oa_status"] = oa
     if doi := extract_doi(cerif.get("doi") or ""):
-        values["doi_normalized"] = doi
+        owner = await session.scalar(
+            select(UtWork.pure_uuid).where(
+                UtWork.doi_normalized == doi, UtWork.pure_uuid != uuid
+            )
+        )
+        if owner is None:
+            values["doi_normalized"] = doi
     if len(values) == 1:
         return
     from sqlalchemy import update

@@ -67,7 +67,12 @@ async def fetch_bytes(
                 )
                 if not transient or attempt == retries - 1:
                     raise
-                await asyncio.sleep(2**attempt)
+                delay = 2**attempt
+                if isinstance(exc, httpx.HTTPStatusError):
+                    retry_after = exc.response.headers.get("retry-after", "")
+                    if retry_after.isdigit():
+                        delay = max(delay, min(int(retry_after), 30))
+                await asyncio.sleep(delay)
         raise last_error  # pragma: no cover
 
 
@@ -80,13 +85,14 @@ async def download_to_landing(
     suffix: str,
     source_pk: str = "",
     headers: dict[str, str] | None = None,
+    retries: int = 3,
 ) -> tuple[bytes, bool]:
     """Fetch a URL, store the raw bytes in the landing dir, record the file.
 
     Returns (data, is_new_version). Call BEFORE any normalization so a
     crash never loses a fetched copy.
     """
-    data = await fetch_bytes(url, headers=headers)
+    data = await fetch_bytes(url, headers=headers, retries=retries)
     _, _, is_new = await store_raw_file(
         session,
         source,
