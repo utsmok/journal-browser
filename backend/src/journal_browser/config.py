@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     openalex_api_key: str = Field(
         "", validation_alias=AliasChoices("JB_OPENALEX_API_KEY", "OPENALEX_API_KEY")
     )
+    contact_email: str = Field(
+        "s.f.abma@utwente.nl",
+        validation_alias=AliasChoices("JB_CONTACT_EMAIL", "CONTACT_EMAIL"),
+    )
     cors_origins: list[str] = ["http://localhost:3000"]
 
     # The browser's home institution. ROR + name are configuration, never

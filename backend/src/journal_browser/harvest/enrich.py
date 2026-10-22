@@ -12,6 +12,7 @@ ISSN -> journal resolution always goes through issn_map (any ISSN variant to
 ISSN-L) and then journals.issn_l.
 """
 
+import asyncio
 import logging
 from typing import Any
 
@@ -25,6 +26,9 @@ from ..models import Journal, UtWork, WorkIdentity
 logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 50  # OpenAlex max identifiers per pipe-separated filter
+# OpenAlex rate-limits bursty batch runs; failures then get wrongly recorded
+# as "missing" identities, so keep a polite gap between chunks.
+CHUNK_PAUSE_S = 0.3
 
 
 def _chunk(items: list[str], size: int) -> list[list[str]]:
@@ -89,33 +93,57 @@ def _openalex_work_fields(work: Any) -> dict[str, Any]:
     return fields
 
 
-async def _works_without_identity(
-    session: AsyncSession, source: str, limit: int | None
+async def _works_needing_journal(
+    session: AsyncSession, limit: int | None
 ) -> list[UtWork]:
-    """ut_works with a DOI and no identity row from `source` yet."""
+    """DOI works still lacking a journal, excluding recorded OpenAlex misses.
+
+    Re-fetches matched works whose journal stayed unresolved; runs are rare
+    and the batch is bounded, so the redundant lookups are accepted.
+    """
+    recorded_miss = exists(
+        select(WorkIdentity.id)
+        .where(
+            WorkIdentity.ut_work_id == UtWork.pure_uuid,
+            WorkIdentity.source == "openalex",
+            WorkIdentity.source_pk.like("doi:%"),
+        )
+        .correlate(UtWork)
+    )
     query = (
         select(UtWork)
         .where(
             UtWork.doi_normalized.is_not(None),
-            ~exists(
-                select(WorkIdentity.id)
-                .where(
-                    WorkIdentity.ut_work_id == UtWork.pure_uuid,
-                    WorkIdentity.source == source,
-                )
-                .correlate(UtWork)
-            ),
+            UtWork.journal_issn_l.is_(None),
+            ~recorded_miss,
         )
         .limit(limit)
     )
     return list((await session.execute(query)).scalars().all())
 
 
+def _location_issns(work: Any) -> list[str]:
+    """ISSNs from any location's source (primary first, deduped in order)."""
+    out: list[str] = []
+    primary = getattr(work, "primary_location", None)
+    for loc in [primary, *(getattr(work, "locations", None) or [])]:
+        src = getattr(loc, "source", None) if loc is not None else None
+        if src is None:
+            continue
+        # aletheca parses Location.source as a raw dict (DehydratedSource).
+        getter = src.get if isinstance(src, dict) else lambda k, _s=src: getattr(_s, k, None)
+        candidates = [getter("issn_l"), *(getter("issn") or [])]
+        for value in candidates:
+            if value and str(value) not in out:
+                out.append(str(value))
+    return out
+
+
 async def enrich_openalex(session: AsyncSession, limit: int | None = None) -> dict[str, int]:
     """Batch DOI lookup; confirm identities + resolve journals from OpenAlex."""
     from aletheca import AlethecaClient
 
-    works = await _works_without_identity(session, "openalex", limit)
+    works = await _works_needing_journal(session, limit)
     stats = {"works": len(works), "matched": 0, "journal_resolved": 0}
     if not works:
         return stats
@@ -126,6 +154,7 @@ async def enrich_openalex(session: AsyncSession, limit: int | None = None) -> di
     by_doi = {w.doi_normalized: w for w in works}
     async with AlethecaClient(**client_kwargs) as client:
         for chunk in _chunk(list(by_doi), BATCH_SIZE):
+            await asyncio.sleep(CHUNK_PAUSE_S)
             found = await client.works.batch_get_by_doi(chunk)
             found_dois = set()
             for key, work in found.items():
@@ -145,6 +174,11 @@ async def enrich_openalex(session: AsyncSession, limit: int | None = None) -> di
                 )
                 stats["matched"] += 1
                 if fields.get("journal_issn_l"):
+                    stats["journal_resolved"] += 1
+                elif issn_l := await _resolve_journal(session, _location_issns(work)):
+                    # Primary location had no journal; any location's source
+                    # (e.g. the journal's own landing page) still counts.
+                    ut.journal_issn_l = issn_l
                     stats["journal_resolved"] += 1
             # Mark misses so the Crossref pass only sees true gaps.
             for doi in by_doi:
@@ -175,12 +209,17 @@ def _settings() -> Any:
 async def _works_for_crossref(
     session: AsyncSession, limit: int | None
 ) -> list[UtWork]:
-    """Works with a DOI, no crossref identity, and no openalex match either."""
+    """Works with a DOI, no crossref identity, and no successful OpenAlex match.
+
+    OpenAlex 'missing' rows carry source_pk='doi:<doi>' and are NOT counted
+    as matches, so true OpenAlex gaps still reach Crossref.
+    """
     no_openalex = ~exists(
         select(WorkIdentity.id)
         .where(
             WorkIdentity.ut_work_id == UtWork.pure_uuid,
             WorkIdentity.source == "openalex",
+            WorkIdentity.source_pk.not_like("doi:%"),
         )
         .correlate(UtWork)
     )
@@ -213,7 +252,7 @@ async def enrich_crossref(session: AsyncSession, limit: int | None = None) -> di
         return stats
 
     by_doi = {w.doi_normalized: w for w in works}
-    async with StavrophoraClient() as client:
+    async with StavrophoraClient(mailto=_settings().contact_email) as client:
         for chunk in _chunk(list(by_doi), BATCH_SIZE):
             found = await client.works.batch_get_by_doi(chunk)
             for doi, work in found.items():

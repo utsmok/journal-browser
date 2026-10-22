@@ -34,7 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..ingest import IngestSession
-from ..models import HarvestRun, UtWork
+from ..models import UtWork
 
 logger = logging.getLogger(__name__)
 
@@ -631,13 +631,19 @@ async def _harvest_set(
 
 # ── Retirement (full re-baseline; Pure reports no deletes) ──────────────────
 
-async def retire_absent(session: AsyncSession, run_id: int) -> int:
-    """Mark ut_works not seen in this full sweep as retired. Never deletes."""
+async def retire_absent(session: AsyncSession, run_ids: list[int]) -> int:
+    """Mark ut_works not seen in any of these sweep runs as retired.
+
+    Never deletes.
+    """
     from sqlalchemy import update
 
     result = await session.execute(
         update(UtWork)
-        .where(UtWork.last_seen_run != run_id, UtWork.retired_at.is_(None))
+        .where(
+            UtWork.last_seen_run.not_in(run_ids),
+            UtWork.retired_at.is_(None),
+        )
         .values(retired_at=datetime.now(UTC))
     )
     return result.rowcount or 0
@@ -659,6 +665,7 @@ async def harvest_pure_years(
     """
     stats: dict[str, Any] = {"sets": {}}
     totals = {"records_seen": 0, "records_stored": 0, "parse_failures": 0}
+    run_ids: list[int] = []
     for year in years:
         set_spec = DEFAULT_YEAR_SET.format(year=year)
         ingest = IngestSession(session)
@@ -668,6 +675,7 @@ async def harvest_pure_years(
             "full_sweep": full_sweep,
         }
         await ingest.start_run(SOURCE, "work", set_spec, config)
+        run_ids.append(ingest.run_id)
         try:
             set_stats = await _harvest_set(ingest, set_spec, PREFIX_DC, limit=limit)
         except PureOaiError as exc:
@@ -678,21 +686,13 @@ async def harvest_pure_years(
         stats["sets"][set_spec] = final
         for key in totals:
             totals[key] += final.get(key, 0) or 0
-    sweep_run = await _latest_run_id(session)
-    stats["retired"] = await retire_absent(session, sweep_run) if full_sweep else 0
+    # Retirement is only sound against the runs of THIS sweep: per-year sets
+    # each get their own harvest_run, so retiring against only the last run
+    # would retire every other year.
+    stats["retired"] = await retire_absent(session, run_ids) if full_sweep else 0
     await session.commit()
     stats.update(totals)
     return stats
-
-
-async def _latest_run_id(session: AsyncSession) -> int:
-    row = await session.execute(
-        select(HarvestRun.id)
-        .where(HarvestRun.source == SOURCE)
-        .order_by(HarvestRun.id.desc())
-        .limit(1)
-    )
-    return row.scalar_one()
 
 
 async def harvest_pure_cerif(
