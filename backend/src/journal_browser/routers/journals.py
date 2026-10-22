@@ -154,28 +154,36 @@ async def journal_detail(issn_l: str, session: SessionDep) -> JournalDetailRespo
     deal_rows = (
         await session.execute(
             select(Deal, Publisher.name)
-            .join(DealInstitution, DealInstitution.deal_id == Deal.id)
             .join(DealJournal, DealJournal.deal_id == Deal.id)
             .outerjoin(Publisher, Publisher.id == Deal.publisher_id)
+            .outerjoin(
+                DealInstitution,
+                (DealInstitution.deal_id == Deal.id)
+                & (DealInstitution.institution_id == HOME_INST),
+            )
             .where(
                 Deal.status == "current",
                 DealJournal.issn_l == journal.issn_l,
-                DealInstitution.institution_id == HOME_INST,
+                # Decision 13: consortium sheets don't consistently enumerate
+                # members, so a canonical openaccess.nl deal applies to Twente
+                # authors even without an explicit institution row.
+                (DealInstitution.institution_id.is_not(None))
+                | (Deal.openaccess_nl_url.is_not(None)),
             )
         )
     ).all()
     deals = [d for d, _name in deal_rows]
     publisher_names = {d.id: name for d, name in deal_rows}
-    stats = list(
+    # Phase 10: pure_canon is the primary works count; the OpenAlex
+    # institution-filter rows keep the OA split and stay visible as the
+    # labeled cross-check (decision 13-style honesty about sources).
+    stats_rows = list(
         (
             await session.execute(
                 select(InstitutionWorksStats)
                 .where(
                     InstitutionWorksStats.issn_l == journal.issn_l,
                     InstitutionWorksStats.institution_id == HOME_INST,
-                    # pure_canon rows exist for the verify job cross-check;
-                    # the displayed OA split stays OpenAlex-derived.
-                    InstitutionWorksStats.source == "openalex_institution_filter",
                 )
                 .order_by(InstitutionWorksStats.year)
             )
@@ -183,6 +191,30 @@ async def journal_detail(issn_l: str, session: SessionDep) -> JournalDetailRespo
         .scalars()
         .all()
     )
+    by_source = {
+        source: {s.year: s for s in stats_rows if s.source == source}
+        for source in ("pure_canon", "openalex_institution_filter")
+    }
+    stats: list[InstitutionWorksStats] = []
+    works_source_by_year: dict[int, str] = {}
+    for year in sorted({s.year for s in stats_rows}):
+        oa_row = by_source["openalex_institution_filter"].get(year)
+        primary = by_source["pure_canon"].get(year)
+        # Works count: Pure-canonical when present. OA split: always the
+        # OpenAlex rows (pure_canon carries none by design).
+        if oa_row is not None:
+            row = oa_row
+            if primary is not None:
+                # In-memory only; never persisted (no commit of these rows).
+                row.works_count = primary.works_count
+                works_source_by_year[year] = "pure_canon"
+        elif primary is not None:
+            row = primary
+            works_source_by_year[year] = "pure_canon"
+        else:
+            row = None
+        if row is not None:
+            stats.append(row)
     sjr_rows = list(
         (
             await session.execute(
@@ -252,6 +284,9 @@ async def journal_detail(issn_l: str, session: SessionDep) -> JournalDetailRespo
             StatsYear(
                 year=s.year,
                 works_count=s.works_count,
+                works_count_source=works_source_by_year.get(
+                    s.year, "openalex_institution_filter"
+                ),
                 oa_gold=s.oa_gold,
                 oa_hybrid=s.oa_hybrid,
                 oa_green=s.oa_green,

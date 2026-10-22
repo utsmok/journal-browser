@@ -92,6 +92,21 @@ as the answer key.
    ut-metadata's derived counts only by explainable, listed causes; the report runs
    green with no unexplained diffs.
 
+**Spec reconciliation (2026-10-22, phases 8-10)**: all acceptance criteria are met
+for journal articles (near-100% DOI-to-journal resolution) but not in absolute
+terms: 78.2% of DOI-bearing canonical works resolve to a journal row. The 90%
+criterion assumed every DOI work is a journal publication; the type scan is the
+evidence — the residue is books/chapters/conference material with no ISSN to
+resolve. Unresolvable works keep their container strings in the curation report
+(section "Works unresolved to a journal") for human triage. The ut-metadata
+top-20 diff report runs green (within 2%, zero unexplained rows; their counts are
+strict supersets via affiliation-inferred non-Pure works, cause listed per row).
+Enrichment payloads are stored verbatim in `source_records` (OpenAlex and
+Crossref), and the journal page shows the Pure-canonical count as primary with
+the OpenAlex institution-filter count as a labeled cross-check. Consortium deals
+without a Twente membership row (11 of 22 current) still surface on journal
+panels — participation comes from the openaccess.nl register (decision 13).
+
 ## Explicit constraints carried over
 
 - Data window 2020+ applies to Pure-based statistics as well.

@@ -21,6 +21,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..harvest.common import normalize_issn, resolve_issn_l
+from ..ingest import IngestSession
 from ..models import Journal, UtWork, WorkIdentity
 
 logger = logging.getLogger(__name__)
@@ -152,6 +153,10 @@ async def enrich_openalex(session: AsyncSession, limit: int | None = None) -> di
     if get_api_key := getattr(_settings(), "openalex_api_key", ""):
         client_kwargs["api_key"] = get_api_key
     by_doi = {w.doi_normalized: w for w in works}
+    ingest = IngestSession(session)
+    await ingest.start_run(
+        "openalex", "work", "enrichment", {"via": "batch_get_by_doi", "batch": BATCH_SIZE}
+    )
     async with AlethecaClient(**client_kwargs) as client:
         for chunk in _chunk(list(by_doi), BATCH_SIZE):
             await asyncio.sleep(CHUNK_PAUSE_S)
@@ -166,6 +171,10 @@ async def enrich_openalex(session: AsyncSession, limit: int | None = None) -> di
                 fields = _openalex_work_fields(work)
                 for name, value in fields.items():
                     setattr(ut, name, value)
+                await ingest.ingest_record(
+                    str(getattr(work, "id", "") or f"doi:{doi}"),
+                    work.model_dump(mode="json"),
+                )
                 await _confirm_identity(
                     session,
                     source="openalex",
@@ -196,7 +205,8 @@ async def enrich_openalex(session: AsyncSession, limit: int | None = None) -> di
                         .on_conflict_do_nothing(constraint="uq_work_identity_source")
                     )
                     await session.execute(stmt)
-            await session.commit()
+            await ingest.finish_run("completed", dict(stats))
+            await ingest.commit()
     return stats
 
 
@@ -252,6 +262,8 @@ async def enrich_crossref(session: AsyncSession, limit: int | None = None) -> di
         return stats
 
     by_doi = {w.doi_normalized: w for w in works}
+    ingest = IngestSession(session)
+    await ingest.start_run("crossref", "work", "enrichment", {"via": "batch_get_by_doi"})
     async with StavrophoraClient(mailto=_settings().contact_email) as client:
         for chunk in _chunk(list(by_doi), BATCH_SIZE):
             found = await client.works.batch_get_by_doi(chunk)
@@ -259,6 +271,12 @@ async def enrich_crossref(session: AsyncSession, limit: int | None = None) -> di
                 ut = by_doi.get(str(doi).lower())
                 if ut is None:
                     continue
+                payload = (
+                    work.model_dump(mode="json")
+                    if hasattr(work, "model_dump")
+                    else dict(work)
+                )
+                await ingest.ingest_record(f"doi:{ut.doi_normalized}", payload)
                 await _confirm_identity(
                     session,
                     source="crossref",
@@ -270,7 +288,8 @@ async def enrich_crossref(session: AsyncSession, limit: int | None = None) -> di
                 if issn_l := await _resolve_journal(session, issns):
                     ut.journal_issn_l = issn_l
                     stats["journal_resolved"] += 1
-            await session.commit()
+            await ingest.finish_run("completed", dict(stats))
+            await ingest.commit()
     return stats
 
 

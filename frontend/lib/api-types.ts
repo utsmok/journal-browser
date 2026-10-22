@@ -427,6 +427,11 @@ export interface components {
             year: number;
             /** Works Count */
             works_count: number;
+            /**
+             * Works Count Source
+             * @default openalex_institution_filter
+             */
+            works_count_source: string;
             /** Oa Gold */
             oa_gold: number;
             /** Oa Hybrid */

@@ -60,6 +60,14 @@
     Journal lists may come from openaccess.nl attachments or publisher pages;
     contract PDF terms are curator-read only (structured fields recorded after
     human confirmation, per the hierarchy above).
+    **Consortium membership caveat (verified 2026-10-22)**: JCT UKB/SURF sheets do
+    not consistently enumerate members — 11 of the 22 visible current deals have no
+    Twente `deal_institutions` row (`dgb2026ukb`, `kar2025surf`, and the 9
+    register-only deals with no `esac_id`; ACM is Twente-covered only on
+    openaccess.nl). Consequence: journal-level deal panels treat every canonical
+    current deal as applicable to Twente authors — membership is taken from the
+    register, not from a JCT institution row (query in
+    `routers/journals.py::get_journal`).
 
 ## Open questions
 

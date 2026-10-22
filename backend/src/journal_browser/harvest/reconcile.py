@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
@@ -524,6 +524,52 @@ async def render_curation_report(
                 f"<li>… and more (showing {len(candidate_rows)})</li>"
                 if len(candidate_rows) == 500
                 else ""
+            )
+            + "</ul>"
+        )
+    # Phase 9 spec: works that resolve to no journal land here with their
+    # container string so a curator can decide (book series vs journal etc.).
+    unresolved = (
+        await session.execute(
+            text("""
+                SELECT w.doi_normalized AS doi, w.title,
+                       COALESCE(
+                           sr.payload->'primary_location'->'source'->>'display_name',
+                           cr.payload->>'container-title'
+                       ) AS container
+                FROM ut_works w
+                LEFT JOIN LATERAL (
+                    SELECT sr.payload
+                    FROM source_records sr
+                    WHERE sr.source='openalex' AND sr.entity_type='work'
+                      AND EXISTS (SELECT 1 FROM work_identity wi
+                                  WHERE wi.ut_work_id = w.pure_uuid
+                                    AND wi.source='openalex' AND wi.source_pk = sr.source_pk)
+                    LIMIT 1
+                ) sr ON sr.payload IS NOT NULL
+                LEFT JOIN LATERAL (
+                    SELECT cr.payload
+                    FROM source_records cr
+                    WHERE cr.source='crossref' AND cr.entity_type='work'
+                      AND cr.source_pk = 'doi:' || w.doi_normalized
+                    LIMIT 1
+                ) cr ON cr.payload IS NOT NULL
+                WHERE w.retired_at IS NULL AND w.doi_normalized IS NOT NULL
+                  AND w.journal_issn_l IS NULL
+                  AND COALESCE(
+                      sr.payload->'primary_location'->'source'->>'display_name',
+                      cr.payload->>'container-title') IS NOT NULL
+                LIMIT 500
+            """)
+        )
+    ).all()
+    if unresolved:
+        sections.append(
+            "<h2>Works unresolved to a journal (have a container string)</h2><ul>"
+            + "".join(
+                f"<li>{_esc((r.doi or '')[:60])} — “{_esc((r.title or '')[:80])}” "
+                f"in <em>{_esc(str(r.container)[:80])}</em></li>"
+                for r in unresolved
             )
             + "</ul>"
         )

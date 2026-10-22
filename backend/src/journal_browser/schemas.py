@@ -65,6 +65,7 @@ class ScimagojrOut(BaseModel):
 class StatsYear(BaseModel):
     year: int
     works_count: int
+    works_count_source: str = "openalex_institution_filter"
     oa_gold: int
     oa_hybrid: int
     oa_green: int

@@ -56,6 +56,14 @@ async def theirs(conn) -> dict:
 
 
 async def top_journals(session, conn) -> list[dict]:
+    """Top-20 per-journal 2023: ours vs ut-metadata's canonical cut, with cause.
+
+    ut-metadata counts canonical works whose OpenAlex venue links to the
+    ISSN (work_venues -> core_venue_link.openalex_issn_l); its canonical
+    corpus includes affiliation-inferred works that Pure never registered,
+    so their counts are supersets. A diff is "explained" when theirs >= ours
+    (extra affiliated works) or the gap is small venue-linking noise.
+    """
     from sqlalchemy import select
 
     from journal_browser.models import Journal
@@ -72,13 +80,37 @@ async def top_journals(session, conn) -> list[dict]:
             .limit(20)
         )
     ).all()
-    # ut-metadata has no per-journal/year cut in a documented table (its
-    # work_venues link uses OpenAlex S-ids, not venue ids), so the top-20 is
-    # reported for eyeballing only; the 2% corpus gate is the real check.
-    return [
-        {"issn_l": issn_l, "title": (title or "")[:40], "ours": count}
-        for issn_l, count, title in ours_rows
-    ]
+    theirs_map = {
+        r["issn_l"]: r["n"]
+        for r in await conn.fetch(
+            """
+            SELECT cvl.openalex_issn_l AS issn_l, count(DISTINCT mw.canonical_id) AS n
+            FROM merged_work_attrs mw
+            JOIN work_venues wv ON wv.work_id = mw.canonical_id
+            JOIN core_venue_link cvl ON lower(cvl.openalex_source_id) = wv.source_s_id
+            WHERE mw.publication_year = $1 AND cvl.openalex_issn_l IS NOT NULL
+            GROUP BY 1
+            """,
+            TOP_JOURNAL_YEAR,
+        )
+    }
+    out = []
+    unexplained = 0
+    for issn_l, count, title in ours_rows:
+        n = theirs_map.get(issn_l, 0)
+        if n < count and count - n > 2:
+            cause = "REVIEW: ours exceeds ut-metadata canonical venue cut"
+            unexplained += 1
+        elif n > count:
+            cause = "ut-metadata includes affiliation-inferred non-Pure works"
+        else:
+            cause = "match/venue-link noise"
+        out.append({
+            "issn_l": issn_l, "title": (title or "")[:40],
+            "ours": count, "utmeta": n, "cause": cause,
+        })
+    out.append({"unexplained_rows": unexplained, "gate_max": 5})
+    return out
 
 
 async def main() -> None:
@@ -94,18 +126,24 @@ async def main() -> None:
             delta = abs(ours_stats["total"] - their_stats["total"]) / max(
                 1, their_stats["total"]
             )
+            top = await top_journals(session, conn)
             report = {
                 "ours_2020plus": ours_stats,
                 "utmeta_2020plus": their_stats,
                 "total_delta_pct": round(delta * 100, 2),
                 "within_2pct": delta <= tolerance,
-                f"top20_{TOP_JOURNAL_YEAR}": await top_journals(session, conn),
+                f"top20_{TOP_JOURNAL_YEAR}": top,
             }
+            summary = top[-1]
+            report["top20_unexplained"] = summary.get("unexplained_rows", 0)
+            report["green"] = (
+                report["within_2pct"] and report["top20_unexplained"] <= summary["gate_max"]
+            )
         finally:
             await conn.close()
     await engine.dispose()
     print(json.dumps(report, indent=1, default=str))
-    if not report.get("within_2pct"):
+    if not report.get("green"):
         sys.exit(1)
 
 

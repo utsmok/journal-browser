@@ -180,12 +180,15 @@ export default function JournalPage() {
 
   const { journal, stats, deals, attribution, summary_stats } = data;
   const recent = stats.filter((s) => s.year >= 2020);
-  // UT institution stats are the primary series; OpenAlex per-year counts
-  // (all affiliations) stand in until the stats harvest has landed.
+  // Pure-canonical counts are the primary series (phase 10); years without
+  // a pure_canon row fall back to the OpenAlex institution-filter cut.
+  const worksSource = recent.some((s) => s.works_count_source === "pure_canon")
+    ? "Pure registrations"
+    : "OpenAlex institution filter";
   const barsSource =
     recent.length > 0
       ? {
-          label: "University of Twente",
+          label: `University of Twente (${worksSource})`,
           note: attribution.stats,
           data: recent.map((s) => ({ year: s.year, value: s.works_count })),
         }
@@ -340,7 +343,11 @@ export default function JournalPage() {
               )}
               <p className="mt-3 text-sm">
                 {journal.twente_works.toLocaleString("en")} UT works total
-                since 2020.
+                since 2020{" "}
+                <span className="text-[var(--muted-foreground)]">
+                  ({worksSource})
+                </span>
+                .
               </p>
               <div className="mt-2">
                 <SourceNote {...(barsSource.note ?? {})} />
