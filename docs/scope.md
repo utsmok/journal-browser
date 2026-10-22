@@ -76,6 +76,21 @@ project other universities can launch and run for themselves.
 - A demo for Twente runs with `docker compose up` on a LAN server, and the README is
   good enough for another university to stand up their own instance.
 
+## v1 parity target vs the live UT journal browser
+
+| Capability | Live tool | v1 (this project) |
+|---|---|---|
+| Journal search + facets + sorting | yes | yes (facets: deal coverage, OA status, DOAJ, topic, quartile) |
+| Deal coverage + cost implication per journal | yes | yes (JCT + openaccess.nl; better structured) |
+| SJR + quartile | yes (Scopus-based) | yes (scimagojr) |
+| CiteScore / SNIP / JCR IF | yes | no; OpenAlex `2yr_mean_citedness` + `h_index` instead, labeled |
+| Publications per year per journal (institution) | yes | yes (2020+ window) |
+| Cited-by-institution counts | yes | deferred: scaffolded, runs on request |
+| Similar journals | yes (co-citation) | deferred: scaffolded, runs on request |
+| Green OA / self-archiving policy | yes (Sherpa) | blocked on Jisc API key (phase 6) |
+| OpenAPC cost evidence | no | yes (v1 addition) |
+| Marked list, alerts, SSO login | yes | out of scope for v1 |
+
 ## Key users
 
 - Twente researchers choosing a venue (primary; demo audience).

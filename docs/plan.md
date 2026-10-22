@@ -50,7 +50,11 @@ Jobs:
 2. `scrape_openaccess_nl`: overview → publisher pages → deal pages; raw HTML to landing
    store + parsed structured fields; diff report on text changes.
 3. `ingest_openapc`: download release CSVs (apc_de, transformative_agreements,
-   contracts, additional_costs); store raw; extract Twente/NL rows into `apc_evidence`.
+   contracts, additional_costs); store raw; aggregate to **journal-level evidence**
+   (ISSN-L x period: typical APC, observed min/max, article counts) for every journal
+   in the corpus, not just Twente rows; Twente/NL rows additionally land in
+   `apc_evidence` as per-article records. Journal-level aggregates serve as fallback
+   cost information wherever a deal gives no explicit price.
 4. `reconcile`: match openaccess.nl deals ↔ JCT deals (publisher × duration); emit a
    curation report (HTML) of unmatched or conflicting rows (ACM local deals, non-Plan-S
    deals, OpenAPC agreements without JCT counterpart).
