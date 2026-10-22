@@ -28,6 +28,16 @@
     TanStack Query/Table, patterns copied from the TCRC frontend. Re-theming to UT
     branding is a token-block swap (TCRC's audited UT palette is prepared for that).
     Typography: Inter + Montserrat (both SIL OFL, self-hosted via next/font).
+12. **Corpus policy (2026-10-22): collect everything, present a quality bar.** The
+    OpenAlex sources sweep is unfiltered — no upstream filtering changes. The
+    presentation layer defaults to a quality bar: `type='journal' AND issn_l IS NOT
+    NULL AND (is_in_doaj OR in_scimago OR deal coverage OR is_active_recently)`,
+    where `is_active_recently` means the latest `counts_by_year` entry with
+    works > 0 is >= 2020. Flags are derived locally at upsert time (zero extra
+    API calls); deal coverage stays relational. `scope=all` returns the full
+    corpus; the frontend defaults to the quality bar with a visible "include all
+    journals" toggle and an "outside quality bar" badge in all-scope view.
+    Expected band: ~50-70k in the default scope vs ~168k for the full corpus.
 
 ## Open questions
 

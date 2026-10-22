@@ -80,7 +80,7 @@ project other universities can launch and run for themselves.
 
 | Capability | Live tool | v1 (this project) |
 |---|---|---|
-| Journal search + facets + sorting | yes | yes (facets: deal coverage, OA status, DOAJ, topic, quartile) |
+| Journal search + facets + sorting | yes | yes (facets: deal coverage, OA status, DOAJ, topic, quartile; quality-bar scope by default per decision 12, full corpus behind `scope=all`) |
 | Deal coverage + cost implication per journal | yes | yes (JCT + openaccess.nl; better structured) |
 | SJR + quartile | yes (Scopus-based) | yes (scimagojr) |
 | CiteScore / SNIP / JCR IF | yes | no; OpenAlex `2yr_mean_citedness` + `h_index` instead, labeled |

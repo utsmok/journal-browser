@@ -24,7 +24,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -213,7 +213,11 @@ class DealJournal(Base):
     deal_id: Mapped[int] = mapped_column(
         ForeignKey("deals.id", ondelete="CASCADE"), primary_key=True
     )
-    issn_l: Mapped[str] = mapped_column(String(9), primary_key=True)
+    # Normalized source ISSN (print or online, as the deal list publishes).
+    # issn_l stays NULL until the issn_map sweep resolves it; then
+    # needs_curation marks anything that never resolved.
+    issn: Mapped[str] = mapped_column(String(9), primary_key=True)
+    issn_l: Mapped[str | None] = mapped_column(String(9), nullable=True, index=True)
     journal_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     first_seen: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_seen: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -224,7 +228,6 @@ class DealJournal(Base):
 
     __table_args__ = (
         CheckConstraint("source IN ('jct', 'manual')", name="ck_deal_journals_source"),
-        Index("ix_deal_journals_issn_l", "issn_l"),
     )
 
 
@@ -265,14 +268,25 @@ class Journal(Base):
     counts_by_year: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     works_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cited_by_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Corpus quality bar (decisions.md #12): derived at upsert time,
+    # zero extra API calls. last_active_year = latest counts_by_year
+    # entry with works > 0; recent activity OR doaj OR scimago OR deal
+    # coverage puts a journal in the default scope.
+    last_active_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_active_recently: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    in_scimago: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     crossref_meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     openaire_meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     harvested_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     search_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    search_vector: Mapped[str | None] = mapped_column(
+    search_vector: Mapped[Any] = mapped_column(
         # Postgres generated columns reject subqueries, so the harvester
         # maintains search_text (title + alternate titles) and this vector
-        # derives from it.
+        # derives from it. Declared TSVECTOR explicitly: an untyped column
+        # silently lands as varchar and every FTS op fails.
+        TSVECTOR,
         Computed("to_tsvector('english', coalesce(search_text, ''))", persisted=True),
         nullable=True,
     )
