@@ -10,14 +10,21 @@ dependencies = [
     "asyncpg>=0.30",
     "pydantic-settings>=2.6",
     "bibliofabric>=0.5",
+    "aletheca>=0.2.2",
+    "aireloom>=0.5.2",
+    "stavrophora>=0.2.1",
+    "httpx>=0.28.1",
+    "beautifulsoup4>=4.15.0",
+    "lxml>=6.1.3",
+    "loguru>=0.7.3",
+    "alembic>=1.20.1",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
-    "httpx>=0.27",
-    "alembic>=1.14",
+    "ruff>=0.17.1",
 ]
 
 [build-system]
@@ -30,3 +37,17 @@ packages = ["src/journal_browser"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "live: hits real network APIs (run explicitly: pytest -m live)",
+]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests", "jobs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI's Depends() default pattern is idiomatic.
+"src/journal_browser/main.py" = ["B008"]

@@ -19,3 +19,6 @@ next-env.d.ts
 # Tooling
 .DS_Store
 uv.lock.bak
+
+# Raw landing zone (downloaded source artifacts)
+backend/landing/
