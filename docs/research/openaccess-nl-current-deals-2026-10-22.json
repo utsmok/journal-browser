@@ -5,6 +5,7 @@
   "twente_participation": "heuristic from conditions text; verify against contract PDFs before trusting",
   "deals": [
     {
+      "owner_notes":"ACM has been 100% gold open access accross the board since january '26. This deal therefore covers ALL ACM publications of all types: journals, conferences, etc -- all APCs are waived for Utwente authors as part of this contract.",
       "publisher": "ACM",
       "publisher_slug": "acm",
       "publisher_page_url": "https://www.openaccess.nl/en/publisher/acm",
@@ -45,6 +46,7 @@
       ]
     },
     {
+      "owner_notes":"Here is the list of all journals that are included in the publishing deal as a table, cells separated by pipes, and lines separated by ** : Publication Title | ISSN Online | URL | Type ** AIP Advances | 2158-3226 | https://pubs.aip.org/aip/adv | Gold OA ** AIP Conference Proceedings | 1551-7616 | https://pubs.aip.org/aip/acp | Hybrid ** American Journal of Physics | 1943-2909 | https://pubs.aip.org/aapt/ajp | Hybrid ** APL Bioengineering | 2473-2877 | https://pubs.aip.org/aip/apb | Gold OA ** APL Computational Physics | 3066-0017 | https://pubs.aip.org/aip/aco | Gold OA ** APL Electronic Devices | 2995-8423 | https://pubs.aip.org/aip/aed | Gold OA ** APL Energy | 2770-9000 | https://pubs.aip.org/aip/ape | Gold OA ** APL Engineering Physics | 3066-7380 | https://pubs.aip.org/aip/aep | Gold OA ** APL Machine Learning | 2770-9019 | https://pubs.aip.org/aip/aml | Gold OA ** APL Materials 2166-532X https://pubs.aip.org/aip/apm | Gold OA ** APL Photonics | 2378-0967 | https://pubs.aip.org/aip/app | Gold OA ** APL Quantum | 2835-0103 | https://pubs.aip.org/aip/apq | Gold OA ** Applied Physics Letters | 1077-3118 | https://pubs.aip.org/aip/apl | Hybrid ** Applied Physics Reviews | 1931-9401 | https://pubs.aip.org/aip/apr | Hybrid ** AVS Quantum Science | 2639-0213 | https://pubs.aip.org/avs/aqs | Hybrid ** Biointerphases | 1559-4106 | https://pubs.aip.org/avs/bip | Hybrid ** Biomicrofluidics | 1932-1058 | https://pubs.aip.org/aip/bmf | Hybrid ** Biophysics Reviews | 2688-4089 | https://pubs.aip.org/aip/bpr | Hybrid ** Chaos: An Interdisciplinary Journal of Nonlinear Science | 1089-7682 | https://pubs.aip.org/aip/cha | Hybrid ** Chemical Physics Reviews | 2688-4070 | https://pubs.aip.org/aip/cpr | Hybrid ** Chinese Journal of Chemical Physics | 2327-2244 | https://pubs.aip.org/cps/cjcp | Hybrid ** JASA Express Letters | 2691-1191 | https://pubs.aip.org/asa/jel | Gold OA ** Journal of Applied Physics | 1089-7550 | https://pubs.aip.org/aip/jap | Hybrid ** Journal of Laser Applications | 1938-1387 | https://pubs.aip.org/lia/jla | Hybrid ** Journal of Physical and Chemical Reference Data | 1529-7845 | https://pubs.aip.org/aip/jpr | Hybrid ** Journal of Renewable and Sustainable Energy | 1941-7012 | https://pubs.aip.org/aip/jrse | Hybrid ** Journal of Rheology | 1520-8516 | https://pubs.aip.org/sor/jor | Hybrid ** Journal of Vacuum Science & Technology A | 1520-8559 | https://pubs.aip.org/avs/jva | Hybrid ** Journal of Vacuum Science & Technology B | 2166-2754 | https://pubs.aip.org/avs/jvb | Hybrid ** Journal of Mathematical Physics | 1089-7658 | https://pubs.aip.org/aip/jmp | Hybrid ** Low Temperature Physics | 1090-6517 | https://pubs.aip.org/aip/ltp | Hybrid ** Physics of Fluids | 1089-7666 | https://pubs.aip.org/aip/pof | Hybrid ** Physics of Plasmas | 1089-7674 | https://pubs.aip.org/aip/pop | Hybrid ** Review of Scientific Instruments | 1089-7623 | https://pubs.aip.org/aip/rsi | Hybrid ** Structural Dynamics | 2329-7778 | https://pubs.aip.org/aca/sdy | Gold OA ** Surface Science Spectra | 1520-8575 | https://pubs.aip.org/avs/sss | Hybrid ** The Journal of the Acoustical Society of America | 1520-8524 | https://pubs.aip.org/asa/jasa | Hybrid ** The Journal of Chemical Physics | 1089-7690 | https://pubs.aip.org/aip/jcp | Hybrid ** The Physics Teacher | 1943-4928 | https://pubs.aip.org/aapt/pte | Hybrid",
       "publisher": "AIP Publishing (AIPP)",
       "publisher_slug": "aip-publishing-aipp",
       "publisher_page_url": "https://www.openaccess.nl/en/publisher/aip-publishing-aipp",
@@ -85,7 +87,7 @@
       ]
     },
     {
-      "publisher": "American Chemical Society (ACS)",
+      "owner_notes":"All ACS journals are included in the deal per the contract. Extracted from the contract: For each article published under the Read & Publish program, one (1) Token will be considered used. Tokens can be used for publication in all ACS journals, including the hybrid journals, but cannot be used for eBooks. Articles that are additions or corrections or editorials are also not eligible under the Agreement.",      "publisher": "American Chemical Society (ACS)",
       "publisher_slug": "american-chemical-society-acs",
       "publisher_page_url": "https://www.openaccess.nl/en/publisher/american-chemical-society-acs",
       "summary": "Publish open access without any costs in more than 70 hybrid journals from ACS. Note: capped deal",
@@ -130,6 +132,7 @@
       ]
     },
     {
+      "owner_notes":"Unclear which journals are part of the deal specifically. But the APCs are very low in general, let's assume ALL journals from AUP are covered.",
       "publisher": "Amsterdam University Press (AUP)",
       "publisher_slug": "amsterdam-university-press-aup",
       "publisher_page_url": "https://www.openaccess.nl/en/publisher/amsterdam-university-press-aup",
@@ -165,6 +168,7 @@
       ]
     },
     {
+      "owner_notes": "Twente is not part of this agreement, ignore.",
       "publisher": "Annual Reviews",
       "publisher_slug": "annual-reviews",
       "publisher_page_url": "https://www.openaccess.nl/en/publisher/annual-reviews",
@@ -250,6 +254,7 @@
       ]
     },
     {
+      "owner_notes": "Twente is not part of this agreement, ignore.",
       "publisher": "De Gruyter Brill",
       "publisher_slug": "de-gruyter-brill",
       "publisher_page_url": "https://www.openaccess.nl/en/publisher/de-gruyter-brill",
@@ -340,6 +345,7 @@
       ]
     },
     {
+      "owner_notes":"already processed the list of covered journals from the contract directly -- so not included in this document. It's in the last pages of the contract (pdf), but its a scanned doc so it needs ocr to analyze",
       "publisher": "Emerald Publishing group",
       "publisher_slug": "emerald-publishing-group",
       "publisher_page_url": "https://www.openaccess.nl/en/publisher/emerald-publishing-group",
@@ -390,6 +396,7 @@
       ]
     },
     {
+      "owner_notes":"Here is the list of journals included in the deal for utwente. It's a flat list of the journals, each shows: abbreviation issn [name](url).   :   2DM 2053-1583 [2D Materials](http://iopscience.iop.org/journal/2053-1583) BB 1748-3190 [Bioinspiration & Biomimetics](http://iopscience.iop.org/bb) BF 1758-5090 [Biofabrication](http://iopscience.iop.org/bf) BMM 1748-605X [Biomedical Materials](http://iopscience.iop.org/bmm) BPEX 2057-1976 [Biomedical Physics & Engineering Express](http://iopscience.iop.org/bpex) CQG 1361-6382 [Classical and Quantum Gravity](http://iopscience.iop.org/cqg) EJP 1361-6404 [European Journal of Physics](http://iopscience.iop.org/ejp) ERX 2631-8695 [Engineering Research Express](http://iopscience.iop.org/erx) EST 2516-1075 [Electronic Structure](http://iopscience.iop.org/est) FPE 2058-8585 [Flexible and Printed Electronics](http://iopscience.iop.org/fpe) IP 1361-6420 [Inverse Problems](http://iopscience.iop.org/ip) JBR 1752-7163 [Journal of Breath Research](http://iopscience.iop.org/jbr) JMM 1361-6439 [Journal of Micromechanics and Microengineering](http://iopscience.iop.org/jmm) JNE 1741-2552 [Journal of Neural Engineering](http://iopscience.iop.org/jne) JOPT 2040-8986 [Journal of Optics](http://iopscience.iop.org/jopt) JPCM 1361-648X [Journal of Physics: Condensed Matter](http://iopscience.iop.org/jpcm) JPhysA 1751-8121 [Journal of Physics A: Mathematical and Theoretical](http://iopscience.iop.org/jphysa) JPhysB 1361-6455 [Journal of Physics B: Atomic, Molecular and Optical Physics](http://iopscience.iop.org/jphysb) JPhysD 1361-6463 [Journal of Physics D: Applied Physics](http://iopscience.iop.org/jphysd) JPhysG 1361-6471 [Journal of Physics G: Nuclear and Particle Physics](http://iopscience.iop.org/jphysg) JRP 1361-6498 [Journal of Radiological Protection](http://iopscience.iop.org/jrp) MAF 2050-6120 [Methods and Applications in Fluorescence](http://iopscience.iop.org/maf) MSMSE 1361-651X [Modelling and Simulation in Materials Science and Engineering](http://iopscience.iop.org/msmse) MST 1361-6501 [Measurement Science and Technology](http://iopscience.iop.org/mst) NANO 1361-6528 [Nanotechnology](http://iopscience.iop.org/nano) NANOFUT 2399-1984 [Nano Futures](http://iopscience.iop.org/nanofut) NON 1361-6544 [Nonlinearity](http://iopscience.iop.org/non) PB 1478-3975 [Physical Biology](http://iopscience.iop.org/pb) PE 1361-6552 [Physics Education](http://iopscience.iop.org/pe) PMB 1361-6560 [Physics in Medicine & Biology](http://iopscience.iop.org/pmb) PMEA 1361-6579 [Physiological Measurement](http://iopscience.iop.org/pmea) PPCF 1361-6587 [Plasma Physics and Controlled Fusion](http://iopscience.iop.org/ppcf) PRGB 2516-1091 [Progress in Biomedical Engineering](http://iopscience.iop.org/prgb) PRGE 2516-1083 [Progress in Energy](http://iopscience.iop.org/prge) PS 1402-4896 [Physica Scripta](https://iopscience.iop.org/journal/1402-4896) PSST 1361-6595 [Plasma Sources Science and Technology](http://iopscience.iop.org/psst) QST 2058-9565 [Quantum Science & Technology](http://iopscience.iop.org/qst) ROPP 1361-6633 [Reports on Progress in Physics](https://iopscience.iop.org/journal/0034-4885) (excludes review article types) SMS 1361-665X [Smart Materials and Structures](http://iopscience.iop.org/sms) SST 1361-6641 [Semiconductor Science and Technology](http://iopscience.iop.org/sst) STMP 2051-672X [Surface Topography: Metrology and Properties](https://iopscience.iop.org/journal/2051-672X) SUST 1361-6668 [Superconductor Science and Technology](http://iopscience.iop.org/sust)",
       "publisher": "IOP Publishing",
       "publisher_slug": "iop-publishing",
       "publisher_page_url": "https://www.openaccess.nl/en/publisher/iop-publishing",
@@ -445,6 +452,7 @@
       ]
     },
     {
+      "owner_notes":"Here are the journals included in the deal with issn, seperated by pipes: Advances in Communication and Swallowing 2772-5391 | Algorithmic Finance 2157-6203 | Applied Ontology 1875-8533 | Argument and Computation 1946-2174 | Asymptotic Analysis 1875-8576 | Bio-Medical Materials and Engineering 1878-3619 | Biorheology 1878-5034 | Bladder Cancer 2352-3735 | Breast Disease 1558-1551 | Bridge Structures 1744-8999 | Cancer Biomarkers 1875-8592 | Clinical Hemorheology and Microcirculation 1875-8622 | Computability 2211-3576 | Data Science 2451-8492 | Education for Information 1875-8649 | Environmental Policy and Law 1878-5395 | Human Antibodies 1875-869XL912| Human Systems Management 1875-8703 | ICGA Journal 2468-2438 | In Silico Biology 1434-3207 | Information Polity 1875-8754 | Information Services and Use 1875-8789 | Integrated Computer-Aided Engineering 1875-8835 | Intelligent Data Analysis 1571-4128 | Intelligent Decision Technologies 1875-8843 | Intelligenza Artificiale 2211-0097 | International Journal of Applied Electromagnetics and Mechanics 1875-8800 | International Journal of Developmental Science 2191-7485 | International Journal of Hybrid Intelligent Systems 1875-8819 | International Journal of Knowledge-Based and Intelligent Engineering Systems 1875-8827 | International Journal of RF Technologies: Research and Applications 1754-5749 | International Journal of Risk and Safety in Medicine 1878-6847 | International Shipbuilding Progress 1566-2829 | Isokinetics and Exercise Science 1878-5913 | Journal of Alzheimer's Disease 1875-8908 | Journal of Alzheimer's Disease Reports 2542-4823 | Journal of Ambient Intelligence and Smart Environments 1876-1372 | Journal of Back and Musculoskeletal Rehabilitation 1878-6324 | Journal of Berry Research 1878-5123 | Journal of Cellular Biotechnology 2352-3697 | Journal of Computational Methods in Science and Engineering 1875-8983 | Journal of Computer Security 1875-8924 | Journal of Economic and Social Measurement 1875-8932 | Journal of High Speed Networks 1875-8940 | Journal of Huntington's Disease 1879-6400 | Journal of Integrated Design and Process Science 1875-8959 | Journal of Intelligent and Fuzzy Systems 1875-8967 | Journal of Neonatal-Perinatal Medicine 1878-4429 | Journal of Neuromuscular Diseases 2214-3602 | Journal of Neutron Research 1477-2655 | Journal of Parkinson's Disease 1877-718XL804| Journal of Pediatric Rehabilitation Medicine 1875-8894 | Journal of Smart Cities and Society 2772-3585 | Journal of Sports Analytics 2215-0218 | Journal of Vestibular Research 1878-6464 | Journal of Vocational Rehabilitation 1878-6316 | Journal of X-Ray Science and Technology 1095-9114 | Main Group Chemistry 1745-1167  | Mediterranean Journal of Nutrition and Metabolism 1973-7998 | Model Assisted Statistics and Applications 1875-9068 | Multiagent and Grid Systems 1875-9076 | NeuroRehabilitation 1878-6448 | Physiotherapy Practice and Research 2213-0691 | Restorative Neurology and Neuroscience 1878-3627 | Risk and Decision Analysis 1875-9173 | Semantic Web 2210-4968 | Statistical Journal of the IAOS: Journal of the International Association for Official Statistics 1875-9254 1| Strength, Fracture and Complexity 1875-9262 | Technology and Disability 1878-643XLA22| Technology and Health Care 1878-7401 | The European Journal on Artificial Intelligence 1875-8452 | The European Journal on Artificial Intelligence 1875-8452 | Translational Science of Rare Diseases 2214-6512 | Tumor Biology 1423-0380 | Web Intelligence 2405-6464 | WORK: A Journal of Prevention, Assessment and Rehabilitation 1875-9270 ",
       "publisher": "IOS Press",
       "publisher_slug": "ios-press",
       "publisher_page_url": "https://www.openaccess.nl/en/publisher/ios-press",
