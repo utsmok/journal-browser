@@ -19,6 +19,9 @@ services:
     build: ./backend
     environment:
       JB_DATABASE_URL: postgresql+asyncpg://journal:journal@db:5432/journalbrowser
+    volumes:
+      # Raw landing copies and job logs must survive container rebuilds.
+      - ./backend/landing:/app/landing
     ports:
       - "8000:8000"
     depends_on:

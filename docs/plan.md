@@ -197,3 +197,28 @@ FastAPI schema. Re-theming to UT house style later means swapping the token bloc
 - **Metric expectations** (CiteScore/SJR habits): caveat hints state what each metric is
   and is not; no invented substitutes.
 - **Green OA blocked on key**: phase 6 starts only when the Jisc key arrives.
+
+## Addendum 2026-10-23 (owner decisions, post-review)
+
+The full review is in `docs/review-2026-10-22.md`. Owner decisions that change this
+plan:
+
+- **Deals are manual (decision 14).** Phases 1 and 7 auto-writers are removed
+  (`ingest_jct`, `scrape_openaccess_nl`, `reconcile`, including the curation
+  report). The register is exactly the owner-verified home-linked deals (16);
+  non-Twente deals were purged from the database. The decision-13 "canonical
+  register with curation-pending visibility" is superseded: the owner verdict is
+  that De Gruyter Brill and the other register-only rows are not Twente deals.
+- **Quality bar dropped (decision 15).** The presented corpus is
+  `works_2020_plus > 3` (130,667 of 177,181 at decision time); the `scope` API
+  parameter, toggle, and badge are gone.
+- **Pure-primary totals everywhere.** List and detail surfaces now agree on the
+  per-year coalesce(pure, openalex) merge; the detail bundle adds
+  `stats_totals` so the journal page can show the OpenAlex institution-filter
+  count as a labeled cross-check, as phase 10 intended.
+- **Ops**: `landing/` is volume-mounted into the backend container so raw copies
+  survive rebuilds; job logs moved out of the landing tree.
+- **Known, not yet fixed** (logged in the review): a fresh install never sets
+  `institutions.is_home` (README order no longer breaks it via JCT, but the
+  resolvers still only set it on create), CI runs no database tests, and the
+  phase 2/3/8/9 harvest machinery has no direct test coverage.

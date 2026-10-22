@@ -62,32 +62,34 @@ jobs (only cursor-paged harvests use the key; single-entity lookups are keyless)
 
 ```bash
 cd backend
-uv run python jobs/scrape_openaccess_nl.py   # openaccess.nl deals (raw HTML landed)
-uv run python jobs/ingest_jct.py             # cOAlition S JCT dump -> deals + journals
-uv run python jobs/ingest_openapc.py         # OpenAPC aggregates + Twente evidence
-uv run python jobs/reconcile.py              # merge deals; curation report (HTML)
-uv run python jobs/harvest_journals.py       # OpenAlex sources sweep + quality-bar counts
+uv run python jobs/harvest_journals.py       # OpenAlex sources sweep (lands raw payloads)
 uv run python jobs/backfill_issn_l.py        # deal_journals.issn_l via issn_map
+uv run python jobs/ingest_openapc.py         # OpenAPC aggregates + Twente evidence
 uv run python jobs/ingest_scimagojr.py       # yearly exports from landing/scimagojr/
-uv run python jobs/backfill_flags.py         # recompute activity flags
+uv run python jobs/harvest_pure.py           # Pure OAI -> canonical UT works
+uv run python jobs/enrich_works.py           # OpenAlex/Crossref enrichment by DOI
 uv run python jobs/harvest_stats.py          # Twente works 2020+ -> per-journal stats
+uv run python jobs/backfill_flags.py         # recompute works_2020_plus / last_active_year
 ```
 
-`landing/reports/curation_report.html` lists every row a human should review:
-unmatched deals, consortium merges without enumerated members, and unresolvable
-deal-journal ISSNs. Curated fixes go through `manual_overrides` and are never
-overwritten by re-ingestion.
+**Deals are manual.** The deal register is exactly the owner-verified deals carrying a
+`deal_institutions` link to the home institution (16 as of 2026-10-23). Nothing
+auto-writes deals: the JCT/openaccess.nl/reconcile harvesters were removed on
+2026-10-23 (owner decision; see decisions.md #14), and `jobs/purge_non_twente_deals.py`
+deletes any deal without a home link. New or changed deals go in through a curation
+job like `jobs/apply_curation_2026_10_22.py`; raw JCT/openaccess.nl copies stay in
+`landing/` for reference.
 
-The search API defaults to the corpus quality bar (decision 12 in
-[docs/decisions.md](docs/decisions.md)); pass `scope=all` for the full corpus.
-Green-OA (Jisc) and cited-by-Twente harvests are scaffolded behind config flags and
-stay off until keys/approval land.
+The search corpus is everything with more than 3 publications since 2020
+(`works_2020_plus > 3`, owner decision; see decisions.md #15). Green-OA (Jisc) and
+cited-by-Twente harvests are scaffolded behind config flags and stay off until
+keys/approval land.
 
 ## Status
 
-Phases 0-6 of [docs/plan.md](docs/plan.md) are built and verified against live
-sources: deal ingestion (JCT + openaccess.nl + OpenAPC + reconcile), the OpenAlex
-sources sweep (177k journals), scimagojr metrics, Twente statistics, the search API,
-and the frontend with the limitations/caveat system. Phase 7 (compose smoke test +
-parity checklist) is the remaining v1 item; phases 8-10 (Pure/OpenAIRE/Crossref) are
-specified in [docs/plan-pure-openaire-crossref.md](docs/plan-pure-openaire-crossref.md).
+Phases 0-10 of [docs/plan.md](docs/plan.md) are built: the OpenAlex sources sweep,
+scimagojr metrics, Pure-canonical Twente statistics (Pure OAI + OpenAIRE/Crossref
+enrichment), the search API, and the frontend with the limitations/caveat system.
+Deal data is a manually maintained register (decisions.md #14); the corpus presents
+journals with >3 works since 2020 (decisions.md #15). Post-review fixes and the
+owner-decision changes are described in [docs/review-2026-10-22.md](docs/review-2026-10-22.md).

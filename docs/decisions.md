@@ -1,6 +1,6 @@
 # Decisions log
 
-## Settled decisions (with owner sign-off 2026-10-22)
+## Settled decisions
 
 1. **Deal journal lists come from the cOAlition S JCT public dump (CC0), amended with
    openaccess.nl data.** Never scrape the old journal browser; go to the sources.
@@ -69,6 +69,24 @@
     register, not from a JCT institution row (query in
     `routers/journals.py::get_journal`).
 
+14. **The deal register is manual and Twente-only (2026-10-23).** The register is
+    exactly the deals with a `deal_institutions` link to the home institution (16
+    verified deals as of 2026-10-23); all other deals were purged from the database
+    (`jobs/purge_non_twente_deals.py`) and are re-derivable from the landing zone.
+    Everything that auto-wrote deal data was removed: the JCT ingester, the
+    openaccess.nl scraper, and reconcile (with its curation report) are deleted from
+    the codebase; raw copies stay in `landing/`. New or changed deals are entered by
+    hand through curation jobs (pattern: `jobs/apply_curation_2026_10_22.py`).
+    Owner verdict of record: De Gruyter Brill (`dgb2026ukb`) and the other
+    register-only rows are **not** Twente deals. Hand-curated fields can no longer be
+    overwritten by a re-ingest, because no deal re-ingest exists.
+15. **Corpus cutoff replaces the quality bar (2026-10-23).** Decision 12's quality
+    bar is dropped as arbitrary. The presented corpus is every journal with more
+    than 3 publications since 2020 (`journals.works_2020_plus > 3`, derived at
+    upsert from `counts_by_year`; 130,667 of 177,181 at decision time). The
+    `scope` query parameter, `in_quality_bar` payload field, "include all journals"
+    toggle, and outside-quality-bar badge are removed.
+
 ## Open questions
 
 1. **Jisc Open Policy Finder API key**: needed for green-OA policy integration
@@ -105,9 +123,9 @@
   key guess made every activity flag silently false — caught by the quality-bar
   count sanity check (0 active journals).
 - **Quality-bar band (decision 12)**: the specified predicate (any work since 2020)
-  puts 138,834/177,181 in the default scope, above the ~50-70k estimate. The
-  predicate is as agreed; if a tighter default is wanted, tighten the activity
-  definition (e.g. minimum works in window) — data supports either.
+  put 138,834/177,181 in the default scope, above the ~50-70k estimate. Resolved
+  2026-10-23 by decision 15: the bar was dropped for the simple works-in-window
+  cutoff.
 
 ## Historical notes
 
