@@ -24,9 +24,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.add_column("journals", sa.Column("home_works_count", sa.Integer(), nullable=True))
-    op.add_column(
-        "journals", sa.Column("latest_quartile", sa.String(length=4), nullable=True)
-    )
+    op.add_column("journals", sa.Column("latest_quartile", sa.String(length=4), nullable=True))
     op.add_column(
         "journals",
         sa.Column(

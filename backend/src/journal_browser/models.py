@@ -275,9 +275,7 @@ class Journal(Base):
     # total works in the 2020+ window, derived at upsert time from
     # counts_by_year. Journals with <= 3 works are presentation-excluded.
     last_active_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    works_2020_plus: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default=text("0")
-    )
+    works_2020_plus: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     in_scimago: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     # Denormalized for search and facets; refreshed by harvest.denorm at the
     # end of the stats, scimago, and deal-register jobs.
@@ -410,18 +408,10 @@ class UtWork(Base):
     publisher: Mapped[str | None] = mapped_column(Text, nullable=True)
     cerif_issn: Mapped[str | None] = mapped_column(Text, nullable=True)
     oa_status: Mapped[str | None] = mapped_column(Text, nullable=True)
-    journal_issn_l: Mapped[str | None] = mapped_column(
-        ForeignKey("journals.issn_l"), nullable=True
-    )
-    first_seen_run: Mapped[int] = mapped_column(
-        ForeignKey("harvest_runs.id"), nullable=False
-    )
-    last_seen_run: Mapped[int] = mapped_column(
-        ForeignKey("harvest_runs.id"), nullable=False
-    )
-    retired_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    journal_issn_l: Mapped[str | None] = mapped_column(ForeignKey("journals.issn_l"), nullable=True)
+    first_seen_run: Mapped[int] = mapped_column(ForeignKey("harvest_runs.id"), nullable=False)
+    last_seen_run: Mapped[int] = mapped_column(ForeignKey("harvest_runs.id"), nullable=False)
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = _tstamp()
 
 
@@ -442,16 +432,12 @@ class WorkIdentity(Base):
     )
     matched_by: Mapped[str] = mapped_column(Text, nullable=False)
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
-    status: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default="candidate"
-    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="candidate")
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = _tstamp()
     updated_at: Mapped[datetime] = _tstamp()
 
-    __table_args__ = (
-        UniqueConstraint("source", "source_pk", name="uq_work_identity_source"),
-    )
+    __table_args__ = (UniqueConstraint("source", "source_pk", name="uq_work_identity_source"),)
 
 
 class Limitation(Base):

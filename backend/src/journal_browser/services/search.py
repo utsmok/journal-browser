@@ -11,6 +11,7 @@ from ..models import Journal
 
 SortKey = str  # relevance | title | institution_works | 2yr_mean_citedness
 
+
 def parse_cursor(cursor: str | None) -> tuple[str, str] | None:
     if not cursor:
         return None
@@ -125,9 +126,7 @@ async def search_journals(
     cursor: str | None = None,
     limit: int = 20,
 ) -> dict[str, Any]:
-    subq = base_query(
-        q=q, deal=deal, oa=oa, doaj=doaj, quartile=quartile, topic=topic
-    ).subquery()
+    subq = base_query(q=q, deal=deal, oa=oa, doaj=doaj, quartile=quartile, topic=topic).subquery()
     total = await session.scalar(select(func.count()).select_from(subq)) or 0
 
     order_col, direction = _order(sort, subq)
@@ -206,26 +205,47 @@ async def facet_counts(
         ).one()
         return int(row[0] or 0), [int(v or 0) for v in row[1:]]
 
-    d = base_query(q=q, oa=oa, doaj=doaj, quartile=quartile, topic=topic).subquery()
-    d_total, (d_covered,) = await _one(d, d.c.deal_covered.is_(True))
-    o = base_query(q=q, deal=deal, doaj=doaj, quartile=quartile, topic=topic).subquery()
-    o_total, (o_true,) = await _one(o, o.c.is_oa.is_(True))
-    dj = base_query(q=q, deal=deal, oa=oa, quartile=quartile, topic=topic).subquery()
-    dj_total, (dj_true,) = await _one(dj, dj.c.is_in_doaj.is_(True))
-    qt = base_query(q=q, deal=deal, oa=oa, doaj=doaj, topic=topic).subquery()
-    qt_total, (q1, q2, q3, q4) = await _one(
-        qt,
-        qt.c.quartile == "Q1",
-        qt.c.quartile == "Q2",
-        qt.c.quartile == "Q3",
-        qt.c.quartile == "Q4",
+    # One pass over the full filter set answers the total and every facet
+    # whose own filter is inactive; only active filters need a second pass.
+    base = base_query(q=q, deal=deal, oa=oa, doaj=doaj, quartile=quartile, topic=topic).subquery()
+    total, (covered, oa_true, doaj_true, q1, q2, q3, q4) = await _one(
+        base,
+        base.c.deal_covered.is_(True),
+        base.c.is_oa.is_(True),
+        base.c.is_in_doaj.is_(True),
+        base.c.quartile == "Q1",
+        base.c.quartile == "Q2",
+        base.c.quartile == "Q3",
+        base.c.quartile == "Q4",
     )
     facets: dict[str, dict[str, int]] = {
-        "deal_coverage": {"covered": d_covered, "not_covered": d_total - d_covered},
-        "oa": {"true": o_true, "false": o_total - o_true},
-        "doaj": {"true": dj_true, "false": dj_total - dj_true},
+        "deal_coverage": {"covered": covered, "not_covered": total - covered},
+        "oa": {"true": oa_true, "false": total - oa_true},
+        "doaj": {"true": doaj_true, "false": total - doaj_true},
         "quartile": {"Q1": q1, "Q2": q2, "Q3": q3, "Q4": q4},
     }
+    if deal != "any":
+        d = base_query(q=q, oa=oa, doaj=doaj, quartile=quartile, topic=topic).subquery()
+        d_total, (d_covered,) = await _one(d, d.c.deal_covered.is_(True))
+        facets["deal_coverage"] = {"covered": d_covered, "not_covered": d_total - d_covered}
+    if oa is not None:
+        o = base_query(q=q, deal=deal, doaj=doaj, quartile=quartile, topic=topic).subquery()
+        o_total, (o_true,) = await _one(o, o.c.is_oa.is_(True))
+        facets["oa"] = {"true": o_true, "false": o_total - o_true}
+    if doaj is not None:
+        dj = base_query(q=q, deal=deal, oa=oa, quartile=quartile, topic=topic).subquery()
+        dj_total, (dj_true,) = await _one(dj, dj.c.is_in_doaj.is_(True))
+        facets["doaj"] = {"true": dj_true, "false": dj_total - dj_true}
+    if quartile in {"Q1", "Q2", "Q3", "Q4"}:
+        qt = base_query(q=q, deal=deal, oa=oa, doaj=doaj, topic=topic).subquery()
+        qt_total, (w1, w2, w3, w4) = await _one(
+            qt,
+            qt.c.quartile == "Q1",
+            qt.c.quartile == "Q2",
+            qt.c.quartile == "Q3",
+            qt.c.quartile == "Q4",
+        )
+        facets["quartile"] = {"Q1": w1, "Q2": w2, "Q3": w3, "Q4": w4}
     elem = func.jsonb_array_elements(
         func.coalesce(Journal.topics, text("'[]'::jsonb"))
     ).table_valued("value", name="t")
