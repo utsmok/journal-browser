@@ -21,12 +21,20 @@ Global constraints:
 
 - [x] Repo layout, docker-compose (db/backend/frontend), FastAPI `/api/v1/healthz`,
       Next.js skeleton, `.env.example`, docs tree.
-- [ ] Alembic wired; CI (ruff + pytest + frontend build).
-- [ ] aletheca/aireloom/stavrophora as dependencies; a thin `harvest/common.py` with the
+- [x] Alembic wired; CI (ruff + pytest + frontend build).
+- [x] aletheca/aireloom/stavrophora as dependencies; a thin `harvest/common.py` with the
       ut-metadata `IngestSession` idiom (content-hash upserts, harvest_runs/harvest_state
       bookkeeping, per-page commits, per-record error isolation, type-check on yields).
 
-## Phase 1 — Deal data model + ingestion (the core)
+## Phase 1 — Deal data model + ingestion (the core) — DONE
+
+All four jobs live and run end-to-end on a fresh database: JCT (546 agreements,
+287k deal journals), openaccess.nl (26 publishers, 76 deals), OpenAPC (82k
+aggregates, 297 Twente evidence rows), reconcile (12 current canonical merges;
+Twente-bearing preferred, Dutch-consortium merges flagged for member verification,
+foreign-consortium rows kept unmerged; curation report at
+`landing/reports/curation_report.html`). Acceptance verified for Karger, Elsevier,
+OUP, PLOS, Thieme.
 
 Data model (Postgres, alembic-managed):
 
@@ -99,9 +107,12 @@ Acceptance: journal/year counts match live OpenAlex queries for a sample set.
 `/api/v1/journals` — query (title/ISSN), facets: deal_coverage, is_oa, is_in_doaj,
 topic, quartile; sorts: relevance, title, institution works, 2yr_mean_citedness;
 keyset pagination. Postgres FTS on title + alternate titles; facets via filtered counts.
-`/api/v1/journals/{issn_l}` — full detail bundle with per-field source attribution.
-`/api/v1/deals`, `/api/v1/deals/{id}` — deal records with journal counts and evidence
-links. `/api/v1/meta/limitations` — the caveat registry. OpenAPI auto-documented.
+Default corpus scope is the quality bar (decision 12: type=journal with DOAJ, Scimago,
+deal coverage, or 2020+ activity); `scope=all` returns the full corpus and facet counts
+follow the active scope. `/api/v1/journals/{issn_l}` — full detail bundle with per-field
+source attribution. `/api/v1/deals`, `/api/v1/deals/{id}` — deal records with journal
+counts and evidence links. `/api/v1/meta/limitations` — the caveat registry. OpenAPI
+auto-documented.
 
 ## Phase 5 — Frontend (Next.js)
 
