@@ -361,6 +361,40 @@ async def render_curation_report(session: AsyncSession) -> Path:
             f"<p>{skipped} JCT agreements are not Twente-affiliated and are out of "
             "scope for this browser; they stay in the database for provenance.</p>"
         )
+    # Upstream sanity: JCT agreement CSVs sometimes carry another
+    # publisher's journal list (eme2025ukb ships Elsevier's list verbatim).
+    # Flag Twente-relevant pairs with near-identical ISSN sets.
+    twente_deals = [d for d in deals if d.id in twente_deal_ids]
+    lists = {}
+    for d in twente_deals:
+        rows = await session.execute(
+            select(DealJournal.issn).where(DealJournal.deal_id == d.id)
+        )
+        sets = frozenset(r[0] for r in rows.all())
+        if len(sets) >= 50:
+            lists[d] = sets
+    seen: set[tuple[int, int]] = set()
+    overlaps: list[str] = []
+    items = sorted(lists.items(), key=lambda kv: kv[0].esac_id or "")
+    for i, (da, sa) in enumerate(items):
+        for db_, sb in items[i + 1 :]:
+            pair = (min(da.id, db_.id), max(da.id, db_.id))
+            if pair in seen:
+                continue
+            seen.add(pair)
+            j = len(sa & sb) / max(1, min(len(sa), len(sb)))
+            if j >= 0.9:
+                overlaps.append(
+                    f"<li>{_esc(da.esac_id or '')} vs {_esc(db_.esac_id or '')}: "
+                    f"{j:.0%} identical ISSN sets ({len(sa)} vs {len(sb)}) — likely "
+                    "an upstream data error; verify with the JCT curators</li>"
+                )
+    if overlaps:
+        sections.append(
+            "<h2>Suspicious journal-list overlap between Twente-relevant agreements</h2><ul>"
+            + "".join(overlaps)
+            + "</ul>"
+        )
     if unresolvable:
         sections.append(
             "<h2>Deal journals with unresolved ISSN-L</h2><ul>"

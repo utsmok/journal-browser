@@ -151,14 +151,16 @@ FastAPI schema. Re-theming to UT house style later means swapping the token bloc
   licenses, conditions), raw JSON to landing store, normalized subset for display.
 - Unblocks when Sam supplies the API key; scaffold can land earlier behind a flag.
 
-## Phase 7 — Curation & ops
+## Phase 7 — Curation & ops — DONE (2026-10-22)
 
-- Staff curation report (unmatched deals, stale data, scraper diffs), read-only HTML
-  from the reconcile job.
-- Scheduled jobs (compose service or cron) + freshness metadata per table in
-  `/api/v1/meta/freshness` and the About page.
-- Packaging pass for the open-source release: configurable institution (ROR + name in
-  env), seed scripts, README walkthrough for a new university.
+- Curation report live at `landing/reports/curation_report.html` (unmatched deals,
+  consortium merges needing member verification, suspicious journal-list overlap
+  between agreements — e.g. els2025ukb vs eme2025ukb at 100% identical ISSNs, an
+  upstream JCT data error — and unresolved deal-journal ISSNs).
+- Freshness metadata in `/api/v1/meta/freshness` + About page; per-source latest
+  harvests shown. Scheduled runs deferred (LAN PoC: jobs run manually per README).
+- Packaging: institution configurable via `JB_INSTITUTION_*` env, compose stack
+  verified end-to-end (`docker compose up --build`), README walkthrough written.
 
 ## Risks & mitigations
 

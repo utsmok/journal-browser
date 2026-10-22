@@ -104,14 +104,15 @@ def base_query(
     if q:
         qstr = q.strip()
         # Relevance = title-prefix match tier + FTS rank + prominence nudge
-        # from 2yr mean citedness. One expression so keyset pagination can
-        # compare (rank, issn_l) tuples; the tier spacing dwarfs FTS-rank and
-        # citedness ranges, so title matches always sort first, prominence
-        # orders within the tier.
+        # from corpus size (works_count). One expression so keyset
+        # pagination can compare (rank, issn_l) tuples; the tier spacing
+        # dwarfs the other ranges, so title matches always sort first, and
+        # within a tier an established flagship outranks a niche journal
+        # with a momentarily higher citedness metric.
         rank = (
             case((J.title.ilike(f"{qstr}%"), 100.0), else_=0.0)
             + func.ts_rank(J.search_vector, func.websearch_to_tsquery(text("'english'"), qstr))
-            + func.coalesce(twoyr, 0.0) * 0.1
+            + func.least(func.coalesce(J.works_count, 0), 100000) * 0.00001
         ).label("rank")
     else:
         rank = cast(text("0"), Numeric).label("rank")

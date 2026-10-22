@@ -78,6 +78,9 @@ project other universities can launch and run for themselves.
 
 ## v1 parity target vs the live UT journal browser
 
+Verified end-to-end on 2026-10-22 against a fresh `docker compose up` stack
+(screenshots under `frontend/docs/screenshots/`).
+
 | Capability | Live tool | v1 (this project) |
 |---|---|---|
 | Journal search + facets + sorting | yes | yes (facets: deal coverage, OA status, DOAJ, topic, quartile; quality-bar scope by default per decision 12, full corpus behind `scope=all`) |
