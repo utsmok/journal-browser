@@ -31,7 +31,6 @@ WINDOW_START = "2020-01-01"
 PER_PAGE = 100
 OA_FIELDS = ("gold", "hybrid", "green", "bronze", "diamond", "closed")
 
-WORKS_SELECT = "id,doi,publication_year,open_access,primary_location"
 
 
 def openalex_id_to_pk(openalex_id: str | None) -> str:
@@ -65,7 +64,7 @@ async def harvest_institution_stats(
         await session.commit()
 
         ingest = IngestSession(session)
-        config = {"filter": filter_set, "select": WORKS_SELECT, "from": WINDOW_START}
+        config = {"filter": filter_set, "from": WINDOW_START}
         await ingest.start_run(SOURCE, ENTITY_TYPE, filter_set, config)
 
         async def commit_page(_page: int, _cursor: str | None) -> None:
@@ -77,10 +76,11 @@ async def harvest_institution_stats(
         unlinked = 0
         current_year = datetime.now(UTC).year
 
+        # aletheca's iterate does not support field selection; the full
+        # work payload lands verbatim in source_records.
         async for item in client.works.iterate(
             page_size=PER_PAGE,
             filters={"institutions.id": inst_id, "from_publication_date": WINDOW_START},
-            select=WORKS_SELECT,
             on_page=commit_page,
         ):
             payload = (

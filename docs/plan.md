@@ -104,7 +104,11 @@ Corpus per decision 12: 138,834 quality bar / 177,181 total.
   `harvest/journal_citations.py` stub with the batching helper, tests on a tiny sample,
   and a config flag default-off.
 
-Acceptance: journal/year counts match live OpenAlex queries for a sample set.
+Acceptance (verified 2026-10-22): harvest stored 26,755 Twente works 2020+
+(exact live count); STOTEN 32 and PLOS ONE 92 match live `works.count` with
+identical per-year splits. Trend table sums 26,754 — one stored work falls
+outside the 2020-2026 year bucket (undated/ahead-dated) and is counted only in
+the raw record store.
 
 ## Phase 4 — Search API
 
