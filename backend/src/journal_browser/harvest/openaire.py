@@ -166,8 +166,7 @@ SELECT o.source_pk, o.title, w.pure_uuid,
                   w.norm_title) AS sim
 FROM openaire o
 JOIN ut_works w
-  ON similarity(lower(regexp_replace(o.title, '[^0-9a-zA-Z]+', ' ', 'g')),
-                w.norm_title) >= :thr
+  ON w.norm_title % (lower(regexp_replace(o.title, '[^0-9a-zA-Z]+', ' ', 'g')))
 ORDER BY o.source_pk, sim DESC
 """
 
@@ -180,14 +179,19 @@ async def match_openaire_titles(
     The Graph API serves no DOIs on list endpoints, so OpenAIRE records
     match by normalized title only. Only the best-scoring work per record
     lands, always as status='candidate' (never auto-confirmed) for the
-    curation report.
+    curation report. The join uses the pg_trgm ``%`` operator so the GIN
+    trigram index on ut_works.norm_title applies; similarity(...) >= const
+    would plan as a 470M-row nested loop.
     """
     from sqlalchemy import text
 
+    # % reads the threshold from the GUC; parameters are not allowed in SET.
+    await session.execute(
+        text("SELECT set_config('pg_trgm.similarity_threshold', :thr, false)"),
+        {"thr": str(TRGM_THRESHOLD)},
+    )
     rows = (
-        await session.execute(
-            text(_MATCH_SQL), {"limit": limit or 100000, "thr": TRGM_THRESHOLD}
-        )
+        await session.execute(text(_MATCH_SQL), {"limit": limit or 100000})
     ).all()
     seen: set[str] = set()
     for r in rows:

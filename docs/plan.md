@@ -164,6 +164,30 @@ FastAPI schema. Re-theming to UT house style later means swapping the token bloc
 - Packaging: institution configurable via `JB_INSTITUTION_*` env, compose stack
   verified end-to-end (`docker compose up --build`), README walkthrough written.
 
+## Phase 8-10 — Canonical corpus, enrichment, stats verification — DONE (2026-10-22)
+
+- **Phase 8 (canonical corpus)**: `ut_works` from Pure OAI (`publications:year20xx`
+  sets, 2020+), verbatim records in `source_records`; per-year full sweeps retire
+  works absent from *all* of the sweep's runs (the single-run comparison retired
+  27,186 works in error once — fixed and repaired). Parity vs ut-metadata: 29,756
+  vs 29,508 works 2020+ (+0.84%, within the 2% gate; per-year ≤0.3% except 2026,
+  which is fresher). CERIF pass backfills `cerif_issn` from the OAI-PMH CERIF view.
+- **Phase 9 (enrichment + identities)**: journal ladder OpenAlex → Crossref → CERIF
+  with a locations-ISSN fallback. Verified by type scan of all 24,393 DOI works:
+  journal articles with an ISSN resolve ~100% (article+issn 15,862/15,861, reviews
+  97.2%, editorials 96.3%); absolute DOI→journal is 78.3% because the corpus is
+  ~40% non-journal (dissertations 1,455, conference papers 3,175, book chapters
+  714, preprints 573, absent-from-OpenAlex 1,176). OpenAIRE adds 21,835 DOI-confirmed
+  identities + 3,657 trigram title candidates (curated, never auto-confirmed).
+- **Phase 10 (stats verification)**: `institution_works_stats.source` dimension
+  (migration 0006): `openalex_institution_filter` (OA split) vs `pure_canon`
+  (works-only cross-check, 9,927 rows). `jobs/verify_utmetadata.py` gates corpus
+  parity at 2%. Curation report lists work-identity candidates.
+- **Decision 13** (docs/decisions.md): openaccess.nl is the canonical deal register,
+  JCT is enrichment only; all canonical Twente deals visible with a curation-pending
+  badge (22 current deals, 11 flagged); Emerald UKB reconstructed manually from the
+  signed contract (311/311) with the upstream JCT mis-link recorded.
+
 ## Risks & mitigations
 
 - **openaccess.nl drift**: scraper diffs + curation report; overrides survive re-runs.

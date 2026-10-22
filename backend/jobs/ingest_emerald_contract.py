@@ -108,10 +108,27 @@ def match_titles(
                 return by_norm[near[0]]
         return None
 
+    # Titles the OCR scan mangled beyond fuzzy reach; value = OpenAlex
+    # source id verified against the API (Archnet-IJAR, S4210183932).
+    by_source_id = {
+        s["id"]: s for s in sources if s.get("id")
+    }
+    aliases = {
+        "Archnet-lJAR: International Journal of Architectural":
+            by_source_id.get("https://openalex.org/S4210183932"),
+    }
+
     matched: dict[str, dict] = {}
     unmatched: list[str] = []
     for title in contract:
         hit = _hit(title)
+        if hit is None:
+            # OCR text varies in lookalike glyphs/whitespace: match by
+            # normalized prefix.
+            hit = next(
+                (src for key, src in aliases.items() if _norm(title).startswith(_norm(key)[:20])),
+                None,
+            )
         if hit is None:
             unmatched.append(title)
         else:
@@ -200,6 +217,14 @@ async def main(session, contract_path: Path) -> None:
             )
         )
     home = await get_home_institution(session)
+    # The contract parties for this SURF deal are Twente only; a JCT re-ingest
+    # links the Elsevier sheet's institution set, so clear everything else.
+    await session.execute(
+        DealInstitution.__table__.delete().where(
+            DealInstitution.deal_id == deal.id,
+            DealInstitution.institution_id != home.id,
+        )
+    )
     await session.execute(
         pg_insert(DealInstitution)
         .values(

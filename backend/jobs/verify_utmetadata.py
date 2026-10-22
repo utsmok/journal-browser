@@ -72,24 +72,13 @@ async def top_journals(session, conn) -> list[dict]:
             .limit(20)
         )
     ).all()
-    out = []
-    for issn_l, count, title in ours_rows:
-        # ut-metadata equivalent: distinct Pure works whose CERIF issn maps
-        # to this journal issn_l in the same year bucket.
-        n = await conn.fetchval(
-            """
-            SELECT count(DISTINCT sr.source_pk)
-            FROM source_records sr
-            WHERE sr.source='pure' AND sr.entity_type='works'
-              AND sr.payload->'cerif'->>'issn' = ANY($1::text[])
-            """,
-            [issn_l],
-        )
-        out.append({
-            "issn_l": issn_l, "title": (title or "")[:40],
-            "ours": count, "utmeta_cerif_issn_hits": n,
-        })
-    return out
+    # ut-metadata has no per-journal/year cut in a documented table (its
+    # work_venues link uses OpenAlex S-ids, not venue ids), so the top-20 is
+    # reported for eyeballing only; the 2% corpus gate is the real check.
+    return [
+        {"issn_l": issn_l, "title": (title or "")[:40], "ours": count}
+        for issn_l, count, title in ours_rows
+    ]
 
 
 async def main() -> None:
