@@ -51,6 +51,34 @@
    but the concrete field selection per entity is open until the harvesters run; the
    `ut-metadata` implementation is the reference.
 
+## Implementation notes (2026-10-22 build)
+
+- **ESAC registry not scraped**: esac-registration.org renders via JS; deal↔ESAC
+  identity comes from the JCT dump (esac_id) joined to openaccess.nl narratives by
+  publisher alias + duration overlap, tiered: Twente-bearing agreements first, then
+  Dutch consortia (ukb/surf/nl), foreign consortia never merge. UKB/SURF joint deals
+  often omit member lists; such merges get a "verify Twente participation" curation
+  flag instead of asserting coverage.
+- **OpenAPC Twente rows carry euro=NA** in the source data for all 297 Twente
+  evidence rows (2020+); cost evidence for Twente articles therefore comes from the
+  journal-level aggregates, not per-article amounts.
+- **scimagojr.com is Cloudflare-hard** (403 for httpx and curl-cffi impersonation;
+  headless Chromium fails the challenge). Exports are fetched once through the
+  user's Chrome relay (in-page same-origin fetch) and landed as
+  `landing/scimagojr/export_<year>.csv` (latin-1, semicolons — parse with the csv
+  module; naive splits corrupt rows where quoted fields contain semicolons).
+- **JCT `institutions_name_key` collisions**: different RORs share display names
+  (e.g. "Open University"); the ingester suffixes the ROR id instead of failing.
+- **OpenAIRE/Crossref enrichment corpus** is bound to the deal+Twente-active journal
+  set, not the full 177k corpus.
+- **counts_by_year entries use `works_count`** (OpenAlex published key). A `works`
+  key guess made every activity flag silently false — caught by the quality-bar
+  count sanity check (0 active journals).
+- **Quality-bar band (decision 12)**: the specified predicate (any work since 2020)
+  puts 138,834/177,181 in the default scope, above the ~50-70k estimate. The
+  predicate is as agreed; if a tighter default is wanted, tighten the activity
+  definition (e.g. minimum works in window) — data supports either.
+
 ## Historical notes
 
 - 2026-10-22: initial research phase. An early draft of this project assumed WUR as the

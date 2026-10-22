@@ -84,8 +84,12 @@ verified against 5 known deals (Karger, Elsevier, OUP, PLOS, Thieme).
   passes (OA versions, license metadata); concrete field selection follows a first
   harvest, using `ut-metadata` harvesters as reference. No derived numbers from them.
 
-Acceptance: sample journals (Water Research, PLOS ONE, a Twente-heavy journal) show
-stats identical to the live OpenAlex source record; scimagojr quartile matches the CSV.
+Acceptance (verified 2026-10-22): Water Research (0043-1354), PLOS ONE (1932-6203),
+STOTEN (0048-9697), and AMBIO (0044-7447) match the live OpenAlex source records
+exactly (summary_stats, counts_by_year, works_count). Sweep: 177,181 sources
+normalized (19,582 seeded from deal ISSNs), 0 parse failures. Scimago exports
+2022-2024 landed via browser fetch (Cloudflare) and ingested (~50k metrics/year).
+Corpus per decision 12: 138,834 quality bar / 177,181 total.
 
 ## Phase 3 — Institution statistics (2020+, collected only)
 
