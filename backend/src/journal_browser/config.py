@@ -28,8 +28,6 @@ class Settings(BaseSettings):
 
     # Permanent raw landing zone for downloaded files (CSVs, HTML, JSON).
     landing_dir: str = "landing"
-    # Curation report output path (reconcile job).
-    curation_report_path: str = "landing/reports/curation_report.html"
 
     # Feature flags. Both scaffolds stay OFF until explicitly enabled.
     enable_journal_citations: bool = False

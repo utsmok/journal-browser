@@ -79,7 +79,7 @@ ATTRIBUTION = {
         caveat_codes=["window-2020", "institution-affiliation", "openalex-coverage"],
     ),
     "deals": Attribution(
-        source="jct + openaccess.nl",
+        source="owner-curated register (openaccess.nl + JCT)",
         url="https://journalcheckertool.org/transformative-agreements/",
         caveat_codes=["jct-coverage", "openaccess-nl-prose", "issn-mapping"],
     ),
@@ -117,7 +117,6 @@ async def search_journals(
     doaj: bool | None = None,
     quartile: Annotated[str | None, Query(pattern="^Q[1-4]$")] = None,
     topic: Annotated[str | None, Query(max_length=100)] = None,
-    scope: Annotated[str, Query(pattern="^(quality|all)$")] = "quality",
     sort: Annotated[
         str, Query(pattern="^(relevance|title|institution_works|2yr_mean_citedness)$")
     ] = "relevance",
@@ -135,7 +134,6 @@ async def search_journals(
         sort=sort,
         cursor=cursor,
         limit=limit,
-        scope=scope,
     )
     return JournalSearchResponse(
         items=[_to_list_item(item) for item in result["items"]],
@@ -164,11 +162,9 @@ async def journal_detail(issn_l: str, session: SessionDep) -> JournalDetailRespo
             .where(
                 Deal.status == "current",
                 DealJournal.issn_l == journal.issn_l,
-                # Decision 13: consortium sheets don't consistently enumerate
-                # members, so a canonical openaccess.nl deal applies to Twente
-                # authors even without an explicit institution row.
-                (DealInstitution.institution_id.is_not(None))
-                | (Deal.openaccess_nl_url.is_not(None)),
+                # The register is exactly the owner-verified Twente-linked
+                # deals (owner decision 2026-10-23); no register fallback.
+                DealInstitution.institution_id == HOME_INST,
             )
         )
     ).all()
@@ -194,6 +190,10 @@ async def journal_detail(issn_l: str, session: SessionDep) -> JournalDetailRespo
     by_source = {
         source: {s.year: s for s in stats_rows if s.source == source}
         for source in ("pure_canon", "openalex_institution_filter")
+    }
+    stats_totals = {
+        source: sum(s.works_count for s in years.values())
+        for source, years in by_source.items()
     }
     stats: list[InstitutionWorksStats] = []
     works_source_by_year: dict[int, str] = {}
@@ -259,11 +259,14 @@ async def journal_detail(issn_l: str, session: SessionDep) -> JournalDetailRespo
             publisher_name=journal.publisher_name,
             is_oa=journal.is_oa,
             is_in_doaj=journal.is_in_doaj,
+            in_scimago=journal.in_scimago,
+            last_active_year=journal.last_active_year,
             deal_covered=bool(deals),
             twente_works=sum(s.works_count for s in stats),
             quartile=sjr_rows[-1].best_quartile if sjr_rows else None,
             twoyr_mean_citedness=summary_stats.get("two_yr_mean_citedness"),
         ),
+        stats_totals=stats_totals,
         issns=journal.issns or [],
         alternate_titles=journal.alternate_titles or [],
         topics=journal.topics or [],

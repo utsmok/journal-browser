@@ -1,8 +1,8 @@
-"""Backfill quality-bar flags for rows harvested before decision 12.
+"""Recompute derived journal flags from stored counts_by_year.
 
-Idempotent: recomputes last_active_year/is_active_recently from the
-already-stored counts_by_year. in_scimago is owned by the scimagojr
-ingest (it backfills on every run).
+Idempotent full recompute: last_active_year and works_2020_plus are
+rebuildable at any time. in_scimago is owned by the scimagojr ingest
+(it backfills on every run).
 
 Usage: uv run python jobs/backfill_flags.py
 """
@@ -19,15 +19,20 @@ UPDATE = text(
     """
     UPDATE journals
     SET last_active_year = y.latest,
-        is_active_recently = coalesce(y.latest >= 2020, false)
+        works_2020_plus = coalesce(y.total, 0)
     FROM (
-        SELECT issn_l, max((e->>'year')::int) AS latest
+        SELECT issn_l,
+               max((e->>'year')::int)
+                 FILTER (WHERE coalesce((e->>'works_count')::int, 0) > 0) AS latest,
+               sum((e->>'works_count')::int) FILTER (WHERE (e->>'year')::int >= 2020) AS total
         FROM journals, jsonb_array_elements(counts_by_year) e
-        WHERE coalesce((e->>'works_count')::int, 0) > 0
         GROUP BY issn_l
     ) y
     WHERE journals.issn_l = y.issn_l
-      AND journals.last_active_year IS DISTINCT FROM y.latest
+      AND (
+        journals.last_active_year IS DISTINCT FROM y.latest
+        OR journals.works_2020_plus IS DISTINCT FROM coalesce(y.total, 0)
+      )
     """
 )
 

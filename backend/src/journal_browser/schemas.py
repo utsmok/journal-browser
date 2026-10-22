@@ -22,7 +22,6 @@ class JournalListItem(BaseModel):
     is_in_doaj: bool | None
     in_scimago: bool = False
     last_active_year: int | None = None
-    in_quality_bar: bool = True
     deal_covered: bool = False
     twente_works: int = 0
     quartile: str | None = None
@@ -97,7 +96,6 @@ class DealOut(BaseModel):
     per_year_oa_counts: dict[str, Any] | None
     needs_curation: bool
     needs_curation_reason: str | None
-    twente_relevant: bool = False
     journal_count: int = 0
 
 
@@ -114,6 +112,7 @@ class JournalDetailResponse(BaseModel):
     harvested_at: datetime | None = None
     deals: list[DealOut] = []
     stats: list[StatsYear] = []
+    stats_totals: dict[str, int] = {}
     trend: list[StatsYear] = []
     scimagojr: list[ScimagojrOut] = []
     apc_aggregates: list[ApcAggregateOut] = []

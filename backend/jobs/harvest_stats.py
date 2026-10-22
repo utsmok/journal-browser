@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
 from journal_browser.harvest.common import get_home_institution
+from journal_browser.harvest.denorm import refresh_home_stats
 from journal_browser.harvest.institution_stats import (
     harvest_institution_stats,
     write_pure_canon_stats,
@@ -25,6 +26,7 @@ async def main() -> None:
         stats = await harvest_institution_stats(session, limit=limit)
         home = await get_home_institution(session)
         stats["pure_canon_rows"] = await write_pure_canon_stats(session, home.id)
+        await refresh_home_stats(session)
         await session.commit()
     await engine.dispose()
     print(json.dumps(stats))

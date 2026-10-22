@@ -271,15 +271,21 @@ class Journal(Base):
     counts_by_year: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     works_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cited_by_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # Corpus quality bar (decisions.md #12): derived at upsert time,
-    # zero extra API calls. last_active_year = latest counts_by_year
-    # entry with works > 0; recent activity OR doaj OR scimago OR deal
-    # coverage puts a journal in the default scope.
+    # Corpus cutoff (owner decision 2026-10-23, superseding decision 12):
+    # total works in the 2020+ window, derived at upsert time from
+    # counts_by_year. Journals with <= 3 works are presentation-excluded.
     last_active_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    is_active_recently: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("false")
+    works_2020_plus: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
     )
     in_scimago: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    # Denormalized for search and facets; refreshed by harvest.denorm at the
+    # end of the stats, scimago, and deal-register jobs.
+    home_works_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    latest_quartile: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    deal_covered_home: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     crossref_meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     openaire_meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     harvested_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)

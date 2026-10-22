@@ -28,6 +28,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
+from journal_browser.harvest.denorm import refresh_home_deal_flags
 from journal_browser.models import (
     Deal,
     DealInstitution,
@@ -269,7 +270,12 @@ async def main() -> None:
 
             # fields from the owner-reviewed snapshot
             contract = next(
-                (l["url"] for l in deal_json["links"] if l["category"] == "contract"), None
+                (
+                    link["url"]
+                    for link in deal_json["links"]
+                    if link["category"] == "contract"
+                ),
+                None,
             )
             deal.publisher_id = pub.id
             deal.status = "current"
@@ -345,6 +351,7 @@ async def main() -> None:
                 {"slug": slug, "deal_id": deal.id, "esac": deal.esac_id,
                  "publisher": pub.name, **jstat}
             )
+        await refresh_home_deal_flags(session)
         await session.commit()
     await engine.dispose()
     for s in stats:

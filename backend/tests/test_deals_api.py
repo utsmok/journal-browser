@@ -1,4 +1,4 @@
-"""Deals register tests: scope=home shows only Twente-linked deals."""
+"""Deal register tests: the register is the home-linked deals only."""
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -7,7 +7,14 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from conftest import requires_db
 from journal_browser.db import get_session
 from journal_browser.main import app
-from journal_browser.models import Deal, DealInstitution, Institution, Publisher
+from journal_browser.models import (
+    Deal,
+    DealInstitution,
+    DealJournal,
+    Institution,
+    Journal,
+    Publisher,
+)
 
 
 @pytest.fixture
@@ -38,34 +45,47 @@ async def deals_api(db_engine):
         session.add_all([twente_deal, foreign_deal])
         await session.flush()
         session.add(DealInstitution(deal_id=twente_deal.id, institution_id=home.id))
+        # A journal covered by both deals: the panel must show only the
+        # home-linked one, even though the other carries openaccess_nl_url.
+        journal = Journal(issn_l="1111-1111", title="Shared", type="journal")
+        session.add(journal)
+        await session.flush()
+        session.add_all(
+            [
+                DealJournal(
+                    deal_id=twente_deal.id, issn=journal.issn_l,
+                    issn_l=journal.issn_l, source="manual",
+                ),
+                DealJournal(
+                    deal_id=foreign_deal.id, issn=journal.issn_l,
+                    issn_l=journal.issn_l, source="manual",
+                ),
+            ]
+        )
         await session.commit()
-        ids = (twente_deal.id, foreign_deal.id)
+        ids = (twente_deal.id, foreign_deal.id, journal.issn_l)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
         yield client, ids
     app.dependency_overrides.clear()
 
 
 @requires_db
-async def test_home_scope_lists_only_twente_deals(deals_api):
-    client, (twente_id, foreign_id) = deals_api
-    body = (await client.get("/api/v1/deals", params={"scope": "home"})).json()
-    got = {d["id"] for d in body}
-    assert twente_id in got
-    assert foreign_id not in got
-
-
-@requires_db
-async def test_all_scope_still_lists_foreign_deals(deals_api):
-    client, (twente_id, foreign_id) = deals_api
-    body = (await client.get("/api/v1/deals", params={"scope": "all"})).json()
-    got = {d["id"] for d in body}
+async def test_listing_has_no_scope_and_lists_the_register(deals_api):
+    client, (twente_id, foreign_id, _) = deals_api
+    r = await client.get("/api/v1/deals")
+    assert r.status_code == 200
+    got = {d["id"] for d in r.json()}
     assert {twente_id, foreign_id} <= got
+    assert "twente_relevant" not in r.json()[0]
+    # Unknown params are ignored; payload equals the plain listing.
+    assert {
+        d["id"] for d in (await client.get("/api/v1/deals", params={"scope": "home"})).json()
+    } == got
 
 
 @requires_db
-async def test_twente_relevant_flag_matches_link(deals_api):
-    client, (twente_id, foreign_id) = deals_api
-    body = (await client.get("/api/v1/deals", params={"scope": "all"})).json()
-    flags = {d["id"]: d["twente_relevant"] for d in body}
-    assert flags[twente_id] is True
-    assert flags[foreign_id] is False
+async def test_journal_panel_requires_home_link(deals_api):
+    client, (_, _, issn) = deals_api
+    body = (await client.get(f"/api/v1/journals/{issn}")).json()
+    assert len(body["deals"]) == 1
+    assert body["deals"][0]["esac_id"] == "sn2024ukb"

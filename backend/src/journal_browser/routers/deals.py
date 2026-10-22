@@ -1,4 +1,9 @@
-"""/api/v1/deals: open publishing deals with journal counts."""
+"""/api/v1/deals: the Twente deal register with journal counts.
+
+The register is exactly the owner-verified deals carrying a home
+deal_institutions link (owner decision 2026-10-23); nothing auto-writes
+deals, so every row here was placed by a curation job.
+"""
 
 from typing import Annotated
 
@@ -7,8 +12,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
-from ..models import Deal, DealInstitution, DealJournal, Publisher
-from ..routers.journals import DEAL_FIELDS, HOME_INST
+from ..models import Deal, DealJournal, Publisher
+from ..routers.journals import DEAL_FIELDS
 from ..schemas import DealOut
 
 router = APIRouter(prefix="/deals", tags=["deals"])
@@ -16,29 +21,18 @@ router = APIRouter(prefix="/deals", tags=["deals"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
-def _deal_out(
-    deal: Deal, publisher_name: str | None, journal_count: int, twente_relevant: bool
-) -> DealOut:
+def _deal_out(deal: Deal, publisher_name: str | None, journal_count: int) -> DealOut:
     return DealOut(
         **{c: getattr(deal, c) for c in DEAL_FIELDS},
         publisher_name=publisher_name,
         journal_count=journal_count,
-        twente_relevant=twente_relevant,
     )
-
-
-async def _twente_deal_ids(session: AsyncSession) -> set[int]:
-    rows = await session.execute(
-        select(DealInstitution.deal_id).where(DealInstitution.institution_id == HOME_INST)
-    )
-    return set(rows.scalars().all())
 
 
 @router.get("", response_model=list[DealOut])
 async def list_deals(
     session: SessionDep,
     status: Annotated[str, Query(pattern="^(current|archive|all)$")] = "current",
-    scope: Annotated[str, Query(pattern="^(home|all)$")] = "home",
 ) -> list[DealOut]:
     query = (
         select(Deal, Publisher.name, func.count(DealJournal.issn_l))
@@ -48,18 +42,8 @@ async def list_deals(
     )
     if status != "all":
         query = query.where(Deal.status == status)
-    relevant_ids = await _twente_deal_ids(session)
-    if scope == "home":
-        # Decision 13 + owner curation (2026-10-22): the register is the set of
-        # deals Twente participates in, via verified deal_institutions links.
-        # Non-Twente deals (other institutions' national rows, worldwide JCT
-        # rows) stay in the database but out of the home register.
-        query = query.where(Deal.id.in_(relevant_ids or {-1}))
     rows = (await session.execute(query)).all()
-    return [
-        _deal_out(deal, name, int(count or 0), deal.id in relevant_ids)
-        for deal, name, count in rows
-    ]
+    return [_deal_out(deal, name, int(count or 0)) for deal, name, count in rows]
 
 
 @router.get("/{deal_id}", response_model=DealOut)
@@ -76,5 +60,4 @@ async def deal_detail(deal_id: int, session: SessionDep) -> DealOut:
     if row is None:
         raise HTTPException(status_code=404, detail="deal not found")
     deal, name, count = row
-    relevant_ids = await _twente_deal_ids(session)
-    return _deal_out(deal, name, int(count or 0), deal.id in relevant_ids)
+    return _deal_out(deal, name, int(count or 0))

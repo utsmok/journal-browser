@@ -11,6 +11,7 @@ from pathlib import Path
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
+from journal_browser.harvest.denorm import refresh_quartiles
 from journal_browser.harvest.scimagojr import ingest_year
 
 
@@ -23,6 +24,9 @@ async def main() -> None:
     for year in years:
         async with maker() as session:
             results.append(await ingest_year(session, year, landing))
+    async with maker() as session:
+        await refresh_quartiles(session)
+        await session.commit()
     await engine.dispose()
     print(json.dumps(results))
 

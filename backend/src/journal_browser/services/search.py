@@ -4,55 +4,12 @@ import base64
 import json
 from typing import Any
 
-from sqlalchemy import Numeric, String, and_, case, cast, func, or_, select, text, tuple_
+from sqlalchemy import Numeric, String, case, cast, func, or_, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import (
-    Deal,
-    DealInstitution,
-    DealJournal,
-    Institution,
-    InstitutionWorksStats,
-    Journal,
-    ScimagojrMetric,
-)
+from ..models import Journal
 
 SortKey = str  # relevance | title | institution_works | 2yr_mean_citedness
-
-_HOME_INST = select(Institution.id).where(Institution.is_home.is_(True)).scalar_subquery()
-
-#: Current open access deals covering the home institution.
-DEAL_COVERED = (
-    select(DealJournal.issn_l)
-    .join(Deal, Deal.id == DealJournal.deal_id)
-    .join(DealInstitution, DealInstitution.deal_id == Deal.id)
-    .where(
-        DealJournal.issn_l == Journal.issn_l,
-        Deal.status == "current",
-        DealInstitution.institution_id == _HOME_INST,
-    )
-    .exists()
-)
-
-TWENTE_WORKS = (
-    select(func.coalesce(func.sum(InstitutionWorksStats.works_count), 0))
-    .where(
-        InstitutionWorksStats.issn_l == Journal.issn_l,
-        InstitutionWorksStats.institution_id == _HOME_INST,
-    )
-    .correlate(Journal)
-    .scalar_subquery()
-)
-
-LATEST_QUARTILE = (
-    select(ScimagojrMetric.best_quartile)
-    .where(ScimagojrMetric.issn_l == Journal.issn_l)
-    .order_by(ScimagojrMetric.year.desc())
-    .limit(1)
-    .correlate(Journal)
-    .scalar_subquery()
-)
-
 
 def parse_cursor(cursor: str | None) -> tuple[str, str] | None:
     if not cursor:
@@ -69,21 +26,9 @@ def encode_cursor(value: Any, issn_l: str) -> str:
     return base64.urlsafe_b64encode(raw.encode()).decode()
 
 
-def quality_bar_clause() -> Any:
-    """Corpus quality bar (decisions.md #12): type=journal AND
-    (DOAJ OR Scimago OR deal coverage OR active since 2020)."""
-    J = Journal
-    covered = DEAL_COVERED.correlate(J)
-    return and_(
-        J.type == "journal",
-        J.issn_l.is_not(None),
-        or_(
-            J.is_in_doaj.is_(True),
-            J.in_scimago.is_(True),
-            covered,
-            J.is_active_recently.is_(True),
-        ),
-    )
+#: Corpus cutoff (owner decision 2026-10-23, superseding decision 12):
+#: journals with <= 3 works in the 2020+ window are presentation-excluded.
+WORKS_CUTOFF = Journal.works_2020_plus > 3
 
 
 def base_query(
@@ -94,13 +39,14 @@ def base_query(
     doaj: bool | None = None,
     quartile: str | None = None,
     topic: str | None = None,
-    scope: str = "quality",
 ):
-    """Filtered select with computed columns; search + facet counts share it."""
+    """Filtered select with computed columns; search + facet counts share it.
+
+    The corpus cutoff (works_2020_plus > 3) always applies."""
     J = Journal
     # OpenAlex publishes this metric as "two_yr_mean_citedness".
     twoyr = cast(J.summary_stats.op("->>")("two_yr_mean_citedness"), Numeric).label("twoyr")
-    covered = DEAL_COVERED.correlate(J).label("deal_covered")
+    covered = J.deal_covered_home.label("deal_covered")
     if q:
         qstr = q.strip()
         # Relevance = title-prefix match tier + FTS rank + prominence nudge
@@ -124,15 +70,12 @@ def base_query(
         J.is_in_doaj,
         J.in_scimago,
         J.last_active_year,
-        quality_bar_clause().label("in_quality_bar"),
         covered,
-        TWENTE_WORKS.label("twente_works"),
-        LATEST_QUARTILE.label("quartile"),
+        func.coalesce(J.home_works_count, 0).label("twente_works"),
+        J.latest_quartile.label("quartile"),
         twoyr,
         rank,
-    )
-    if scope == "quality":
-        query = query.where(quality_bar_clause())
+    ).where(WORKS_CUTOFF, J.type == "journal", J.issn_l.is_not(None))
     if q:
         issn = q.strip().upper()
         tsq = func.websearch_to_tsquery(text("'english'"), q)
@@ -144,17 +87,17 @@ def base_query(
             )
         )
     if deal == "covered":
-        query = query.where(covered)
+        query = query.where(J.deal_covered_home.is_(True))
     elif deal == "not_covered":
-        query = query.where(~covered)
+        query = query.where(J.deal_covered_home.is_(False))
     if oa is not None:
         query = query.where(J.is_oa.is_(oa))
     if doaj is not None:
         query = query.where(J.is_in_doaj.is_(doaj))
     if quartile in {"Q1", "Q2", "Q3", "Q4"}:
-        query = query.where(quartile == LATEST_QUARTILE)
+        query = query.where(J.latest_quartile == quartile)
     if topic:
-        query = query.where(Journal.topics.op("@>")(f'[{{"display_name": "{topic}"}}]'))
+        query = query.where(J.topics.contains([{"display_name": topic}]))
     return query
 
 
@@ -181,10 +124,9 @@ async def search_journals(
     sort: SortKey = "relevance",
     cursor: str | None = None,
     limit: int = 20,
-    scope: str = "quality",
 ) -> dict[str, Any]:
     subq = base_query(
-        q=q, deal=deal, oa=oa, doaj=doaj, quartile=quartile, topic=topic, scope=scope
+        q=q, deal=deal, oa=oa, doaj=doaj, quartile=quartile, topic=topic
     ).subquery()
     total = await session.scalar(select(func.count()).select_from(subq)) or 0
 
@@ -230,7 +172,9 @@ async def search_journals(
         item.pop("rank", None)
         items.append(item)
 
-    facets = await facet_counts(session, q=q, oa=oa, doaj=doaj, quartile=quartile, scope=scope)
+    facets = await facet_counts(
+        session, q=q, deal=deal, oa=oa, doaj=doaj, quartile=quartile, topic=topic
+    )
     return {
         "items": items,
         "total": int(total),
@@ -243,48 +187,49 @@ async def facet_counts(
     session: AsyncSession,
     *,
     q: str | None,
+    deal: str,
     oa: bool | None,
     doaj: bool | None,
     quartile: str | None,
-    scope: str = "quality",
+    topic: str | None,
 ) -> dict[str, dict[str, int]]:
-    """Facet counts over the query-filtered set (each facet's own filter
-    excluded); the active scope always applies. Deal counts always reflect
-    the home institution."""
-    subq = base_query(q=q, oa=oa, doaj=doaj, quartile=quartile, scope=scope).subquery()
-    row = (
-        await session.execute(
-            select(
-                func.count(),
-                func.sum(case((subq.c.deal_covered.is_(True), 1), else_=0)),
-                func.sum(case((subq.c.is_oa.is_(True), 1), else_=0)),
-                func.sum(case((subq.c.is_in_doaj.is_(True), 1), else_=0)),
-                func.sum(case((subq.c.quartile == "Q1", 1), else_=0)),
-                func.sum(case((subq.c.quartile == "Q2", 1), else_=0)),
-                func.sum(case((subq.c.quartile == "Q3", 1), else_=0)),
-                func.sum(case((subq.c.quartile == "Q4", 1), else_=0)),
+    """Facet counts over the query-filtered set. Each facet's own filter is
+    excluded so a chip shows what selecting it would yield; all other active
+    filters apply. The corpus cutoff always applies, and deal counts always
+    reflect the home institution."""
+
+    async def _one(subquery: Any, *counts: Any) -> tuple[int, list[int]]:
+        row = (
+            await session.execute(
+                select(func.count(), *[func.sum(case((c, 1), else_=0)) for c in counts])
             )
-        )
-    ).one()
-    total = int(row[0] or 0)
+        ).one()
+        return int(row[0] or 0), [int(v or 0) for v in row[1:]]
+
+    d = base_query(q=q, oa=oa, doaj=doaj, quartile=quartile, topic=topic).subquery()
+    d_total, (d_covered,) = await _one(d, d.c.deal_covered.is_(True))
+    o = base_query(q=q, deal=deal, doaj=doaj, quartile=quartile, topic=topic).subquery()
+    o_total, (o_true,) = await _one(o, o.c.is_oa.is_(True))
+    dj = base_query(q=q, deal=deal, oa=oa, quartile=quartile, topic=topic).subquery()
+    dj_total, (dj_true,) = await _one(dj, dj.c.is_in_doaj.is_(True))
+    qt = base_query(q=q, deal=deal, oa=oa, doaj=doaj, topic=topic).subquery()
+    qt_total, (q1, q2, q3, q4) = await _one(
+        qt,
+        qt.c.quartile == "Q1",
+        qt.c.quartile == "Q2",
+        qt.c.quartile == "Q3",
+        qt.c.quartile == "Q4",
+    )
     facets: dict[str, dict[str, int]] = {
-        "deal_coverage": {
-            "covered": int(row[1] or 0),
-            "not_covered": total - int(row[1] or 0),
-        },
-        "oa": {"true": int(row[2] or 0), "false": total - int(row[2] or 0)},
-        "doaj": {"true": int(row[3] or 0), "false": total - int(row[3] or 0)},
-        "quartile": {
-            "Q1": int(row[4] or 0),
-            "Q2": int(row[5] or 0),
-            "Q3": int(row[6] or 0),
-            "Q4": int(row[7] or 0),
-        },
+        "deal_coverage": {"covered": d_covered, "not_covered": d_total - d_covered},
+        "oa": {"true": o_true, "false": o_total - o_true},
+        "doaj": {"true": dj_true, "false": dj_total - dj_true},
+        "quartile": {"Q1": q1, "Q2": q2, "Q3": q3, "Q4": q4},
     }
     elem = func.jsonb_array_elements(
         func.coalesce(Journal.topics, text("'[]'::jsonb"))
     ).table_valued("value", name="t")
-    topic_subq = base_query(q=q, oa=oa, doaj=doaj, quartile=quartile, scope=scope).subquery()
+    topic_subq = base_query(q=q, deal=deal, oa=oa, doaj=doaj, quartile=quartile).subquery()
     topic_rows = await session.execute(
         select(
             elem.c.value.op("->>")("display_name").label("topic"),

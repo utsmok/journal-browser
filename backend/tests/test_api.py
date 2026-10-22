@@ -1,4 +1,4 @@
-"""Search API tests: quality-bar scope (decisions.md #12)."""
+"""Search API tests: corpus cutoff (owner decision 2026-10-23)."""
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -18,8 +18,8 @@ def _journal(issn_l: str, **kw) -> Journal:
         is_oa=False,
         is_in_doaj=False,
         in_scimago=False,
-        is_active_recently=False,
         last_active_year=None,
+        works_2020_plus=0,
     )
     base.update(kw)
     return Journal(**base)
@@ -37,16 +37,14 @@ async def api(db_engine):
     async with maker() as session:
         session.add_all(
             [
-                # In bar via DOAJ.
-                _journal("1111-1111", is_in_doaj=True),
-                # In bar via recent activity.
-                _journal("2222-2222", last_active_year=2024, is_active_recently=True),
-                # In bar via scimago flag.
-                _journal("3333-3333", in_scimago=True),
-                # Out of bar: journal type, but no signal.
-                _journal("4444-4444"),
-                # Out of bar: wrong type entirely.
-                _journal("5555-5555", type="repository", is_in_doaj=True),
+                # At the cutoff boundary: exactly 4 works stays in.
+                _journal("1111-1111", works_2020_plus=4),
+                _journal("2222-2222", works_2020_plus=1000),
+                # Dropped: 3 works or fewer.
+                _journal("3333-3333", works_2020_plus=3),
+                _journal("4444-4444", works_2020_plus=0),
+                # Dropped regardless of works: not a journal type.
+                _journal("5555-5555", type="repository", works_2020_plus=50),
             ]
         )
         await session.commit()
@@ -56,40 +54,26 @@ async def api(db_engine):
 
 
 @requires_db
-async def test_default_scope_is_quality_bar(api):
+async def test_cutoff_excludes_low_activity_journals(api):
     r = await api.get("/api/v1/journals")
     assert r.status_code == 200
     body = r.json()
-    assert body["total"] == 3
+    assert body["total"] == 2
     issns = {i["issn_l"] for i in body["items"]}
-    assert "4444-4444" not in issns and "5555-5555" not in issns
-    assert all(i["in_quality_bar"] for i in body["items"])
+    assert issns == {"1111-1111", "2222-2222"}
 
 
 @requires_db
-async def test_scope_all_returns_full_corpus_with_badge_info(api):
-    r = await api.get("/api/v1/journals", params={"scope": "all"})
-    assert r.status_code == 200
-    body = r.json()
-    assert body["total"] == 5
-    by_issn = {i["issn_l"]: i for i in body["items"]}
-    assert by_issn["4444-4444"]["in_quality_bar"] is False
-    assert by_issn["1111-1111"]["in_quality_bar"] is True
-    assert by_issn["5555-5555"]["in_quality_bar"] is False
+async def test_scope_param_is_gone(api):
+    # Unknown query params are ignored; the response carries no badge field.
+    plain = (await api.get("/api/v1/journals")).json()
+    scoped = (await api.get("/api/v1/journals", params={"scope": "all"})).json()
+    assert scoped["total"] == plain["total"] == 2
+    assert "in_quality_bar" not in plain["items"][0]
 
 
 @requires_db
-async def test_facets_respect_scope(api):
-    quality = (await api.get("/api/v1/journals")).json()["facets"]
-    everything = (await api.get("/api/v1/journals", params={"scope": "all"})).json()["facets"]
-    # The out-of-bar journal is not OA, not in DOAJ: oa facet totals differ.
-    assert sum(quality["oa"].values()) == 3
-    assert sum(everything["oa"].values()) == 5
-    assert quality["doaj"]["true"] == 1
-    assert everything["doaj"]["true"] == 2
-
-
-@requires_db
-async def test_invalid_scope_rejected(api):
-    r = await api.get("/api/v1/journals", params={"scope": "everything"})
-    assert r.status_code == 422
+async def test_facets_reflect_cutoff(api):
+    body = (await api.get("/api/v1/journals")).json()
+    assert sum(body["facets"]["oa"].values()) == 2
+    assert body["facets"]["doaj"]["true"] == 0

@@ -90,6 +90,9 @@ async def _upsert_journal(session: AsyncSession, payload: dict[str, Any]) -> str
         (int(e["year"]) for e in counts if int(e.get("works_count") or 0) > 0),
         default=None,
     )
+    works_2020_plus = sum(
+        int(e.get("works_count") or 0) for e in counts if int(e.get("year") or 0) >= 2020
+    )
     values = dict(
         issn_l=issn_l,
         openalex_id=payload.get("id"),
@@ -109,7 +112,7 @@ async def _upsert_journal(session: AsyncSession, payload: dict[str, Any]) -> str
         works_count=payload.get("works_count"),
         cited_by_count=payload.get("cited_by_count"),
         last_active_year=last_active,
-        is_active_recently=last_active is not None and last_active >= 2020,
+        works_2020_plus=works_2020_plus,
         harvested_at=datetime.now(UTC),
         search_text=" ".join([title or "", *alternate_titles]).strip(),
     )
