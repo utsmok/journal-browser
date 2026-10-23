@@ -514,7 +514,10 @@ function JournalPageInner() {
   const { data, isPending, isError, error } = useJournal(issnL);
   // Old backends lack /similar; the section simply stays hidden then.
   const similarQuery = useSimilar(issnL);
-  const similar = similarQuery.data ?? [];
+  const similar = similarQuery.data;
+  const similarEmpty =
+    !similar ||
+    (similar.all.length === 0 && similar.twente.length === 0 && similar.deals.length === 0);
 
   if (isPending)
     return (
@@ -575,9 +578,7 @@ function JournalPageInner() {
     { id: "oa-per-year", label: "Open access per year" },
     { id: "metrics", label: "Metrics" },
     ...(hasApc ? [{ id: "apc", label: "APC cost evidence" }] : []),
-    ...(similar.length > 0
-      ? [{ id: "similar", label: "Similar journals" }]
-      : []),
+    ...(!similarEmpty ? [{ id: "similar", label: "Similar journals" }] : []),
   ];
 
   return (
@@ -973,33 +974,79 @@ function JournalPageInner() {
         </div>
       </div>
 
-      {similar.length > 0 && (
+      {similar && !similarEmpty && (
         <CollapsibleCard id="similar" title="Similar journals" className="mt-6">
-            <ul className="divide-y divide-[var(--border)]">
-              {similar.map((s) => (
-                <li key={s.issn_l} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-2 text-sm first:pt-0 last:pb-0">
-                  <Link
-                    href={`/journals/${s.issn_l}`}
-                    className="font-medium underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-                  >
-                    {s.title ?? s.issn_l}
-                  </Link>
-                  <span className="text-xs text-[var(--muted-foreground)]">
-                    {s.publisher_name ?? "Unknown publisher"}
-                  </span>
-                  <span className="ml-auto flex items-center gap-2">
-                    <QuartileBadge quartile={s.quartile ?? null} />
-                    <span className="text-xs text-[var(--muted-foreground)]">
-                      {s.similarity != null
-                        ? `${Math.round(s.similarity * 100)}% match`
-                        : `${s.shared_topics} shared ${
-                            s.shared_topics === 1 ? "topic" : "topics"
-                          }`}
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
+          <div className="space-y-5">
+            {(
+              [
+                {
+                  key: "twente",
+                  heading: "Twente publishes here",
+                  note: "Nearest neighbors that carry at least one University of Twente publication.",
+                },
+                {
+                  key: "deals",
+                  heading: "Covered by a publication deal",
+                  note: "Nearest neighbors with a current open access deal for Twente authors.",
+                },
+                {
+                  key: "all",
+                  heading: "Most similar overall",
+                  note: undefined,
+                },
+              ] as const
+            ).map(
+              (group) =>
+                similar[group.key].length > 0 && (
+                  <div key={group.key}>
+                    <h3 className="text-sm font-semibold">{group.heading}</h3>
+                    {group.note && (
+                      <p className="mb-1 text-xs text-[var(--muted-foreground)]">
+                        {group.note}
+                      </p>
+                    )}
+                    <ul className="divide-y divide-[var(--border)]">
+                      {similar[group.key].map((s) => (
+                        <li
+                          key={s.issn_l}
+                          className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-2 text-sm first:pt-0 last:pb-0"
+                        >
+                          <Link
+                            href={`/journals/${s.issn_l}`}
+                            className="font-medium underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                          >
+                            {s.title ?? s.issn_l}
+                          </Link>
+                          <span className="text-xs text-[var(--muted-foreground)]">
+                            {s.publisher_name ?? "Unknown publisher"}
+                          </span>
+                          <span className="ml-auto flex flex-wrap items-center gap-2">
+                            <DealBadge covered={s.deal_covered} />
+                            {s.twente_works > 0 && (
+                              <span
+                                className="text-xs text-[var(--muted-foreground)]"
+                                title="Known University of Twente publications in this journal"
+                              >
+                                {s.twente_works.toLocaleString("en")} UT{" "}
+                                {s.twente_works === 1 ? "publication" : "publications"}
+                              </span>
+                            )}
+                            <QuartileBadge quartile={s.quartile ?? null} />
+                            <span className="text-xs text-[var(--muted-foreground)]">
+                              {s.similarity != null
+                                ? `${Math.round(s.similarity * 100)}% match`
+                                : `${s.shared_topics} shared ${
+                                    s.shared_topics === 1 ? "topic" : "topics"
+                                  }`}
+                            </span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ),
+            )}
+          </div>
         </CollapsibleCard>
       )}
       </div>

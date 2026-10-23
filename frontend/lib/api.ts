@@ -45,10 +45,17 @@ export type SimilarJournal = {
   publisher_name: string | null;
   quartile?: string | null;
   is_oa?: boolean | null;
-  deal_covered?: boolean;
-  twente_works?: number;
+  deal_covered: boolean;
+  twente_works: number;
   shared_topics: number;
   similarity?: number | null;
+};
+
+/** Three similar-journal cuts: UT-publishing venues, deal-covered venues, and the general list. */
+export type SimilarJournalsBundle = {
+  twente: SimilarJournal[];
+  deals: SimilarJournal[];
+  all: SimilarJournal[];
 };
 
 /** OpenAlex source record for a journal (absent on old backends). */

@@ -76,6 +76,10 @@ function SearchView() {
   const publisher = sp.get("publisher") ?? "";
   const hasApc = sp.get("has_apc");
   const searchIn = (sp.get("search_in") ?? "all") as SearchIn;
+  // mode=semantic: rank by embedding similarity instead of FTS. Filters and
+  // sort do not apply to the vector ranking, so their UI is hidden. Needs a
+  // real query; shorter input just browses normally.
+  const semantic = sp.get("mode") === "semantic" && spQ.trim().length >= 2;
 
   const [input, setInput] = React.useState(spQ);
   const [stack, setStack] = React.useState<string[]>([]);
@@ -200,8 +204,8 @@ function SearchView() {
     include_facets: false,
   };
   const { data, isPending, isFetching, isError, error, refetch } =
-    useJournals(query);
-  const facetsQuery = useFacets(query);
+    useJournals(query, semantic);
+  const facetsQuery = useFacets(query, { enabled: !semantic });
 
   const facets = facetsQuery.data?.facets ?? {};
 
@@ -376,7 +380,11 @@ function SearchView() {
               onKeyDown={(event) => {
                 if (event.key === "Escape") event.currentTarget.blur();
               }}
-              placeholder="Search by title, ISSN, publisher, or topic"
+              placeholder={
+                semantic
+                  ? "Describe your topic, or paste an abstract"
+                  : "Search by title, ISSN, publisher, or topic"
+              }
               aria-label="Search journals"
               className="pr-8"
             />
@@ -389,18 +397,34 @@ function SearchView() {
               </kbd>
             )}
           </div>
-          <select
-            aria-label="Search scope"
-            value={searchIn}
-            onChange={(event) => update({ search_in: event.target.value })}
-            className="h-10 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 text-sm"
+          {!semantic && (
+            <select
+              aria-label="Search scope"
+              value={searchIn}
+              onChange={(event) => update({ search_in: event.target.value })}
+              className="h-10 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 text-sm"
+            >
+              {SEARCH_IN_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          )}
+          <label
+            className="flex h-10 cursor-pointer items-center gap-1.5 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2.5 text-sm select-none"
+            title="Rank journals by meaning instead of exact words; filters and sorting are off in this mode"
           >
-            {SEARCH_IN_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+            <input
+              type="checkbox"
+              className="accent-[var(--primary)]"
+              checked={sp.get("mode") === "semantic"}
+              onChange={(event) =>
+                update({ mode: event.target.checked ? "semantic" : undefined })
+              }
+            />
+            Match by meaning
+          </label>
           <Button type="submit">
             <Search aria-hidden className="size-4" /> Search
           </Button>
@@ -408,50 +432,63 @@ function SearchView() {
         </section>
 
         {/* Stacked filter card: the only filter UI below 960px. */}
-        <section className="order-2 mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
-          <FilterPanel
-            facets={facets}
-            selection={filterSelection}
-            onToggle={toggleFilter}
-            variant="chips"
-          />
-        </section>
+        {!semantic && (
+          <section className="order-2 mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
+            <FilterPanel
+              facets={facets}
+              selection={filterSelection}
+              onToggle={toggleFilter}
+              variant="chips"
+            />
+          </section>
+        )}
 
         {/* Wide-screen sidebar: sticky, scrolls on its own when long. */}
-        <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:col-start-1 min-[960px]:row-span-2 min-[960px]:row-start-1 min-[960px]:block">
-          <FilterPanel
-            facets={facets}
-            selection={filterSelection}
-            onToggle={toggleFilter}
-            variant="rows"
-          />
-        </aside>
+        {!semantic && (
+          <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:col-start-1 min-[960px]:row-span-2 min-[960px]:row-start-1 min-[960px]:block">
+            <FilterPanel
+              facets={facets}
+              selection={filterSelection}
+              onToggle={toggleFilter}
+              variant="rows"
+            />
+          </aside>
+        )}
 
         <div className="order-3 min-w-0 min-[960px]:col-start-2 min-[960px]:row-start-2">
           {/* Sort and reset belong with the results they act on. */}
           <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
-            <label htmlFor="sort" className="whitespace-nowrap">Sort by</label>
-            <select
-              id="sort"
-              value={sort}
-              onChange={(event) => update({ sort: event.target.value })}
-              className="h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2"
-            >
-              {SORTS.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-            {hasFilters && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-[var(--muted-foreground)]"
-                onClick={clearFilters}
-              >
-                Reset filters
-              </Button>
+            {!semantic && (
+              <>
+                <label htmlFor="sort" className="whitespace-nowrap">Sort by</label>
+                <select
+                  id="sort"
+                  value={sort}
+                  onChange={(event) => update({ sort: event.target.value })}
+                  className="h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2"
+                >
+                  {SORTS.map((s) => (
+                    <option key={s.value} value={s.value}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+                {hasFilters && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-[var(--muted-foreground)]"
+                    onClick={clearFilters}
+                  >
+                    Reset filters
+                  </Button>
+                )}
+              </>
+            )}
+            {semantic && (
+              <p className="text-[var(--muted-foreground)]">
+                Ranked by meaning; filters and sorting are off in this mode.
+              </p>
             )}
           </div>
 

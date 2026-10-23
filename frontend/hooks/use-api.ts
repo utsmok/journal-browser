@@ -11,7 +11,7 @@ import {
   type JournalSearchParams,
   type JournalSearchResponse,
   type LimitationOut,
-  type SimilarJournal,
+  type SimilarJournalsBundle,
   type WorksPage,
 } from "@/lib/api";
 
@@ -43,15 +43,22 @@ function useFetchEpoch(params: JournalSearchParams) {
   return epoch;
 }
 
-export function useJournals(params: JournalSearchParams) {
+export function useJournals(params: JournalSearchParams, semantic?: boolean) {
   const epoch = useFetchEpoch(params);
   return useQuery({
-    queryKey: qk.journals(params),
+    queryKey: [...qk.journals(params), semantic ? "semantic" : "fts"] as const,
     queryFn: async () => {
       const at = epoch.current;
-      const data = await apiGet<JournalSearchResponse>("/journals", {
-        ...params,
-      });
+      const data = semantic
+        ? // Free-text "journals like this description": embeddings, not FTS.
+          // Filter/sort params do not apply to the vector ranking.
+          await apiGet<JournalSearchResponse>("/journals/semantic-search", {
+            q: params.q ?? "",
+            limit: params.limit ?? 40,
+          })
+        : await apiGet<JournalSearchResponse>("/journals", {
+            ...params,
+          });
       if (at !== epoch.current) throw new Error("stale fetch discarded");
       return data;
     },
@@ -63,7 +70,10 @@ export function useJournals(params: JournalSearchParams) {
  * Facets depend on the filter set only — never on cursor, page, or sort — so
  * they live in their own query and page turns reuse the cached aggregate.
  */
-export function useFacets(params: JournalSearchParams) {
+export function useFacets(
+  params: JournalSearchParams,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
   const { cursor: _c, sort: _s, limit: _l, ...filters } = params;
   return useQuery({
     queryKey: qk.facets(filters),
@@ -73,6 +83,7 @@ export function useFacets(params: JournalSearchParams) {
         include_facets: true,
         limit: 1,
       }),
+    enabled,
     placeholderData: keepPreviousData,
     staleTime: 60_000,
   });
@@ -87,13 +98,14 @@ export function useJournal(issnL: string | undefined) {
 }
 
 /**
- * Similar journals for a title. Old backends lack the route; callers hide the
- * section on error, so failures are quiet and never retried.
+ * Similar journals for a title, in three cuts (Twente-publishing, deal-covered,
+ * general). Old backends lack the route; callers hide the section on error, so
+ * failures are quiet and never retried.
  */
 export function useSimilar(issnL: string | undefined) {
   return useQuery({
     queryKey: qk.similar(issnL ?? ""),
-    queryFn: () => apiGet<SimilarJournal[]>(`/journals/${issnL}/similar`),
+    queryFn: () => apiGet<SimilarJournalsBundle>(`/journals/${issnL}/similar`),
     enabled: Boolean(issnL),
     retry: false,
     staleTime: 60_000,
