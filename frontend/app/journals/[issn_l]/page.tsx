@@ -990,8 +990,11 @@ function JournalPageInner() {
                   <span className="ml-auto flex items-center gap-2">
                     <QuartileBadge quartile={s.quartile ?? null} />
                     <span className="text-xs text-[var(--muted-foreground)]">
-                      {s.shared_topics} shared{" "}
-                      {s.shared_topics === 1 ? "topic" : "topics"}
+                      {s.similarity != null
+                        ? `${Math.round(s.similarity * 100)}% match`
+                        : `${s.shared_topics} shared ${
+                            s.shared_topics === 1 ? "topic" : "topics"
+                          }`}
                     </span>
                   </span>
                 </li>

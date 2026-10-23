@@ -48,6 +48,7 @@ export type SimilarJournal = {
   deal_covered?: boolean;
   twente_works?: number;
   shared_topics: number;
+  similarity?: number | null;
 };
 
 /** OpenAlex source record for a journal (absent on old backends). */
