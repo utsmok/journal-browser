@@ -1,5 +1,12 @@
 import { ChevronDown } from "lucide-react";
 
+const OA_TYPE_LABELS: Record<string, string> = {
+  gold: "Gold OA",
+  diamond: "Diamond OA",
+  hybrid: "Hybrid",
+  subscription: "Subscription (closed)",
+};
+
 export type FacetValue = { value: string; count?: number; label?: string };
 
 export type FacetsData = Record<string, Record<string, number>>;
@@ -12,6 +19,8 @@ export type FilterSelection = {
   topic: string;
   publisher: string;
   hasApc: string | null;
+  /** Multi-select: values OR together (single-select groups do not). */
+  oaTypes: string[];
 };
 
 type FacetGroupDef = {
@@ -184,6 +193,19 @@ export function FilterPanel({
         label: value === "true" ? "OA journal" : "Not OA",
       })),
       activeValues: selection.oa !== null ? [selection.oa] : [],
+    },
+    {
+      key: "oa_type",
+      label: "OA type",
+      defaultOpen: true,
+      values: ["gold", "diamond", "hybrid", "subscription"].map((v) => ({
+        value: v,
+        count: facets.oa_type?.[v] ?? 0,
+        label: OA_TYPE_LABELS[v] ?? v,
+      })),
+      // Multi-select: this group ORs its values; the caller keeps every
+      // active value instead of clearing the group on re-click.
+      activeValues: selection.oaTypes,
     },
     {
       key: "doaj",

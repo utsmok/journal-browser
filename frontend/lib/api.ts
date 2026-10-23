@@ -151,6 +151,8 @@ export type JournalSearchParams = {
   publisher?: string;
   has_apc?: boolean;
   topic?: string;
+  /** Comma-separated multi-select, OR'd server-side. */
+  oa_type?: string;
   sort?: SortKey;
   cursor?: string;
   limit?: number;

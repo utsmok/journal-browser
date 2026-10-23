@@ -76,6 +76,9 @@ function SearchView() {
   const publisher = sp.get("publisher") ?? "";
   const hasApc = sp.get("has_apc");
   const searchIn = (sp.get("search_in") ?? "all") as SearchIn;
+  // oa_type is the one multi-select facet: comma-joined in the URL, OR'd
+  // server-side.
+  const oaTypes = (sp.get("oa_type") ?? "").split(",").filter(Boolean);
   // mode=semantic: rank by embedding similarity instead of FTS. Filters and
   // sort do not apply to the vector ranking, so their UI is hidden. Needs a
   // real query; shorter input just browses normally.
@@ -198,6 +201,7 @@ function SearchView() {
     publisher: publisher || undefined,
     has_apc: hasApc === null ? undefined : hasApc === "true",
     topic: topic || undefined,
+    oa_type: oaTypes.join(",") || undefined,
     sort,
     cursor,
     limit: 40,
@@ -217,11 +221,22 @@ function SearchView() {
     topic,
     publisher,
     hasApc,
+    oaTypes,
   };
 
   // Single-select per group: clicking the active value clears it.
   const toggleFilter = (key: string, value: string) =>
     update({ [key]: sp.get(key) === value ? undefined : value });
+
+  // The oa_type group ORs values: toggle membership instead of clearing.
+  const toggleOaType = (value: string) => {
+    const next = oaTypes.includes(value)
+      ? oaTypes.filter((v) => v !== value)
+      : [...oaTypes, value];
+    update({ oa_type: next.join(",") || undefined });
+  };
+  const handleFacetToggle = (key: string, value: string) =>
+    key === "oa_type" ? toggleOaType(value) : toggleFilter(key, value);
 
   const columns = React.useMemo<ColumnDef<JournalListItem>[]>(
     () => [
@@ -325,7 +340,8 @@ function SearchView() {
       quartile ||
       topic ||
       publisher ||
-      hasApc !== null,
+      hasApc !== null ||
+      oaTypes.length > 0,
   );
   const hasNonQueryFilters = Boolean(
     deal ||
@@ -334,7 +350,8 @@ function SearchView() {
       quartile ||
       topic ||
       publisher ||
-      hasApc !== null,
+      hasApc !== null ||
+      oaTypes.length > 0,
   );
   const clearFilters = () =>
     update({
@@ -347,6 +364,7 @@ function SearchView() {
       topic: undefined,
       publisher: undefined,
       has_apc: undefined,
+      oa_type: undefined,
     });
 
   return (
@@ -437,7 +455,7 @@ function SearchView() {
             <FilterPanel
               facets={facets}
               selection={filterSelection}
-              onToggle={toggleFilter}
+              onToggle={handleFacetToggle}
               variant="chips"
             />
           </section>
@@ -449,7 +467,7 @@ function SearchView() {
             <FilterPanel
               facets={facets}
               selection={filterSelection}
-              onToggle={toggleFilter}
+              onToggle={handleFacetToggle}
               variant="rows"
             />
           </aside>
