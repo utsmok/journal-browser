@@ -161,7 +161,7 @@ export default function DealsPage() {
   );
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
+    <div className="mx-auto max-w-screen-2xl px-4 py-10">
       <h1 className="mb-2 text-3xl font-bold">Open access deals</h1>
       <p className="mb-8 max-w-2xl text-[var(--muted-foreground)]">
         Transformative and read-and-publish agreements relevant to University of

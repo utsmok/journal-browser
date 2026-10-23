@@ -471,7 +471,7 @@ function SectionNav({ sections }: { sections: { id: string; label: string }[] })
       aria-label="Page sections"
       className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--secondary)] text-[var(--secondary-foreground)]"
     >
-      <div className="mx-auto flex max-w-6xl items-center gap-3 overflow-x-auto px-4 py-2">
+      <div className="mx-auto flex max-w-screen-2xl items-center gap-3 overflow-x-auto px-4 py-2">
         <Link
           href="/"
           className="inline-flex shrink-0 items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
@@ -518,14 +518,14 @@ function JournalPageInner() {
 
   if (isPending)
     return (
-      <div className="mx-auto max-w-6xl px-4 py-10">
+      <div className="mx-auto max-w-screen-2xl px-4 py-10">
         <div className="h-8 w-2/3 animate-pulse rounded bg-[var(--muted)]" />
         <div className="mt-4 h-40 animate-pulse rounded bg-[var(--muted)]" />
       </div>
     );
   if (isError || !data)
     return (
-      <div className="mx-auto max-w-6xl px-4 py-10">
+      <div className="mx-auto max-w-screen-2xl px-4 py-10">
         <p className="text-[var(--destructive)]">{errorMessage(error)}</p>
         <Link
           href="/"
@@ -583,7 +583,7 @@ function JournalPageInner() {
   return (
     <>
       <SectionNav sections={sections} />
-      <div className="mx-auto max-w-6xl px-4 py-10">
+      <div className="mx-auto max-w-screen-2xl px-4 py-10">
       <header className="mb-8">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-3xl font-bold">

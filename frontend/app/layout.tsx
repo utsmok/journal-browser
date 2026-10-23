@@ -34,7 +34,7 @@ const THEME_SCRIPT = `(function(){try{var m=localStorage.getItem("jb-theme");if(
 function SiteHeader() {
   return (
     <header className="bg-[var(--secondary)] text-[var(--secondary-foreground)]">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4">
+      <div className="mx-auto flex h-16 max-w-screen-2xl items-center justify-between gap-3 px-4">
         <Link
           href="/"
           className="font-heading whitespace-nowrap text-base sm:text-lg font-bold tracking-tight"
@@ -73,7 +73,7 @@ const FOOTER_LINKS = [
 function SiteFooter() {
   return (
     <footer className="mt-auto bg-[var(--secondary)] text-[var(--secondary-foreground)]">
-      <div className="mx-auto max-w-6xl px-4 py-6 text-sm">
+      <div className="mx-auto max-w-screen-2xl px-4 py-6 text-sm">
         <ul className="flex flex-wrap gap-x-6 gap-y-1">
           {FOOTER_LINKS.map((l) => (
             <li key={l.href}>

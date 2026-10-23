@@ -344,8 +344,13 @@ function SearchView() {
     });
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
-      <section className="mb-8">
+    <div className="mx-auto max-w-screen-2xl px-4 py-10">
+      {/* Sidebar from ~960px up (user-set cutoff); narrower sidebar column
+          between 960 and 1280 so the results keep enough width. Search and
+          hero sit in the results column, above the results list. */}
+      <div className="flex flex-col min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[960px]:gap-6 min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
+        {/* Hero and search: first in stacked flow, top of the results column from 960px. */}
+        <section className="order-1 mb-8 min-[960px]:col-start-2 min-[960px]:row-start-1 min-[960px]:mb-6">
         <h1 className="mb-3 text-3xl font-bold">
           Find the best home for your next article
         </h1>
@@ -355,7 +360,7 @@ function SearchView() {
           publishes in them.
         </p>
         <form
-          className="flex max-w-xl gap-2"
+          className="flex max-w-2xl gap-2"
           onSubmit={(event) => {
             event.preventDefault();
             update({ q: input || undefined });
@@ -398,13 +403,10 @@ function SearchView() {
             <Search aria-hidden className="size-4" /> Search
           </Button>
         </form>
-      </section>
+        </section>
 
-      {/* Sidebar from ~960px up (user-set cutoff); narrower sidebar column
-          between 960 and 1280 so the results keep enough width. */}
-      <div className="min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[960px]:gap-6 min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
         {/* Stacked filter card: the only filter UI below 960px. */}
-        <section className="mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
+        <section className="order-2 mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
           <FilterPanel
             facets={facets}
             selection={filterSelection}
@@ -414,7 +416,7 @@ function SearchView() {
         </section>
 
         {/* Wide-screen sidebar: sticky, scrolls on its own when long. */}
-        <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:block">
+        <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:col-start-1 min-[960px]:row-span-2 min-[960px]:row-start-1 min-[960px]:block">
           <FilterPanel
             facets={facets}
             selection={filterSelection}
@@ -423,7 +425,7 @@ function SearchView() {
           />
         </aside>
 
-        <div className="min-w-0">
+        <div className="order-3 min-w-0 min-[960px]:col-start-2 min-[960px]:row-start-2">
           {/* Sort and reset belong with the results they act on. */}
           <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
             <label htmlFor="sort" className="whitespace-nowrap">Sort by</label>

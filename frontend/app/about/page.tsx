@@ -98,7 +98,7 @@ export default function AboutPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-10 px-4 py-10">
+    <div className="mx-auto max-w-screen-2xl space-y-10 px-4 py-10">
       <header>
         <h1 className="mb-2 text-3xl font-bold">About this browser</h1>
         <p className="max-w-2xl text-[var(--muted-foreground)]">
