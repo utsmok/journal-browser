@@ -49,13 +49,13 @@ const SOURCES: SourceInfo[] = [
     name: "openaccess.nl",
     url: "https://www.openaccess.nl/en/publishing/publisher-deals",
     role: "Deal terms, conditions, and workflow descriptions.",
-    table: "deals",
+    harvest: "openaccess.nl",
   },
   {
     name: "JCT",
     url: "https://journalcheckertool.org/transformative-agreements/",
     role: "Transformative agreement journal lists, one input used to build the register.",
-    table: "deals",
+    harvest: "jct",
   },
   {
     name: "OpenAPC",
@@ -109,12 +109,16 @@ export default function AboutPage() {
               {" "}
               (
               <a
-                href={`https://ror.org/${freshness.ror}`}
+                href={
+                  /^https?:\/\//.test(freshness.ror)
+                    ? freshness.ror
+                    : `https://ror.org/${freshness.ror}`
+                }
                 target="_blank"
-                rel="noreferrer"
-                className="text-[var(--primary)] hover:underline"
+                rel="noopener noreferrer"
+                className="text-[var(--primary-text)] hover:underline"
               >
-                ROR {freshness.ror}
+                ROR {freshness.ror.replace(/^https?:\/\/ror\.org\//, "")}
               </a>
               )
             </>
@@ -137,8 +141,8 @@ export default function AboutPage() {
                     <a
                       href={info.url}
                       target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-0.5 font-semibold capitalize text-[var(--primary)] hover:underline"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-0.5 font-semibold text-[var(--primary-text)] hover:underline"
                     >
                       {info.name} <ExternalLink aria-hidden className="size-3" />
                     </a>
@@ -152,7 +156,7 @@ export default function AboutPage() {
                 </li>
               ))}
             </ul>
-            <p className="mt-4 text-xs text-[var(--muted-foreground)]">
+            <p className="mt-4 max-w-2xl text-xs text-[var(--muted-foreground)]">
               Harvest jobs run when the library refreshes the data, and per-run
               status is listed below. The deal register is maintained by hand,
               so a re-ingest can never overwrite reviewed deal information.
@@ -189,13 +193,13 @@ export default function AboutPage() {
                         key={`${h.source}-${h.entity_type}-${i}`}
                         className="border-t border-[var(--border)]"
                       >
-                        <td className="py-1.5 pr-3 capitalize">
+                        <td className="py-1.5 pr-3">
                           {url ? (
                             <a
                               href={url}
                               target="_blank"
-                              rel="noreferrer"
-                              className="text-[var(--primary)] hover:underline"
+                              rel="noopener noreferrer"
+                              className="text-[var(--primary-text)] hover:underline"
                             >
                               {h.source}
                             </a>
@@ -254,8 +258,8 @@ export default function AboutPage() {
                   <a
                     href={l.url}
                     target="_blank"
-                    rel="noreferrer"
-                    className="ml-2 inline-flex items-center gap-0.5 text-[var(--primary)] hover:underline"
+                    rel="noopener noreferrer"
+                    className="ml-2 inline-flex items-center gap-0.5 text-[var(--primary-text)] hover:underline"
                   >
                     More info <ExternalLink aria-hidden className="size-3" />
                   </a>
@@ -270,6 +274,50 @@ export default function AboutPage() {
             codes={["window-2020", "corpus-cutoff", "pure-canon-primary"]}
           />
         </div>
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-xl font-bold">Contact</h2>
+        <Card>
+          <CardContent className="text-sm">
+            <p className="mb-2 text-[var(--muted-foreground)]">
+              Questions about open access publishing at the University of
+              Twente? The library can help.
+            </p>
+            <ul className="flex flex-wrap gap-x-6 gap-y-1">
+              <li>
+                <a
+                  href="https://www.utwente.nl/library"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-0.5 text-[var(--primary-text)] hover:underline"
+                >
+                  University of Twente Library{" "}
+                  <ExternalLink aria-hidden className="size-3" />
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://www.utwente.nl/en/service-portal/university-library/publication-archiving/open-access"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-0.5 text-[var(--primary-text)] hover:underline"
+                >
+                  Open Access publishing guide{" "}
+                  <ExternalLink aria-hidden className="size-3" />
+                </a>
+              </li>
+              <li>
+                <a
+                  href="mailto:open-access@utwente.nl"
+                  className="text-[var(--primary-text)] hover:underline"
+                >
+                  open-access@utwente.nl
+                </a>
+              </li>
+            </ul>
+          </CardContent>
+        </Card>
       </section>
     </div>
   );

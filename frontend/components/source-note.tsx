@@ -1,6 +1,7 @@
 "use client";
 
 import { ExternalLink, Info } from "lucide-react";
+import * as React from "react";
 
 import { useLimitations } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
@@ -23,10 +24,13 @@ type SourceNoteProps = {
 export function SourceNote({ source, url, codes, className }: SourceNoteProps) {
   const { data: limitations } = useLimitations();
   const caveats = (limitations ?? []).filter((l) => codes?.includes(l.code));
+  const tooltipId = React.useId();
+  const hasTooltip = caveats.length > 0 || Boolean(url);
 
   return (
     <span
       tabIndex={0}
+      {...(hasTooltip ? { "aria-describedby": tooltipId } : {})}
       className={cn(
         "group relative inline-flex cursor-help items-center gap-1 align-baseline text-xs text-[var(--muted-foreground)]",
         className,
@@ -34,10 +38,11 @@ export function SourceNote({ source, url, codes, className }: SourceNoteProps) {
     >
       <Info aria-hidden className="size-3 shrink-0" />
       <span>{source ?? "Source"}</span>
-      {(caveats.length > 0 || url) && (
+      {hasTooltip && (
         <span
           role="tooltip"
-          className="pointer-events-none absolute bottom-full left-0 z-30 mb-1.5 hidden w-80 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-3 text-left text-xs shadow-lg group-hover:block group-focus-within:block group-focus:block"
+          id={tooltipId}
+          className="absolute bottom-full left-0 z-30 mb-1.5 hidden w-80 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-3 text-left text-xs shadow-lg after:absolute after:-bottom-1.5 after:left-0 after:right-0 after:h-1.5 after:content-[''] group-hover:block group-focus-within:block group-focus:block"
         >
           {caveats.map((c) => (
             <span key={c.code} className="mb-2 block last:mb-0">
@@ -61,8 +66,8 @@ export function SourceNote({ source, url, codes, className }: SourceNoteProps) {
                 <a
                   href={c.url}
                   target="_blank"
-                  rel="noreferrer"
-                  className="mt-0.5 inline-flex items-center gap-0.5 text-[var(--primary)] underline-offset-2 hover:underline"
+                  rel="noopener noreferrer"
+                  className="mt-0.5 inline-flex items-center gap-0.5 text-[var(--primary-text)] underline-offset-2 hover:underline"
                 >
                   More info <ExternalLink aria-hidden className="size-3" />
                 </a>
@@ -73,8 +78,8 @@ export function SourceNote({ source, url, codes, className }: SourceNoteProps) {
             <a
               href={url}
               target="_blank"
-              rel="noreferrer"
-              className="mt-2 flex items-center gap-0.5 border-t border-[var(--border)] pt-2 text-[var(--primary)] underline-offset-2 hover:underline"
+              rel="noopener noreferrer"
+              className="mt-2 flex items-center gap-0.5 border-t border-[var(--border)] pt-2 text-[var(--primary-text)] underline-offset-2 hover:underline"
             >
               {url.replace(/^https?:\/\//, "")}{" "}
               <ExternalLink aria-hidden className="size-3" />

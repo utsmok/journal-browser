@@ -1,8 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* Theme switching is class-based; the dark: variant must follow the class. */
-@custom-variant dark (&:is(.dark *));
+/* Theme switching is class-based; the dark: variant must match the class
+   itself and everything inside it. */
+@custom-variant dark (&:where(.dark, .dark *));
 
 /*
   openaccess.nl-inspired theme (docs/research/frontend-design.md).
@@ -17,8 +18,12 @@
   --muted: #f2f4f7;
   --muted-foreground: #515c65;
   --primary: #f06e00;
-  --primary-foreground: #ffffff;
+  /* Dark warm ink, not white: white on this orange is 3.03:1 (WCAG AA fail);
+     #1c0508 on #f06e00 is 6.45:1. */
+  --primary-foreground: #1c0508;
   --primary-hover: #d46200;
+  /* Brand orange fails WCAG AA as text on white; text uses this darker shade. */
+  --primary-text: #b34f00;
   --secondary: #14274c;
   --secondary-foreground: #ffffff;
   --accent: #14274c;
@@ -31,15 +36,38 @@
   --radius: 0.5rem;
 }
 
+/* Dark palette: same tokens, hand-rolled (no next-themes). */
+.dark {
+  --background: #101318;
+  --foreground: #e6e8eb;
+  --card: #171b21;
+  --card-foreground: #e6e8eb;
+  --muted: #1f252d;
+  --muted-foreground: #9aa4af;
+  --primary: #f06e00;
+  --primary-foreground: #1c0508;
+  --primary-hover: #ff8a2a;
+  --primary-text: #ffa25e;
+  --secondary: #14274c;
+  --secondary-foreground: #ffffff;
+  --accent: #14274c;
+  --accent-foreground: #ffffff;
+  --destructive: #f08c96;
+  --destructive-foreground: #1c0508;
+  --border: #2a313b;
+  --input: #2a313b;
+  --ring: #f06e00;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-text: var(--primary-text);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-accent: var(--accent);

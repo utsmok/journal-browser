@@ -15,7 +15,7 @@ const buttonVariants = cva(
         outline:
           "border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] hover:bg-[var(--muted)]",
         ghost: "text-[var(--foreground)] hover:bg-[var(--muted)]",
-        link: "text-[var(--primary)] underline-offset-4 hover:underline",
+        link: "text-[var(--primary-text)] underline-offset-4 hover:underline",
       },
       size: {
         default: "h-10 px-4 py-2",

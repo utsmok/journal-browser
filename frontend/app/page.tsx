@@ -11,7 +11,8 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
-import { DealBadge, OaFlag, QuartileBadge } from "@/components/badges";
+import { DealBadge, OaTypeBadge, QuartileBadge } from "@/components/badges";
+import { FilterPanel } from "@/components/filter-panel";
 import { SourceNote } from "@/components/source-note";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,16 +26,29 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useJournals } from "@/hooks/use-api";
-import type { JournalListItem, SortKey } from "@/lib/api";
+import { errorMessage, type JournalListItem, type SearchIn, type SortKey } from "@/lib/api";
 
 const SORTS: { value: SortKey; label: string }[] = [
   { value: "relevance", label: "Relevance" },
-  { value: "title", label: "Title" },
-  { value: "institution_works", label: "UT works" },
-  { value: "2yr_mean_citedness", label: "2yr mean citedness" },
+  { value: "title", label: "Title A–Z" },
+  { value: "institution_works", label: "Twente works" },
+  { value: "2yr_mean_citedness", label: "2-year mean citedness" },
 ];
 
-type FacetValue = { value: string; count?: number; label?: string };
+const SEARCH_IN_OPTIONS: { value: SearchIn; label: string }[] = [
+  { value: "all", label: "Everything" },
+  { value: "title", label: "Title" },
+  { value: "publisher", label: "Publisher" },
+  { value: "topic", label: "Topic" },
+];
+
+const SEARCH_INPUT_ID = "journal-search";
+
+/** Round an APC mean sensibly: nearest 10 euros at realistic price points. */
+function formatApc(euro: number) {
+  const rounded = Math.abs(euro) >= 100 ? Math.round(euro / 10) * 10 : Math.round(euro);
+  return rounded.toLocaleString("en");
+}
 
 export default function HomePage() {
   // useSearchParams needs a Suspense boundary during prerender.
@@ -51,7 +65,7 @@ function SearchView() {
   const pathname = usePathname();
 
   const spQ = sp.get("q") ?? "";
-  // A browse-all with no query has nothing to rank, so UT works is the
+  // A browse-all with no query has nothing to rank, so Twente works is the
   // sensible default order.
   const sort = (sp.get("sort") ?? (spQ ? "relevance" : "institution_works")) as SortKey;
   const deal = sp.get("deal") ?? "";
@@ -59,20 +73,57 @@ function SearchView() {
   const doaj = sp.get("doaj");
   const quartile = sp.get("quartile") ?? "";
   const topic = sp.get("topic") ?? "";
+  const publisher = sp.get("publisher") ?? "";
+  const hasApc = sp.get("has_apc");
+  const searchIn = (sp.get("search_in") ?? "all") as SearchIn;
 
   const [input, setInput] = React.useState(spQ);
-  const [cursor, setCursor] = React.useState<string | undefined>();
   const [stack, setStack] = React.useState<string[]>([]);
 
-  // Reset keyset position whenever the query itself changes.
-  React.useEffect(() => {
-    setStack([]);
-    setCursor(undefined);
+  // Cursor is URL state (refresh/share keep your page). The visited-cursor
+  // stack mirrors to sessionStorage so Prev survives a refresh in the same
+  // tab; a fresh link simply starts over at that page.
+  const cursor = sp.get("cursor") ?? undefined;
+
+  // Reset keyset position whenever the filters change — not when the cursor
+  // does, or paging would wipe its own history.
+  const filtersKey = React.useMemo(() => {
+    const withoutCursor = new URLSearchParams(sp.toString());
+    withoutCursor.delete("cursor");
+    withoutCursor.delete("p");
+    return withoutCursor.toString();
   }, [sp]);
+  const firstRun = React.useRef(true);
+  React.useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false;
+      try {
+        const saved = JSON.parse(sessionStorage.getItem("jb-cursor-stack") ?? "[]");
+        if (Array.isArray(saved) && saved.length) {
+          setStack(saved);
+          return;
+        }
+      } catch {
+        // corrupted storage: fall through to a fresh stack
+      }
+      if (cursor) setStack([cursor]);
+      return;
+    }
+    setStack([]);
+    sessionStorage.removeItem("jb-cursor-stack");
+    // sp is read once per filter change; the cursor must not retrigger this.
+  }, [filtersKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const update = React.useCallback(
     (patch: Record<string, string | undefined>) => {
+      // Any filter change invalidates the current page: drop the cursor and
+      // the stored stack synchronously so an in-flight fetch can never anchor
+      // the new result set to an older page.
+      setStack([]);
+      sessionStorage.removeItem("jb-cursor-stack");
       const next = new URLSearchParams(sp.toString());
+      next.delete("cursor");
+      next.delete("p");
       for (const [key, value] of Object.entries(patch)) {
         if (!value) next.delete(key);
         else next.set(key, value);
@@ -81,6 +132,18 @@ function SearchView() {
     },
     [pathname, router, sp],
   );
+
+  // Page moves keep the stack; both cursor and page number live in the URL.
+  const moveTo = (nextStack: string[], nextCursor: string | undefined) => {
+    setStack(nextStack);
+    sessionStorage.setItem("jb-cursor-stack", JSON.stringify(nextStack));
+    const next = new URLSearchParams(sp.toString());
+    if (nextCursor) next.set("cursor", nextCursor);
+    else next.delete("cursor");
+    // The stack excludes page 1, so the page number is length + 1.
+    next.set("p", String(nextStack.length + 1));
+    router.replace(`${pathname}?${next}`, { scroll: false });
+  };
 
   // Live search with debounce; keep the input in sync with back/forward nav.
   React.useEffect(() => {
@@ -93,12 +156,43 @@ function SearchView() {
     return () => clearTimeout(t);
   }, [input, spQ, update]);
 
+  // "/" focuses search from anywhere outside a form field; Escape blurs it.
+  React.useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        event.key === "Escape" &&
+        target?.id === SEARCH_INPUT_ID
+      ) {
+        target.blur();
+        return;
+      }
+      if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey)
+        return;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      )
+        return;
+      event.preventDefault();
+      document.getElementById(SEARCH_INPUT_ID)?.focus();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const query = {
     q: spQ || undefined,
+    search_in: searchIn === "all" ? undefined : searchIn,
     deal: (deal || undefined) as "covered" | "not_covered" | undefined,
     oa: oa === null ? undefined : oa === "true",
     doaj: doaj === null ? undefined : doaj === "true",
     quartile: quartile || undefined,
+    publisher: publisher || undefined,
+    has_apc: hasApc === null ? undefined : hasApc === "true",
     topic: topic || undefined,
     sort,
     cursor,
@@ -109,44 +203,19 @@ function SearchView() {
 
   const facets = data?.facets ?? {};
 
-  const facetGroup = (
-    key: string,
-    values: FacetValue[],
-    activeValues: string[],
-  ) => (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {values.map((f) => {
-        const active = activeValues.includes(f.value);
-        return (
-          <button
-            key={f.value}
-            type="button"
-            onClick={() =>
-              update({ [key]: sp.get(key) === f.value ? undefined : f.value })
-            }
-            aria-pressed={active}
-            className={
-              active
-                ? "rounded-full bg-[var(--primary)] px-3 py-1 text-xs font-medium text-[var(--primary-foreground)]"
-                : "rounded-full border border-[var(--border)] bg-[var(--card)] px-3 py-1 text-xs text-[var(--muted-foreground)] hover:border-[var(--primary)] hover:text-[var(--foreground)]"
-            }
-          >
-            {f.label ?? f.value}
-            {f.count !== undefined && (
-              <span className="ml-1 tabular-nums opacity-70">{f.count}</span>
-            )}
-          </button>
-        );
-      })}
-    </div>
-  );
+  const filterSelection = {
+    deal,
+    oa,
+    doaj,
+    quartile,
+    topic,
+    publisher,
+    hasApc,
+  };
 
-  const topicValues: FacetValue[] = Object.entries(facets.topic ?? {})
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
-    .map(([value, count]) => ({ value, count }));
-  if (topic && !topicValues.some((t) => t.value === topic))
-    topicValues.unshift({ value: topic });
+  // Single-select per group: clicking the active value clears it.
+  const toggleFilter = (key: string, value: string) =>
+    update({ [key]: sp.get(key) === value ? undefined : value });
 
   const columns = React.useMemo<ColumnDef<JournalListItem>[]>(
     () => [
@@ -159,12 +228,18 @@ function SearchView() {
             <div className="max-w-md">
               <Link
                 href={`/journals/${row.issn_l}`}
-                className="font-medium text-[var(--foreground)] underline-offset-2 hover:text-[var(--primary)] hover:underline"
+                className="font-medium text-[var(--foreground)] underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
               >
                 {row.title ?? row.issn_l}
               </Link>
               <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
                 <span>{row.publisher_name ?? "Unknown publisher"}</span>
+                {row.apc_euro_mean != null && (
+                  <span title="Average article processing charge reported by OpenAPC">
+                    APC ≈ €{formatApc(row.apc_euro_mean)}
+                    {row.apc_period ? ` (${row.apc_period}, OpenAPC)` : " (OpenAPC)"}
+                  </span>
+                )}
               </div>
             </div>
           );
@@ -178,11 +253,18 @@ function SearchView() {
       {
         accessorKey: "is_oa",
         header: "OA",
-        cell: (info) => <OaFlag isOa={info.getValue<boolean | null>()} />,
+        cell: (info) => {
+          const row = info.row.original;
+          return <OaTypeBadge oaType={row.oa_type} isOa={row.is_oa} />;
+        },
       },
       {
         accessorKey: "twente_works",
-        header: "UT works 2020+",
+        header: () => (
+          <span title="University of Twente publications in this journal, 2020 onwards">
+            Twente works
+          </span>
+        ),
         cell: (info) => (
           <span className="tabular-nums">{info.getValue<number>()}</span>
         ),
@@ -196,7 +278,9 @@ function SearchView() {
       },
       {
         accessorKey: "twoyr_mean_citedness",
-        header: "2yr citedness",
+        header: () => (
+          <span title="2-year mean citedness (OpenAlex)">2-yr citedness</span>
+        ),
         cell: (info) => {
           const v = info.getValue<number | null>();
           return v === null ? (
@@ -204,7 +288,7 @@ function SearchView() {
           ) : (
             <span
               className="tabular-nums"
-              title="2yr mean citedness (OpenAlex)"
+              title="2-year mean citedness (OpenAlex)"
             >
               {v.toFixed(1)}
             </span>
@@ -215,17 +299,49 @@ function SearchView() {
     [],
   );
 
-  const rows = data?.items ?? [];
+  // Backend fields the generated types trail (see lib/api.ts).
+  const rows = (data?.items ?? []) as JournalListItem[];
   const table = useReactTable({
     data: rows,
     columns,
     getCoreRowModel: getCoreRowModel(),
   });
 
-  const pageStart = stack.length * (query.limit ?? 20) + 1;
+  const pParam = parseInt(sp.get("p") ?? "", 10);
+  const page =
+    Number.isFinite(pParam) && pParam > 0 ? pParam : stack.length + 1;
+  const pageStart = (page - 1) * (query.limit ?? 20) + 1;
   const hasFilters = Boolean(
-    spQ || deal || oa !== null || doaj !== null || quartile || topic,
+    spQ ||
+      deal ||
+      oa !== null ||
+      doaj !== null ||
+      quartile ||
+      topic ||
+      publisher ||
+      hasApc !== null,
   );
+  const hasNonQueryFilters = Boolean(
+    deal ||
+      oa !== null ||
+      doaj !== null ||
+      quartile ||
+      topic ||
+      publisher ||
+      hasApc !== null,
+  );
+  const clearFilters = () =>
+    update({
+      q: undefined,
+      search_in: undefined,
+      deal: undefined,
+      oa: undefined,
+      doaj: undefined,
+      quartile: undefined,
+      topic: undefined,
+      publisher: undefined,
+      has_apc: undefined,
+    });
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
@@ -245,22 +361,72 @@ function SearchView() {
             update({ q: input || undefined });
           }}
         >
-          <Input
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            placeholder="Search by journal title or ISSN"
-            aria-label="Search journals"
-          />
+          <div className="relative flex-1">
+            <Input
+              id={SEARCH_INPUT_ID}
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") event.currentTarget.blur();
+              }}
+              placeholder="Search by journal title or ISSN"
+              aria-label="Search journals"
+              className="pr-8"
+            />
+            {input === "" && (
+              <kbd
+                aria-hidden
+                className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-[var(--border)] bg-[var(--muted)] px-1.5 py-0.5 text-[11px] text-[var(--muted-foreground)]"
+              >
+                /
+              </kbd>
+            )}
+          </div>
+          <select
+            aria-label="Search scope"
+            value={searchIn}
+            onChange={(event) => update({ search_in: event.target.value })}
+            className="h-10 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 text-sm"
+          >
+            {SEARCH_IN_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
           <Button type="submit">
             <Search aria-hidden className="size-4" /> Search
           </Button>
         </form>
       </section>
 
-      <section className="mb-6 space-y-2.5 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-sm">
-            <label htmlFor="sort">Sort by</label>
+      {/* Sidebar from ~960px up (user-set cutoff); narrower sidebar column
+          between 960 and 1280 so the results keep enough width. */}
+      <div className="min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[960px]:gap-6 min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
+        {/* Stacked filter card: the only filter UI below 960px. */}
+        <section className="mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
+          <FilterPanel
+            facets={facets}
+            selection={filterSelection}
+            onToggle={toggleFilter}
+            variant="chips"
+          />
+        </section>
+
+        {/* Wide-screen sidebar: sticky, scrolls on its own when long. */}
+        <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:block">
+          <FilterPanel
+            facets={facets}
+            selection={filterSelection}
+            onToggle={toggleFilter}
+            variant="rows"
+          />
+        </aside>
+
+        <div className="min-w-0">
+          {/* Sort and reset belong with the results they act on. */}
+          <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
+            <label htmlFor="sort" className="whitespace-nowrap">Sort by</label>
             <select
               id="sort"
               value={sort}
@@ -273,54 +439,27 @@ function SearchView() {
                 </option>
               ))}
             </select>
+            {hasFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-[var(--muted-foreground)]"
+                onClick={clearFilters}
+              >
+                Reset filters
+              </Button>
+            )}
           </div>
-        </div>
-        {facetGroup(
-          "deal",
-          Object.entries(facets.deal_coverage ?? {}).map(([value, count]) => ({
-            value,
-            count,
-            label: value === "covered" ? "Deal coverage" : "No deal",
-          })),
-          deal ? [deal] : [],
-        )}
-        {facetGroup(
-          "oa",
-          Object.entries(facets.oa ?? {}).map(([value, count]) => ({
-            value,
-            count,
-            label: value === "true" ? "OA journal" : "Not OA",
-          })),
-          oa !== null ? [oa] : [],
-        )}
-        {facetGroup(
-          "doaj",
-          Object.entries(facets.doaj ?? {}).map(([value, count]) => ({
-            value,
-            count,
-            label: value === "true" ? "In DOAJ" : "Not in DOAJ",
-          })),
-          doaj !== null ? [doaj] : [],
-        )}
-        {facetGroup(
-          "quartile",
-          ["Q1", "Q2", "Q3", "Q4"].map((q) => ({
-            value: q,
-            count: facets.quartile?.[q] ?? 0,
-          })),
-          quartile ? [quartile] : [],
-        )}
-        {topicValues.length > 0 &&
-          facetGroup("topic", topicValues, topic ? [topic] : [])}
-      </section>
 
       <Card>
         <CardContent className="pt-6">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <p aria-live="polite" className="text-sm text-[var(--muted-foreground)]">
-              {data
-                ? `${data.total.toLocaleString("en")} journals`
-                : "Loading…"}
+            <p className="text-sm text-[var(--muted-foreground)]">
+              {/* Announce only settled counts: while a fetch runs the live
+                  region keeps its previous text, so typing never chatters. */}
+              <span aria-live="polite">
+                {data ? `${data.total.toLocaleString("en")} journals` : ""}
+              </span>
               {isFetching && data ? " · updating…" : ""}
             </p>
             <div className="flex items-center gap-2">
@@ -330,8 +469,7 @@ function SearchView() {
                 disabled={stack.length === 0}
                 onClick={() => {
                   const next = stack.slice(0, -1);
-                  setStack(next);
-                  setCursor(next[next.length - 1]);
+                  moveTo(next, next[next.length - 1]);
                 }}
               >
                 <ChevronLeft aria-hidden className="size-4" /> Prev
@@ -342,8 +480,7 @@ function SearchView() {
                 disabled={!data?.next_cursor}
                 onClick={() => {
                   if (!data?.next_cursor) return;
-                  setStack((s) => [...s, data.next_cursor!]);
-                  setCursor(data.next_cursor);
+                  moveTo([...stack, data.next_cursor], data.next_cursor);
                 }}
               >
                 Next <ChevronRight aria-hidden className="size-4" />
@@ -353,9 +490,7 @@ function SearchView() {
 
           {isError ? (
             <div className="py-10 text-center">
-              <p className="text-[var(--destructive)]">
-                {(error as Error)?.message ?? "Failed to load journals."}
-              </p>
+              <p className="text-[var(--destructive)]">{errorMessage(error)}</p>
               <Button
                 variant="outline"
                 size="sm"
@@ -376,66 +511,103 @@ function SearchView() {
             </div>
           ) : rows.length === 0 ? (
             <div className="py-10 text-center text-[var(--muted-foreground)]">
-              No journals match{hasFilters ? " these filters" : ""}.
+              {spQ && !hasNonQueryFilters ? (
+                <>
+                  No journals match &ldquo;{spQ}&rdquo;.
+                </>
+              ) : (
+                <>No journals match{hasFilters ? " these filters" : ""}.</>
+              )}
               {hasFilters && (
                 <div className="mt-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      update({
-                        q: undefined,
-                        deal: undefined,
-                        oa: undefined,
-                        doaj: undefined,
-                        quartile: undefined,
-                        topic: undefined,
-                      })
-                    }
-                  >
+                  <Button variant="outline" size="sm" onClick={clearFilters}>
                     Clear filters
                   </Button>
                 </div>
               )}
             </div>
           ) : (
-            <Table className={isFetching ? "opacity-60" : undefined}>
-              <TableHeader>
-                {table.getHeaderGroups().map((group) => (
-                  <TableRow key={group.id}>
-                    {group.headers.map((header) => (
-                      <TableHead key={header.id}>
-                        {flexRender(
-                          header.column.columnDef.header,
-                          header.getContext(),
-                        )}
-                      </TableHead>
-                    ))}
-                  </TableRow>
+            <>
+              {/* Stacked cards on narrow viewports: the six-column table would
+                  push the decision columns off-screen behind horizontal
+                  scrolling. */}
+              <ul
+                className={
+                  isFetching ? "opacity-60 md:hidden" : "md:hidden"
+                }
+                aria-label="Journal results"
+              >
+                {rows.map((row) => (
+                  <li
+                    key={row.issn_l}
+                    className="border-b border-[var(--border)] py-3 first:pt-0 last:border-0 last:pb-0"
+                  >
+                    <Link
+                      href={`/journals/${row.issn_l}`}
+                      className="font-medium text-[var(--foreground)] underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                    >
+                      {row.title ?? row.issn_l}
+                    </Link>
+                    <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                      {row.publisher_name ?? "Unknown publisher"}
+                      {row.apc_euro_mean != null &&
+                        ` · APC ≈ €${formatApc(row.apc_euro_mean)}`}
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <DealBadge covered={row.deal_covered} />
+                      <OaTypeBadge oaType={row.oa_type} isOa={row.is_oa} />
+                      <QuartileBadge quartile={row.quartile ?? null} />
+                    </div>
+                    <div className="mt-1 text-xs tabular-nums text-[var(--muted-foreground)]">
+                      {row.twente_works.toLocaleString("en")} Twente works
+                      {row.twoyr_mean_citedness != null &&
+                        ` · ${row.twoyr_mean_citedness.toFixed(1)} citedness`}
+                    </div>
+                  </li>
                 ))}
-              </TableHeader>
-              <TableBody>
-                {table.getRowModel().rows.map((row) => (
-                  <TableRow key={row.id}>
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext(),
-                        )}
-                      </TableCell>
+              </ul>
+              <div className={isFetching ? "hidden opacity-60 md:block" : "hidden md:block"}>
+                <Table>
+                  <caption className="sr-only">Journal search results</caption>
+                  <TableHeader>
+                    {table.getHeaderGroups().map((group) => (
+                      <TableRow key={group.id}>
+                        {group.headers.map((header) => (
+                          <TableHead key={header.id}>
+                            {flexRender(
+                              header.column.columnDef.header,
+                              header.getContext(),
+                            )}
+                          </TableHead>
+                        ))}
+                      </TableRow>
                     ))}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {table.getRowModel().rows.map((row) => (
+                      <TableRow key={row.id}>
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell key={cell.id}>
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext(),
+                            )}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--muted-foreground)]">
+            {/* Only render a range while real rows exist; "0–-1 of 0" is noise. */}
             <span>
-              Showing {rows.length > 0 ? pageStart : 0}–
-              {pageStart + rows.length - 1} of{" "}
-              {(data?.total ?? 0).toLocaleString("en")}
+              {data && rows.length > 0
+                ? `Showing ${pageStart}–${pageStart + rows.length - 1} of ${data.total.toLocaleString("en")}`
+                : ""}
             </span>
             <SourceNote
               source="OpenAlex · Scimago · JCT · openaccess.nl"
@@ -451,6 +623,8 @@ function SearchView() {
           </div>
         </CardContent>
       </Card>
+        </div>
+      </div>
     </div>
   );
 }

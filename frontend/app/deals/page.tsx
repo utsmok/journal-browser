@@ -5,6 +5,7 @@ import type { UseQueryResult } from "@tanstack/react-query";
 
 import { SourceNote } from "@/components/source-note";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -12,7 +13,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useDeals } from "@/hooks/use-api";
-import type { DealOut } from "@/lib/api";
+import { errorMessage, type DealOut } from "@/lib/api";
+import { dealLinkLabel, orderedDealLinks } from "@/lib/deal-links";
+import { cleanProse } from "@/lib/utils";
 
 function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
   const capNumbers = Object.entries(deal.cap_numbers ?? {}).sort(
@@ -31,7 +34,7 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
           {deal.needs_curation && (
             <Badge
               variant="outline"
-              className="border-[var(--primary)] text-[var(--primary-hover)] normal-case"
+              className="border-[var(--primary)] text-[var(--primary-text)] normal-case"
               title={deal.needs_curation_reason ?? undefined}
             >
               curation pending
@@ -45,11 +48,11 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
         </p>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
-        {deal.summary && <p>{deal.summary}</p>}
+        {deal.summary && <p>{cleanProse(deal.summary)}</p>}
         {deal.cap_text && (
           <p>
             <span className="font-medium">Caps: </span>
-            {deal.cap_text}
+            {cleanProse(deal.cap_text)}
           </p>
         )}
         {capNumbers.length > 0 && (
@@ -65,36 +68,54 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
           </ul>
         )}
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
-          {deal.openaccess_nl_url && (
-            <a
-              href={deal.openaccess_nl_url}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-[var(--primary)] hover:underline"
-            >
-              openaccess.nl <ExternalLink aria-hidden className="size-3" />
-            </a>
-          )}
-          {deal.contract_url && (
-            <a
-              href={deal.contract_url}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-[var(--primary)] hover:underline"
-            >
-              Contract <ExternalLink aria-hidden className="size-3" />
-            </a>
-          )}
-          {deal.jct_data_url && (
-            <a
-              href={deal.jct_data_url}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-[var(--primary)] hover:underline"
-            >
-              JCT data <ExternalLink aria-hidden className="size-3" />
-            </a>
-          )}
+          {deal.links?.length
+            ? orderedDealLinks(deal.links).map((link) => (
+                <a
+                  key={`${link.category}-${link.url}`}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[var(--primary-text)] hover:underline"
+                >
+                  {dealLinkLabel(link)}{" "}
+                  <ExternalLink aria-hidden className="size-3" />
+                </a>
+              ))
+            : (
+              // Old backend: no links[] yet; fall back to the flat URL fields.
+              <>
+                {deal.openaccess_nl_url && (
+                  <a
+                    href={deal.openaccess_nl_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[var(--primary-text)] hover:underline"
+                  >
+                    openaccess.nl <ExternalLink aria-hidden className="size-3" />
+                  </a>
+                )}
+                {deal.contract_url && (
+                  <a
+                    href={deal.contract_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[var(--primary-text)] hover:underline"
+                  >
+                    Contract <ExternalLink aria-hidden className="size-3" />
+                  </a>
+                )}
+                {deal.jct_data_url && (
+                  <a
+                    href={deal.jct_data_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[var(--primary-text)] hover:underline"
+                  >
+                    JCT data <ExternalLink aria-hidden className="size-3" />
+                  </a>
+                )}
+              </>
+            )}
         </div>
       </CardContent>
     </Card>
@@ -118,9 +139,17 @@ export default function DealsPage() {
           : "Loading…"}
       </p>
       {query.isError ? (
-        <p className="text-[var(--destructive)]">
-          {(query.error as Error)?.message}
-        </p>
+        <div>
+          <p className="text-[var(--destructive)]">{errorMessage(query.error)}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2"
+            onClick={() => query.refetch()}
+          >
+            Retry
+          </Button>
+        </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           {(query.data ?? []).map((deal) => (
