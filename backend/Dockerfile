@@ -14,6 +14,12 @@ RUN uv sync --frozen --no-install-project --no-dev
 COPY . .
 RUN uv sync --frozen --no-dev && chown -R app:app /app
 
+# Pre-fetch the ONNX query-encoding model so the first semantic search needs
+# no network at runtime (services/embeddings.py encode_query loads lazily).
+ENV FASTEMBED_CACHE_PATH=/app/.fastembed
+RUN uv run --no-dev python -c "from fastembed import TextEmbedding; list(TextEmbedding(model_name='BAAI/bge-small-en-v1.5').embed(['warmup']))" \
+    && chown -R app:app /app
+
 USER app
 
 EXPOSE 8000

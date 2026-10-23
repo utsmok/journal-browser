@@ -61,6 +61,11 @@ PROCEEDINGS_EXCLUSION = Journal.browse_excluded.is_not(True)
 #: default, which the % operator uses via pg_trgm.similarity_threshold.
 FUZZY_THRESHOLD = 0.3
 
+#: Similar-journal list sizes: the Twente/deal-cut lists are teasers, the
+#: general list carries the full ten.
+SIMILAR_FILTERED_LIMIT = 5
+SIMILAR_ALL_LIMIT = 10
+
 APC_EXISTS = exists(select(1).where(JournalApcAggregate.issn_l == Journal.issn_l))
 
 #: Per-journal OA type (owner-approved 2026-10-23). DOAJ = fully-OA venue;
@@ -213,6 +218,29 @@ def _order(sort: SortKey, subq: Any) -> tuple[Any, str]:
     return func.coalesce(subq.c.rank, 0), "desc"  # relevance
 
 
+async def attach_latest_apc(session: AsyncSession, items: list[dict[str, Any]]) -> None:
+    """Stamps apc_period/apc_euro_mean (most recent OpenAPC period) onto each
+    item dict in place; one keyed query for the whole page."""
+    apc_rows = (
+        await session.execute(
+            select(
+                JournalApcAggregate.issn_l,
+                JournalApcAggregate.period,
+                JournalApcAggregate.euro_mean,
+            )
+            .where(JournalApcAggregate.issn_l.in_([i["issn_l"] for i in items]))
+            .order_by(JournalApcAggregate.issn_l, JournalApcAggregate.period.desc())
+        )
+    ).all()
+    latest: dict[str, tuple[Any, Any]] = {}
+    for r in apc_rows:
+        latest.setdefault(r.issn_l, (r.period, r.euro_mean))
+    for item in items:
+        hit = latest.get(item["issn_l"])
+        item["apc_period"] = str(hit[0]) if hit else None
+        item["apc_euro_mean"] = float(hit[1]) if hit and hit[1] is not None else None
+
+
 async def search_journals(
     session: AsyncSession,
     *,
@@ -302,24 +330,7 @@ async def search_journals(
     # Most-recent OpenAPC period per journal for the page only (<= limit
     # rows); one extra keyed query beats a lateral join on every page.
     if rows:
-        apc_rows = (
-            await session.execute(
-                select(
-                    JournalApcAggregate.issn_l,
-                    JournalApcAggregate.period,
-                    JournalApcAggregate.euro_mean,
-                )
-                .where(JournalApcAggregate.issn_l.in_([r.issn_l for r in rows]))
-                .order_by(JournalApcAggregate.issn_l, JournalApcAggregate.period.desc())
-            )
-        ).all()
-        latest: dict[str, tuple[Any, Any]] = {}
-        for r in apc_rows:
-            latest.setdefault(r.issn_l, (r.period, r.euro_mean))
-        for item in items:
-            hit = latest.get(item["issn_l"])
-            item["apc_period"] = str(hit[0]) if hit else None
-            item["apc_euro_mean"] = float(hit[1]) if hit and hit[1] is not None else None
+        await attach_latest_apc(session, items)
 
     # Facets only depend on the filter set, never on cursor/page/sort — page
     # turns skip the aggregate and pass the count through instead.
@@ -500,12 +511,18 @@ async def facet_counts(
     return facets, total
 
 
-async def similar_journals(session: AsyncSession, issn_l: str) -> list[dict[str, Any]] | None:
-    """Up to 10 cutoff-passing journals nearest to the given journal in
-    embedding space (cosine; jobs/embed_journals.py backfills the vectors).
-    Falls back to shared-topic ranking when the journal has no embedding
-    yet. None when the journal itself is unknown. Shares base_query, so the
-    corpus cutoff and the proceedings exclusion apply here too."""
+async def similar_journals(session: AsyncSession, issn_l: str) -> dict[str, Any] | None:
+    """Three cutoff-passing similar-journal lists, nearest first in embedding
+    space (cosine; jobs/embed_journals.py backfills the vectors):
+
+    - "twente": journals with at least one known UT publication
+    - "deals": journals covered by a publication deal
+    - "all": unfiltered apart from the base cutoffs
+
+    Falls back to shared-topic ranking (same three lists) when the journal
+    has no embedding yet. None when the journal itself is unknown. Shares
+    base_query, so the corpus cutoff and proceedings exclusion always apply.
+    """
     self_row = (
         await session.execute(
             select(Journal.issn_l, Journal.topics, Journal.embedding).where(
@@ -515,35 +532,36 @@ async def similar_journals(session: AsyncSession, issn_l: str) -> list[dict[str,
     ).first()
     if self_row is None:
         return None
+
+    scopes = {
+        # (extra Journal-level filter or None, list length)
+        "twente": (func.coalesce(Journal.home_works_count, 0) > 0, SIMILAR_FILTERED_LIMIT),
+        "deals": (Journal.deal_covered_home.is_(True), SIMILAR_FILTERED_LIMIT),
+        "all": (None, SIMILAR_ALL_LIMIT),
+    }
+    out: dict[str, list[dict[str, Any]]] = {}
     if self_row.embedding is not None:
         distance = Journal.embedding.cosine_distance(self_row.embedding).label("dist")
-        subq = (
-            base_query()
-            .add_columns(distance)
-            .where(Journal.issn_l != self_row.issn_l, Journal.embedding.is_not(None))
-            .subquery()
-        )
-        rows = (
-            await session.execute(
-                select(subq)
-                .order_by(subq.c.dist.asc(), subq.c.issn_l.asc())
-                .limit(10)
+        for key, (extra, limit) in scopes.items():
+            query = base_query().add_columns(distance).where(
+                Journal.issn_l != self_row.issn_l, Journal.embedding.is_not(None)
             )
-        ).all()
-        items = []
-        for row in rows:
-            item = dict(row._mapping)
-            item["twoyr_mean_citedness"] = (
-                float(item.pop("twoyr")) if item.get("twoyr") is not None else None
-            )
-            item.pop("rank", None)
-            item["similarity"] = round(1.0 - item.pop("dist"), 4)
-            item["shared_topics"] = 0
-            items.append(item)
-        return items
+            if extra is not None:
+                query = query.where(extra)
+            subq = query.subquery()
+            rows = (
+                await session.execute(
+                    select(subq)
+                    .order_by(subq.c.dist.asc(), subq.c.issn_l.asc())
+                    .limit(limit)
+                )
+            ).all()
+            out[key] = [_similar_item(row, embedding=True) for row in rows]
+        return out
+
     names = [t["display_name"] for t in (self_row.topics or []) if t.get("display_name")]
     if not names:
-        return []
+        return {"twente": [], "deals": [], "all": []}
     elems = func.jsonb_array_elements(Journal.topics).table_valued("value")
     shared = (
         select(func.count())
@@ -552,21 +570,60 @@ async def similar_journals(session: AsyncSession, issn_l: str) -> list[dict[str,
         .scalar_subquery()
         .label("shared_topics")
     )
+    for key, (extra, limit) in scopes.items():
+        query = base_query().add_columns(shared).where(
+            Journal.issn_l != self_row.issn_l, shared > 0
+        )
+        if extra is not None:
+            query = query.where(extra)
+        subq = query.subquery()
+        rows = (
+            await session.execute(
+                select(subq)
+                .order_by(
+                    subq.c.shared_topics.desc(),
+                    func.coalesce(subq.c.twoyr, 0).desc(),
+                    subq.c.issn_l.asc(),
+                )
+                .limit(limit)
+            )
+        ).all()
+        out[key] = [_similar_item(row, embedding=False) for row in rows]
+    return out
+
+
+def _similar_item(row: Any, *, embedding: bool) -> dict[str, Any]:
+    item = dict(row._mapping)
+    item["twoyr_mean_citedness"] = (
+        float(item.pop("twoyr")) if item.get("twoyr") is not None else None
+    )
+    item.pop("rank", None)
+    if embedding:
+        item["similarity"] = round(1.0 - item.pop("dist"), 4)
+        item["shared_topics"] = 0
+    return item
+
+
+async def semantic_search(
+    session: AsyncSession, q: str, limit: int = 40
+) -> list[dict[str, Any]]:
+    """Free-text "find journals like this description": encode the query with
+    the embedding model (fastembed ONNX, CPU) and rank by cosine distance.
+    Shares base_query cutoffs and proceedings exclusion; journals without a
+    stored vector are absent. Response rows match search_journals items so
+    the frontend table renders them unchanged."""
+    from .embeddings import encode_query
+
+    distance = Journal.embedding.cosine_distance(encode_query(q)).label("dist")
     subq = (
         base_query()
-        .add_columns(shared)
-        .where(Journal.issn_l != self_row.issn_l, shared > 0)
+        .add_columns(distance)
+        .where(Journal.embedding.is_not(None))
         .subquery()
     )
     rows = (
         await session.execute(
-            select(subq)
-            .order_by(
-                subq.c.shared_topics.desc(),
-                func.coalesce(subq.c.twoyr, 0).desc(),
-                subq.c.issn_l.asc(),
-            )
-            .limit(10)
+            select(subq).order_by(subq.c.dist.asc(), subq.c.issn_l.asc()).limit(limit)
         )
     ).all()
     items = []
@@ -576,5 +633,8 @@ async def similar_journals(session: AsyncSession, issn_l: str) -> list[dict[str,
             float(item.pop("twoyr")) if item.get("twoyr") is not None else None
         )
         item.pop("rank", None)
+        item.pop("dist", None)
         items.append(item)
+    if items:
+        await attach_latest_apc(session, items)
     return items

@@ -53,6 +53,15 @@ class SimilarJournalItem(BaseModel):
     similarity: float | None = None
 
 
+class SimilarJournalsBundle(BaseModel):
+    """Similar-journal lists: UT-publishing venues and deal-covered venues as
+    teaser cuts, plus the general list."""
+
+    twente: list[SimilarJournalItem]
+    deals: list[SimilarJournalItem]
+    all: list[SimilarJournalItem]
+
+
 class ApcAggregateOut(BaseModel):
     period: int
     article_count: int

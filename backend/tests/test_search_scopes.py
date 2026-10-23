@@ -355,12 +355,13 @@ async def test_proceedings_exclusion(api):
 async def test_similar_journals(api):
     r = await api.get("/api/v1/journals/1234-5678/similar")
     assert r.status_code == 200
-    # No topic overlap with anything.
-    assert r.json() == []
+    # No topic overlap with anything: three empty lists.
+    assert r.json() == {"twente": [], "deals": [], "all": []}
 
     r = await api.get("/api/v1/journals/7777-7777/similar")
     assert r.status_code == 200
-    items = r.json()
+    bundle = r.json()
+    items = bundle["all"]
     # Shared-topic count desc, then twoyr desc; self, non-overlapping and
     # cutoff-failing journals are out.
     assert [(i["issn_l"], i["shared_topics"]) for i in items] == [("8888-8888", 1)]
@@ -375,6 +376,10 @@ async def test_similar_journals(api):
         "twente_works",
         "shared_topics",
     }
+    # Fixture journals carry no UT works and no deal, so the teaser cuts are
+    # empty and every item lands in "all" only.
+    assert bundle["twente"] == []
+    assert bundle["deals"] == []
 
     # Unknown journal -> 404.
     r = await api.get("/api/v1/journals/0000-0000/similar")

@@ -31,6 +31,7 @@ from ..schemas import (
     OpenalexInfo,
     ScimagojrOut,
     SimilarJournalItem,
+    SimilarJournalsBundle,
     StatsYear,
     TwenteMetrics,
     WorksPage,
@@ -169,12 +170,30 @@ async def search_journals(
     )
 
 
-@router.get("/{issn_l}/similar", response_model=list[SimilarJournalItem])
-async def similar_journals(issn_l: str, session: SessionDep) -> list[SimilarJournalItem]:
+@router.get("/semantic-search", response_model=JournalSearchResponse)
+async def semantic_search_journals(
+    session: SessionDep,
+    q: Annotated[str, Query(min_length=2, max_length=512)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 40,
+) -> JournalSearchResponse:
+    """Free-text "journals like this description" search over embeddings."""
+    items = await search_service.semantic_search(session, q, limit)
+    return JournalSearchResponse(
+        items=[_to_list_item(item) for item in items],
+        total=len(items),
+    )
+
+
+@router.get("/{issn_l}/similar", response_model=SimilarJournalsBundle)
+async def similar_journals(
+    issn_l: str, session: SessionDep
+) -> SimilarJournalsBundle:
     similar = await search_service.similar_journals(session, issn_l)
     if similar is None:
         raise HTTPException(status_code=404, detail="journal not found")
-    return [SimilarJournalItem(**item) for item in similar]
+    return SimilarJournalsBundle(
+        **{key: [SimilarJournalItem(**item) for item in items] for key, items in similar.items()}
+    )
 
 
 @router.get("/{issn_l}/works", response_model=WorksPage)

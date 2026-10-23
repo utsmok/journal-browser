@@ -1,14 +1,31 @@
-"""Embedding text construction for journal similarity.
+"""Embedding text construction and query encoding for journal similarity.
 
-Kept free of torch/sentence-transformers imports so the API container and
-the test suite can use it; only jobs/embed_journals.py loads the model.
+Query-time encoding uses fastembed (ONNX on CPU — no torch, so the API
+image stays small); the host-side GPU backfill uses sentence-transformers
+with the same model. Only jobs/embed_journals.py pulls torch in.
 """
 
 import re
 from typing import Any
 
-MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+MODEL_NAME = "BAAI/bge-small-en-v1.5"
 DIMENSION = 384
+
+_query_model: Any = None
+
+
+def encode_query(text: str) -> list[float]:
+    """Encode a free-text search query. Lazy: the ONNX model (~130 MB,
+    pre-downloaded into the image) loads on first call. fastembed's
+    query_embed applies the BGE query prompt; passages in the DB are
+    unprefixed, matching the BGE recipe."""
+    global _query_model
+    if _query_model is None:
+        from fastembed import TextEmbedding
+
+        _query_model = TextEmbedding(model_name=MODEL_NAME)
+    return [float(v) for v in next(_query_model.query_embed([text]))]
+
 
 #: Journal-title boilerplate that carries no subject signal (owner request:
 #: drop "journal", "of", "and", ...). Deliberately small — words like
