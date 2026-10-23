@@ -1,6 +1,8 @@
 services:
   db:
-    image: postgres:17-alpine
+    # postgres:17-alpine + pgvector (see db/Dockerfile). Same PG major as
+    # before, so the pgdata volume carries over unchanged.
+    build: ./db
     restart: unless-stopped
     environment:
       POSTGRES_USER: journal
