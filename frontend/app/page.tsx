@@ -366,13 +366,13 @@ function SearchView() {
           publishes in them.
         </p>
         <form
-          className="flex max-w-2xl gap-2"
+          className="flex max-w-2xl flex-wrap gap-2"
           onSubmit={(event) => {
             event.preventDefault();
             update({ q: input || undefined });
           }}
         >
-          <div className="relative flex-1">
+          <div className="relative w-full min-[560px]:w-auto min-[560px]:flex-1">
             <Input
               id={SEARCH_INPUT_ID}
               value={input}
@@ -412,7 +412,7 @@ function SearchView() {
             </select>
           )}
           <label
-            className="flex h-10 cursor-pointer items-center gap-1.5 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2.5 text-sm select-none"
+            className="flex h-10 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2.5 text-sm select-none"
             title="Rank journals by meaning instead of exact words; filters and sorting are off in this mode"
           >
             <input
@@ -425,7 +425,7 @@ function SearchView() {
             />
             Match by meaning
           </label>
-          <Button type="submit">
+          <Button type="submit" className="flex-1 min-[560px]:flex-none">
             <Search aria-hidden className="size-4" /> Search
           </Button>
         </form>
