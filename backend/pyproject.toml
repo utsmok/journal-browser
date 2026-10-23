@@ -45,6 +45,8 @@ markers = [
 [tool.ruff]
 line-length = 100
 src = ["src", "tests", "jobs"]
+# Applied migrations are historical record; never reformat them.
+extend-exclude = ["alembic/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]

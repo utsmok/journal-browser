@@ -1,12 +1,13 @@
 services:
   db:
     image: postgres:17-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: journal
       POSTGRES_PASSWORD: journal
       POSTGRES_DB: journalbrowser
     ports:
-      - "5433:5432" # host 5433: machines often run a local postgres on 5432
+      - "127.0.0.1:5433:5432" # host 5433: machines often run a local postgres on 5432
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -17,25 +18,58 @@ services:
 
   backend:
     build: ./backend
+    restart: unless-stopped
     environment:
       JB_DATABASE_URL: postgresql+asyncpg://journal:journal@db:5432/journalbrowser
+      # Canonical Twente publications (ut-metadata Postgres). Empty/unset =
+      # feature off; wrong/unreachable DSN degrades the same way at runtime.
+      # Note: inside compose, localhost is the container — point this at a
+      # container-reachable address (e.g. host.docker.internal:5434).
+      JB_UT_METADATA_DSN: ${JB_UT_METADATA_DSN:-}
     volumes:
       # Raw landing copies and job logs must survive container rebuilds.
       - ./backend/landing:/app/landing
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      # /api/v1/healthz executes SELECT 1 against the DB.
+      test:
+        [
+          "CMD",
+          "uv",
+          "run",
+          "--no-dev",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/healthz', timeout=3)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     depends_on:
       db:
         condition: service_healthy
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://journalbrowser.samuelmok.cc}
+    restart: unless-stopped
     environment:
       API_PROXY_URL: http://backend:8000
     ports:
       - "3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "-", "http://127.0.0.1:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   pgdata:
