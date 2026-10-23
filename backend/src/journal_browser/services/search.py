@@ -80,6 +80,10 @@ OA_TYPE = case(
     else_="subscription",
 ).label("oa_type")
 
+#: Journal OA-type vocabulary (the OA_TYPE values); the oa_type facet
+#: multi-selects these with OR semantics.
+OA_TYPES = ("gold", "diamond", "hybrid", "subscription")
+
 
 def oa_type_value(is_in_doaj: bool | None, has_apc: bool, deal_covered: bool) -> str:
     """Python mirror of the OA_TYPE SQL case, for the detail endpoint."""
@@ -108,6 +112,7 @@ def base_query(
     topic: str | None = None,
     publisher: str | None = None,
     has_apc: bool | None = None,
+    oa_types: list[str] | None = None,
     fuzzy: bool = False,
 ):
     """Filtered select with computed columns; search + facet counts share it.
@@ -147,6 +152,8 @@ def base_query(
         OA_TYPE,
         rank,
     ).where(WORKS_CUTOFF, J.type == "journal", J.issn_l.is_not(None), PROCEEDINGS_EXCLUSION)
+    if oa_types:
+        query = query.where(OA_TYPE.in_(oa_types))
     if q:
         qstr = q.strip()
         if fuzzy:
@@ -253,6 +260,7 @@ async def search_journals(
     topic: str | None = None,
     publisher: str | None = None,
     has_apc: bool | None = None,
+    oa_types: list[str] | None = None,
     sort: SortKey = "relevance",
     cursor: str | None = None,
     limit: int = 20,
@@ -268,6 +276,7 @@ async def search_journals(
         topic=topic,
         publisher=publisher,
         has_apc=has_apc,
+        oa_types=oa_types,
     )
     subq = base_query(**filters).subquery()
     total = await session.scalar(select(func.count()).select_from(subq)) or 0
@@ -361,6 +370,7 @@ async def facet_counts(
     topic: str | None = None,
     publisher: str | None = None,
     has_apc: bool | None = None,
+    oa_types: list[str] | None = None,
 ) -> tuple[dict[str, dict[str, int]], int]:
     """Facet counts over the query-filtered set. Each facet's own filter is
     excluded so a chip shows what selecting it would yield; all other active
@@ -387,6 +397,7 @@ async def facet_counts(
         topic=topic,
         publisher=publisher,
         has_apc=has_apc,
+        oa_types=oa_types,
     ).subquery()
     total, (covered, oa_true, doaj_true, q1, q2, q3, q4) = await _one(
         base,
@@ -405,7 +416,15 @@ async def facet_counts(
         "quartile": {"Q1": q1, "Q2": q2, "Q3": q3, "Q4": q4},
     }
     # Variants drop exactly their own filter and keep everything else.
-    common = dict(q=q, search_in=search_in, deal=deal, oa=oa, doaj=doaj, quartile=quartile)
+    common = dict(
+        q=q,
+        search_in=search_in,
+        deal=deal,
+        oa=oa,
+        doaj=doaj,
+        quartile=quartile,
+        oa_types=oa_types,
+    )
     if deal != "any":
         d = base_query(
             **{**common, "topic": topic, "publisher": publisher, "has_apc": has_apc}
@@ -436,6 +455,26 @@ async def facet_counts(
             qt.c.quartile == "Q4",
         )
         facets["quartile"] = {"Q1": w1, "Q2": w2, "Q3": w3, "Q4": w4}
+    # OA-type facet: counts per oa_type with the oa_type filter itself
+    # excluded, so every option stays visible while selected.
+    oa_type_subq = base_query(
+        q=q,
+        search_in=search_in,
+        deal=deal,
+        oa=oa,
+        doaj=doaj,
+        quartile=quartile,
+        topic=topic,
+        publisher=publisher,
+        has_apc=has_apc,
+    ).subquery()
+    oa_type_rows = await session.execute(
+        select(oa_type_subq.c.oa_type, func.count().label("n")).group_by(
+            oa_type_subq.c.oa_type
+        )
+    )
+    facets["oa_type"] = {row.oa_type: int(row.n) for row in oa_type_rows}
+
     elem = func.jsonb_array_elements(
         func.coalesce(Journal.topics, text("'[]'::jsonb"))
     ).table_valued("value", name="t")
@@ -448,6 +487,7 @@ async def facet_counts(
         quartile=quartile,
         publisher=publisher,
         has_apc=has_apc,
+        oa_types=oa_types,
     ).subquery()
     topic_rows = await session.execute(
         select(
@@ -473,6 +513,7 @@ async def facet_counts(
         quartile=quartile,
         topic=topic,
         has_apc=has_apc,
+        oa_types=oa_types,
     ).subquery()
     pub_rows = await session.execute(
         select(pub_subq.c.publisher_name, func.count().label("n"))
@@ -497,6 +538,7 @@ async def facet_counts(
             quartile=quartile,
             topic=topic,
             publisher=publisher,
+            oa_types=oa_types,
         ).subquery()
         apc_total = await session.scalar(select(func.count()).select_from(apc_base)) or 0
     apc_true = (

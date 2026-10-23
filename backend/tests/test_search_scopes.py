@@ -341,6 +341,31 @@ async def test_oa_type_mapping(api):
 
 
 @requires_db
+async def test_oa_type_facet_filter(api):
+    # OR semantics: gold OR diamond returns exactly those fixtures.
+    r = await api.get("/api/v1/journals", params={"oa_type": "gold,diamond"})
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert {i["issn_l"] for i in items} == {"3333-3333", "1515-1515", "4444-4444"}
+
+    # Single value narrows to one fixture.
+    r = await api.get("/api/v1/journals", params={"oa_type": "diamond"})
+    assert r.status_code == 200
+    assert _issns(r.json()) == {"4444-4444"}
+
+    # The facet's own filter is excluded from its counts, so every option
+    # stays visible (with the rest of the filter set applied).
+    oa_facets = r.json()["facets"]["oa_type"]
+    assert oa_facets["gold"] == 2
+    assert oa_facets["diamond"] == 1
+    assert oa_facets["hybrid"] == 2
+
+    # Unknown vocabulary is a 400, not a silent empty result.
+    r = await api.get("/api/v1/journals", params={"oa_type": "gold,bogus"})
+    assert r.status_code == 400
+
+
+@requires_db
 async def test_proceedings_exclusion(api):
     body = (await api.get("/api/v1/journals")).json()
     issns = _issns(body)

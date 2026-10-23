@@ -135,6 +135,7 @@ async def search_journals(
     topic: Annotated[str | None, Query(max_length=100)] = None,
     publisher: Annotated[str | None, Query(max_length=200)] = None,
     has_apc: bool | None = None,
+    oa_type: Annotated[str | None, Query(max_length=60)] = None,
     sort: Annotated[
         str, Query(pattern="^(relevance|title|institution_works|2yr_mean_citedness)$")
     ] = "relevance",
@@ -142,6 +143,10 @@ async def search_journals(
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     include_facets: bool = True,
 ) -> JournalSearchResponse:
+    # oa_type is a comma-separated multi-select, OR'd together server-side.
+    oa_types = [v for v in (oa_type or "").split(",") if v]
+    if unknown := [v for v in oa_types if v not in search_service.OA_TYPES]:
+        raise HTTPException(status_code=400, detail=f"unknown oa_type: {unknown}")
     try:
         result = await search_service.search_journals(
             session,
@@ -154,6 +159,7 @@ async def search_journals(
             topic=topic,
             publisher=publisher,
             has_apc=has_apc,
+            oa_types=oa_types or None,
             sort=sort,
             cursor=cursor,
             limit=limit,
