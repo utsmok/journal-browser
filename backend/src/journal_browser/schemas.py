@@ -49,6 +49,8 @@ class SimilarJournalItem(BaseModel):
     deal_covered: bool
     twente_works: int
     shared_topics: int
+    # Embedding-cosine similarity (0-1); null on the shared-topic fallback.
+    similarity: float | None = None
 
 
 class ApcAggregateOut(BaseModel):

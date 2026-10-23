@@ -10,6 +10,7 @@ import secrets
 
 import asyncpg
 import pytest
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.models import Base
@@ -55,6 +56,9 @@ async def db_engine():
     await conn.close()
     engine = create_async_engine(TEST_URL)
     async with engine.begin() as conn:
+        # journals.embedding is a vector column; the pgvector type must
+        # exist before create_all issues the table DDL.
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)
     yield engine
     await engine.dispose()

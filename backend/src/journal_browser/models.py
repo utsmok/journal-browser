@@ -9,6 +9,7 @@ store; `manual_overrides` survives every re-ingestion.
 from datetime import datetime
 from typing import Any
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -305,6 +306,10 @@ class Journal(Base):
         Computed("to_tsvector('english', coalesce(search_text, ''))", persisted=True),
         nullable=True,
     )
+    # 384-dim all-MiniLM-L6-v2 text embedding (cleaned title + topics + top
+    # cited works), written only by jobs/embed_journals.py on the GPU host;
+    # powers the embedding path of similar_journals (services/search.py).
+    embedding: Mapped[Any] = mapped_column(Vector(384), nullable=True)
 
 
 class ScimagojrMetric(Base):

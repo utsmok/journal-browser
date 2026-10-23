@@ -501,17 +501,46 @@ async def facet_counts(
 
 
 async def similar_journals(session: AsyncSession, issn_l: str) -> list[dict[str, Any]] | None:
-    """Up to 10 cutoff-passing journals sharing >=1 topic with the given
-    journal, ranked by shared-topic count then 2-yr citedness. None when
-    the journal itself is unknown. Shares base_query, so the corpus cutoff
-    and the proceedings exclusion apply here too."""
+    """Up to 10 cutoff-passing journals nearest to the given journal in
+    embedding space (cosine; jobs/embed_journals.py backfills the vectors).
+    Falls back to shared-topic ranking when the journal has no embedding
+    yet. None when the journal itself is unknown. Shares base_query, so the
+    corpus cutoff and the proceedings exclusion apply here too."""
     self_row = (
         await session.execute(
-            select(Journal.issn_l, Journal.topics).where(Journal.issn_l == issn_l.upper())
+            select(Journal.issn_l, Journal.topics, Journal.embedding).where(
+                Journal.issn_l == issn_l.upper()
+            )
         )
     ).first()
     if self_row is None:
         return None
+    if self_row.embedding is not None:
+        distance = Journal.embedding.cosine_distance(self_row.embedding).label("dist")
+        subq = (
+            base_query()
+            .add_columns(distance)
+            .where(Journal.issn_l != self_row.issn_l, Journal.embedding.is_not(None))
+            .subquery()
+        )
+        rows = (
+            await session.execute(
+                select(subq)
+                .order_by(subq.c.dist.asc(), subq.c.issn_l.asc())
+                .limit(10)
+            )
+        ).all()
+        items = []
+        for row in rows:
+            item = dict(row._mapping)
+            item["twoyr_mean_citedness"] = (
+                float(item.pop("twoyr")) if item.get("twoyr") is not None else None
+            )
+            item.pop("rank", None)
+            item["similarity"] = round(1.0 - item.pop("dist"), 4)
+            item["shared_topics"] = 0
+            items.append(item)
+        return items
     names = [t["display_name"] for t in (self_row.topics or []) if t.get("display_name")]
     if not names:
         return []
