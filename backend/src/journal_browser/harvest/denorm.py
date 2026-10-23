@@ -12,6 +12,20 @@ The SQL lives here so the alembic backfill and the jobs share one source.
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# Decision 16 (docs/decisions.md): proceedings-like titles with no deal and
+# no UT works are hidden from browse. Recomputed wholesale so deal or UT
+# changes clear the flag too. Depends on deal_covered_home and
+# home_works_count, so the refresh functions below run it after those.
+BROWSE_EXCLUDED_SQL = text(
+    """
+    UPDATE journals SET browse_excluded =
+        (coalesce(title, '') ~*
+         '\\y(conference|proceedings|symposium|workshop|abstracts|meetings)\\y')
+        AND NOT deal_covered_home
+        AND coalesce(home_works_count, 0) = 0
+    """
+)
+
 RESET_HOME_WORKS_SQL = text("UPDATE journals SET home_works_count = NULL")
 
 # Pure-canonical primary per year (phase 10): one row per (issn_l, year),
@@ -66,6 +80,7 @@ DEAL_FLAGS_SQL = text(
 async def refresh_home_stats(session: AsyncSession) -> None:
     await session.execute(RESET_HOME_WORKS_SQL)
     await session.execute(HOME_WORKS_SQL)
+    await session.execute(BROWSE_EXCLUDED_SQL)
 
 
 async def refresh_quartiles(session: AsyncSession) -> None:
@@ -75,3 +90,4 @@ async def refresh_quartiles(session: AsyncSession) -> None:
 
 async def refresh_home_deal_flags(session: AsyncSession) -> None:
     await session.execute(DEAL_FLAGS_SQL)
+    await session.execute(BROWSE_EXCLUDED_SQL)

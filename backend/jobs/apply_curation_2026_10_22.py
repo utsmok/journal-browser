@@ -118,18 +118,14 @@ def parse_aip_list(notes: str) -> list[tuple[str, str]]:
 
 def parse_iop_list(notes: str) -> list[tuple[str, str]]:
     out = []
-    for m in re.finditer(
-        r"([A-Za-z0-9&\-]+)\s+(\d{4}-\d{3}[\dXx])\s+\[([^\]]+)\]", notes
-    ):
+    for m in re.finditer(r"([A-Za-z0-9&\-]+)\s+(\d{4}-\d{3}[\dXx])\s+\[([^\]]+)\]", notes):
         out.append((m.group(2).upper(), m.group(3).strip()))
     return out
 
 
 def parse_ios_list(notes: str) -> list[tuple[str, str]]:
     out = []
-    for m in re.finditer(
-        r"([^|]+?)\s+(\d{4}-\d{3}[\dXx])(?:\s+\S{1,3})?\s*(?:\||$)", notes
-    ):
+    for m in re.finditer(r"([^|]+?)\s+(\d{4}-\d{3}[\dXx])(?:\s+\S{1,3})?\s*(?:\||$)", notes):
         name = m.group(1).strip()
         # strip a leading previous-entry residue: names run up to the issn
         name = re.sub(r"^.*?\d{4}-\d{3}[\dXx]\s*", "", name)
@@ -175,9 +171,7 @@ async def resolve_issn_l(session, issn: str) -> str | None:
     row = await session.get(IssnMap, issn)
     if row:
         return row.issn_l
-    hit = await session.execute(
-        select(Journal.issn_l).where(Journal.issn_l == issn)
-    )
+    hit = await session.execute(select(Journal.issn_l).where(Journal.issn_l == issn))
     return hit.scalar_one_or_none()
 
 
@@ -221,9 +215,7 @@ async def main() -> None:
             code = CODE_BY_SLUG.get(slug)
             if code and pub.name != code:
                 stale = (
-                    await session.execute(
-                        select(Publisher).where(Publisher.name == code)
-                    )
+                    await session.execute(select(Publisher).where(Publisher.name == code))
                 ).scalar_one_or_none()
                 if stale is not None:
                     await session.execute(
@@ -242,14 +234,18 @@ async def main() -> None:
                 ).scalar_one_or_none()
             if deal is None:
                 rows = (
-                    await session.execute(
-                        select(Deal).where(
-                            Deal.publisher_id == pub.id,
-                            Deal.status == "current",
-                            Deal.openaccess_nl_url.is_not(None),
+                    (
+                        await session.execute(
+                            select(Deal).where(
+                                Deal.publisher_id == pub.id,
+                                Deal.status == "current",
+                                Deal.openaccess_nl_url.is_not(None),
+                            )
                         )
                     )
-                ).scalars().all()
+                    .scalars()
+                    .all()
+                )
                 if len(rows) == 1:
                     deal = rows[0]
             if deal is None:
@@ -270,11 +266,7 @@ async def main() -> None:
 
             # fields from the owner-reviewed snapshot
             contract = next(
-                (
-                    link["url"]
-                    for link in deal_json["links"]
-                    if link["category"] == "contract"
-                ),
+                (link["url"] for link in deal_json["links"] if link["category"] == "contract"),
                 None,
             )
             deal.publisher_id = pub.id
@@ -292,9 +284,7 @@ async def main() -> None:
             deal.conditions_text = deal_json["license_and_conditions"] or None
             deal.workflow_text = deal_json["how_does_it_work"] or None
             deal.contract_url = contract or deal.contract_url
-            deal.openaccess_nl_url = (
-                deal.openaccess_nl_url or deal_json["publisher_page_url"]
-            )
+            deal.openaccess_nl_url = deal.openaccess_nl_url or deal_json["publisher_page_url"]
             deal.needs_curation = False
             deal.needs_curation_reason = None
             deal.last_reviewed = REVIEWED
@@ -313,16 +303,20 @@ async def main() -> None:
                 # Reconcile may have missed the national row (e.g. Emerald was
                 # absent from JCT when it last ran); retire it as a duplicate.
                 dupes = (
-                    await session.execute(
-                        select(Deal).where(
-                            Deal.id != deal.id,
-                            Deal.publisher_id == pub.id,
-                            Deal.status == "current",
-                            Deal.esac_id.is_(None),
-                            Deal.openaccess_nl_url.is_not(None),
+                    (
+                        await session.execute(
+                            select(Deal).where(
+                                Deal.id != deal.id,
+                                Deal.publisher_id == pub.id,
+                                Deal.status == "current",
+                                Deal.esac_id.is_(None),
+                                Deal.openaccess_nl_url.is_not(None),
+                            )
                         )
                     )
-                ).scalars().all()
+                    .scalars()
+                    .all()
+                )
                 for dupe in dupes:
                     dupe.status = "archive"
                     dupe.needs_curation_reason = (
@@ -348,8 +342,13 @@ async def main() -> None:
                     **await seed_journals(session, deal.id, entries),
                 }
             stats.append(
-                {"slug": slug, "deal_id": deal.id, "esac": deal.esac_id,
-                 "publisher": pub.name, **jstat}
+                {
+                    "slug": slug,
+                    "deal_id": deal.id,
+                    "esac": deal.esac_id,
+                    "publisher": pub.name,
+                    **jstat,
+                }
             )
         await refresh_home_deal_flags(session)
         await session.commit()

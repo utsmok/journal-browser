@@ -97,9 +97,7 @@ def retry_delay(attempt: int, retry_after: str) -> float:
 
 _DOI_RE = re.compile(r"10\.\d{4,9}/\S+", re.IGNORECASE)
 _ZW_RE = re.compile(r"[\u200b\u200c\u200d\u2060\ufeff]")
-_DOI_PREFIX_RE = re.compile(
-    r"^(?:https?://)?(?:dx\.)?doi\.org/?", re.IGNORECASE
-)
+_DOI_PREFIX_RE = re.compile(r"^(?:https?://)?(?:dx\.)?doi\.org/?", re.IGNORECASE)
 _DOI_TAIL_RE = re.compile(r"[?#].*$")
 _DOI_TRAIL = ".,;)-/"
 _DOI_VERSION_RE = re.compile(r"\.v\d+$", re.IGNORECASE)
@@ -136,9 +134,8 @@ def extract_doi(value: str) -> str | None:
 
 # ── OAI transport ────────────────────────────────────────────────────────────
 
-async def _oai_get(
-    base_url: str, params: dict[str, str], pacer: Pacer
-) -> ET.Element:
+
+async def _oai_get(base_url: str, params: dict[str, str], pacer: Pacer) -> ET.Element:
     """One OAI-PMH GET; honors Retry-After on 429/5xx, raises PureOaiError on <error>."""
     async with httpx.AsyncClient(timeout=120.0) as client:
         for attempt in range(1, MAX_HTTP_ATTEMPTS + 1):
@@ -157,7 +154,9 @@ async def _oai_get(
                 delay = retry_delay(attempt, resp.headers.get("Retry-After", ""))
                 logger.warning(
                     "OAI %s, retrying in %ss (attempt %s)",
-                    resp.status_code, delay, attempt,
+                    resp.status_code,
+                    delay,
+                    attempt,
                 )
                 await asyncio.sleep(delay)
                 continue
@@ -200,9 +199,7 @@ async def _oai_pages(
     token: str | None = None
     while True:
         params: dict[str, str] = (
-            {"verb": verb, "resumptionToken": token}
-            if token
-            else {"verb": verb, **base_params}
+            {"verb": verb, "resumptionToken": token} if token else {"verb": verb, **base_params}
         )
         try:
             root = await _oai_get(base_url, params, pacer)
@@ -219,6 +216,7 @@ async def _oai_pages(
 
 # ── Parsing ──────────────────────────────────────────────────────────────────
 
+
 def _header_fields(record: ET.Element) -> tuple[str, str, list[str], str | None]:
     """(oai_identifier, datestamp, set_specs, status) from a <record> header."""
     header = record.find(oai_tag("header"))
@@ -227,11 +225,7 @@ def _header_fields(record: ET.Element) -> tuple[str, str, list[str], str | None]
     return (
         (header.findtext(oai_tag("identifier")) or "").strip(),
         (header.findtext(oai_tag("datestamp")) or "").strip(),
-        [
-            s
-            for el in header.findall(oai_tag("setSpec"))
-            if el.text and (s := el.text.strip())
-        ],
+        [s for el in header.findall(oai_tag("setSpec")) if el.text and (s := el.text.strip())],
         header.get("status"),
     )
 
@@ -330,6 +324,7 @@ def record_payload(record: ET.Element) -> tuple[str, dict[str, Any]]:
 
 # ── Canonical upsert ─────────────────────────────────────────────────────────
 
+
 def _norm_title(title: str) -> str:
     """Case/punctuation-folded title for fuzzy matching."""
     folded = title.casefold()
@@ -351,6 +346,31 @@ def _normalize_access(raw: str | None) -> str | None:
         code = raw.rsplit("/", 1)[-1]
         return f"coar:{code}" if code else None
     return raw
+
+
+# Pure/Eprints/COAR access literals -> the closed ut_works.oa_status set
+# (harvest.common.OA_STATUSES). Pure openAccess means the fulltext is public
+# in the institutional repository, i.e. green; anything not publicly readable
+# now maps to closed; unknown literals drop to None (raw stays in payloads).
+_OA_MAP = {
+    "openaccess": "green",
+    "closedaccess": "closed",
+    "embargoedaccess": "closed",
+    "restrictedaccess": "closed",
+    "metadataonly": "closed",
+    "coar:c_abf2": "green",  # open access
+    "coar:c_16ec": "closed",  # closed access
+    "coar:c_f1cf": "closed",  # embargoed access
+    "coar:c_998f": "closed",  # restricted access
+}
+
+
+def canonical_access(raw: str | None) -> str | None:
+    """Pure access literal -> canonical oa_status; None when unmappable."""
+    compact = _normalize_access(raw)
+    if compact is None:
+        return None
+    return _OA_MAP.get(compact.lower().replace(" ", "").replace("-", ""))
 
 
 def _dc_first(value: Any) -> str | None:
@@ -389,19 +409,18 @@ async def upsert_ut_work(
         # (e.g. article + chapter views); doi_normalized is UNIQUE, so the
         # twin keeps the DOI and this row stays NULL-doi (fuzzy-matchable).
         owner = await session.scalar(
-            select(UtWork.pure_uuid).where(
-                UtWork.doi_normalized == doi, UtWork.pure_uuid != uuid
-            )
+            select(UtWork.pure_uuid).where(UtWork.doi_normalized == doi, UtWork.pure_uuid != uuid)
         )
         if owner:
             logger.warning(
                 "duplicate DOI %s across pure works %s and %s; storing %s without doi",
-                doi, owner, uuid, uuid,
+                doi,
+                owner,
+                uuid,
+                uuid,
             )
             doi = None
-    oa_status = _normalize_access(
-        _dc_first(cerif.get("oa_status")) or _dc_first(dc.get("rights"))
-    )
+    oa_status = canonical_access(_dc_first(cerif.get("oa_status")) or _dc_first(dc.get("rights")))
     stmt = (
         pg_insert(UtWork)
         .values(
@@ -437,9 +456,7 @@ async def upsert_ut_work(
     await session.execute(stmt)
 
 
-async def backfill_cerif(
-    session: AsyncSession, uuid: str, cerif: dict[str, Any]
-) -> None:
+async def backfill_cerif(session: AsyncSession, uuid: str, cerif: dict[str, Any]) -> None:
     """Backfill cerif-derived fields onto an existing ut_work; never nulls.
 
     doi_normalized is UNIQUE across works and cerif records can repeat a
@@ -450,13 +467,11 @@ async def backfill_cerif(
         values["cerif_issn"] = issn
     if publisher := _dc_first(cerif.get("publisher")):
         values["publisher"] = publisher
-    if oa := _dc_first(cerif.get("oa_status")):
+    if oa := canonical_access(_dc_first(cerif.get("oa_status"))):
         values["oa_status"] = oa
     if doi := extract_doi(cerif.get("doi") or ""):
         owner = await session.scalar(
-            select(UtWork.pure_uuid).where(
-                UtWork.doi_normalized == doi, UtWork.pure_uuid != uuid
-            )
+            select(UtWork.pure_uuid).where(UtWork.doi_normalized == doi, UtWork.pure_uuid != uuid)
         )
         if owner is None:
             values["doi_normalized"] = doi
@@ -464,9 +479,7 @@ async def backfill_cerif(
         return
     from sqlalchemy import update
 
-    await session.execute(
-        update(UtWork).where(UtWork.pure_uuid == uuid).values(**values)
-    )
+    await session.execute(update(UtWork).where(UtWork.pure_uuid == uuid).values(**values))
 
 
 async def _ingest_oai_record(
@@ -485,7 +498,8 @@ async def _ingest_oai_record(
         ingest.records_seen += 1
         logger.warning(
             "deleted record header on endpoint with deletedRecord=no: %s (%s)",
-            oai_identifier, datestamp,
+            oai_identifier,
+            datestamp,
         )
         return "deleted"
     _, payload = record_payload(record)
@@ -498,9 +512,7 @@ async def _ingest_oai_record(
     if entity_type == "work":
         await upsert_ut_work(ingest.session, payload, year=year, run_id=run_id)
     elif entity_type == "work_cerif" and payload.get("cerif"):
-        await backfill_cerif(
-            ingest.session, pure_uuid_for(oai_identifier), payload["cerif"]
-        )
+        await backfill_cerif(ingest.session, pure_uuid_for(oai_identifier), payload["cerif"])
     return kind
 
 
@@ -534,7 +546,8 @@ async def _produce_oai_pages(
                 stats["token_restarts"] += 1
                 logger.warning(
                     "badResumptionToken on set %s (attempt %s); restarting set",
-                    set_spec, attempt + 1,
+                    set_spec,
+                    attempt + 1,
                 )
     finally:
         task = asyncio.current_task()
@@ -611,8 +624,12 @@ async def _harvest_set(
     year = year_for_set(set_spec) or 0
     cons = asyncio.create_task(
         _consume_oai_pages(
-            ingest, queue, stats, year=year,
-            entity_type=ingest.entity_type or "work", limit=limit,
+            ingest,
+            queue,
+            stats,
+            year=year,
+            entity_type=ingest.entity_type or "work",
+            limit=limit,
         )
     )
     try:
@@ -630,6 +647,7 @@ async def _harvest_set(
 
 
 # ── Retirement (full re-baseline; Pure reports no deletes) ──────────────────
+
 
 async def retire_absent(session: AsyncSession, run_ids: list[int]) -> int:
     """Mark ut_works not seen in any of these sweep runs as retired.
@@ -650,6 +668,7 @@ async def retire_absent(session: AsyncSession, run_ids: list[int]) -> int:
 
 
 # ── Job entry points ─────────────────────────────────────────────────────────
+
 
 async def harvest_pure_years(
     session: AsyncSession,
@@ -709,9 +728,7 @@ async def harvest_pure_cerif(
     config = {"base_url": get_settings().pure_oai_base_url, "metadata_prefix": PREFIX_CERIF}
     await ingest.start_run(SOURCE, "work_cerif", CRIS_PUBLICATIONS_SET, config)
     try:
-        set_stats = await _harvest_set(
-            ingest, CRIS_PUBLICATIONS_SET, PREFIX_CERIF, limit=limit
-        )
+        set_stats = await _harvest_set(ingest, CRIS_PUBLICATIONS_SET, PREFIX_CERIF, limit=limit)
     except PureOaiError as exc:
         await ingest.finish_run("failed", {"error": str(exc)})
         raise

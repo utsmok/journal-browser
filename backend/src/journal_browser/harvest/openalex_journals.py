@@ -18,8 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..ingest import IngestSession
-from ..models import Institution, Journal, Publisher
-from .common import normalize_issn, upsert_issn_map
+from ..models import Institution, IssnMap, Journal, Publisher
+from .common import issn_checksum_ok, normalize_issn, upsert_issn_map
 
 logger = logging.getLogger(__name__)
 
@@ -73,10 +73,18 @@ def _payload_dict(item: Any) -> dict[str, Any] | None:
     return None
 
 
-async def _upsert_journal(session: AsyncSession, payload: dict[str, Any]) -> str | None:
-    """Normalize one source payload into journals; returns issn_l or None."""
+def journal_values(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Normalize one source payload into journals column values; None when
+    the record has no usable linking ISSN (missing or bad checksum)."""
     issn_l = normalize_issn(payload.get("issn_l"))
     if issn_l is None:
+        return None
+    if not issn_checksum_ok(issn_l):
+        logger.warning(
+            "openalex %s: checksum-invalid issn_l %r; journal skipped",
+            payload.get("id"),
+            issn_l,
+        )
         return None
     title = payload.get("display_name") or payload.get("title")
     alternate_titles = payload.get("alternate_titles") or []
@@ -93,7 +101,7 @@ async def _upsert_journal(session: AsyncSession, payload: dict[str, Any]) -> str
     works_2020_plus = sum(
         int(e.get("works_count") or 0) for e in counts if int(e.get("year") or 0) >= 2020
     )
-    values = dict(
+    return dict(
         issn_l=issn_l,
         openalex_id=payload.get("id"),
         title=title,
@@ -103,7 +111,11 @@ async def _upsert_journal(session: AsyncSession, payload: dict[str, Any]) -> str
         is_in_doaj=payload.get("is_in_doaj"),
         homepage_url=payload.get("homepage_url"),
         country_code=payload.get("country_code"),
-        issns=[i for i in (normalize_issn(x) for x in (payload.get("issn") or [])) if i],
+        issns=[
+            i
+            for i in (normalize_issn(x) for x in (payload.get("issn") or []))
+            if i and issn_checksum_ok(i)
+        ],
         alternate_titles=alternate_titles,
         topics=topics,
         apc_prices=payload.get("apc_prices"),
@@ -116,13 +128,20 @@ async def _upsert_journal(session: AsyncSession, payload: dict[str, Any]) -> str
         harvested_at=datetime.now(UTC),
         search_text=" ".join([title or "", *alternate_titles]).strip(),
     )
+
+
+async def _upsert_journal(session: AsyncSession, payload: dict[str, Any]) -> str | None:
+    """Normalize one source payload into journals; returns issn_l or None."""
+    values = journal_values(payload)
+    if values is None:
+        return None
     await session.execute(
         pg_insert(Journal)
         .values(**values)
         .on_conflict_do_update(index_elements=["issn_l"], set_=values)
     )
-    await upsert_issn_map(session, values["issns"], issn_l, SOURCE)
-    return issn_l
+    await upsert_issn_map(session, values["issns"], values["issn_l"], SOURCE)
+    return values["issn_l"]
 
 
 async def seed_deal_journals(client: AlethecaClient, session: AsyncSession) -> dict[str, int]:
@@ -146,10 +165,54 @@ async def seed_deal_journals(client: AlethecaClient, session: AsyncSession) -> d
     return stats
 
 
+async def _upsert_journal_page(session: AsyncSession, payloads: list[dict[str, Any]]) -> int:
+    """Bulk-normalize one page of source payloads: one journals upsert and
+    one issn_map upsert. Returns the number of payloads normalized.
+
+    Per-page memo keyed by issn_l / variant ISSN; the last record wins,
+    matching the sequential per-record upsert order.
+    """
+    journal_rows: dict[str, dict[str, Any]] = {}
+    issn_rows: dict[str, dict[str, Any]] = {}
+    counted = 0
+    for payload in payloads:
+        values = journal_values(payload)
+        if values is None:
+            continue
+        counted += 1
+        journal_rows[values["issn_l"]] = values
+        for issn in set(values["issns"]) | {values["issn_l"]}:
+            issn_rows[issn] = {"issn": issn, "issn_l": values["issn_l"], "source": SOURCE}
+    if journal_rows:
+        rows = list(journal_rows.values())
+        stmt = pg_insert(Journal).values(rows)
+        await session.execute(
+            stmt.on_conflict_do_update(
+                index_elements=["issn_l"],
+                set_={k: stmt.excluded[k] for k in rows[0] if k != "issn_l"},
+            )
+        )
+    if issn_rows:
+        rows = list(issn_rows.values())
+        stmt = pg_insert(IssnMap).values(rows)
+        await session.execute(
+            stmt.on_conflict_do_update(
+                index_elements=["issn"],
+                set_={"issn_l": stmt.excluded.issn_l, "source": stmt.excluded.source},
+            )
+        )
+    return counted
+
+
 async def sweep_all_sources(
     client: AlethecaClient, session: AsyncSession, limit: int | None
 ) -> dict:
-    """Full cursor sweep of OpenAlex sources; keyed harvest, per-page commits."""
+    """Full cursor sweep of OpenAlex sources; keyed harvest, per-page commits.
+
+    Per page: one bulk source_records store, one bulk journals upsert, one
+    bulk issn_map upsert (memoized per page). ~3 round trips per 100-source
+    page instead of ~1.25M sequential ones.
+    """
     ingest = IngestSession(session)
     filter_set = "all"
     config = {"per_page": PER_PAGE, "route": "sweep"}
@@ -159,10 +222,14 @@ async def sweep_all_sources(
         await ingest.commit()
 
     normalized = 0
+    seen = 0
+    page: list[tuple[str, dict[str, Any]]] = []
+
     async for item in client.sources.iterate(page_size=PER_PAGE, on_page=commit_page):
         payload = _payload_dict(item)
         pk = payload.get("id") if payload else None
         if not pk:
+            seen += 1
             await ingest.record_parse_failure(
                 {
                     "source_pk": None,
@@ -171,12 +238,17 @@ async def sweep_all_sources(
                 }
             )
             continue
-        await ingest.ingest_record(pk, payload)
-        if await _upsert_journal(session, payload):
-            normalized += 1
-        if limit is not None and ingest.records_seen >= limit:
+        seen += 1
+        page.append((pk, payload))
+        if len(page) >= PER_PAGE:
+            await ingest.ingest_records(page)
+            normalized += await _upsert_journal_page(session, [p for _, p in page])
+            page = []
+        if limit is not None and seen >= limit:
             logger.info("Reached --limit %s", limit)
             break
+    await ingest.ingest_records(page)
+    normalized += await _upsert_journal_page(session, [p for _, p in page])
     stats = await ingest.finish_run("completed", {"journals_normalized": normalized})
     await session.commit()
     return stats

@@ -21,26 +21,20 @@ async def main() -> None:
     engine = create_async_engine(get_settings().database_url)
     maker = async_sessionmaker(engine, expire_on_commit=False)
     async with maker() as session:
-        home_id = await session.scalar(
-            select(Institution.id).where(Institution.is_home.is_(True))
-        )
+        home_id = await session.scalar(select(Institution.id).where(Institution.is_home.is_(True)))
         if home_id is None:
             raise SystemExit("no is_home institution; refusing to purge")
         home_rows = await session.execute(
-            select(DealInstitution.deal_id).where(
-                DealInstitution.institution_id == home_id
-            )
+            select(DealInstitution.deal_id).where(DealInstitution.institution_id == home_id)
         )
-        keep = {d for d, in home_rows}
+        keep = {d for (d,) in home_rows}
         if not keep:
             raise SystemExit("no home-linked deals found; refusing to purge everything")
         all_ids = set((await session.execute(select(Deal.id))).scalars())
         doomed = all_ids - keep
         for deal_id in sorted(doomed):
             await session.execute(delete(DealJournal).where(DealJournal.deal_id == deal_id))
-            await session.execute(
-                delete(DealInstitution).where(DealInstitution.deal_id == deal_id)
-            )
+            await session.execute(delete(DealInstitution).where(DealInstitution.deal_id == deal_id))
             await session.execute(delete(Deal).where(Deal.id == deal_id))
         await refresh_home_deal_flags(session)
         await session.commit()

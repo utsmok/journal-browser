@@ -14,12 +14,13 @@ import re
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..ingest import IngestSession
 from ..models import Journal, ScimagojrMetric
-from .common import lookup_issn_l, normalize_issn
+from .common import issn_checksum_ok, lookup_issn_l, normalize_issn
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +61,13 @@ def parse_export(data: bytes) -> list[dict[str, str]]:
 
 
 def issn_candidates(raw: str) -> list[str]:
-    """The export sometimes lists several ISSNs in one cell."""
-    return [i for i in (normalize_issn(part) for part in re.split(r"[^0-9Xx]+", raw or "")) if i]
+    """The export sometimes lists several ISSNs in one cell. Checksum-bad
+    ones are dropped: they can never resolve to a journal row."""
+    return [
+        i
+        for i in (normalize_issn(part) for part in re.split(r"[^0-9Xx]+", raw or ""))
+        if i and issn_checksum_ok(i)
+    ]
 
 
 async def ingest_year(session: AsyncSession, year: int, landing_dir: Path) -> dict[str, Any]:
@@ -79,6 +85,7 @@ async def ingest_year(session: AsyncSession, year: int, landing_dir: Path) -> di
     rows = parse_export(data)
     metrics_upserted = 0
     unresolved = 0
+    ghost_skipped = 0
     for row in rows:
         try:
             sjr = float(row.get("SJR", "").replace(",", ".")) if row.get("SJR") else None
@@ -100,12 +107,13 @@ async def ingest_year(session: AsyncSession, year: int, landing_dir: Path) -> di
                         .on_conflict_do_update(index_elements=["issn_l", "year"], set_=values)
                     )
                     # Quality-bar flag (decisions.md #12); backfills rows
-                    # harvested before this export landed.
-                    await session.execute(
-                        pg_insert(Journal)
-                        .values(issn_l=issn_l, in_scimago=True)
-                        .on_conflict_do_update(index_elements=["issn_l"], set_={"in_scimago": True})
+                    # harvested before this export landed. UPDATE-only: never
+                    # mint a title-less ghost journal for scimago-only ISSNs.
+                    flag = await session.execute(
+                        update(Journal).where(Journal.issn_l == issn_l).values(in_scimago=True)
                     )
+                    if not flag.rowcount:
+                        ghost_skipped += 1
                     resolved = True
                     metrics_upserted += 1
             if not resolved:
@@ -116,8 +124,20 @@ async def ingest_year(session: AsyncSession, year: int, landing_dir: Path) -> di
             )
     stats = await ingest.finish_run(
         "completed",
-        {"rows": len(rows), "metrics_upserted": metrics_upserted, "unresolved_issn": unresolved},
+        {
+            "rows": len(rows),
+            "metrics_upserted": metrics_upserted,
+            "unresolved_issn": unresolved,
+            "ghost_journal_skips": ghost_skipped,
+        },
     )
     await session.commit()
-    logger.info("scimagojr %s: %s", year, stats)
+    logger.info(
+        "scimagojr %s: %s rows, %s metrics, %s unresolved, %s ghost-journal flags skipped",
+        year,
+        len(rows),
+        metrics_upserted,
+        unresolved,
+        ghost_skipped,
+    )
     return {"year": year, "status": "ok", **stats}

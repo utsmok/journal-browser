@@ -35,12 +35,19 @@ async def deals_api(db_engine):
         session.add_all([pub, other])
         await session.flush()
         twente_deal = Deal(
-            publisher_id=pub.id, esac_id="sn2024ukb", status="current",
-            start_year=2024, end_year=2026,
+            publisher_id=pub.id,
+            esac_id="sn2024ukb",
+            status="current",
+            start_year=2024,
+            end_year=2026,
         )
         foreign_deal = Deal(
-            publisher_id=other.id, esac_id="kar2025surf", status="current",
-            start_year=2025, end_year=2027, openaccess_nl_url="https://x",
+            publisher_id=other.id,
+            esac_id="kar2025surf",
+            status="current",
+            start_year=2025,
+            end_year=2027,
+            openaccess_nl_url="https://x",
         )
         session.add_all([twente_deal, foreign_deal])
         await session.flush()
@@ -53,12 +60,16 @@ async def deals_api(db_engine):
         session.add_all(
             [
                 DealJournal(
-                    deal_id=twente_deal.id, issn=journal.issn_l,
-                    issn_l=journal.issn_l, source="manual",
+                    deal_id=twente_deal.id,
+                    issn=journal.issn_l,
+                    issn_l=journal.issn_l,
+                    source="manual",
                 ),
                 DealJournal(
-                    deal_id=foreign_deal.id, issn=journal.issn_l,
-                    issn_l=journal.issn_l, source="manual",
+                    deal_id=foreign_deal.id,
+                    issn=journal.issn_l,
+                    issn_l=journal.issn_l,
+                    source="manual",
                 ),
             ]
         )

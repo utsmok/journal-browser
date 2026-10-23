@@ -1,8 +1,8 @@
 """Enrich ut_works: OpenAlex -> Crossref -> CERIF journal ladder + summary.
 
-    uv run python jobs/enrich_works.py            # full ladder run
-    uv run python jobs/enrich_works.py --limit 100
-    uv run python jobs/enrich_works.py --summary  # just print acceptance metrics
+uv run python jobs/enrich_works.py            # full ladder run
+uv run python jobs/enrich_works.py --limit 100
+uv run python jobs/enrich_works.py --summary  # just print acceptance metrics
 """
 
 import asyncio

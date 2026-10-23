@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import get_settings
 from ..ingest import IngestSession
 from ..models import InstitutionTrend, InstitutionWorksStats, Journal, UtWork
-from .common import get_home_institution
+from .common import OA_STATUSES, get_home_institution
 from .openalex_journals import resolve_home_institution_id
 
 logger = logging.getLogger(__name__)
@@ -29,8 +29,6 @@ SOURCE = "openalex"
 ENTITY_TYPE = "works_stats"
 WINDOW_START = "2020-01-01"
 PER_PAGE = 100
-OA_FIELDS = ("gold", "hybrid", "green", "bronze", "diamond", "closed")
-
 
 
 def openalex_id_to_pk(openalex_id: str | None) -> str:
@@ -39,7 +37,7 @@ def openalex_id_to_pk(openalex_id: str | None) -> str:
 
 def _oa_status(work: dict[str, Any]) -> str:
     status = ((work.get("open_access") or {}).get("oa_status")) or "closed"
-    return status if status in OA_FIELDS else "closed"
+    return status if status in OA_STATUSES else "closed"
 
 
 async def _source_issn_map(session: AsyncSession) -> dict[str, str]:
@@ -121,7 +119,7 @@ async def harvest_institution_stats(
 
 
 def _zero_row(institution_id: int, keys: dict[str, Any]) -> dict[str, Any]:
-    row = {f"oa_{s}": 0 for s in OA_FIELDS}
+    row = {f"oa_{s}": 0 for s in OA_STATUSES}
     row.update(institution_id=institution_id, **keys)
     return row
 
@@ -142,7 +140,7 @@ async def _write_journal_stats(
         )
         row[f"oa_{status}"] = count
     for row in rows.values():
-        row["works_count"] = sum(row[f"oa_{s}"] for s in OA_FIELDS)
+        row["works_count"] = sum(row[f"oa_{s}"] for s in OA_STATUSES)
     await session.execute(
         delete(InstitutionWorksStats).where(
             InstitutionWorksStats.institution_id == institution_id,

@@ -1,7 +1,7 @@
 """Harvest OpenAIRE research products for the institution.
 
-    uv run python jobs/harvest_openaire.py             # full sweep
-    uv run python jobs/harvest_openaire.py --limit 200
+uv run python jobs/harvest_openaire.py             # full sweep
+uv run python jobs/harvest_openaire.py --limit 200
 """
 
 import asyncio

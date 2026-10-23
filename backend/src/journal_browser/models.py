@@ -197,6 +197,8 @@ class Deal(Base):
     jct_data_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     per_year_oa_counts: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     provenance: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
+    # Register links from the owner-reviewed snapshot: [{url, text, category}].
+    links: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     needs_curation: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
@@ -282,6 +284,12 @@ class Journal(Base):
     home_works_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     latest_quartile: Mapped[str | None] = mapped_column(String(4), nullable=True)
     deal_covered_home: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    #: Presentation-excluded from browse/facets (proceedings-like title, no
+    #: deal, no UT works); maintained by the denorm refreshes, see
+    #: harvest/denorm.py and decision 16 in docs/decisions.md.
+    browse_excluded: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
     crossref_meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)

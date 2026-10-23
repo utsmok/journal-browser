@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import func, insert, select
+from sqlalchemy import func, insert, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -118,6 +118,45 @@ class IngestSession:
         if len(self._pending) >= BATCH_SIZE:
             await self._flush()
         return "new", h
+
+    async def ingest_records(self, records: list[tuple[str, dict[str, Any]]]) -> int:
+        """Page-bulk ingest_record: one dedupe SELECT + one buffered INSERT
+        set for the whole page. Same bookkeeping (records_seen, duplicate
+        memo, pending store) as the per-record path."""
+        assert self.run_id is not None and self.source and self.entity_type, (
+            "call start_run() first"
+        )
+        self.records_seen += len(records)
+        dedup: dict[tuple[str, str], dict[str, Any]] = {}
+        for source_pk, payload in records:
+            stripped = _strip_nuls(payload)
+            key = (source_pk, content_hash(stripped))
+            if key in self._seen_keys:
+                continue
+            dedup[key] = {
+                "source": self.source,
+                "entity_type": self.entity_type,
+                "source_pk": source_pk,
+                "payload": stripped,
+                "content_hash": key[1],
+                "harvest_run_id": self.run_id,
+            }
+        if not dedup:
+            return 0
+        existing = await self.session.execute(
+            select(SourceRecord.source_pk, SourceRecord.content_hash).where(
+                SourceRecord.source == self.source,
+                SourceRecord.entity_type == self.entity_type,
+                tuple_(SourceRecord.source_pk, SourceRecord.content_hash).in_(list(dedup)),
+            )
+        )
+        for key in existing.all():
+            dedup.pop(tuple(key), None)
+        self._seen_keys.update(dedup)
+        self._pending.extend(dedup.values())
+        if len(self._pending) >= BATCH_SIZE:
+            await self._flush()
+        return len(dedup)
 
     async def record_parse_failure(self, detail: dict[str, Any]) -> None:
         """Count + log one record that could not be parsed/isolated."""

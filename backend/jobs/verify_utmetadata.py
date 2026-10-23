@@ -34,9 +34,7 @@ async def ours(session) -> dict:
     from journal_browser.models import UtWork
 
     per_year = dict(
-        (await session.execute(
-            select(UtWork.year, func.count()).group_by(UtWork.year)
-        )).all()
+        (await session.execute(select(UtWork.year, func.count()).group_by(UtWork.year))).all()
     )
     return {"total": sum(per_year.values()), "per_year": per_year}
 
@@ -105,10 +103,15 @@ async def top_journals(session, conn) -> list[dict]:
             cause = "ut-metadata includes affiliation-inferred non-Pure works"
         else:
             cause = "match/venue-link noise"
-        out.append({
-            "issn_l": issn_l, "title": (title or "")[:40],
-            "ours": count, "utmeta": n, "cause": cause,
-        })
+        out.append(
+            {
+                "issn_l": issn_l,
+                "title": (title or "")[:40],
+                "ours": count,
+                "utmeta": n,
+                "cause": cause,
+            }
+        )
     out.append({"unexplained_rows": unexplained, "gate_max": 5})
     return out
 
@@ -123,9 +126,7 @@ async def main() -> None:
         try:
             their_stats = await theirs(conn)
             tolerance = 0.02 if their_stats["total"] else 1.0
-            delta = abs(ours_stats["total"] - their_stats["total"]) / max(
-                1, their_stats["total"]
-            )
+            delta = abs(ours_stats["total"] - their_stats["total"]) / max(1, their_stats["total"])
             top = await top_journals(session, conn)
             report = {
                 "ours_2020plus": ours_stats,

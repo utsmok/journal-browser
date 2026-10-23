@@ -82,9 +82,7 @@ async def fetch_emerald_sources() -> list[dict]:
     return out
 
 
-def match_titles(
-    contract: list[str], sources: list[dict]
-) -> tuple[dict[str, dict], list[str]]:
+def match_titles(contract: list[str], sources: list[dict]) -> tuple[dict[str, dict], list[str]]:
     """(contract title -> source) exact + fuzzy; unmatched titles returned.
 
     OpenAlex names are often shorter than contract titles (subtitles such
@@ -110,12 +108,11 @@ def match_titles(
 
     # Titles the OCR scan mangled beyond fuzzy reach; value = OpenAlex
     # source id verified against the API (Archnet-IJAR, S4210183932).
-    by_source_id = {
-        s["id"]: s for s in sources if s.get("id")
-    }
+    by_source_id = {s["id"]: s for s in sources if s.get("id")}
     aliases = {
-        "Archnet-lJAR: International Journal of Architectural":
-            by_source_id.get("https://openalex.org/S4210183932"),
+        "Archnet-lJAR: International Journal of Architectural": by_source_id.get(
+            "https://openalex.org/S4210183932"
+        ),
     }
 
     matched: dict[str, dict] = {}
@@ -180,9 +177,7 @@ async def resolve_unmatched(unmatched: list[str]) -> dict[str, dict]:
 
 
 async def main(session, contract_path: Path) -> None:
-    deal = (
-        await session.execute(select(Deal).where(Deal.esac_id == ESAC_ID))
-    ).scalar_one()
+    deal = (await session.execute(select(Deal).where(Deal.esac_id == ESAC_ID))).scalar_one()
 
     landing = Path(get_settings().landing_dir) / "emerald_contract"
     landing.mkdir(parents=True, exist_ok=True)
@@ -200,9 +195,7 @@ async def main(session, contract_path: Path) -> None:
 
     # Replace any previous derived rows for this deal, then write the
     # contract-reconstructed list (never touches other deals).
-    await session.execute(
-        DealJournal.__table__.delete().where(DealJournal.deal_id == deal.id)
-    )
+    await session.execute(DealJournal.__table__.delete().where(DealJournal.deal_id == deal.id))
     for title, s in matched.items():
         issn = (s.get("issn") or [None])[0]
         if not issn:
@@ -228,8 +221,10 @@ async def main(session, contract_path: Path) -> None:
     await session.execute(
         pg_insert(DealInstitution)
         .values(
-            deal_id=deal.id, institution_id=home.id,
-            first_seen=str(date.today()), last_seen=str(date.today()),
+            deal_id=deal.id,
+            institution_id=home.id,
+            first_seen=str(date.today()),
+            last_seen=str(date.today()),
         )
         .on_conflict_do_update(
             index_elements=["deal_id", "institution_id"],

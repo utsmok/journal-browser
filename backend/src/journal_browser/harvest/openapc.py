@@ -20,6 +20,7 @@ from ..models import ApcEvidence, JournalApcAggregate, RawFile, SourceRecord
 from .common import (
     download_to_landing,
     get_home_institution,
+    issn_checksum_ok,
     lookup_issn_l,
     normalize_issn,
     parse_csv_rows,
@@ -96,6 +97,12 @@ async def build_aggregates(
             issn_l = normalize_issn(_clean(row.get("issn_l")))
             if issn_l is None:
                 issn_l = await resolve(_clean(row.get("issn")))
+            if issn_l is not None and not issn_checksum_ok(issn_l):
+                counters["invalid_issn"] += 1
+                logger.warning(
+                    "openapc: checksum-invalid ISSN %r skipped (doi=%s)", issn_l, row.get("doi")
+                )
+                continue
             period = _to_int(row.get("period"))
             if issn_l is None:
                 counters["unresolved_issn"] += 1
@@ -146,6 +153,11 @@ async def build_evidence(
         group_id = _clean(row.get("group_id"))
         doi = _clean(row.get("doi"))
         issn_l = normalize_issn(_clean(row.get("issn_l")))
+        if issn_l is not None and not issn_checksum_ok(issn_l):
+            logger.warning(
+                "openapc evidence: checksum-invalid ISSN %r dropped (doi=%s)", issn_l, doi
+            )
+            issn_l = None
         if issn_l is None:
             issn_l = await resolve(_clean(row.get("issn")))
         agreement = _clean(row.get("agreement"))

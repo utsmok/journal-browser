@@ -36,6 +36,31 @@ def normalize_issn(raw: str | None) -> str | None:
     return issn
 
 
+def issn_checksum_ok(issn: str | None) -> bool:
+    """Mod-11 ISSN check digit ('X' = 10). Shape-only normalize_issn callers
+    that write normalized columns gate on this."""
+    if not issn:
+        return False
+    core = issn.replace("-", "")
+    if not re.fullmatch(r"\d{7}[\dX]", core):
+        return False
+    total = sum(int(d) * (8 - i) for i, d in enumerate(core[:7]))
+    check = (11 - total % 11) % 11
+    return core[7] == ("X" if check == 10 else str(check))
+
+
+# Closed OA-status vocabulary for ut_works.oa_status: OpenAlex's set, per the
+# limitations registry row "openalex-oa-status". Every writer maps onto this.
+OA_STATUSES = frozenset({"gold", "hybrid", "green", "bronze", "diamond", "closed"})
+
+
+def canonical_oa_status(raw: str | None) -> str | None:
+    """OpenAlex oa_status literal -> OA_STATUSES; unknown/None stays None."""
+    if not raw:
+        return None
+    return raw if raw in OA_STATUSES else "closed"
+
+
 async def fetch_bytes(
     url: str,
     *,

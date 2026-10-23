@@ -26,13 +26,29 @@ class JournalListItem(BaseModel):
     twente_works: int = 0
     quartile: str | None = None
     twoyr_mean_citedness: float | None = None
+    oa_type: str = "subscription"
+    # Most-recent OpenAPC evidence; None when the journal has no rows.
+    apc_euro_mean: float | None = None
+    apc_period: str | None = None
 
 
 class JournalSearchResponse(BaseModel):
     items: list[JournalListItem]
     total: int
     next_cursor: str | None = None
+    fuzzy: bool = False
     facets: dict[str, dict[str, int]] = {}
+
+
+class SimilarJournalItem(BaseModel):
+    issn_l: str
+    title: str | None
+    publisher_name: str | None
+    quartile: str | None
+    is_oa: bool | None
+    deal_covered: bool
+    twente_works: int
+    shared_topics: int
 
 
 class ApcAggregateOut(BaseModel):
@@ -96,7 +112,77 @@ class DealOut(BaseModel):
     per_year_oa_counts: dict[str, Any] | None
     needs_curation: bool
     needs_curation_reason: str | None
+    # Register links ([{url, text, category}]); None on rows not yet seeded.
+    links: list[dict[str, Any]] | None = None
     journal_count: int = 0
+
+
+class OpenalexInfo(BaseModel):
+    """Venue-level OpenAlex source object (topics sorted count desc, nulls last)."""
+
+    id: str | None = None
+    url: str | None = None
+    cited_by_count: int | None = None
+    works_count: int | None = None
+    host_organization_name: str | None = None
+    first_publication_year: int | None = None
+    last_publication_year: int | None = None
+    topics: list[Any] = []
+
+
+class OpenaireInfo(BaseModel):
+    matched_works: int = 0
+
+
+class UtOa(BaseModel):
+    """ut-metadata oa_status distribution over a journal's UT works."""
+
+    gold: int = 0
+    hybrid: int = 0
+    green: int = 0
+    bronze: int = 0
+    diamond: int = 0
+    closed: int = 0
+    unknown: int = 0
+
+
+class TwenteMetrics(BaseModel):
+    """OpenAlex view of Twente publications in this journal, plus
+    ut-metadata-grounded totals when the canonical store is reachable
+    (otherwise the ut_* keys are None)."""
+
+    openalex_matched: int = 0
+    fwci_avg: float | None = None
+    fwci_n: int = 0
+    retracted: int = 0
+    cited_total: int = 0
+    ut_total: int | None = None
+    ut_retracted: int | None = None
+    ut_oa: UtOa | None = None
+
+
+class WorkItem(BaseModel):
+    id: str | None = None
+    url: str | None = None
+    doi: str | None = None
+    title: str | None = None
+    year: int | None = None
+    oa_status: str | None = None
+    fwci: float | None = None
+    cited_by_count: int = 0
+    is_retracted: bool | None = None
+    type: str | None = None
+    # ut-metadata provenance: canonical work type, and whether the item is
+    # backed by an OpenAlex works_stats row.
+    work_type: str | None = None
+    in_openalex: bool | None = None
+
+
+class WorksPage(BaseModel):
+    items: list[WorkItem]
+    total: int
+    page: int
+    page_size: int
 
 
 class JournalDetailResponse(BaseModel):
@@ -117,6 +203,9 @@ class JournalDetailResponse(BaseModel):
     scimagojr: list[ScimagojrOut] = []
     apc_aggregates: list[ApcAggregateOut] = []
     apc_evidence: list[ApcEvidenceOut] = []
+    openalex: OpenalexInfo | None = None
+    openaire: OpenaireInfo = OpenaireInfo()
+    twente_metrics: TwenteMetrics = TwenteMetrics()
     attribution: dict[str, Attribution] = {}
 
 

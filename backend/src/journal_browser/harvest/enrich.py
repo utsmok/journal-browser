@@ -20,7 +20,7 @@ from sqlalchemy import exists, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..harvest.common import normalize_issn, resolve_issn_l
+from ..harvest.common import canonical_oa_status, normalize_issn, resolve_issn_l
 from ..ingest import IngestSession
 from ..models import Journal, UtWork, WorkIdentity
 
@@ -36,6 +36,10 @@ def _chunk(items: list[str], size: int) -> list[list[str]]:
     return [items[i : i + size] for i in range(0, len(items), size)]
 
 
+async def _journal_exists(session: AsyncSession, issn_l: str) -> bool:
+    return await session.scalar(select(Journal.issn_l).where(Journal.issn_l == issn_l)) is not None
+
+
 async def _resolve_journal(session: AsyncSession, issns: list[Any]) -> str | None:
     """Any ISSN variant -> issn_map -> journals.issn_l; first hit wins."""
     for raw in issns:
@@ -43,9 +47,7 @@ async def _resolve_journal(session: AsyncSession, issns: list[Any]) -> str | Non
         if not issn:
             continue
         issn_l = await resolve_issn_l(session, issn)
-        if issn_l and await session.scalar(
-            select(Journal.issn_l).where(Journal.issn_l == issn_l)
-        ):
+        if issn_l and await session.scalar(select(Journal.issn_l).where(Journal.issn_l == issn_l)):
             return issn_l
     return None
 
@@ -79,14 +81,12 @@ def _openalex_work_fields(work: Any) -> dict[str, Any]:
     """Extract the fields we keep from one aletheca Work model."""
     fields: dict[str, Any] = {}
     oa = getattr(work, "open_access", None)
-    oa_status = getattr(oa, "oa_status", None)
+    oa_status = canonical_oa_status(getattr(oa, "oa_status", None))
     if oa_status:
         fields["oa_status"] = oa_status
     location = getattr(work, "primary_location", None)
     source = (
-        location.get("source")
-        if isinstance(location, dict)
-        else getattr(location, "source", None)
+        location.get("source") if isinstance(location, dict) else getattr(location, "source", None)
     )
     issn_l = source.get("issn_l") if isinstance(source, dict) else getattr(source, "issn_l", None)
     if issn_l:
@@ -94,9 +94,7 @@ def _openalex_work_fields(work: Any) -> dict[str, Any]:
     return fields
 
 
-async def _works_needing_journal(
-    session: AsyncSession, limit: int | None
-) -> list[UtWork]:
+async def _works_needing_journal(session: AsyncSession, limit: int | None) -> list[UtWork]:
     """DOI works still lacking a journal, excluding recorded OpenAlex misses.
 
     Re-fetches matched works whose journal stayed unresolved; runs are rare
@@ -169,6 +167,18 @@ async def enrich_openalex(session: AsyncSession, limit: int | None = None) -> di
                 if ut is None:
                     continue
                 fields = _openalex_work_fields(work)
+                # FK guard: ut_works.journal_issn_l -> journals.issn_l. OpenAlex
+                # can cite a journal this DB has not ingested; drop the link
+                # (counted) instead of failing the whole chunk at flush.
+                if fields.get("journal_issn_l") and not await _journal_exists(
+                    session, fields["journal_issn_l"]
+                ):
+                    logger.warning(
+                        "openalex enrichment: journal %s not ingested; link dropped (doi=%s)",
+                        fields.pop("journal_issn_l"),
+                        doi,
+                    )
+                    stats["journal_fk_skipped"] = stats.get("journal_fk_skipped", 0) + 1
                 for name, value in fields.items():
                     setattr(ut, name, value)
                 await ingest.ingest_record(
@@ -216,9 +226,7 @@ def _settings() -> Any:
     return get_settings()
 
 
-async def _works_for_crossref(
-    session: AsyncSession, limit: int | None
-) -> list[UtWork]:
+async def _works_for_crossref(session: AsyncSession, limit: int | None) -> list[UtWork]:
     """Works with a DOI, no crossref identity, and no successful OpenAlex match.
 
     OpenAlex 'missing' rows carry source_pk='doi:<doi>' and are NOT counted
@@ -272,9 +280,7 @@ async def enrich_crossref(session: AsyncSession, limit: int | None = None) -> di
                 if ut is None:
                     continue
                 payload = (
-                    work.model_dump(mode="json")
-                    if hasattr(work, "model_dump")
-                    else dict(work)
+                    work.model_dump(mode="json") if hasattr(work, "model_dump") else dict(work)
                 )
                 await ingest.ingest_record(f"doi:{ut.doi_normalized}", payload)
                 await _confirm_identity(
@@ -333,9 +339,5 @@ async def enrichment_summary(session: AsyncSession) -> dict[str, Any]:
         "with_doi": with_doi,
         "doi_fill": round(with_doi / total, 3) if total else None,
         "with_journal": with_journal,
-        "doi_works_with_journal": round(
-            doi_works_with_journal / with_doi, 3
-        )
-        if with_doi
-        else None,
+        "doi_works_with_journal": round(doi_works_with_journal / with_doi, 3) if with_doi else None,
     }

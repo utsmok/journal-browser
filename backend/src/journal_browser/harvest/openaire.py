@@ -30,15 +30,13 @@ except ImportError:  # pragma: no cover
 
 
 def _org_id() -> str:
-    """OpenAIRE organization id derived from the configured ROR.
+    """OpenAIRE organization id for the institution harvest.
 
-    The home institution's OpenAIRE id is stable across universities, but it
-    is NOT derivable at runtime — it is a lookup. Configure it via
-    JB_OPENAIRE_ORG_ID; the Twente value is the default.
+    The OpenAIRE id is NOT derivable from the ROR — it is a lookup, not a
+    transformation. Configure it via JB_OPENAIRE_ORG_ID; the Twente value is
+    the default.
     """
-    return getattr(_settings(), "openaire_org_id", "") or (
-        "openorgs____::604881198363fedbb5d5478f465305f2"
-    )
+    return _settings().openaire_org_id or "openorgs____::604881198363fedbb5d5478f465305f2"
 
 
 def _settings() -> Any:
@@ -171,9 +169,7 @@ ORDER BY o.source_pk, sim DESC
 """
 
 
-async def match_openaire_titles(
-    session: AsyncSession, limit: int | None = None
-) -> dict[str, Any]:
+async def match_openaire_titles(session: AsyncSession, limit: int | None = None) -> dict[str, Any]:
     """Trigram title matching: OpenAIRE works -> ut_works candidates.
 
     The Graph API serves no DOIs on list endpoints, so OpenAIRE records
@@ -190,9 +186,7 @@ async def match_openaire_titles(
         text("SELECT set_config('pg_trgm.similarity_threshold', :thr, false)"),
         {"thr": str(TRGM_THRESHOLD)},
     )
-    rows = (
-        await session.execute(text(_MATCH_SQL), {"limit": limit or 100000})
-    ).all()
+    rows = (await session.execute(text(_MATCH_SQL), {"limit": limit or 100000})).all()
     seen: set[str] = set()
     for r in rows:
         if r.source_pk in seen:

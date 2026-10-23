@@ -8,6 +8,12 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_prefix="JB_", extra="ignore")
 
     database_url: str = "postgresql+asyncpg://journal:journal@localhost:5433/journalbrowser"
+
+    # ut-metadata Postgres (canonical Twente publications). Empty = the
+    # feature is off: every endpoint keeps its works_stats-only behavior.
+    # Connection is lazy and read-only; the app boots fine when unset or
+    # unreachable.
+    ut_metadata_dsn: str = ""
     # Reads the JB_-prefixed name or the common bare export in ~/.zshrc.
     openalex_api_key: str = Field(
         "", validation_alias=AliasChoices("JB_OPENALEX_API_KEY", "OPENALEX_API_KEY")
@@ -25,6 +31,11 @@ class Settings(BaseSettings):
     # Resolved OpenAlex institution id (I...). Empty = resolved from the ROR
     # on first harvest and stored in the institutions table.
     institution_openalex_id: str = ""
+
+    # OpenAIRE organization id (openorgs____::...) for the product harvest.
+    # Not derivable from the ROR; empty = the Twente id hardcoded in
+    # harvest/openaire.py stays the default.
+    openaire_org_id: str | None = None
 
     # Permanent raw landing zone for downloaded files (CSVs, HTML, JSON).
     landing_dir: str = "landing"

@@ -5,6 +5,7 @@ Examples:
     uv run python jobs/harvest_pure.py --years 2020-2026    # full sweep + retire
     uv run python jobs/harvest_pure.py --cerif              # CERIF enrichment pass
 """
+
 import asyncio
 import datetime as dt
 
@@ -44,7 +45,8 @@ if __name__ == "__main__":
     parser.add_argument("--years", type=parse_years, default=None)
     parser.add_argument("--cerif", action="store_true", help="CERIF enrichment pass")
     parser.add_argument(
-        "--full-sweep", action="store_true",
+        "--full-sweep",
+        action="store_true",
         help="treat this run as a full re-baseline (retires absent works)",
     )
     parser.add_argument("--limit", type=int, default=None)

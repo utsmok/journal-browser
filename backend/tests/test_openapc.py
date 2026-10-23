@@ -19,15 +19,15 @@ TA_CSV = "\n".join(
         # Twente lower-case (filter is case-insensitive), agreement missing -> contracts fill
         "university of twente,2020,2000,10.1/tw2,FALSE,FALSE,Springer Nature,Soft Computing,"
         "1432-7643,1432-7643,1433-7479,1432-7643,http://cc/by,TRUE,NA,NA,NA,NA,FALSE,NA,g1",
-        # Twente, no own issn_l -> strict map resolve to 3333-3333; euro NA
+        # Twente, no own issn_l -> strict map resolve to 3333-3335; euro NA
         "University of Twente,2020,NA,10.1/tw3,TRUE,FALSE,Wiley,Journal X,"
-        "1111-1111,1111-1111,NA,NA,http://cc/by,TRUE,NA,NA,NA,NA,TRUE,NA,g2",
+        "1111-1119,1111-1119,NA,NA,http://cc/by,TRUE,NA,NA,NA,NA,TRUE,NA,g2",
         # Twente, no ISSN at all and no group_id/doi -> source_pk falls back to row index
         "University of Twente,2021,500,NA,FALSE,FALSE,Elsevier,Journal Y,NA,NA,NA,NA,"
         "http://cc/by,FALSE,NA,NA,NA,NA,FALSE,NA,NA",
         # Other institution: aggregates only, never evidence
-        "TU Delft,2020,999,10.1/nl1,TRUE,FALSE,Elsevier,Journal Z,9999-9999,NA,9999-9999,"
-        "9999-9999,http://cc/by,TRUE,NA,NA,NA,NA,FALSE,NA,g3",
+        "TU Delft,2020,999,10.1/nl1,TRUE,FALSE,Elsevier,Journal Z,9999-9994,NA,9999-9994,"
+        "9999-9994,http://cc/by,TRUE,NA,NA,NA,NA,FALSE,NA,g3",
         # No ISSN at all: aggregate-unresolved
         "No Issn Uni,2019,100,10.1/x1,TRUE,FALSE,MDPI,Journal W,NA,NA,NA,NA,http://cc/by,"
         "TRUE,NA,NA,NA,NA,FALSE,NA,NA",
@@ -37,7 +37,8 @@ TA_CSV = "\n".join(
 CONTRACTS_MAP = {"g2": "Wiley CA"}
 
 # Strict: only this mapping exists; everything else resolves to None.
-ISSN_MAP = {"1111-1111": "3333-3333"}
+# (Fixture ISSNs must pass the mod-11 checksum gate in build_aggregates.)
+ISSN_MAP = {"1111-1119": "3333-3335"}
 
 
 async def resolve(issn: str | None) -> str | None:
@@ -52,14 +53,14 @@ async def test_build_aggregates_min_max_mean_and_issn_resolution():
     aggregates, counters = await build_aggregates(_rows(), resolve)
 
     by_key = {(a["issn_l"], a["period"]): a for a in aggregates}
-    assert set(by_key) == {("1432-7643", 2020), ("3333-3333", 2020), ("9999-9999", 2020)}
+    assert set(by_key) == {("1432-7643", 2020), ("3333-3335", 2020), ("9999-9994", 2020)}
 
     agg = by_key[("1432-7643", 2020)]
     assert agg["article_count"] == 2
     assert (agg["euro_min"], agg["euro_max"], agg["euro_mean"]) == (1000.0, 2000.0, 1500.0)
 
     # euro NA still counts as an article, but no euro stats
-    agg = by_key[("3333-3333", 2020)]
+    agg = by_key[("3333-3335", 2020)]
     assert agg["article_count"] == 1
     assert (agg["euro_min"], agg["euro_max"], agg["euro_mean"]) == (None, None, None)
 
@@ -87,7 +88,7 @@ async def test_build_evidence_institution_filter_and_contracts_fill():
     }
     assert by_pk["g1|10.1/tw2"]["fields"]["agreement"] is None  # g1 not in contracts
     assert by_pk["g2|10.1/tw3"]["fields"]["agreement"] == "Wiley CA"  # filled
-    assert by_pk["g2|10.1/tw3"]["fields"]["issn_l"] == "3333-3333"  # strict fallback
+    assert by_pk["g2|10.1/tw3"]["fields"]["issn_l"] == "3333-3335"  # strict fallback
 
     # No ISSN and no group_id/doi -> issn_l NULL; source_pk stays None here
     # (the row-index fallback "3" is assigned in _body).
