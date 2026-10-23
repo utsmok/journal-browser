@@ -25,7 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useJournals } from "@/hooks/use-api";
+import { useFacets, useJournals } from "@/hooks/use-api";
 import { errorMessage, type JournalListItem, type SearchIn, type SortKey } from "@/lib/api";
 
 const SORTS: { value: SortKey; label: string }[] = [
@@ -196,12 +196,14 @@ function SearchView() {
     topic: topic || undefined,
     sort,
     cursor,
-    limit: 20,
+    limit: 40,
+    include_facets: false,
   };
   const { data, isPending, isFetching, isError, error, refetch } =
     useJournals(query);
+  const facetsQuery = useFacets(query);
 
-  const facets = data?.facets ?? {};
+  const facets = facetsQuery.data?.facets ?? {};
 
   const filterSelection = {
     deal,
@@ -310,7 +312,7 @@ function SearchView() {
   const pParam = parseInt(sp.get("p") ?? "", 10);
   const page =
     Number.isFinite(pParam) && pParam > 0 ? pParam : stack.length + 1;
-  const pageStart = (page - 1) * (query.limit ?? 20) + 1;
+  const pageStart = (page - 1) * (query.limit ?? 40) + 1;
   const hasFilters = Boolean(
     spQ ||
       deal ||
@@ -374,7 +376,7 @@ function SearchView() {
               onKeyDown={(event) => {
                 if (event.key === "Escape") event.currentTarget.blur();
               }}
-              placeholder="Search by journal title or ISSN"
+              placeholder="Search by title, ISSN, publisher, or topic"
               aria-label="Search journals"
               className="pr-8"
             />

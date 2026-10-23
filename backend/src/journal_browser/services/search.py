@@ -228,6 +228,7 @@ async def search_journals(
     sort: SortKey = "relevance",
     cursor: str | None = None,
     limit: int = 20,
+    include_facets: bool = True,
 ) -> dict[str, Any]:
     filters = dict(
         q=q,
@@ -320,7 +321,12 @@ async def search_journals(
             item["apc_period"] = str(hit[0]) if hit else None
             item["apc_euro_mean"] = float(hit[1]) if hit and hit[1] is not None else None
 
-    facets, facet_total = await facet_counts(session, **filters)
+    # Facets only depend on the filter set, never on cursor/page/sort — page
+    # turns skip the aggregate and pass the count through instead.
+    if include_facets:
+        facets, facet_total = await facet_counts(session, **filters)
+    else:
+        facets, facet_total = {}, total
     return {
         "items": items,
         # The facet base aggregate counts the identical filter set; the only

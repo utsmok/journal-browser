@@ -139,6 +139,7 @@ async def search_journals(
     ] = "relevance",
     cursor: str | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    include_facets: bool = True,
 ) -> JournalSearchResponse:
     try:
         result = await search_service.search_journals(
@@ -155,6 +156,7 @@ async def search_journals(
             sort=sort,
             cursor=cursor,
             limit=limit,
+            include_facets=include_facets,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

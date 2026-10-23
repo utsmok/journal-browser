@@ -146,6 +146,7 @@ export type JournalSearchParams = {
   sort?: SortKey;
   cursor?: string;
   limit?: number;
+  include_facets?: boolean;
 };
 
 /** Error with an HTTP status; message stays technical (console only). */

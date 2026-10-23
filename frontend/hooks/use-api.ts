@@ -18,6 +18,7 @@ import {
 /** TanStack Query key factory: one place owns every cache key shape. */
 export const qk = {
   journals: (params: JournalSearchParams) => ["journals", params] as const,
+  facets: (filters: JournalSearchParams) => ["facets", filters] as const,
   journal: (issnL: string) => ["journal", issnL] as const,
   similar: (issnL: string) => ["similar", issnL] as const,
   works: (issnL: string, page: number) => ["works", issnL, page] as const,
@@ -55,6 +56,25 @@ export function useJournals(params: JournalSearchParams) {
       return data;
     },
     placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * Facets depend on the filter set only — never on cursor, page, or sort — so
+ * they live in their own query and page turns reuse the cached aggregate.
+ */
+export function useFacets(params: JournalSearchParams) {
+  const { cursor: _c, sort: _s, limit: _l, ...filters } = params;
+  return useQuery({
+    queryKey: qk.facets(filters),
+    queryFn: () =>
+      apiGet<JournalSearchResponse>("/journals", {
+        ...filters,
+        include_facets: true,
+        limit: 1,
+      }),
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
   });
 }
 
