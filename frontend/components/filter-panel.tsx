@@ -78,7 +78,7 @@ function FacetGroup({
     // open never changes value, so React leaves the native toggle alone.
     <details open={defaultOpen} className="group" role="group" aria-label={`Filter by ${label}`}>
       <summary
-        className={`${focus} flex cursor-pointer select-none list-none items-center justify-between gap-2 rounded text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] [&::-webkit-details-marker]:hidden`}
+        className={`${focus} flex cursor-pointer select-none list-none items-center justify-between gap-2 rounded py-1.5 text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] [&::-webkit-details-marker]:hidden`}
       >
         <span>{label}</span>
         <span className="flex items-center gap-1.5">

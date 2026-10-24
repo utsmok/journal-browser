@@ -81,8 +81,10 @@ function SearchView() {
   const oaTypes = (sp.get("oa_type") ?? "").split(",").filter(Boolean);
   // mode=semantic: rank by embedding similarity instead of FTS. Filters and
   // sort do not apply to the vector ranking, so their UI is hidden. Needs a
-  // real query; shorter input just browses normally.
-  const semantic = sp.get("mode") === "semantic" && spQ.trim().length >= 2;
+  // real query: the UI follows the toggle so it never lies about the active
+  // mode, while shorter input just falls back to a normal browse.
+  const semanticMode = sp.get("mode") === "semantic";
+  const semantic = semanticMode && spQ.trim().length >= 2;
 
   const [input, setInput] = React.useState(spQ);
   const [stack, setStack] = React.useState<string[]>([]);
@@ -284,6 +286,10 @@ function SearchView() {
         header: () => (
           <span title="University of Twente publications in this journal, 2020 onwards">
             Twente works
+            <span className="sr-only">
+              {" "}
+              — University of Twente publications, 2020 onwards
+            </span>
           </span>
         ),
         cell: (info) => (
@@ -300,7 +306,10 @@ function SearchView() {
       {
         accessorKey: "twoyr_mean_citedness",
         header: () => (
-          <span title="2-year mean citedness (OpenAlex)">2-yr citedness</span>
+          <span title="2-year mean citedness (OpenAlex)">
+            2-yr citedness
+            <span className="sr-only"> (OpenAlex)</span>
+          </span>
         ),
         cell: (info) => {
           const v = info.getValue<number | null>();
@@ -367,6 +376,12 @@ function SearchView() {
       oa_type: undefined,
     });
 
+  // Detail pages offer a "Back to search" that restores this exact URL.
+  React.useEffect(() => {
+    if (hasFilters)
+      sessionStorage.setItem("jb-last-search", `${pathname}?${sp.toString()}`);
+  }, [hasFilters, pathname, sp]);
+
   return (
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
       {/* Sidebar from ~960px up (user-set cutoff); narrower sidebar column
@@ -399,7 +414,7 @@ function SearchView() {
                 if (event.key === "Escape") event.currentTarget.blur();
               }}
               placeholder={
-                semantic
+                semanticMode
                   ? "Describe your topic, or paste an abstract"
                   : "Search by title, ISSN, publisher, or topic"
               }
@@ -409,13 +424,13 @@ function SearchView() {
             {input === "" && (
               <kbd
                 aria-hidden
-                className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-[var(--border)] bg-[var(--muted)] px-1.5 py-0.5 text-[11px] text-[var(--muted-foreground)]"
+                className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-[var(--border)] bg-[var(--muted)] px-1.5 py-0.5 text-[11px] text-[var(--muted-foreground)] [@media(hover:hover)_and_(pointer:fine)]:block"
               >
                 /
               </kbd>
             )}
           </div>
-          {!semantic && (
+          {!semanticMode && (
             <select
               aria-label="Search scope"
               value={searchIn}
@@ -435,7 +450,7 @@ function SearchView() {
           >
             <input
               type="checkbox"
-              className="accent-[var(--primary)]"
+              className="size-4 accent-[var(--primary)]"
               checked={sp.get("mode") === "semantic"}
               onChange={(event) =>
                 update({ mode: event.target.checked ? "semantic" : undefined })
@@ -450,7 +465,7 @@ function SearchView() {
         </section>
 
         {/* Stacked filter card: the only filter UI below 960px. */}
-        {!semantic && (
+        {!semanticMode && (
           <section className="order-2 mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
             <FilterPanel
               facets={facets}
@@ -462,7 +477,7 @@ function SearchView() {
         )}
 
         {/* Wide-screen sidebar: sticky, scrolls on its own when long. */}
-        {!semantic && (
+        {!semanticMode && (
           <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:col-start-1 min-[960px]:row-span-2 min-[960px]:row-start-1 min-[960px]:block">
             <FilterPanel
               facets={facets}
@@ -476,7 +491,7 @@ function SearchView() {
         <div className="order-3 min-w-0 min-[960px]:col-start-2 min-[960px]:row-start-2">
           {/* Sort and reset belong with the results they act on. */}
           <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
-            {!semantic && (
+            {!semanticMode && (
               <>
                 <label htmlFor="sort" className="whitespace-nowrap">Sort by</label>
                 <select
@@ -498,14 +513,16 @@ function SearchView() {
                     className="text-[var(--muted-foreground)]"
                     onClick={clearFilters}
                   >
-                    Reset filters
+                    {hasNonQueryFilters ? "Reset filters" : "Reset search"}
                   </Button>
                 )}
               </>
             )}
-            {semantic && (
+            {semanticMode && (
               <p className="text-[var(--muted-foreground)]">
-                Ranked by meaning; filters and sorting are off in this mode.
+                {semantic
+                  ? "Ranked by meaning; filters and sorting are off in this mode."
+                  : "Match by meaning activates from two characters; regular search runs until then."}
               </p>
             )}
           </div>
@@ -517,7 +534,9 @@ function SearchView() {
               {/* Announce only settled counts: while a fetch runs the live
                   region keeps its previous text, so typing never chatters. */}
               <span aria-live="polite">
-                {data ? `${data.total.toLocaleString("en")} journals` : ""}
+                {data
+                  ? `${data.total.toLocaleString("en")} journal${data.total === 1 ? "" : "s"}`
+                  : ""}
               </span>
               {isFetching && data ? " · updating…" : ""}
             </p>
@@ -558,6 +577,18 @@ function SearchView() {
               >
                 Retry
               </Button>
+              {(cursor || sp.get("p")) && (
+                // A stale or hand-edited cursor 400s forever; Retry re-sends
+                // it. This drops cursor/page and restarts at page 1.
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 ml-2"
+                  onClick={() => update({})}
+                >
+                  Back to page 1
+                </Button>
+              )}
             </div>
           ) : isPending ? (
             <div className="space-y-2 py-4">
@@ -571,13 +602,27 @@ function SearchView() {
           ) : rows.length === 0 ? (
             <div className="py-10 text-center text-[var(--muted-foreground)]">
               {spQ && !hasNonQueryFilters ? (
-                <>
-                  No journals match &ldquo;{spQ}&rdquo;.
-                </>
+                <>No journals match &ldquo;{spQ}&rdquo;.</>
               ) : (
-                <>No journals match{hasFilters ? " these filters" : ""}.</>
+                <>
+                  No journals match
+                  {hasNonQueryFilters ? " these filters" : ""}.
+                </>
               )}
-              {hasFilters && (
+              {/* Zero hits still leaves pivots: facets stay query-free (see
+                  useFacets) and meaning-based ranking skips the exact words. */}
+              {spQ && !semanticMode && (
+                <div className="mt-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => update({ mode: "semantic" })}
+                  >
+                    Try match by meaning
+                  </Button>
+                </div>
+              )}
+              {hasNonQueryFilters && (
                 <div className="mt-3">
                   <Button variant="outline" size="sm" onClick={clearFilters}>
                     Clear filters
@@ -599,11 +644,11 @@ function SearchView() {
                 {rows.map((row) => (
                   <li
                     key={row.issn_l}
-                    className="border-b border-[var(--border)] py-3 first:pt-0 last:border-0 last:pb-0"
+                    className="relative border-b border-[var(--border)] py-3 first:pt-0 last:border-0 last:pb-0"
                   >
                     <Link
                       href={`/journals/${row.issn_l}`}
-                      className="font-medium text-[var(--foreground)] underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                      className="font-medium text-[var(--foreground)] underline-offset-2 after:absolute after:inset-0 after:content-[''] hover:text-[var(--primary-text)] hover:underline"
                     >
                       {row.title ?? row.issn_l}
                     </Link>

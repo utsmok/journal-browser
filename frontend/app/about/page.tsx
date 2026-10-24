@@ -156,7 +156,7 @@ export default function AboutPage() {
                 </li>
               ))}
             </ul>
-            <p className="mt-4 max-w-2xl text-xs text-[var(--muted-foreground)]">
+            <p className="mt-4 max-w-prose text-xs text-[var(--muted-foreground)]">
               Harvest jobs run when the library refreshes the data, and per-run
               status is listed below. The deal register is maintained by hand,
               so a re-ingest can never overwrite reviewed deal information.
@@ -279,7 +279,7 @@ export default function AboutPage() {
       <section>
         <h2 className="mb-3 text-xl font-bold">Contact</h2>
         <Card>
-          <CardContent className="text-sm">
+          <CardContent className="pt-6 text-sm">
             <p className="mb-2 text-[var(--muted-foreground)]">
               Questions about open access publishing at the University of
               Twente? The library can help.

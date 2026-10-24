@@ -74,7 +74,16 @@ export function useFacets(
   params: JournalSearchParams,
   { enabled = true }: { enabled?: boolean } = {},
 ) {
-  const { cursor: _c, sort: _s, limit: _l, ...filters } = params;
+  // Facet counts ignore the free-text query (and scope): a zero-hit query
+  // must still show which filter values exist to pivot to, Scopus-style.
+  const {
+    cursor: _c,
+    sort: _s,
+    limit: _l,
+    q: _q,
+    search_in: _si,
+    ...filters
+  } = params;
   return useQuery({
     queryKey: qk.facets(filters),
     queryFn: () =>

@@ -5,13 +5,8 @@ import type { UseQueryResult } from "@tanstack/react-query";
 
 import { SourceNote } from "@/components/source-note";
 import { Badge } from "@/components/ui/badge";
+import { CollapsibleCard } from "@/components/collapsible-card";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { useDeals } from "@/hooks/use-api";
 import { errorMessage, type DealOut } from "@/lib/api";
 import { dealLinkLabel, orderedDealLinks } from "@/lib/deal-links";
@@ -21,10 +16,13 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
   const capNumbers = Object.entries(deal.cap_numbers ?? {}).sort(
     (a, b) => (parseInt(a[0], 10) || 0) - (parseInt(b[0], 10) || 0),
   );
+  // Collapsible like the detail page's deal panels: the scraped prose runs
+  // long, and a 16-card page should not force all of it on the reader.
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex flex-wrap items-center gap-2">
+    <CollapsibleCard
+      id={`deal-${deal.id}`}
+      title={
+        <>
           {deal.publisher_name ?? `Deal ${deal.id}`}
           {archived ? (
             <Badge variant="muted">Archive</Badge>
@@ -40,17 +38,22 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
               curation pending
             </Badge>
           )}
-        </CardTitle>
+        </>
+      }
+      description={
         <p className="text-sm text-[var(--muted-foreground)]">
           {deal.duration_text ?? `${deal.start_year ?? "?"}–${deal.end_year ?? "?"}`}{" "}
           · {deal.journal_count.toLocaleString("en")} journals
           {deal.corresponding_authors_only && " · corresponding authors only"}
         </p>
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm">
-        {deal.summary && <p>{cleanProse(deal.summary)}</p>}
+      }
+      contentClassName="space-y-3 text-sm"
+    >
+        {deal.summary && (
+          <p className="max-w-prose text-pretty">{cleanProse(deal.summary)}</p>
+        )}
         {deal.cap_text && (
-          <p>
+          <p className="max-w-prose text-pretty">
             <span className="font-medium">Caps: </span>
             {cleanProse(deal.cap_text)}
           </p>
@@ -117,8 +120,7 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
               </>
             )}
         </div>
-      </CardContent>
-    </Card>
+    </CollapsibleCard>
   );
 }
 
@@ -168,7 +170,17 @@ export default function DealsPage() {
         Twente authors, with caps, conditions, and workflow summaries.
       </p>
       {section("Current deals", current)}
-      {section("Archive", archive, true)}
+      {archive.data?.length === 0 ? (
+        // Loaded and empty: say so instead of a bare headed grid.
+        <section className="mb-10">
+          <h2 className="mb-1 text-xl font-bold">Archive</h2>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            No archived deals.
+          </p>
+        </section>
+      ) : (
+        section("Archive", archive, true)
+      )}
       <SourceNote
         source="JCT · openaccess.nl"
         url="https://journalcheckertool.org/transformative-agreements/"

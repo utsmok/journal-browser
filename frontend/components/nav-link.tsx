@@ -14,7 +14,8 @@ export function NavLink({ href, label }: { href: string; label: string }) {
       href={href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "rounded-sm underline-offset-4 hover:text-white/80 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
+        // py-1.5 keeps the tap target at ≥24px (WCAG 2.5.8).
+        "inline-flex items-center rounded-sm py-1.5 underline-offset-4 hover:text-white/80 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
         active ? "font-semibold text-white underline" : "text-white/85",
       )}
     >

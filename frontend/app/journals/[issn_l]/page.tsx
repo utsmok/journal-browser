@@ -112,7 +112,7 @@ function CitationCard({ data }: { data: JournalDetailResponse }) {
         <div className="flex items-start gap-2">
           {/* anywhere (not break-words): only `anywhere` lets the long canonical URL
               count as breakable for the grid column's min-content, so mobile stays 390px. */}
-          <p className="min-w-0 flex-1 [overflow-wrap:anywhere]">{citation}</p>
+          <p className="min-w-0 flex-1 text-pretty [overflow-wrap:anywhere]">{citation}</p>
           <CopyButton text={citation} label="citation" />
         </div>
         <ul className="space-y-1 border-t border-[var(--border)] pt-2">
@@ -167,13 +167,17 @@ function DealPanel({
       }
       contentClassName="space-y-4 text-sm"
     >
-        {deal.summary && <p>{cleanProse(deal.summary)}</p>}
+        {deal.summary && (
+          <p className="max-w-prose text-pretty">{cleanProse(deal.summary)}</p>
+        )}
         {deal.conditions_text && (
           <div>
             <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
               Cost implication & conditions
             </h3>
-            <p className="whitespace-pre-line">{cleanProse(deal.conditions_text)}</p>
+            <p className="max-w-prose whitespace-pre-line text-pretty">
+              {cleanProse(deal.conditions_text)}
+            </p>
           </div>
         )}
         {(deal.cap_text || capNumbers.length > 0) && (
@@ -305,7 +309,7 @@ function PublicationsCard({
       id="publications"
       title="Publications (Twente)"
       description={
-        <p className="text-sm text-[var(--muted-foreground)]">
+        <p className="text-pretty text-sm text-[var(--muted-foreground)]">
           University corpus (Pure), all years; citations and FWCI from OpenAlex
           where the title is matched there.
         </p>
@@ -328,12 +332,17 @@ function PublicationsCard({
                 key={w.id}
                 className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 py-2 first:pt-0 last:pb-0"
               >
+                {/* Full-basis line on phones: flex-1's 0% basis squeezed the
+                    title into a ~63px column beside year/citations badges. */}
                 {href ? (
-                  <External href={href} className="min-w-0 flex-1 font-medium">
+                  <External
+                    href={href}
+                    className="min-w-0 w-full min-[480px]:w-auto min-[480px]:flex-1 font-medium"
+                  >
                     {w.title ?? w.doi ?? w.url}
                   </External>
                 ) : (
-                  <span className="min-w-0 flex-1 font-medium">
+                  <span className="min-w-0 w-full min-[480px]:w-auto min-[480px]:flex-1 font-medium">
                     {w.title ?? "Untitled"}
                   </span>
                 )}
@@ -432,6 +441,15 @@ function PublicationsCard({
   );
 }
 
+/** href for "Back to search": the last search this tab ran, else the home page. */
+function useLastSearchHref(): string {
+  const [href, setHref] = React.useState("/");
+  React.useEffect(() => {
+    setHref(sessionStorage.getItem("jb-last-search") ?? "/");
+  }, []);
+  return href;
+}
+
 /** Highlight the id of the topmost section currently in view. */
 function useSectionSpy(ids: string[]) {
   const [active, setActive] = React.useState<string | null>(null);
@@ -466,6 +484,9 @@ function useSectionSpy(ids: string[]) {
 
 function SectionNav({ sections }: { sections: { id: string; label: string }[] }) {
   const active = useSectionSpy(sections.map((s) => s.id));
+  // Muted-foreground/primary-text both fail 4.5:1 on the navy bar, so this
+  // nav speaks in white and separates the active item with weight+underline.
+  const backHref = useLastSearchHref();
   return (
     <nav
       aria-label="Page sections"
@@ -473,8 +494,8 @@ function SectionNav({ sections }: { sections: { id: string; label: string }[] })
     >
       <div className="mx-auto flex max-w-screen-2xl items-center gap-3 overflow-x-auto px-4 py-2">
         <Link
-          href="/"
-          className="inline-flex shrink-0 items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+          href={backHref}
+          className="inline-flex shrink-0 items-center gap-1 text-sm text-white/80 hover:text-white"
         >
           <ArrowLeft aria-hidden className="size-4" /> Back to search
         </Link>
@@ -492,10 +513,10 @@ function SectionNav({ sections }: { sections: { id: string; label: string }[] })
                     ?.scrollIntoView({ behavior: "smooth" });
                 }}
                 className={cn(
-                  "inline-block whitespace-nowrap rounded px-2 py-1 text-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]",
+                  "inline-block whitespace-nowrap rounded px-2 py-1 text-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white",
                   active === s.id
-                    ? "font-medium text-[var(--primary-text)] underline"
-                    : "text-[var(--muted-foreground)]",
+                    ? "font-medium text-white underline"
+                    : "text-white/80",
                 )}
               >
                 {s.label}
@@ -511,6 +532,7 @@ function SectionNav({ sections }: { sections: { id: string; label: string }[] })
 function JournalPageInner() {
   const params = useParams<{ issn_l: string }>();
   const issnL = params?.issn_l ? decodeURIComponent(params.issn_l) : undefined;
+  const backHref = useLastSearchHref();
   const { data, isPending, isError, error } = useJournal(issnL);
   // Old backends lack /similar; the section simply stays hidden then.
   const similarQuery = useSimilar(issnL);
@@ -531,7 +553,7 @@ function JournalPageInner() {
       <div className="mx-auto max-w-screen-2xl px-4 py-10">
         <p className="text-[var(--destructive)]">{errorMessage(error)}</p>
         <Link
-          href="/"
+          href={backHref}
           className="mt-2 inline-flex items-center gap-1 text-sm text-[var(--primary-text)] underline-offset-4 hover:underline"
         >
           <ArrowLeft aria-hidden className="size-4" /> Back to search
@@ -1032,12 +1054,21 @@ function JournalPageInner() {
                               </span>
                             )}
                             <QuartileBadge quartile={s.quartile ?? null} />
-                            <span className="text-xs text-[var(--muted-foreground)]">
+                            <span
+                              className="text-xs text-[var(--muted-foreground)]"
+                              title="Embedding similarity between the journals' research profiles"
+                            >
                               {s.similarity != null
                                 ? `${Math.round(s.similarity * 100)}% match`
                                 : `${s.shared_topics} shared ${
                                     s.shared_topics === 1 ? "topic" : "topics"
                                   }`}
+                              {s.similarity != null && (
+                                <span className="sr-only">
+                                  {" "}
+                                  (embedding similarity)
+                                </span>
+                              )}
                             </span>
                           </span>
                         </li>

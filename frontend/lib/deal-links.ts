@@ -29,7 +29,13 @@ const TEXT_ALIASES: Record<string, string> = {
 function cleanLabel(link: DealLink) {
   const text = link.text?.trim().replace(/[.:\s]+$/, "");
   if (!text) return DEAL_LINK_LABEL[link.category] ?? "Information";
-  return TEXT_ALIASES[text.toLowerCase()] ?? text;
+  if (/[^\s@]+@[^\s@]+\.[^\s@]+/.test(text)) return "Contact";
+  const aliased = TEXT_ALIASES[text.toLowerCase()];
+  if (aliased) return aliased;
+  // Scraped single-word labels sometimes arrive lowercase ("documentation").
+  return /^[a-z][a-z\s]*$/.test(text)
+    ? text.charAt(0).toUpperCase() + text.slice(1)
+    : text;
 }
 
 /** Last path segment; identifies the same document mirrored on two hosts. */
