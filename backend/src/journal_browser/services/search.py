@@ -647,14 +647,25 @@ def _similar_item(row: Any, *, embedding: bool) -> dict[str, Any]:
 
 
 async def semantic_search(
-    session: AsyncSession, q: str, limit: int = 40
-) -> list[dict[str, Any]]:
+    session: AsyncSession, q: str, limit: int = 40, cursor: str | None = None
+) -> dict[str, Any]:
     """Free-text "find journals like this description": encode the query with
     the embedding model (fastembed ONNX, CPU) and rank by cosine distance.
     Shares base_query cutoffs and proceedings exclusion; journals without a
     stored vector are absent. Response rows match search_journals items so
-    the frontend table renders them unchanged."""
+    the frontend table renders them unchanged.
+
+    The (distance, issn_l) order is deterministic for a fixed query and
+    embedding set, so paging is a plain decimal offset into it — the cursor
+    is only meaningful for the query that produced it, the same contract the
+    frontend already honors by resetting on filter/query changes."""
     from .embeddings import encode_query
+
+    offset = 0
+    if cursor is not None:
+        if not cursor.isdigit():
+            raise ValueError("invalid cursor")
+        offset = int(cursor)
 
     distance = Journal.embedding.cosine_distance(encode_query(q)).label("dist")
     subq = (
@@ -663,11 +674,25 @@ async def semantic_search(
         .where(Journal.embedding.is_not(None))
         .subquery()
     )
+    # Exact ranking: the HNSW index yields at most hnsw.ef_search tuples
+    # (default 40), which silently caps any LIMIT above that and corrupts
+    # offset paging. Planner flags scope to this request's transaction; the
+    # exact scan + top-N sort over 129k rows costs tens of milliseconds.
+    await session.execute(text("SET LOCAL enable_indexscan = off"))
+    await session.execute(text("SET LOCAL enable_indexonlyscan = off"))
+    total = (
+        await session.execute(select(func.count()).select_from(subq))
+    ).scalar_one()
     rows = (
         await session.execute(
-            select(subq).order_by(subq.c.dist.asc(), subq.c.issn_l.asc()).limit(limit)
+            select(subq)
+            .order_by(subq.c.dist.asc(), subq.c.issn_l.asc())
+            .offset(offset)
+            .limit(limit + 1)
         )
     ).all()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
     items = []
     for row in rows:
         item = dict(row._mapping)
@@ -679,4 +704,8 @@ async def semantic_search(
         items.append(item)
     if items:
         await attach_latest_apc(session, items)
-    return items
+    return {
+        "items": items,
+        "total": total,
+        "next_cursor": str(offset + limit) if has_more else None,
+    }

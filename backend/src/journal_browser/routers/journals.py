@@ -181,12 +181,17 @@ async def semantic_search_journals(
     session: SessionDep,
     q: Annotated[str, Query(min_length=2, max_length=512)],
     limit: Annotated[int, Query(ge=1, le=100)] = 40,
+    cursor: str | None = None,
 ) -> JournalSearchResponse:
     """Free-text "journals like this description" search over embeddings."""
-    items = await search_service.semantic_search(session, q, limit)
+    try:
+        result = await search_service.semantic_search(session, q, limit, cursor)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return JournalSearchResponse(
-        items=[_to_list_item(item) for item in items],
-        total=len(items),
+        items=[_to_list_item(item) for item in result["items"]],
+        total=result["total"],
+        next_cursor=result["next_cursor"],
     )
 
 

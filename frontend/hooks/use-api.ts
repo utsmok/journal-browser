@@ -51,10 +51,12 @@ export function useJournals(params: JournalSearchParams, semantic?: boolean) {
       const at = epoch.current;
       const data = semantic
         ? // Free-text "journals like this description": embeddings, not FTS.
-          // Filter/sort params do not apply to the vector ranking.
+          // Filter/sort params do not apply to the vector ranking, but the
+          // cursor does: the endpoint pages by offset into its ranking.
           await apiGet<JournalSearchResponse>("/journals/semantic-search", {
             q: params.q ?? "",
             limit: params.limit ?? 40,
+            cursor: params.cursor,
           })
         : await apiGet<JournalSearchResponse>("/journals", {
             ...params,
