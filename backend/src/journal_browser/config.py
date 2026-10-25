@@ -40,6 +40,17 @@ class Settings(BaseSettings):
     # Permanent raw landing zone for downloaded files (CSVs, HTML, JSON).
     landing_dir: str = "landing"
 
+    # Curation report output path (reconcile job).
+    curation_report_path: str = "landing/reports/curation_report.html"
+
+    # Publication-year data window (inclusive). JB_DATA_WINDOW_START shrinks
+    # a deployment's harvest (e.g. 2025); end 0 = open (to now).
+    data_window_start: int = 2020
+    data_window_end: int = 0
+
+    # Bootstrap job mode: auto = only on an empty DB, always, off.
+    bootstrap: str = "auto"
+
     # Feature flags. Both scaffolds stay OFF until explicitly enabled.
     enable_journal_citations: bool = False
     enable_jisc: bool = False
@@ -50,8 +61,15 @@ class Settings(BaseSettings):
     pure_oai_min_spacing: float = 1.0
 
     @property
+    def window_years(self) -> list[int]:
+        """Inclusive publication-year window, capped at the current year."""
+        import datetime as dt
+
+        last = self.data_window_end or dt.date.today().year
+        return list(range(self.data_window_start, min(last, dt.date.today().year) + 1))
+
+    @property
     def ror_id(self) -> str:
-        """Bare ROR id ('006hf6230') from the full ROR URL."""
         return self.institution_ror.rstrip("/").rsplit("/", 1)[-1]
 
 
