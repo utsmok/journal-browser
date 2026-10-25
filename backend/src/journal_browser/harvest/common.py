@@ -9,7 +9,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
@@ -186,6 +186,12 @@ async def get_home_institution(session: AsyncSession) -> Institution:
         select(Institution).where(Institution.ror == settings.institution_ror)
     )
     if inst is None:
+        # A changed JB_INSTITUTION_ROR on an existing database must leave
+        # exactly one is_home row: HOME_INST scalar subqueries and the
+        # denorm SQL raise on duplicates.
+        await session.execute(
+            update(Institution).where(Institution.is_home.is_(True)).values(is_home=False)
+        )
         inst = Institution(
             name=settings.institution_name,
             ror=settings.institution_ror,

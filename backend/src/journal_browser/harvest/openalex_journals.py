@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from aletheca import AlethecaClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,6 +49,11 @@ async def resolve_home_institution_id(client: AlethecaClient, session: AsyncSess
         raise RuntimeError(f"no OpenAlex institution for ROR {settings.institution_ror}")
     i_id = openalex_id_to_pk(results[0].id)
     if inst is None:
+        # Changed JB_INSTITUTION_ROR: keep exactly one is_home row (HOME_INST
+        # scalar subqueries raise on duplicates); see get_home_institution.
+        await session.execute(
+            update(Institution).where(Institution.is_home.is_(True)).values(is_home=False)
+        )
         inst = Institution(
             name=settings.institution_name, ror=settings.institution_ror, is_home=True
         )
