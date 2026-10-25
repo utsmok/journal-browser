@@ -71,6 +71,8 @@ async def freshness(session: SessionDep) -> FreshnessResponse:
         support_email=settings.support_email,
         admin_contact=settings.admin_contact,
         research_portal_url=settings.research_portal_url,
+        data_window_start=settings.data_window_start,
+        data_window_end=settings.data_window_end,
         harvests=[
             FreshnessEntry(
                 source=state.source,

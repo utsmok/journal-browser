@@ -390,6 +390,16 @@ export interface components {
             admin_contact?: string | null;
             /** Research Portal Url */
             research_portal_url: string;
+            /**
+             * Data Window Start
+             * @default 2020
+             */
+            data_window_start: number;
+            /**
+             * Data Window End
+             * @default 0
+             */
+            data_window_end: number;
             /** Harvests */
             harvests: components["schemas"]["FreshnessEntry"][];
             /**

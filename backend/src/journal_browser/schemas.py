@@ -272,6 +272,8 @@ class FreshnessResponse(BaseModel):
     support_email: str
     admin_contact: str | None = None
     research_portal_url: str
+    data_window_start: int = 2020
+    data_window_end: int = 0
     harvests: list[FreshnessEntry]
     # max timestamps (or year/period maxima for yearly tables)
     tables: dict[str, Any] = {}

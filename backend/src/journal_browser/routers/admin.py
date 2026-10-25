@@ -12,7 +12,7 @@ import hmac
 import time
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -71,13 +71,13 @@ async def login(body: LoginIn) -> dict[str, Any]:
 
 
 @router.get("/runs")
-async def list_runs(session: SessionDep, _: AdminDep, limit: int = 100) -> list[dict[str, Any]]:
+async def list_runs(
+    session: SessionDep,
+    _: AdminDep,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+) -> list[dict[str, Any]]:
     rows = (
-        (
-            await session.execute(
-                select(HarvestRun).order_by(desc(HarvestRun.id)).limit(min(limit, 500))
-            )
-        )
+        (await session.execute(select(HarvestRun).order_by(desc(HarvestRun.id)).limit(limit)))
         .scalars()
         .all()
     )
@@ -93,6 +93,8 @@ async def list_runs(session: SessionDep, _: AdminDep, limit: int = 100) -> list[
         }
         for r in rows
     ]
+
+
 @router.get("/flagged")
 async def flagged_deals(session: SessionDep, _: AdminDep) -> list[dict[str, Any]]:
     journal_count = (
@@ -103,16 +105,13 @@ async def flagged_deals(session: SessionDep, _: AdminDep) -> list[dict[str, Any]
         .scalar_subquery()
     )
     rows = (
-        (
-            await session.execute(
-                select(Deal, Publisher.name, journal_count)
-                .join(Publisher, Publisher.id == Deal.publisher_id)
-                .where(Deal.needs_curation.is_(True))
-                .order_by(Deal.status.desc(), Publisher.name)
-            )
+        await session.execute(
+            select(Deal, Publisher.name, journal_count)
+            .join(Publisher, Publisher.id == Deal.publisher_id)
+            .where(Deal.needs_curation.is_(True))
+            .order_by(Deal.status.desc(), Publisher.name)
         )
-        .all()
-    )
+    ).all()
     return [
         {
             "id": deal.id,
