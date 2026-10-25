@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
 from journal_browser.models import Journal
-from journal_browser.services.embeddings import MODEL_NAME, embed_text, _query_model
+from journal_browser.services.embeddings import MODEL_NAME, embed_text
 
 #: Top cited works per journal for the text. Single pass over the ~28k
 #: works_stats rows; journals without stored works simply skip this part.
@@ -72,10 +72,14 @@ async def main(limit: int | None, batch: int) -> None:
             keys.append(issn_l)
     skipped = len(rows) - len(texts)
     print(f"embedding {len(texts)} of {len(rows)} journals (skipped: {skipped} without text)")
+    if not texts:
+        print("nothing to embed")
+        await engine.dispose()
+        return
 
     from fastembed import TextEmbedding
 
-    model = _query_model if _query_model is not None else TextEmbedding(model_name=MODEL_NAME)
+    model = TextEmbedding(model_name=MODEL_NAME)
     print(f"model={MODEL_NAME} backend=fastembed")
     vectors = np.stack([np.asarray(v) for v in model.embed(texts, batch_size=batch)])
     vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
@@ -93,6 +97,31 @@ async def main(limit: int | None, batch: int) -> None:
             )
             await session.commit()
             print(f"stored {min(start + DB_CHUNK, len(keys))}/{len(keys)}", flush=True)
+
+        # Full runs also retire vectors whose text vanished (e.g. a journal
+        # lost both title and topics): a stale vector would keep ranking it
+        # in semantic results. --limit runs leave the rest of the DB alone.
+        if limit is None:
+            keyset = set(keys)
+            embedded = (
+                (
+                    await session.execute(
+                        select(Journal.issn_l).where(Journal.embedding.is_not(None))
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            stale = [k for k in embedded if k not in keyset]
+            for start in range(0, len(stale), DB_CHUNK):
+                await session.execute(
+                    update(Journal)
+                    .where(Journal.issn_l.in_(stale[start : start + DB_CHUNK]))
+                    .values(embedding=None)
+                )
+            if stale:
+                await session.commit()
+                print(f"cleared {len(stale)} stale embeddings", flush=True)
     await engine.dispose()
 
 

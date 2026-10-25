@@ -24,7 +24,6 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from journal_browser.config import get_settings
 from journal_browser.models import InstitutionWorksStats
 
-DEFAULT_DSN = "postgresql://ut_metadata:ut_metadata@localhost:5434/ut_metadata"
 TOP_JOURNAL_YEAR = 2023
 
 
@@ -134,7 +133,9 @@ async def top_journals(session, conn) -> list[dict]:
 
 
 async def main() -> None:
-    dsn = os.environ.get("JB_UT_METADATA_DSN") or DEFAULT_DSN
+    dsn = os.environ.get("JB_UT_METADATA_DSN")
+    if not dsn:
+        sys.exit("set JB_UT_METADATA_DSN (see .env.example) before running")
     engine = create_async_engine(get_settings().database_url)
     maker = async_sessionmaker(engine, expire_on_commit=False)
     async with maker() as session:
