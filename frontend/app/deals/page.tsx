@@ -149,8 +149,10 @@ export default function DealsPage() {
       <h2 className="mb-1 text-xl font-bold">{label}</h2>
       <p className="mb-4 text-sm text-[var(--muted-foreground)]">
         {query.data
-          ? `${query.data.length} deals covering ${site.name}`
-          : "Loading…"}
+          ? `${query.data.length} deals relevant to ${site.short} authors`
+          : query.isError
+            ? "Could not load deals."
+            : "Loading…"}
       </p>
       {query.isError ? (
         <div>

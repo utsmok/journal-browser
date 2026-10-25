@@ -39,13 +39,13 @@ const SOURCES: SourceInfo[] = [
   {
     name: "OpenAIRE",
     url: "https://openaire.eu",
-    role: "Alternative records and open access links for individual UT works.",
+    role: "Alternative records and open access links for individual institutional works.",
     harvest: "openaire",
   },
   {
     name: "Crossref",
     url: "https://www.crossref.org",
-    role: "DOI metadata used to match UT works to their journal.",
+    role: "DOI metadata used to match institutional works to their journal.",
     harvest: "crossref",
   },
   {
@@ -179,19 +179,19 @@ export default function AboutPage() {
                 <Github aria-hidden className="size-4" />
                 GitHub
               </a>
+              {site.adminContact
+                ? ". Technical questions? Contact the admin, "
+                : ". "}
               {site.adminContact && (
-                <>
-                  . Technical questions? Contact the admin,{" "}
-                  <a
-                    href={`mailto:${site.adminContact}`}
-                    className="text-[var(--primary-text)] underline-offset-2 hover:underline"
-                  >
-                    {site.adminContact}
-                  </a>
-                </>
-              )}{" "}
-              . For open access policy questions, see the library links in the
-              footer.
+                <a
+                  href={`mailto:${site.adminContact}`}
+                  className="text-[var(--primary-text)] underline-offset-2 hover:underline"
+                >
+                  {site.adminContact}
+                </a>
+              )}
+              {" "}For open access policy questions, see the library links in
+              the footer.
             </p>
           </CardContent>
         </Card>
@@ -230,9 +230,9 @@ export default function AboutPage() {
               Harvest jobs run when the library refreshes the data, and per-run
               status is listed below. The deal register is maintained by hand,
               so a re-ingest can never overwrite reviewed deal information.
-              Publication statistics cover works published in 2020 or later,
-              and the search lists journals with more than 3 publications in
-              that window.
+              Publication statistics cover works published in{" "}
+              {site.windowStart} or later, and the search lists journals with
+              more than 3 publications in that window.
             </p>
           </CardContent>
         </Card>
@@ -281,9 +281,8 @@ export default function AboutPage() {
                           )}
                         </td>
                         <td className="py-1.5 pr-3">{h.entity_type}</td>
-                        <td className="py-1.5 pr-3">{h.filter_set}</td>
                         <td className="py-1.5 pr-3">
-                          <Badge variant={h.status === "ok" ? "muted" : "outline"}>
+                          <Badge variant={h.status === "completed" ? "muted" : "outline"}>
                             {h.status ?? "—"}
                           </Badge>
                         </td>

@@ -183,7 +183,7 @@ const OA_TYPE_META: Record<OaType, { label: string; title: string; lock: LockSta
   },
   hybrid: {
     label: "HYBRID",
-    title: "Hybrid journal — subscription journal where individual articles can be made open access, often via a UT deal.",
+    title: "Hybrid journal — subscription journal where individual articles can be made open access, often via an open access deal.",
     lock: "ajar",
     className: ACCESS_TEXT.hybrid,
     width: 68,
@@ -288,7 +288,7 @@ export function DealBadge({ covered }: { covered: boolean }) {
     <Lockup
       label="DEAL"
       width={50}
-      title="Open access deal — APCs for corresponding UT authors are covered (fully or partly) by a UT agreement."
+      title="Open access deal — APCs for corresponding authors are covered (fully or partly) by an institutional agreement."
       className={ACCESS_TEXT.deal}
     >
       <DealGlyph />

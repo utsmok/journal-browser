@@ -122,6 +122,7 @@ export default function AdminPage() {
         >
           <Input
             type="password"
+            aria-label="Admin password"
             placeholder="Admin password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}

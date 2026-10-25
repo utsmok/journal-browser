@@ -244,23 +244,29 @@ const FACET_TITLES: Record<string, string> = {
   "has_apc:false": "No APC records for this journal in OpenAPC.",
 };
 
-/** Hints that name the institution, resolved per render. */
-function groupHint(key: string, name: string) {
+/** Hints that name the institution or window, resolved per render. */
+function groupHint(key: string, name: string, windowStart: number) {
   if (key === "deal")
     return `Does a ${name} open access deal cover APCs in this journal? One choice; click it again to clear.`;
   if (key === "has_ut_works")
-    return `Has ${name} published in this journal (2020 onwards)? One choice; click it again to clear.`;
+    return `Has ${name} published in this journal (${windowStart} onwards)? One choice; click it again to clear.`;
   return GROUP_HINTS[key];
 }
 
-function facetTitle(key: string, value: string, name: string, short: string) {
+function facetTitle(
+  key: string,
+  value: string,
+  name: string,
+  short: string,
+  windowStart: number,
+) {
   const k = `${key}:${value}`;
   if (k === "deal:covered")
     return `APCs for corresponding ${short} authors are covered, fully or partly, by a deal.`;
   if (k === "has_ut_works:true")
-    return `${name} has at least one publication in this journal since 2020.`;
+    return `${name} has at least one publication in this journal since ${windowStart}.`;
   if (k === "has_ut_works:false")
-    return `No known ${name} publications in this journal since 2020.`;
+    return `No known ${name} publications in this journal since ${windowStart}.`;
   return FACET_TITLES[k];
 }
 
@@ -291,7 +297,7 @@ function FacetGroup({
     // open never changes value, so React leaves the native toggle alone.
     <details open={defaultOpen} className="group" role="group" aria-label={`Filter by ${label}`}>
       <summary
-        title={groupHint(key, site.name)}
+        title={groupHint(key, site.name, site.windowStart)}
         className={`${focus} flex cursor-pointer select-none list-none items-center justify-between gap-2 rounded py-1.5 text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] [&::-webkit-details-marker]:hidden`}
       >
         <span>{label}</span>
@@ -365,7 +371,7 @@ function FacetGroup({
             </>
           );
           const optionTitle =
-            facetTitle(key, f.value, site.name, site.short) ??
+            facetTitle(key, f.value, site.name, site.short, site.windowStart) ??
             (f.value.length > 24 ? f.value : undefined);
           return zero ? (
             <span key={f.value} aria-disabled="true" title={optionTitle} className={className}>
@@ -417,7 +423,7 @@ export function FilterPanel({
         ([value, count]) => ({
           value,
           count,
-          label: value === "covered" ? "Deal coverage" : "No deal",
+          label: value === "covered" ? "Covered by a deal" : "No deal",
         }),
       ),
       activeValues: selection.deal ? [selection.deal] : [],

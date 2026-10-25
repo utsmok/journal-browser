@@ -146,6 +146,7 @@ function DealPanel({
   deal: DealOut;
   attribution: Partial<Attribution>;
 }) {
+  const site = useSiteMeta();
   const capNumbers = Object.entries(deal.cap_numbers ?? {}).sort((a, b) =>
     (parseInt(a[0], 10) || 0) - (parseInt(b[0], 10) || 0),
   );
@@ -159,7 +160,7 @@ function DealPanel({
           {deal.corresponding_authors_only && (
             <Badge
               variant="muted"
-              title="The deal only funds the APC when the corresponding author is from UT."
+              title={`The deal only funds the APC when the corresponding author is from ${site.name}.`}
             >
               Corresponding authors only
             </Badge>
@@ -707,7 +708,8 @@ function JournalPageInner() {
                 <External href="https://journalcheckertool.org">
                   Journal Checker Tool
                 </External>{" "}
-                for green OA routes.
+                to double-check; for green open access routes (self-archiving),
+                see the library&apos;s open access guide linked in the footer.
                 <div className="mt-2">
                   <SourceNote
                     {...(attribution.deals ?? {})}
@@ -796,7 +798,7 @@ function JournalPageInner() {
               <>
                 Open access per year{" "}
                 <span className="text-sm font-normal text-[var(--muted-foreground)]">
-                  ({site.short}, 2020+)
+                  ({site.short}, {site.windowStart}+)
                 </span>
               </>
             }
@@ -809,8 +811,8 @@ function JournalPageInner() {
                 </p>
               )}
               <p className="mt-3 text-sm">
-                {totals.pure_canon.toLocaleString("en")} {site.short} works total since
-                2020 <span className="text-[var(--muted-foreground)]">(Pure)</span>{" "}
+                {totals.pure_canon.toLocaleString("en")} {site.short} works total since{" "}
+                {site.windowStart} <span className="text-[var(--muted-foreground)]">(Pure)</span>{" "}
                 · OpenAlex institution filter:{" "}
                 <span className="whitespace-nowrap">
                   {totals.openalex_institution_filter.toLocaleString("en")}{" "}

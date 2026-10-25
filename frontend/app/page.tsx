@@ -40,7 +40,7 @@ const SORTS: { value: SortKey; label: string }[] = [
   { value: "relevance", label: "Relevance" },
   { value: "title", label: "Title A–Z" },
   { value: "publisher", label: "Publisher A–Z" },
-  { value: "institution_works", label: "Twente works" },
+  { value: "institution_works", label: "Institution works" },
   { value: "quartile", label: "Quartile" },
   { value: "topic", label: "Topic A–Z" },
   { value: "apc", label: "APC (high–low)" },
@@ -111,7 +111,7 @@ const SEARCH_IN_OPTIONS: { value: SearchIn; label: string }[] = [
 
 const SEARCH_INPUT_ID = "journal-search";
 
-/** Round an APC mean sensibly: nearest 10 euros at realistic price points. */
+/** Round a displayed APC sensibly: nearest 10 euros at realistic prices. */
 function formatApc(euro: number) {
   const rounded = Math.abs(euro) >= 100 ? Math.round(euro / 10) * 10 : Math.round(euro);
   return rounded.toLocaleString("en");
@@ -402,7 +402,7 @@ function SearchView() {
           <SortHead
             columnId="twente_works"
             label="Works"
-            title={`${site.name} publications in this journal, 2020 onwards. Click to sort, again to reverse, again to reset`}
+            title={`${site.name} publications in this journal, ${site.windowStart} onwards. Click to sort, again to reverse, again to reset`}
             state={sortRef.current}
           />
         ),
