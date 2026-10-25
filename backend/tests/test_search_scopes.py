@@ -336,8 +336,28 @@ async def test_publisher_and_apc_facets(api):
     params = {"publisher": "Massachusetts Institute of Technology Press"}
     body = (await api.get("/api/v1/journals", params=params)).json()
     assert _issns(body) == {"1234-5678"}
-    assert body["facets"]["apc"] == {"true": 0, "false": 1}
 
+
+@requires_db
+async def test_facet_variants_drop_own_filter(api):
+    """Regression: chip facets must drop exactly their own filter. The
+    variants used to re-include it, so e.g. deal=covered rendered the "No
+    deal" chip with a zero count."""
+    browse = (await api.get("/api/v1/journals")).json()
+    body = (await api.get("/api/v1/journals", params={"deal": "covered"})).json()
+    assert body["total"] == 2  # 5555-5555 and 1313-1313 are deal-covered
+    assert body["facets"]["deal_coverage"] == browse["facets"]["deal_coverage"]
+
+    body = (await api.get("/api/v1/journals", params={"oa": "true"})).json()
+    assert body["facets"]["oa"] == browse["facets"]["oa"]
+
+    # The apc facet drops only its own filter: has_ut_works stays applied.
+    # Regression: it used to drop has_ut_works too. 1414-1414 is the only
+    # home-works fixture and has no APC evidence.
+    params = {"has_apc": "true", "has_ut_works": "true"}
+    body = (await api.get("/api/v1/journals", params=params)).json()
+    assert body["total"] == 0
+    assert body["facets"]["apc"] == {"true": 0, "false": 1}
 
 @requires_db
 async def test_has_apc_filter(api):

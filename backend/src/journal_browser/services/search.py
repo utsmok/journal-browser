@@ -1,5 +1,6 @@
 """Journal search: Postgres FTS + facets + keyset pagination."""
 
+import asyncio
 import base64
 import json
 from typing import Any
@@ -336,31 +337,19 @@ async def search_journals(
             page_q = page_q.where(
                 tuple_(order_col, tiebreak) > tuple_(cast(keyset[0], value_cast), keyset[1])
             )
+    # The labeled copy of the ordering expression becomes the cursor value:
+    # Postgres itself computed it, so it matches the sort collation exactly
+    # (Python .lower() and SQL lower() diverge on non-ASCII under C locale).
+    page_q = page_q.add_columns(order_col.label("cursor_value"))
     rows = (await session.execute(page_q.limit(limit + 1))).all()
 
     next_cursor = None
     if len(rows) > limit:
         rows = rows[:limit]
         last = rows[-1]
-        value_col = {
-            "title": "title",
-            "publisher": "publisher_name",
-            "quartile": "quartile",
-            "topic": "primary_topic",
-            "apc": "latest_apc",
-            "institution_works": "twente_works",
-            "2yr_mean_citedness": "twoyr",
-            "relevance": "rank",
-        }[sort]
-        value = getattr(last, value_col)
-        # Cursor value must mirror the ordering expression exactly, and can
-        # never be NULL: coalesce like _order does (title and publisher sort
-        # on lower(...); the numeric sorts coalesce to 0; quartile/topic are
-        # coalesced to "" at select time).
-        if value is None:
-            value = "" if sort in ("title", "publisher", "quartile") else 0
-        if sort in ("title", "publisher"):
-            value = value.lower()
+        value = last._mapping["cursor_value"]
+        if value is None:  # only the topic sort orders on a nullable column
+            value = ""
         next_cursor = encode_cursor(
             float(value) if isinstance(value, (int, float)) else value, last.issn_l
         )
@@ -368,6 +357,7 @@ async def search_journals(
     items = []
     for row in rows:
         item = dict(row._mapping)
+        item.pop("cursor_value", None)
         item["twoyr_mean_citedness"] = (
             float(item.pop("twoyr")) if item.get("twoyr") is not None else None
         )
@@ -455,43 +445,9 @@ async def facet_counts(
         "doaj": {"true": doaj_true, "false": total - doaj_true},
         "quartile": {"Q1": q1, "Q2": q2, "Q3": q3, "Q4": q4},
     }
-    # Variants drop exactly their own filter and keep everything else.
-    common = dict(
-        q=q,
-        search_in=search_in,
-        deal=deal,
-        oa=oa,
-        doaj=doaj,
-        quartile=quartile,
-        oa_types=oa_types,
-    )
-    # The four chip facets below each drop their own filter and keep the rest.
-    own = dict(topic=topic, publisher=publisher, has_apc=has_apc, has_ut_works=has_ut_works)
-    if deal != "any":
-        d = base_query(**{**common, **own}).subquery()
-        d_total, (d_covered,) = await _one(d, d.c.deal_covered.is_(True))
-        facets["deal_coverage"] = {"covered": d_covered, "not_covered": d_total - d_covered}
-    if oa is not None:
-        o = base_query(**{**common, **own}).subquery()
-        o_total, (o_true,) = await _one(o, o.c.is_oa.is_(True))
-        facets["oa"] = {"true": o_true, "false": o_total - o_true}
-    if doaj is not None:
-        dj = base_query(**{**common, **own}).subquery()
-        dj_total, (dj_true,) = await _one(dj, dj.c.is_in_doaj.is_(True))
-        facets["doaj"] = {"true": dj_true, "false": dj_total - dj_true}
-    if quartile in {"Q1", "Q2", "Q3", "Q4"}:
-        qt = base_query(**{**common, **own}).subquery()
-        qt_total, (w1, w2, w3, w4) = await _one(
-            qt,
-            qt.c.quartile == "Q1",
-            qt.c.quartile == "Q2",
-            qt.c.quartile == "Q3",
-            qt.c.quartile == "Q4",
-        )
-        facets["quartile"] = {"Q1": w1, "Q2": w2, "Q3": w3, "Q4": w4}
-    # OA-type facet: counts per oa_type with the oa_type filter itself
-    # excluded, so every option stays visible while selected.
-    oa_type_subq = base_query(
+    # Every variant drops exactly its own filter and keeps the rest, so each
+    # chip shows what selecting it would yield under the other filters.
+    all_filters = dict(
         q=q,
         search_in=search_in,
         deal=deal,
@@ -502,7 +458,38 @@ async def facet_counts(
         publisher=publisher,
         has_apc=has_apc,
         has_ut_works=has_ut_works,
-    ).subquery()
+        oa_types=oa_types,
+    )
+
+    def variant_subq(*drop: str) -> Any:
+        kept = {k: v for k, v in all_filters.items() if k not in drop}
+        return base_query(**kept).subquery()
+
+    if deal != "any":
+        d = variant_subq("deal")
+        d_total, (d_covered,) = await _one(d, d.c.deal_covered.is_(True))
+        facets["deal_coverage"] = {"covered": d_covered, "not_covered": d_total - d_covered}
+    if oa is not None:
+        o = variant_subq("oa")
+        o_total, (o_true,) = await _one(o, o.c.is_oa.is_(True))
+        facets["oa"] = {"true": o_true, "false": o_total - o_true}
+    if doaj is not None:
+        dj = variant_subq("doaj")
+        dj_total, (dj_true,) = await _one(dj, dj.c.is_in_doaj.is_(True))
+        facets["doaj"] = {"true": dj_true, "false": dj_total - dj_true}
+    if quartile in {"Q1", "Q2", "Q3", "Q4"}:
+        qt = variant_subq("quartile")
+        qt_total, (w1, w2, w3, w4) = await _one(
+            qt,
+            qt.c.quartile == "Q1",
+            qt.c.quartile == "Q2",
+            qt.c.quartile == "Q3",
+            qt.c.quartile == "Q4",
+        )
+        facets["quartile"] = {"Q1": w1, "Q2": w2, "Q3": w3, "Q4": w4}
+    # OA-type facet: counts per oa_type with the oa_type filter itself
+    # excluded, so every option stays visible while selected.
+    oa_type_subq = variant_subq("oa_types")
     oa_type_rows = await session.execute(
         select(oa_type_subq.c.oa_type, func.count().label("n")).group_by(oa_type_subq.c.oa_type)
     )
@@ -511,18 +498,7 @@ async def facet_counts(
     elem = func.jsonb_array_elements(
         func.coalesce(Journal.topics, text("'[]'::jsonb"))
     ).table_valued("value", name="t")
-    topic_subq = base_query(
-        q=q,
-        search_in=search_in,
-        deal=deal,
-        oa=oa,
-        doaj=doaj,
-        quartile=quartile,
-        publisher=publisher,
-        has_apc=has_apc,
-        has_ut_works=has_ut_works,
-        oa_types=oa_types,
-    ).subquery()
+    topic_subq = variant_subq("topic")
     topic_rows = await session.execute(
         select(
             elem.c.value.op("->>")("display_name").label("topic"),
@@ -538,18 +514,7 @@ async def facet_counts(
 
     # Publisher facet: top publisher_name counts in the filtered set, own
     # exact-match filter excluded.
-    pub_subq = base_query(
-        q=q,
-        search_in=search_in,
-        deal=deal,
-        oa=oa,
-        doaj=doaj,
-        quartile=quartile,
-        topic=topic,
-        has_apc=has_apc,
-        has_ut_works=has_ut_works,
-        oa_types=oa_types,
-    ).subquery()
+    pub_subq = variant_subq("publisher")
     pub_rows = await session.execute(
         select(pub_subq.c.publisher_name, func.count().label("n"))
         .where(pub_subq.c.publisher_name.is_not(None))
@@ -564,17 +529,7 @@ async def facet_counts(
     if has_apc is None:
         apc_base, apc_total = base, total
     else:
-        apc_base = base_query(
-            q=q,
-            search_in=search_in,
-            deal=deal,
-            oa=oa,
-            doaj=doaj,
-            quartile=quartile,
-            topic=topic,
-            publisher=publisher,
-            oa_types=oa_types,
-        ).subquery()
+        apc_base = variant_subq("has_apc")
         apc_total = await session.scalar(select(func.count()).select_from(apc_base)) or 0
     apc_true = (
         await session.scalar(
@@ -591,18 +546,7 @@ async def facet_counts(
     if has_ut_works is None:
         utw_base, utw_total = base, total
     else:
-        utw_base = base_query(
-            q=q,
-            search_in=search_in,
-            deal=deal,
-            oa=oa,
-            doaj=doaj,
-            quartile=quartile,
-            topic=topic,
-            publisher=publisher,
-            has_apc=has_apc,
-            oa_types=oa_types,
-        ).subquery()
+        utw_base = variant_subq("has_ut_works")
         utw_total = await session.scalar(select(func.count()).select_from(utw_base)) or 0
     utw_true = (
         await session.scalar(
@@ -728,7 +672,10 @@ async def semantic_search(
             raise ValueError("invalid cursor")
         offset = int(cursor)
 
-    distance = Journal.embedding.cosine_distance(encode_query(q)).label("dist")
+    # ONNX inference (and the lazy ~130 MB model load) would stall the event
+    # loop for every other request; run it in a worker thread.
+    query_vec = await asyncio.to_thread(encode_query, q)
+    distance = Journal.embedding.cosine_distance(query_vec).label("dist")
     subq = base_query().add_columns(distance).where(Journal.embedding.is_not(None)).subquery()
     # Exact ranking: the HNSW index yields at most hnsw.ef_search tuples
     # (default 40), which silently caps any LIMIT above that and corrupts
