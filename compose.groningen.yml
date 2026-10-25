@@ -1,0 +1,43 @@
+# University of Groningen test stack (RUG): own ports, own landing dir,
+# project-scoped volume via -p jb-groningen. Proves the fresh-deployment
+# story for a second Dutch university.
+#
+#   export OPENALEX_API_KEY=...
+#   docker compose -p jb-groningen -f docker-compose.yml -f compose.groningen.yml up -d --build
+#
+# !override replaces the base lists (ports/volumes merge by appending).
+services:
+  db:
+    ports: !override
+      - "127.0.0.1:5543:5432"
+
+  bootstrap:
+    volumes: !override
+      - ./backend/landing-groningen:/app/landing
+    environment:
+      JB_DATABASE_URL: postgresql+asyncpg://journal:journal@db:5432/journalbrowser
+      JB_INSTITUTION_NAME: University of Groningen
+      JB_INSTITUTION_ROR: https://ror.org/012p63287
+      JB_PURE_OAI_BASE_URL: https://pure.rug.nl/ws/oai
+      JB_OPENAIRE_ORG_ID: openorgs____::81371ea94b1a09d3243e73d6ec3527ec
+      JB_DATA_WINDOW_START: "2025"
+      JB_DATA_WINDOW_END: "2025"
+      JB_UT_METADATA_DSN: ""
+      OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
+
+  backend:
+    ports: !override
+      - "127.0.0.1:8002:8000"
+    volumes: !override
+      - ./backend/landing-groningen:/app/landing
+    environment:
+      JB_DATABASE_URL: postgresql+asyncpg://journal:journal@db:5432/journalbrowser
+      JB_INSTITUTION_NAME: University of Groningen
+      JB_INSTITUTION_ROR: https://ror.org/012p63287
+      JB_UT_METADATA_DSN: ""
+      JB_DATA_WINDOW_START: "2025"
+      JB_DATA_WINDOW_END: "2025"
+
+  frontend:
+    ports: !override
+      - "3002:3000"

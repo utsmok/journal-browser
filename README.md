@@ -7,7 +7,36 @@ how Twente publishes in them, and what they are about. Replaces the WUR-hosted
 available data. Any Dutch institute can run its own instance: set the institution
 ROR, repository OAI-PMH endpoint, and an OpenAlex key in `.env`, then
 `docker compose up` — the one-shot `bootstrap` service fills the database
-automatically (journals, deals, APCs, repository works, stats).
+
+## First-time install
+
+1. Install Docker (Compose v2.6+; `!override` in the test overrides needs
+   Compose v2.24+).
+2. `cp .env.example .env`, then set the institution levers:
+
+   | Variable | What it is | How to find it |
+   |---|---|---|
+   | `JB_INSTITUTION_NAME` | Your institution's English name as deal pages write it | openaccess.nl deal pages |
+   | `JB_INSTITUTION_ROR` | Your ROR id | <https://ror.org> search |
+   | `JB_PURE_OAI_BASE_URL` | Your repository's anonymous OAI-PMH endpoint | Pure: `https://<portal>/ws/oai?verb=Identify` must answer |
+   | `JB_OPENAIRE_ORG_ID` | OpenAIRE organization id (unset = OpenAIRE harvest off) | `api.openaire.eu/graph/v1/organizations?legalName=<name>` |
+   | `OPENALEX_API_KEY` | Free OpenAlex key for cursor-paged harvests | <https://openalex.org> users page |
+   | `JB_DATA_WINDOW_START`/`_END` | Publication-year window (default 2020..now) | your choice |
+
+3. `docker compose up -d --build`.
+4. Watch the first boot: `docker compose logs -f bootstrap` (30–60 min,
+   fully automatic; the backend stays down until every step succeeds).
+5. Verify: `curl localhost:8000/api/v1/healthz`, then open
+   `http://localhost:3000` — the deal register should list your
+   institution's current NL deals with journal counts.
+
+Optional: `JB_UT_METADATA_DSN` (Twente's ut-metadata Postgres) is Twente-only;
+leave it empty elsewhere. `JB_CONTACT_EMAIL` identifies you to OpenAlex's
+polite pool.
+
+Reference second-institute deployment: `compose.groningen.yml`
+(University of Groningen, ports 5543/8002/3002) — run with
+`docker compose -p <name> -f docker-compose.yml -f compose.groningen.yml up -d --build`.
 
 
 ## Stack

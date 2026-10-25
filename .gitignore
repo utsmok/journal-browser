@@ -25,6 +25,7 @@ uv.lock.bak
 # Raw landing zone (downloaded source artifacts)
 backend/landing/
 backend/landing-test/
+backend/landing-groningen/
 backend/logs/
 
 # Impeccable design-review artifacts
