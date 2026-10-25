@@ -46,9 +46,7 @@ def clean_links(links: list[dict]) -> list[dict]:
     for link in links:
         email = _decode_cf_email(link.get("url", ""))
         if email and "@" in email:
-            out.append(
-                {"url": f"mailto:{email}", "text": email, "category": "contact"}
-            )
+            out.append({"url": f"mailto:{email}", "text": email, "category": "contact"})
         elif "[email" in link.get("text", ""):
             continue  # undecodable obfuscation artifact; a dead cdn-cgi anchor
         else:

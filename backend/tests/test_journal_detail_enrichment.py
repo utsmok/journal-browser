@@ -182,18 +182,10 @@ async def api(db_engine):
             )
         session.add_all(
             [
-                WorkIdentity(
-                    source="openaire", source_pk="W1", ut_work_id="u1", matched_by="doi"
-                ),
-                WorkIdentity(
-                    source="openaire", source_pk="W9", ut_work_id="u1", matched_by="doi"
-                ),
-                WorkIdentity(
-                    source="openaire", source_pk="W2", ut_work_id="u2", matched_by="doi"
-                ),
-                WorkIdentity(
-                    source="openaire", source_pk="W4", ut_work_id="u3", matched_by="doi"
-                ),
+                WorkIdentity(source="openaire", source_pk="W1", ut_work_id="u1", matched_by="doi"),
+                WorkIdentity(source="openaire", source_pk="W9", ut_work_id="u1", matched_by="doi"),
+                WorkIdentity(source="openaire", source_pk="W2", ut_work_id="u2", matched_by="doi"),
+                WorkIdentity(source="openaire", source_pk="W4", ut_work_id="u3", matched_by="doi"),
             ]
         )
 
@@ -249,15 +241,11 @@ async def test_works_pagination_and_sort(api):
     assert body["page"] == 1
     assert body["page_size"] == 2
 
-    r = await api.get(
-        f"/api/v1/journals/{MAIN_ISSN}/works", params={"page": 2, "page_size": 2}
-    )
+    r = await api.get(f"/api/v1/journals/{MAIN_ISSN}/works", params={"page": 2, "page_size": 2})
     body = r.json()
     assert [i["id"] for i in body["items"]] == ["W3"]
 
-    r = await api.get(
-        f"/api/v1/journals/{MAIN_ISSN}/works", params={"page": 4, "page_size": 2}
-    )
+    r = await api.get(f"/api/v1/journals/{MAIN_ISSN}/works", params={"page": 4, "page_size": 2})
     assert r.json()["items"] == []
     assert r.json()["total"] == 3
 

@@ -95,7 +95,8 @@ async def harvest_openaire_products(
         for doi, uuid in (
             await session.execute(
                 select(UtWork.doi_normalized, UtWork.pure_uuid).where(
-                    UtWork.doi_normalized.is_not(None)
+                    UtWork.doi_normalized.is_not(None),
+                    UtWork.retired_at.is_(None),
                 )
             )
         ).all()
@@ -182,8 +183,10 @@ async def match_openaire_titles(session: AsyncSession, limit: int | None = None)
     from sqlalchemy import text
 
     # % reads the threshold from the GUC; parameters are not allowed in SET.
+    # Transaction-local (true): a session-scoped 0.82 would leak to every
+    # later trigram query on this pooled connection.
     await session.execute(
-        text("SELECT set_config('pg_trgm.similarity_threshold', :thr, false)"),
+        text("SELECT set_config('pg_trgm.similarity_threshold', :thr, true)"),
         {"thr": str(TRGM_THRESHOLD)},
     )
     rows = (await session.execute(text(_MATCH_SQL), {"limit": limit or 100000})).all()

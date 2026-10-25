@@ -1,10 +1,11 @@
-"""Scaffold: "cited by Twente staff" + co-citation similar journals.
+"""Scaffold: "cited by Twente staff" counts.
 
 Two-step W-id batching (OpenAlex has no direct source-level citation
 filter): collect a journal's recent work IDs, then count citations to
 those IDs in batches of 100. BLOCKED per docs/decisions.md: scaffolding
 only, `JB_ENABLE_JOURNAL_CITATIONS` default OFF; no full harvests until
-an explicit go.
+an explicit go. (The co-citation half of the original scaffold shipped
+2026-10-23 as embedding-based similar journals — decision 21.)
 """
 
 import logging

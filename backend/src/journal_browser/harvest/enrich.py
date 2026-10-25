@@ -36,6 +36,11 @@ def _chunk(items: list[str], size: int) -> list[list[str]]:
     return [items[i : i + size] for i in range(0, len(items), size)]
 
 
+def _norm_doi_key(key: Any) -> str:
+    """Client result keys may be bare DOIs or https://doi.org/ URLs."""
+    return str(key).lower().removeprefix("https://doi.org/")
+
+
 async def _journal_exists(session: AsyncSession, issn_l: str) -> bool:
     return await session.scalar(select(Journal.issn_l).where(Journal.issn_l == issn_l)) is not None
 
@@ -161,7 +166,7 @@ async def enrich_openalex(session: AsyncSession, limit: int | None = None) -> di
             found = await client.works.batch_get_by_doi(chunk)
             found_dois = set()
             for key, work in found.items():
-                doi = str(key).lower().removeprefix("https://doi.org/")
+                doi = _norm_doi_key(key)
                 found_dois.add(doi)
                 ut = by_doi.get(doi)
                 if ut is None:
@@ -215,8 +220,11 @@ async def enrich_openalex(session: AsyncSession, limit: int | None = None) -> di
                         .on_conflict_do_nothing(constraint="uq_work_identity_source")
                     )
                     await session.execute(stmt)
-            await ingest.finish_run("completed", dict(stats))
             await ingest.commit()
+    # Finalize once, after the last chunk: a mid-run crash must not leave a
+    # "completed" run whose later chunks were rolled back.
+    await ingest.finish_run("completed", dict(stats))
+    await session.commit()
     return stats
 
 
@@ -275,8 +283,8 @@ async def enrich_crossref(session: AsyncSession, limit: int | None = None) -> di
     async with StavrophoraClient(mailto=_settings().contact_email) as client:
         for chunk in _chunk(list(by_doi), BATCH_SIZE):
             found = await client.works.batch_get_by_doi(chunk)
-            for doi, work in found.items():
-                ut = by_doi.get(str(doi).lower())
+            for key, work in found.items():
+                ut = by_doi.get(_norm_doi_key(key))
                 if ut is None:
                     continue
                 payload = (
@@ -294,8 +302,9 @@ async def enrich_crossref(session: AsyncSession, limit: int | None = None) -> di
                 if issn_l := await _resolve_journal(session, issns):
                     ut.journal_issn_l = issn_l
                     stats["journal_resolved"] += 1
-            await ingest.finish_run("completed", dict(stats))
             await ingest.commit()
+    await ingest.finish_run("completed", dict(stats))
+    await session.commit()
     return stats
 
 

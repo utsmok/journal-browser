@@ -284,6 +284,10 @@ class Journal(Base):
     # end of the stats, scimago, and deal-register jobs.
     home_works_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     latest_quartile: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    # Denormalized latest-period OpenAPC mean so the results table can sort
+    # on APC without a correlated subquery per row (same pattern as
+    # latest_quartile); refreshed by harvest.denorm.refresh_apcs.
+    latest_apc_euro: Mapped[float | None] = mapped_column(Numeric, nullable=True)
     deal_covered_home: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
@@ -421,7 +425,9 @@ class UtWork(Base):
     publisher: Mapped[str | None] = mapped_column(Text, nullable=True)
     cerif_issn: Mapped[str | None] = mapped_column(Text, nullable=True)
     oa_status: Mapped[str | None] = mapped_column(Text, nullable=True)
-    journal_issn_l: Mapped[str | None] = mapped_column(ForeignKey("journals.issn_l"), nullable=True)
+    journal_issn_l: Mapped[str | None] = mapped_column(
+        Text, ForeignKey("journals.issn_l"), nullable=True
+    )
     first_seen_run: Mapped[int] = mapped_column(ForeignKey("harvest_runs.id"), nullable=False)
     last_seen_run: Mapped[int] = mapped_column(ForeignKey("harvest_runs.id"), nullable=False)
     retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -441,7 +447,7 @@ class WorkIdentity(Base):
     source: Mapped[str] = mapped_column(Text, nullable=False)
     source_pk: Mapped[str] = mapped_column(Text, nullable=False)
     ut_work_id: Mapped[str] = mapped_column(
-        ForeignKey("ut_works.pure_uuid", ondelete="CASCADE"), nullable=False
+        Text, ForeignKey("ut_works.pure_uuid", ondelete="CASCADE"), nullable=False
     )
     matched_by: Mapped[str] = mapped_column(Text, nullable=False)
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)

@@ -55,7 +55,8 @@ OA_STATUSES = frozenset({"gold", "hybrid", "green", "bronze", "diamond", "closed
 
 
 def canonical_oa_status(raw: str | None) -> str | None:
-    """OpenAlex oa_status literal -> OA_STATUSES; unknown/None stays None."""
+    """OpenAlex oa_status literal -> OA_STATUSES; empty/None stays None,
+    anything outside the vocabulary maps to "closed"."""
     if not raw:
         return None
     return raw if raw in OA_STATUSES else "closed"

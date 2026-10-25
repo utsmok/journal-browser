@@ -15,7 +15,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.models import Base
 
-ADMIN_URL = "postgresql://journal:journal@localhost:5433/journalbrowser"
+# Admin ops (CREATE/DROP DATABASE) go through the always-present maintenance
+# db, not `journalbrowser`: the CI service only creates journalbrowser_test.
+ADMIN_URL = "postgresql://journal:journal@localhost:5433/postgres"
 # Unique per process: two concurrent pytest runs must not fight over one DB.
 TEST_DB = (
     os.environ.get("JB_TEST_DB") or f"journalbrowser_pytest_{os.getpid()}_{secrets.token_hex(2)}"

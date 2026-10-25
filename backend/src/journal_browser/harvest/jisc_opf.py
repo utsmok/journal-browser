@@ -66,7 +66,7 @@ async def harvest_policies(ingest: IngestSession, limit: int | None = None) -> d
         while True:
             page = await retrieve_page(client, search_after=search_after)
             for record in page.get("results", []):
-                pk = str(((record.get("system_metadata") or {}).get("id")) or len(stats))
+                pk = str(((record.get("system_metadata") or {}).get("id")) or stats["records"] + 1)
                 await ingest.ingest_record(pk, record)
                 stats["records"] += 1
                 if limit is not None and stats["records"] >= limit:

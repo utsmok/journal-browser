@@ -18,6 +18,7 @@ absent works retired instead of deleting evidence.
 
 import asyncio
 import contextlib
+import datetime as dt
 import logging
 import re
 import time
@@ -575,9 +576,17 @@ async def _consume_oai_pages(
             stats["complete_list_size"] = int(token_attrs["complete_list_size"])
         limit_reached = False
         for record in page:
-            kind = await _ingest_oai_record(
-                ingest, record, year=year, run_id=ingest.run_id, entity_type=entity_type
-            )
+            try:
+                kind = await _ingest_oai_record(
+                    ingest, record, year=year, run_id=ingest.run_id, entity_type=entity_type
+                )
+            except (PureOaiError, ET.ParseError) as exc:
+                # Record-level parse problems leave the session healthy;
+                # DB-level errors must propagate (the transaction is dead).
+                await ingest.record_parse_failure(
+                    {"source_pk": None, "reason": f"{type(exc).__name__}: {exc}"}
+                )
+                continue
             stats[kind] += 1
             if limit is not None and ingest.records_seen >= limit:
                 stats["limit_reached"] = True
@@ -613,7 +622,6 @@ async def _harvest_set(
         "token_restarts": 0,
         "new": 0,
         "duplicate": 0,
-        "changed": 0,
         "deleted": 0,
         "complete_list_size": None,
     }
@@ -652,8 +660,11 @@ async def _harvest_set(
 async def retire_absent(session: AsyncSession, run_ids: list[int]) -> int:
     """Mark ut_works not seen in any of these sweep runs as retired.
 
-    Never deletes.
+    Never deletes. A no-run call is a no-op: `NOT IN ()` would retire
+    every row.
     """
+    if not run_ids:
+        return 0
     from sqlalchemy import update
 
     result = await session.execute(
@@ -680,8 +691,16 @@ async def harvest_pure_years(
     """Harvest publications:year{Y} sets (oai_dc) into source_records + ut_works.
 
     One harvest_run per year set. full_sweep=True covers every year 2020..now
-    in one go and retires works absent from the sweep afterwards.
+    in one go and retires works absent from the sweep afterwards — so `years`
+    MUST span that whole window, or retirement would stamp works that were
+    simply not part of this (partial) run.
     """
+    if full_sweep:
+        expected = set(range(FIRST_YEAR, dt.date.today().year + 1))
+        if set(years) != expected:
+            raise ValueError(
+                f"full_sweep requires every year set {FIRST_YEAR}..now, got {sorted(years)}"
+            )
     stats: dict[str, Any] = {"sets": {}}
     totals = {"records_seen": 0, "records_stored": 0, "parse_failures": 0}
     run_ids: list[int] = []
@@ -697,8 +716,12 @@ async def harvest_pure_years(
         run_ids.append(ingest.run_id)
         try:
             set_stats = await _harvest_set(ingest, set_spec, PREFIX_DC, limit=limit)
-        except PureOaiError as exc:
-            await ingest.finish_run("failed", {"error": str(exc)})
+        except Exception as exc:
+            # Commit the failed-run marker: finish_run only flushes, and the
+            # re-raise would otherwise roll the run row back into nothing.
+            await ingest.finish_run("failed", {"error": f"{type(exc).__name__}: {exc}"[:200]})
+            with contextlib.suppress(Exception):
+                await session.commit()
             raise
         final = await ingest.finish_run("completed", set_stats)
         await ingest.commit()
@@ -729,8 +752,10 @@ async def harvest_pure_cerif(
     await ingest.start_run(SOURCE, "work_cerif", CRIS_PUBLICATIONS_SET, config)
     try:
         set_stats = await _harvest_set(ingest, CRIS_PUBLICATIONS_SET, PREFIX_CERIF, limit=limit)
-    except PureOaiError as exc:
-        await ingest.finish_run("failed", {"error": str(exc)})
+    except Exception as exc:
+        await ingest.finish_run("failed", {"error": f"{type(exc).__name__}: {exc}"[:200]})
+        with contextlib.suppress(Exception):
+            await session.commit()
         raise
     final = await ingest.finish_run("completed", set_stats)
     await ingest.commit()

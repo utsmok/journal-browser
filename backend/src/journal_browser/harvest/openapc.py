@@ -12,9 +12,11 @@ from statistics import fmean
 from typing import Any
 
 from sqlalchemy import delete, insert, select
+from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
+from ..harvest.denorm import refresh_apcs
 from ..ingest import IngestSession, sha256_bytes
 from ..models import ApcEvidence, JournalApcAggregate, RawFile, SourceRecord
 from .common import (
@@ -91,7 +93,7 @@ async def build_aggregates(
     Rows with no ISSN-L or no parseable period are skipped and counted.
     """
     groups: dict[tuple[str, int], list[float | None]] = {}
-    counters = {"rows": len(rows), "unresolved_issn": 0, "skipped": 0}
+    counters = {"rows": len(rows), "unresolved_issn": 0, "invalid_issn": 0, "skipped": 0}
     for row in rows:
         try:
             issn_l = normalize_issn(_clean(row.get("issn_l")))
@@ -255,14 +257,23 @@ async def _body(ingest: IngestSession, limit: int | None) -> dict[str, Any]:
         item["source_pk"] = item["source_pk"] or str(i)
         await ingest.ingest_record(item["source_pk"], item["payload"])
     await ingest.commit()  # source_records need ids before apc_evidence can link them
-    record_ids = {
-        pk: rid
-        for pk, rid in await session.execute(
-            select(SourceRecord.source_pk, SourceRecord.id).where(
-                SourceRecord.harvest_run_id == ingest.run_id
+    # Latest source_record per evidence pk. Unchanged rows are ingest
+    # duplicates (no row for THIS run), so the lookup cannot be scoped to
+    # the current run or a second run would NULL every provenance link.
+    record_ids = dict(
+        (
+            await session.execute(
+                select(SourceRecord.source_pk, SourceRecord.id)
+                .ext(distinct_on(SourceRecord.source_pk))
+                .where(
+                    SourceRecord.source == SOURCE,
+                    SourceRecord.entity_type == "apc_row",
+                    SourceRecord.source_pk.in_([i["source_pk"] for i in evidence]),
+                )
+                .order_by(SourceRecord.source_pk, SourceRecord.harvested_at.desc())
             )
-        )
-    }
+        ).all()
+    )
     await session.execute(delete(ApcEvidence).where(ApcEvidence.source == SOURCE))
     if evidence:
         await session.execute(
@@ -295,6 +306,8 @@ async def main(session: AsyncSession, limit: int | None = None) -> dict[str, Any
         lambda ingest: _body(ingest, limit),
         session,
     )
+    await refresh_apcs(session)
+    await session.commit()
     for key in sorted(stats):
         print(f"{key}: {stats[key]}")
     return stats

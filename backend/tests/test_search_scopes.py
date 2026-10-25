@@ -208,6 +208,28 @@ async def test_null_twoyr_sort_pages_cleanly(api):
 
 
 @requires_db
+async def test_relevance_sort_pages_cleanly(api):
+    # Regression: relevance rank is float8 in SQL, so its cursor must cast
+    # to Numeric; as String it died with "operator does not exist: double
+    # precision < character varying" on every page after the first.
+    seen: list[str] = []
+    cursor = None
+    for _ in range(10):
+        params = {"sort": "relevance", "q": "journal", "limit": 2}
+        if cursor:
+            params["cursor"] = cursor
+        r = await api.get("/api/v1/journals", params=params)
+        assert r.status_code == 200
+        body = r.json()
+        seen += [i["issn_l"] for i in body["items"]]
+        cursor = body["next_cursor"]
+        if cursor is None:
+            break
+    assert cursor is None
+    assert len(seen) == len(set(seen)) > 0
+
+
+@requires_db
 async def test_title_sort_pages_with_lower_case_cursor(api):
     cursor = None
     seen: list[str] = []

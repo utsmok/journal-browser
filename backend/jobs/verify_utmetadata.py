@@ -8,7 +8,7 @@ ut-metadata's verbatim Pure harvest:
 - top-20 journal 2023 counts (pure_canon vs ut-metadata equivalent).
 
 Requires network access to the ut-metadata DB; gated by
-JB_UTMETADATA_DSN (dev machines set it in backend/.env, never tracked).
+JB_UT_METADATA_DSN (dev machines set it in backend/.env, never tracked).
 
 Usage: uv run python jobs/verify_utmetadata.py
 """
@@ -33,8 +33,16 @@ async def ours(session) -> dict:
 
     from journal_browser.models import UtWork
 
+    # Same corpus the docstring promises and theirs() counts: active works,
+    # 2020+ window. Unfiltered counts made every verdict permanently red.
     per_year = dict(
-        (await session.execute(select(UtWork.year, func.count()).group_by(UtWork.year))).all()
+        (
+            await session.execute(
+                select(UtWork.year, func.count())
+                .where(UtWork.retired_at.is_(None), UtWork.year >= 2020)
+                .group_by(UtWork.year)
+            )
+        ).all()
     )
     return {"total": sum(per_year.values()), "per_year": per_year}
 
@@ -50,7 +58,16 @@ async def theirs(conn) -> dict:
         GROUP BY y ORDER BY y
     """)
     per_year = {int(r["y"]): r["count"] for r in rows}
-    return {"total": sum(per_year.values()), "per_year": per_year}
+    # Work-distinct total: a work belonging to several year sets must count
+    # once, not once per set.
+    total = await conn.fetchval("""
+        SELECT count(DISTINCT source_pk) FROM (
+            SELECT source_pk, jsonb_array_elements_text(payload->'set_specs') AS s
+            FROM source_records WHERE source='pure' AND entity_type='works'
+        ) z
+        WHERE s ~ '^publications:year20(2[0-9])$'
+    """)
+    return {"total": int(total or 0), "per_year": per_year}
 
 
 async def top_journals(session, conn) -> list[dict]:
@@ -117,7 +134,7 @@ async def top_journals(session, conn) -> list[dict]:
 
 
 async def main() -> None:
-    dsn = os.environ.get("JB_UTMETADATA_DSN") or DEFAULT_DSN
+    dsn = os.environ.get("JB_UT_METADATA_DSN") or DEFAULT_DSN
     engine = create_async_engine(get_settings().database_url)
     maker = async_sessionmaker(engine, expire_on_commit=False)
     async with maker() as session:

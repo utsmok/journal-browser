@@ -62,6 +62,22 @@ QUARTILES_SQL = text(
     """
 )
 
+# Mirrors attach_latest_apc semantics: the latest period row wins, even when
+# its euro_mean is NULL (an aggregate row without amounts is still "latest").
+RESET_APC_SQL = text("UPDATE journals SET latest_apc_euro = NULL")
+
+APC_SQL = text(
+    """
+    UPDATE journals j SET latest_apc_euro = a.euro_mean
+    FROM (
+        SELECT DISTINCT ON (issn_l) issn_l, euro_mean
+        FROM journal_apc_aggregates
+        ORDER BY issn_l, period DESC
+    ) a
+    WHERE j.issn_l = a.issn_l
+    """
+)
+
 # Full recompute, so deals removed from the register clear the flag too.
 DEAL_FLAGS_SQL = text(
     """
@@ -86,6 +102,11 @@ async def refresh_home_stats(session: AsyncSession) -> None:
 async def refresh_quartiles(session: AsyncSession) -> None:
     await session.execute(RESET_QUARTILES_SQL)
     await session.execute(QUARTILES_SQL)
+
+
+async def refresh_apcs(session: AsyncSession) -> None:
+    await session.execute(RESET_APC_SQL)
+    await session.execute(APC_SQL)
 
 
 async def refresh_home_deal_flags(session: AsyncSession) -> None:

@@ -4,6 +4,7 @@ Usage: uv run python jobs/ingest_scimagojr.py [year ...]   # default: 2024 2023 
 """
 
 import asyncio
+import datetime as dt
 import json
 import sys
 from pathlib import Path
@@ -16,7 +17,10 @@ from journal_browser.harvest.scimagojr import ingest_year
 
 
 async def main() -> None:
-    years = [int(a) for a in sys.argv[1:]] or [2024, 2023, 2022]
+    # SCImago exports land a year behind, so default to the three most
+    # recent completed years instead of a list that goes stale.
+    this_year = dt.date.today().year
+    years = [int(a) for a in sys.argv[1:]] or [this_year - 1, this_year - 2, this_year - 3]
     landing = Path(get_settings().landing_dir)
     engine = create_async_engine(get_settings().database_url)
     maker = async_sessionmaker(engine, expire_on_commit=False)

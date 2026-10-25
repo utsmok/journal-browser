@@ -120,9 +120,7 @@ def merge_work_lists(
     without a DOI match) are kept as-is.
     """
     by_doi = {
-        doi: item
-        for item in stats_items
-        if (doi := normalize_doi(item.get("doi"))) is not None
+        doi: item for item in stats_items if (doi := normalize_doi(item.get("doi"))) is not None
     }
     seen_dois: set[str] = set()
     merged: list[dict[str, Any]] = []

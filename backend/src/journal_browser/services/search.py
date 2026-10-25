@@ -23,7 +23,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import IssnMap, Journal, JournalApcAggregate
 
-SortKey = str  # relevance | title | institution_works | 2yr_mean_citedness
+# Sort keys: relevance | title | publisher | institution_works | quartile |
+# topic | apc | 2yr_mean_citedness
+SortKey = str
+
+#: Sort keys whose order column is numeric; their keyset cursors must cast
+#: the cursor value to Numeric in both directions (text keys cast to String).
+NUMERIC_SORTS = frozenset({"relevance", "institution_works", "2yr_mean_citedness", "apc"})
 
 
 def parse_cursor(cursor: str | None) -> tuple[str, str] | None:
@@ -112,6 +118,7 @@ def base_query(
     topic: str | None = None,
     publisher: str | None = None,
     has_apc: bool | None = None,
+    has_ut_works: bool | None = None,
     oa_types: list[str] | None = None,
     fuzzy: bool = False,
 ):
@@ -151,6 +158,9 @@ def base_query(
         twoyr,
         OA_TYPE,
         rank,
+        # OpenAlex lists topics primary-first; first entry = primary topic.
+        func.coalesce(J.topics.op("->")(0).op("->>")("display_name"), "").label("primary_topic"),
+        J.latest_apc_euro.label("latest_apc"),
     ).where(WORKS_CUTOFF, J.type == "journal", J.issn_l.is_not(None), PROCEEDINGS_EXCLUSION)
     if oa_types:
         query = query.where(OA_TYPE.in_(oa_types))
@@ -211,13 +221,24 @@ def base_query(
         query = query.where(J.publisher_name == publisher)
     if has_apc is not None:
         query = query.where(APC_EXISTS if has_apc else ~APC_EXISTS)
+    if has_ut_works is not None:
+        works = func.coalesce(J.home_works_count, 0)
+        query = query.where(works > 0 if has_ut_works else works == 0)
     return query
 
 
 def _order(sort: SortKey, subq: Any) -> tuple[Any, str]:
-    """Returns (order expression, direction)."""
+    """Returns (order expression, natural direction)."""
     if sort == "title":
         return func.lower(func.coalesce(subq.c.title, "")), "asc"
+    if sort == "publisher":
+        return func.lower(func.coalesce(subq.c.publisher_name, "")), "asc"
+    if sort == "quartile":
+        return func.coalesce(subq.c.quartile, ""), "asc"
+    if sort == "topic":
+        return subq.c.primary_topic, "asc"
+    if sort == "apc":
+        return func.coalesce(subq.c.latest_apc, 0), "desc"
     if sort == "institution_works":
         return func.coalesce(subq.c.twente_works, 0), "desc"
     if sort == "2yr_mean_citedness":
@@ -260,8 +281,10 @@ async def search_journals(
     topic: str | None = None,
     publisher: str | None = None,
     has_apc: bool | None = None,
+    has_ut_works: bool | None = None,
     oa_types: list[str] | None = None,
     sort: SortKey = "relevance",
+    dir: str | None = None,
     cursor: str | None = None,
     limit: int = 20,
     include_facets: bool = True,
@@ -276,6 +299,7 @@ async def search_journals(
         topic=topic,
         publisher=publisher,
         has_apc=has_apc,
+        has_ut_works=has_ut_works,
         oa_types=oa_types,
     )
     subq = base_query(**filters).subquery()
@@ -288,20 +312,25 @@ async def search_journals(
         total = await session.scalar(select(func.count()).select_from(subq)) or 0
 
     order_col, direction = _order(sort, subq)
+    if dir in ("asc", "desc"):
+        direction = dir
     tiebreak = subq.c.issn_l
     keyset = parse_cursor(cursor)
+    # The cursor value type must match the ordering expression: numeric
+    # sorts compare against Numeric, text sorts against String.
+    value_cast = Numeric if sort in NUMERIC_SORTS else String
 
     if direction == "desc":
         page_q = select(subq).order_by(order_col.desc(), tiebreak.desc())
         if keyset:
             page_q = page_q.where(
-                tuple_(order_col, tiebreak) < tuple_(cast(keyset[0], Numeric), keyset[1])
+                tuple_(order_col, tiebreak) < tuple_(cast(keyset[0], value_cast), keyset[1])
             )
     else:
         page_q = select(subq).order_by(order_col.asc(), tiebreak.asc())
         if keyset:
             page_q = page_q.where(
-                tuple_(order_col, tiebreak) > tuple_(cast(keyset[0], String), keyset[1])
+                tuple_(order_col, tiebreak) > tuple_(cast(keyset[0], value_cast), keyset[1])
             )
     rows = (await session.execute(page_q.limit(limit + 1))).all()
 
@@ -311,17 +340,22 @@ async def search_journals(
         last = rows[-1]
         value_col = {
             "title": "title",
+            "publisher": "publisher_name",
+            "quartile": "quartile",
+            "topic": "primary_topic",
+            "apc": "latest_apc",
             "institution_works": "twente_works",
             "2yr_mean_citedness": "twoyr",
             "relevance": "rank",
         }[sort]
         value = getattr(last, value_col)
         # Cursor value must mirror the ordering expression exactly, and can
-        # never be NULL: coalesce like _order does (title sorts on
-        # lower(title); twoyr/twente_works/rank coalesce to 0).
+        # never be NULL: coalesce like _order does (title and publisher sort
+        # on lower(...); the numeric sorts coalesce to 0; quartile/topic are
+        # coalesced to "" at select time).
         if value is None:
-            value = "" if sort == "title" else 0
-        if sort == "title":
+            value = "" if sort in ("title", "publisher", "quartile") else 0
+        if sort in ("title", "publisher"):
             value = value.lower()
         next_cursor = encode_cursor(
             float(value) if isinstance(value, (int, float)) else value, last.issn_l
@@ -370,6 +404,7 @@ async def facet_counts(
     topic: str | None = None,
     publisher: str | None = None,
     has_apc: bool | None = None,
+    has_ut_works: bool | None = None,
     oa_types: list[str] | None = None,
 ) -> tuple[dict[str, dict[str, int]], int]:
     """Facet counts over the query-filtered set. Each facet's own filter is
@@ -397,6 +432,7 @@ async def facet_counts(
         topic=topic,
         publisher=publisher,
         has_apc=has_apc,
+        has_ut_works=has_ut_works,
         oa_types=oa_types,
     ).subquery()
     total, (covered, oa_true, doaj_true, q1, q2, q3, q4) = await _one(
@@ -425,28 +461,22 @@ async def facet_counts(
         quartile=quartile,
         oa_types=oa_types,
     )
+    # The four chip facets below each drop their own filter and keep the rest.
+    own = dict(topic=topic, publisher=publisher, has_apc=has_apc, has_ut_works=has_ut_works)
     if deal != "any":
-        d = base_query(
-            **{**common, "topic": topic, "publisher": publisher, "has_apc": has_apc}
-        ).subquery()
+        d = base_query(**{**common, **own}).subquery()
         d_total, (d_covered,) = await _one(d, d.c.deal_covered.is_(True))
         facets["deal_coverage"] = {"covered": d_covered, "not_covered": d_total - d_covered}
     if oa is not None:
-        o = base_query(
-            **{**common, "topic": topic, "publisher": publisher, "has_apc": has_apc}
-        ).subquery()
+        o = base_query(**{**common, **own}).subquery()
         o_total, (o_true,) = await _one(o, o.c.is_oa.is_(True))
         facets["oa"] = {"true": o_true, "false": o_total - o_true}
     if doaj is not None:
-        dj = base_query(
-            **{**common, "topic": topic, "publisher": publisher, "has_apc": has_apc}
-        ).subquery()
+        dj = base_query(**{**common, **own}).subquery()
         dj_total, (dj_true,) = await _one(dj, dj.c.is_in_doaj.is_(True))
         facets["doaj"] = {"true": dj_true, "false": dj_total - dj_true}
     if quartile in {"Q1", "Q2", "Q3", "Q4"}:
-        qt = base_query(
-            **{**common, "topic": topic, "publisher": publisher, "has_apc": has_apc}
-        ).subquery()
+        qt = base_query(**{**common, **own}).subquery()
         qt_total, (w1, w2, w3, w4) = await _one(
             qt,
             qt.c.quartile == "Q1",
@@ -467,11 +497,10 @@ async def facet_counts(
         topic=topic,
         publisher=publisher,
         has_apc=has_apc,
+        has_ut_works=has_ut_works,
     ).subquery()
     oa_type_rows = await session.execute(
-        select(oa_type_subq.c.oa_type, func.count().label("n")).group_by(
-            oa_type_subq.c.oa_type
-        )
+        select(oa_type_subq.c.oa_type, func.count().label("n")).group_by(oa_type_subq.c.oa_type)
     )
     facets["oa_type"] = {row.oa_type: int(row.n) for row in oa_type_rows}
 
@@ -487,6 +516,7 @@ async def facet_counts(
         quartile=quartile,
         publisher=publisher,
         has_apc=has_apc,
+        has_ut_works=has_ut_works,
         oa_types=oa_types,
     ).subquery()
     topic_rows = await session.execute(
@@ -513,6 +543,7 @@ async def facet_counts(
         quartile=quartile,
         topic=topic,
         has_apc=has_apc,
+        has_ut_works=has_ut_works,
         oa_types=oa_types,
     ).subquery()
     pub_rows = await session.execute(
@@ -550,6 +581,32 @@ async def facet_counts(
         or 0
     )
     facets["apc"] = {"true": int(apc_true), "false": int(apc_total) - int(apc_true)}
+
+    # Twente-works facet: journals with/without at least one known UT
+    # publication, own filter excluded so both options stay visible.
+    if has_ut_works is None:
+        utw_base, utw_total = base, total
+    else:
+        utw_base = base_query(
+            q=q,
+            search_in=search_in,
+            deal=deal,
+            oa=oa,
+            doaj=doaj,
+            quartile=quartile,
+            topic=topic,
+            publisher=publisher,
+            has_apc=has_apc,
+            oa_types=oa_types,
+        ).subquery()
+        utw_total = await session.scalar(select(func.count()).select_from(utw_base)) or 0
+    utw_true = (
+        await session.scalar(
+            select(func.count()).select_from(utw_base).where(utw_base.c.twente_works > 0)
+        )
+        or 0
+    )
+    facets["ut_works"] = {"true": int(utw_true), "false": int(utw_total) - int(utw_true)}
     return facets, total
 
 
@@ -585,17 +642,17 @@ async def similar_journals(session: AsyncSession, issn_l: str) -> dict[str, Any]
     if self_row.embedding is not None:
         distance = Journal.embedding.cosine_distance(self_row.embedding).label("dist")
         for key, (extra, limit) in scopes.items():
-            query = base_query().add_columns(distance).where(
-                Journal.issn_l != self_row.issn_l, Journal.embedding.is_not(None)
+            query = (
+                base_query()
+                .add_columns(distance)
+                .where(Journal.issn_l != self_row.issn_l, Journal.embedding.is_not(None))
             )
             if extra is not None:
                 query = query.where(extra)
             subq = query.subquery()
             rows = (
                 await session.execute(
-                    select(subq)
-                    .order_by(subq.c.dist.asc(), subq.c.issn_l.asc())
-                    .limit(limit)
+                    select(subq).order_by(subq.c.dist.asc(), subq.c.issn_l.asc()).limit(limit)
                 )
             ).all()
             out[key] = [_similar_item(row, embedding=True) for row in rows]
@@ -613,8 +670,8 @@ async def similar_journals(session: AsyncSession, issn_l: str) -> dict[str, Any]
         .label("shared_topics")
     )
     for key, (extra, limit) in scopes.items():
-        query = base_query().add_columns(shared).where(
-            Journal.issn_l != self_row.issn_l, shared > 0
+        query = (
+            base_query().add_columns(shared).where(Journal.issn_l != self_row.issn_l, shared > 0)
         )
         if extra is not None:
             query = query.where(extra)
@@ -668,21 +725,14 @@ async def semantic_search(
         offset = int(cursor)
 
     distance = Journal.embedding.cosine_distance(encode_query(q)).label("dist")
-    subq = (
-        base_query()
-        .add_columns(distance)
-        .where(Journal.embedding.is_not(None))
-        .subquery()
-    )
+    subq = base_query().add_columns(distance).where(Journal.embedding.is_not(None)).subquery()
     # Exact ranking: the HNSW index yields at most hnsw.ef_search tuples
     # (default 40), which silently caps any LIMIT above that and corrupts
     # offset paging. Planner flags scope to this request's transaction; the
     # exact scan + top-N sort over 129k rows costs tens of milliseconds.
     await session.execute(text("SET LOCAL enable_indexscan = off"))
     await session.execute(text("SET LOCAL enable_indexonlyscan = off"))
-    total = (
-        await session.execute(select(func.count()).select_from(subq))
-    ).scalar_one()
+    total = (await session.execute(select(func.count()).select_from(subq))).scalar_one()
     rows = (
         await session.execute(
             select(subq)

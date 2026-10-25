@@ -255,8 +255,7 @@ async def test_works_union_and_detail_ut_metrics(api, client, monkeypatch):
         return [
             _ut_row(id=1, doi="10.1/one", oa_status="gold", is_retracted=True),
             _ut_row(id=2, doi="10.9/ut-only", cited_by_count=3, oa_status=None),
-            _ut_row(id=3, doi="10.8/beyond-stats", year=None, cited_by_count=1,
-                    oa_status="hybrid"),
+            _ut_row(id=3, doi="10.8/beyond-stats", year=None, cited_by_count=1, oa_status="hybrid"),
         ]
 
     monkeypatch.setattr(ut_metadata, "ut_works_for_journal", fake_ut_rows)

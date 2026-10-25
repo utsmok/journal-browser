@@ -135,10 +135,15 @@ async def search_journals(
     topic: Annotated[str | None, Query(max_length=100)] = None,
     publisher: Annotated[str | None, Query(max_length=200)] = None,
     has_apc: bool | None = None,
+    has_ut_works: bool | None = None,
     oa_type: Annotated[str | None, Query(max_length=60)] = None,
     sort: Annotated[
-        str, Query(pattern="^(relevance|title|institution_works|2yr_mean_citedness)$")
+        str,
+        Query(
+            pattern="^(relevance|title|publisher|institution_works|quartile|topic|apc|2yr_mean_citedness)$"
+        ),
     ] = "relevance",
+    dir: Annotated[str | None, Query(pattern="^(asc|desc)$")] = None,
     cursor: str | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     include_facets: bool = True,
@@ -159,8 +164,10 @@ async def search_journals(
             topic=topic,
             publisher=publisher,
             has_apc=has_apc,
+            has_ut_works=has_ut_works,
             oa_types=oa_types or None,
             sort=sort,
+            dir=dir,
             cursor=cursor,
             limit=limit,
             include_facets=include_facets,
@@ -196,9 +203,7 @@ async def semantic_search_journals(
 
 
 @router.get("/{issn_l}/similar", response_model=SimilarJournalsBundle)
-async def similar_journals(
-    issn_l: str, session: SessionDep
-) -> SimilarJournalsBundle:
+async def similar_journals(issn_l: str, session: SessionDep) -> SimilarJournalsBundle:
     similar = await search_service.similar_journals(session, issn_l)
     if similar is None:
         raise HTTPException(status_code=404, detail="journal not found")
@@ -219,9 +224,7 @@ async def journal_works(
         raise HTTPException(status_code=404, detail="journal not found")
     ut_rows = await ut_metadata_service.ut_works_for_journal(known)
     return WorksPage(
-        **await detail_enrichment.list_works(
-            session, known, page, page_size, ut_rows=ut_rows
-        )
+        **await detail_enrichment.list_works(session, known, page, page_size, ut_rows=ut_rows)
     )
 
 

@@ -59,13 +59,8 @@ async def main(limit: int | None, batch: int) -> None:
     engine = create_async_engine(get_settings().database_url)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as session:
-        works = {
-            row.issn_l: list(row.titles)
-            for row in (await session.execute(WORKS_SQL)).all()
-        }
-        rows = (
-            await session.execute(select(Journal.issn_l, Journal.title, Journal.topics))
-        ).all()
+        works = {row.issn_l: list(row.titles) for row in (await session.execute(WORKS_SQL)).all()}
+        rows = (await session.execute(select(Journal.issn_l, Journal.title, Journal.topics))).all()
     if limit:
         rows = rows[:limit]
 
@@ -92,10 +87,7 @@ async def main(limit: int | None, batch: int) -> None:
             chunk = keys[start : start + DB_CHUNK]
             await session.execute(
                 update(Journal),
-                [
-                    {"issn_l": k, "embedding": vectors[start + i]}
-                    for i, k in enumerate(chunk)
-                ],
+                [{"issn_l": k, "embedding": vectors[start + i]} for i, k in enumerate(chunk)],
                 execution_options={"synchronize_session": False},
             )
             await session.commit()

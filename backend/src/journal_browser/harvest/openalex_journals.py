@@ -94,8 +94,13 @@ def journal_values(payload: dict[str, Any]) -> dict[str, Any] | None:
     ]
     counts = payload.get("counts_by_year") or []
     # counts_by_year entries are {year, works_count, ...}; latest year with works > 0.
+    # Entries without a year are skipped, not page-aborting KeyErrors.
     last_active = max(
-        (int(e["year"]) for e in counts if int(e.get("works_count") or 0) > 0),
+        (
+            int(e["year"])
+            for e in counts
+            if e.get("year") is not None and int(e.get("works_count") or 0) > 0
+        ),
         default=None,
     )
     works_2020_plus = sum(

@@ -2,7 +2,8 @@
 
 Examples:
     uv run python jobs/harvest_pure.py                      # current year set
-    uv run python jobs/harvest_pure.py --years 2020-2026    # full sweep + retire
+    uv run python jobs/harvest_pure.py --full-sweep         # 2020..now + retire absent
+    uv run python jobs/harvest_pure.py --years 2024-2025    # partial (never retires)
     uv run python jobs/harvest_pure.py --cerif              # CERIF enrichment pass
 """
 
@@ -13,6 +14,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
 from journal_browser.harvest.pure import (
+    FIRST_YEAR,
     harvest_pure_cerif,
     harvest_pure_years,
 )
@@ -30,10 +32,13 @@ async def main(session, limit: int | None, years=None, cerif=False, full_sweep=F
     if cerif:
         stats = await harvest_pure_cerif(session, limit=limit)
     else:
-        if years is None:
+        if full_sweep:
+            # Retirement is only sound against a complete baseline: every
+            # year set 2020..now, not whatever subset --years named.
+            years = list(range(FIRST_YEAR, dt.date.today().year + 1))
+        elif years is None:
             years = [dt.date.today().year]
-        full = full_sweep or len(years) > 1
-        stats = await harvest_pure_years(session, years, limit=limit, full_sweep=full)
+        stats = await harvest_pure_years(session, years, limit=limit, full_sweep=full_sweep)
     print(stats)
     return stats
 

@@ -30,9 +30,7 @@ def _journal_works(issn_l: str):
             # Explicit -> operators (not payload[...][...] subscripts): the
             # subscript form plans as a seq scan and cannot use
             # ix_source_records_works_issn_l.
-            SourceRecord.payload.op("->")("primary_location")
-            .op("->")("source")
-            .op("->>")("issn_l")
+            SourceRecord.payload.op("->")("primary_location").op("->")("source").op("->>")("issn_l")
             == issn_l,
         )
         .order_by(SourceRecord.source_pk, SourceRecord.harvested_at.desc())
@@ -79,9 +77,7 @@ async def list_works(
     if ut_rows is not None:
         items = ut_metadata.merge_work_lists(ut_rows, items)
     return {
-        "items": ut_metadata.sort_work_items(items)[
-            (page - 1) * page_size : page * page_size
-        ],
+        "items": ut_metadata.sort_work_items(items)[(page - 1) * page_size : page * page_size],
         "total": len(items),
         "page": page,
         "page_size": page_size,
@@ -104,9 +100,7 @@ async def twente_metrics(
                 func.avg(fwci),
                 func.count(fwci),
                 func.count(case((rows.c.payload["is_retracted"].astext == "true", 1))),
-                func.coalesce(
-                    func.sum(cast(rows.c.payload["cited_by_count"].astext, Integer)), 0
-                ),
+                func.coalesce(func.sum(cast(rows.c.payload["cited_by_count"].astext, Integer)), 0),
             ).select_from(rows)
         )
     ).one()
@@ -141,9 +135,7 @@ async def openalex_info(session: AsyncSession, issn_l: str) -> dict[str, Any] | 
     )
     if payload is None:
         return None
-    years = [
-        entry["year"] for entry in payload.get("counts_by_year") or [] if entry.get("year")
-    ]
+    years = [entry["year"] for entry in payload.get("counts_by_year") or [] if entry.get("year")]
     topics = sorted(
         payload.get("topics") or [],
         key=lambda t: (t.get("count") is None, -(t.get("count") or 0)),

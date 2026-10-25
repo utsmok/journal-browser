@@ -27,6 +27,9 @@ class JournalListItem(BaseModel):
     quartile: str | None = None
     twoyr_mean_citedness: float | None = None
     oa_type: str = "subscription"
+    # OpenAlex primary topic (first entry of the topics list); None when the
+    # journal has no topics.
+    primary_topic: str | None = None
     # Most-recent OpenAPC evidence; None when the journal has no rows.
     apc_euro_mean: float | None = None
     apc_period: str | None = None
@@ -210,7 +213,6 @@ class JournalDetailResponse(BaseModel):
     deals: list[DealOut] = []
     stats: list[StatsYear] = []
     stats_totals: dict[str, int] = {}
-    trend: list[StatsYear] = []
     scimagojr: list[ScimagojrOut] = []
     apc_aggregates: list[ApcAggregateOut] = []
     apc_evidence: list[ApcEvidenceOut] = []

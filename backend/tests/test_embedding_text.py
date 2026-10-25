@@ -16,9 +16,7 @@ def test_clean_title_falls_back_when_all_stopwords():
 
 def test_embed_text_combines_parts():
     topics = [{"display_name": "Plant Science", "score": 0.9}]
-    text = embed_text(
-        "Journal of Nematology", topics, ["A very cited worm paper"]
-    )
+    text = embed_text("Journal of Nematology", topics, ["A very cited worm paper"])
     assert text == "nematology | Plant Science | A very cited worm paper"
 
 
