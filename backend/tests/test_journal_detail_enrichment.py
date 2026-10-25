@@ -304,9 +304,10 @@ async def test_detail_enrichment(api):
     assert openalex["first_publication_year"] == 2019
     assert openalex["last_publication_year"] == 2023
     assert [t["display_name"] for t in openalex["topics"]] == ["Big", "Small", "NullCount"]
-    # Hierarchy objects pass through verbatim where the source has them.
+    # Hierarchy objects pass through verbatim where the source has them;
+    # absent hierarchy keys serialize as explicit nulls (typed model).
     assert openalex["topics"][1]["subfield"] == {"id": "sf", "display_name": "S"}
-    assert "subfield" not in openalex["topics"][0]
+    assert openalex["topics"][0]["subfield"] is None
 
     assert body["openaire"] == {"matched_works": 2}
 

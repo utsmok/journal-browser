@@ -20,6 +20,7 @@ import { useJournal, useJournalWorks, useSimilar } from "@/hooks/use-api";
 import {
   errorMessage,
   type Attribution,
+  type DealLink,
   type DealOut,
   type JournalDetailResponse,
   type OpenalexSource,
@@ -231,11 +232,13 @@ function DealPanel({
         )}
         <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-[var(--border)] pt-3">
           {deal.links?.length
-            ? orderedDealLinks(deal.links).map((link) => (
-                <External key={`${link.category}-${link.url}`} href={link.url}>
-                  {dealLinkLabel(link)}
-                </External>
-              ))
+            ? orderedDealLinks(deal.links)
+                .filter((link): link is DealLink & { url: string } => !!link.url)
+                .map((link) => (
+                  <External key={`${link.category}-${link.url}`} href={link.url}>
+                    {dealLinkLabel(link)}
+                  </External>
+                ))
             : (
               // Old backend: no links[] yet; fall back to the flat URL fields.
               <>

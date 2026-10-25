@@ -21,6 +21,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/journals/semantic-search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Semantic Search Journals
+         * @description Free-text "journals like this description" search over embeddings.
+         */
+        get: operations["semantic_search_journals_api_v1_journals_semantic_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/journals/{issn_l}/similar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Similar Journals */
+        get: operations["similar_journals_api_v1_journals__issn_l__similar_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/journals/{issn_l}/works": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Journal Works */
+        get: operations["journal_works_api_v1_journals__issn_l__works_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/journals/{issn_l}": {
         parameters: {
             query?: never;
@@ -167,6 +221,18 @@ export interface components {
              */
             caveat_codes: string[];
         };
+        /**
+         * DealLinkOut
+         * @description Register link entry ([{url, text, category}], seeded by curation jobs).
+         */
+        DealLinkOut: {
+            /** Url */
+            url?: string | null;
+            /** Text */
+            text?: string | null;
+            /** Category */
+            category?: string | null;
+        };
         /** DealOut */
         DealOut: {
             /** Id */
@@ -213,6 +279,8 @@ export interface components {
             needs_curation: boolean;
             /** Needs Curation Reason */
             needs_curation_reason: string | null;
+            /** Links */
+            links?: components["schemas"]["DealLinkOut"][] | null;
             /**
              * Journal Count
              * @default 0
@@ -313,11 +381,6 @@ export interface components {
                 [key: string]: number;
             };
             /**
-             * Trend
-             * @default []
-             */
-            trend: components["schemas"]["StatsYear"][];
-            /**
              * Scimagojr
              * @default []
              */
@@ -332,6 +395,22 @@ export interface components {
              * @default []
              */
             apc_evidence: components["schemas"]["ApcEvidenceOut"][];
+            openalex?: components["schemas"]["OpenalexInfo"] | null;
+            /**
+             * @default {
+             *       "matched_works": 0
+             *     }
+             */
+            openaire: components["schemas"]["OpenaireInfo"];
+            /**
+             * @default {
+             *       "openalex_matched": 0,
+             *       "fwci_n": 0,
+             *       "retracted": 0,
+             *       "cited_total": 0
+             *     }
+             */
+            twente_metrics: components["schemas"]["TwenteMetrics"];
             /**
              * Attribution
              * @default {}
@@ -373,6 +452,17 @@ export interface components {
             quartile?: string | null;
             /** Twoyr Mean Citedness */
             twoyr_mean_citedness?: number | null;
+            /**
+             * Oa Type
+             * @default subscription
+             */
+            oa_type: string;
+            /** Primary Topic */
+            primary_topic?: string | null;
+            /** Apc Euro Latest */
+            apc_euro_latest?: number | null;
+            /** Apc Period */
+            apc_period?: string | null;
         };
         /** JournalSearchResponse */
         JournalSearchResponse: {
@@ -382,6 +472,11 @@ export interface components {
             total: number;
             /** Next Cursor */
             next_cursor?: string | null;
+            /**
+             * Fuzzy
+             * @default false
+             */
+            fuzzy: boolean;
             /**
              * Facets
              * @default {}
@@ -407,6 +502,65 @@ export interface components {
             /** Url */
             url: string | null;
         };
+        /** OpenaireInfo */
+        OpenaireInfo: {
+            /**
+             * Matched Works
+             * @default 0
+             */
+            matched_works: number;
+        };
+        /**
+         * OpenalexInfo
+         * @description Venue-level OpenAlex source object (topics sorted count desc, nulls last).
+         */
+        OpenalexInfo: {
+            /** Id */
+            id?: string | null;
+            /** Url */
+            url?: string | null;
+            /** Cited By Count */
+            cited_by_count?: number | null;
+            /** Works Count */
+            works_count?: number | null;
+            /** Host Organization Name */
+            host_organization_name?: string | null;
+            /** First Publication Year */
+            first_publication_year?: number | null;
+            /** Last Publication Year */
+            last_publication_year?: number | null;
+            /**
+             * Topics
+             * @default []
+             */
+            topics: components["schemas"]["OpenalexTopicOut"][];
+        };
+        /**
+         * OpenalexTopicOut
+         * @description Topic entry of an OpenAlex source object (sorted count desc).
+         */
+        OpenalexTopicOut: {
+            /** Id */
+            id?: string | null;
+            /** Display Name */
+            display_name?: string | null;
+            /** Count */
+            count?: number | null;
+            /** Score */
+            score?: number | null;
+            /** Subfield */
+            subfield?: {
+                [key: string]: unknown;
+            } | null;
+            /** Field */
+            field?: {
+                [key: string]: unknown;
+            } | null;
+            /** Domain */
+            domain?: {
+                [key: string]: unknown;
+            } | null;
+        };
         /** ScimagojrOut */
         ScimagojrOut: {
             /** Year */
@@ -417,6 +571,40 @@ export interface components {
             best_quartile: string | null;
             /** H Index */
             h_index: number | null;
+        };
+        /** SimilarJournalItem */
+        SimilarJournalItem: {
+            /** Issn L */
+            issn_l: string;
+            /** Title */
+            title: string | null;
+            /** Publisher Name */
+            publisher_name: string | null;
+            /** Quartile */
+            quartile: string | null;
+            /** Is Oa */
+            is_oa: boolean | null;
+            /** Deal Covered */
+            deal_covered: boolean;
+            /** Twente Works */
+            twente_works: number;
+            /** Shared Topics */
+            shared_topics: number;
+            /** Similarity */
+            similarity?: number | null;
+        };
+        /**
+         * SimilarJournalsBundle
+         * @description Similar-journal lists: UT-publishing venues and deal-covered venues as
+         *     teaser cuts, plus the general list.
+         */
+        SimilarJournalsBundle: {
+            /** Twente */
+            twente: components["schemas"]["SimilarJournalItem"][];
+            /** Deals */
+            deals: components["schemas"]["SimilarJournalItem"][];
+            /** All */
+            all: components["schemas"]["SimilarJournalItem"][];
         };
         /** StatsYear */
         StatsYear: {
@@ -442,6 +630,82 @@ export interface components {
             /** Oa Closed */
             oa_closed: number;
         };
+        /**
+         * TwenteMetrics
+         * @description OpenAlex view of Twente publications in this journal, plus
+         *     ut-metadata-grounded totals when the canonical store is reachable
+         *     (otherwise the ut_* keys are None).
+         */
+        TwenteMetrics: {
+            /**
+             * Openalex Matched
+             * @default 0
+             */
+            openalex_matched: number;
+            /** Fwci Avg */
+            fwci_avg?: number | null;
+            /**
+             * Fwci N
+             * @default 0
+             */
+            fwci_n: number;
+            /**
+             * Retracted
+             * @default 0
+             */
+            retracted: number;
+            /**
+             * Cited Total
+             * @default 0
+             */
+            cited_total: number;
+            /** Ut Total */
+            ut_total?: number | null;
+            /** Ut Retracted */
+            ut_retracted?: number | null;
+            ut_oa?: components["schemas"]["UtOa"] | null;
+        };
+        /**
+         * UtOa
+         * @description ut-metadata oa_status distribution over a journal's UT works.
+         */
+        UtOa: {
+            /**
+             * Gold
+             * @default 0
+             */
+            gold: number;
+            /**
+             * Hybrid
+             * @default 0
+             */
+            hybrid: number;
+            /**
+             * Green
+             * @default 0
+             */
+            green: number;
+            /**
+             * Bronze
+             * @default 0
+             */
+            bronze: number;
+            /**
+             * Diamond
+             * @default 0
+             */
+            diamond: number;
+            /**
+             * Closed
+             * @default 0
+             */
+            closed: number;
+            /**
+             * Unknown
+             * @default 0
+             */
+            unknown: number;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -454,6 +718,47 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** WorkItem */
+        WorkItem: {
+            /** Id */
+            id?: string | null;
+            /** Url */
+            url?: string | null;
+            /** Doi */
+            doi?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Year */
+            year?: number | null;
+            /** Oa Status */
+            oa_status?: string | null;
+            /** Fwci */
+            fwci?: number | null;
+            /**
+             * Cited By Count
+             * @default 0
+             */
+            cited_by_count: number;
+            /** Is Retracted */
+            is_retracted?: boolean | null;
+            /** Type */
+            type?: string | null;
+            /** Work Type */
+            work_type?: string | null;
+            /** In Openalex */
+            in_openalex?: boolean | null;
+        };
+        /** WorksPage */
+        WorksPage: {
+            /** Items */
+            items: components["schemas"]["WorkItem"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
         };
     };
     responses: never;
@@ -468,14 +773,21 @@ export interface operations {
         parameters: {
             query?: {
                 q?: string | null;
+                search_in?: string;
                 deal?: string;
                 oa?: boolean | null;
                 doaj?: boolean | null;
                 quartile?: string | null;
                 topic?: string | null;
+                publisher?: string | null;
+                has_apc?: boolean | null;
+                has_ut_works?: boolean | null;
+                oa_type?: string | null;
                 sort?: string;
+                dir?: string | null;
                 cursor?: string | null;
                 limit?: number;
+                include_facets?: boolean;
             };
             header?: never;
             path?: never;
@@ -490,6 +802,104 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JournalSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    semantic_search_journals_api_v1_journals_semantic_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    similar_journals_api_v1_journals__issn_l__similar_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issn_l: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimilarJournalsBundle"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_works_api_v1_journals__issn_l__works_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                issn_l: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorksPage"];
                 };
             };
             /** @description Validation Error */

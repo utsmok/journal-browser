@@ -8,7 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { Button } from "@/components/ui/button";
 import { useDeals } from "@/hooks/use-api";
-import { errorMessage, type DealOut } from "@/lib/api";
+import {
+  errorMessage,
+  type DealLink,
+  type DealOut,
+} from "@/lib/api";
 import { dealLinkLabel, orderedDealLinks } from "@/lib/deal-links";
 import { cleanProse } from "@/lib/utils";
 
@@ -76,14 +80,16 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
         )}
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
           {deal.links?.length
-            ? orderedDealLinks(deal.links).map((link) => (
-                <a
-                  key={`${link.category}-${link.url}`}
-                  href={link.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-[var(--primary-text)] hover:underline"
-                >
+            ? orderedDealLinks(deal.links)
+                .filter((link): link is DealLink & { url: string } => !!link.url)
+                .map((link) => (
+                  <a
+                    key={`${link.category}-${link.url}`}
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[var(--primary-text)] hover:underline"
+                  >
                   {dealLinkLabel(link)}{" "}
                   <ExternalLink aria-hidden className="size-3" />
                 </a>

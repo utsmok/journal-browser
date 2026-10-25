@@ -284,9 +284,11 @@ class Journal(Base):
     # end of the stats, scimago, and deal-register jobs.
     home_works_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     latest_quartile: Mapped[str | None] = mapped_column(String(4), nullable=True)
-    # Denormalized latest-period OpenAPC mean so the results table can sort
-    # on APC without a correlated subquery per row (same pattern as
-    # latest_quartile); refreshed by harvest.denorm.refresh_apcs.
+    # Denormalized most recent known OpenAPC cost: the highest single
+    # reported APC in the journal's newest period with cost evidence (not a
+    # period mean), so the results table can sort on APC without a
+    # correlated subquery per row (same pattern as latest_quartile);
+    # refreshed by harvest.denorm.refresh_apcs.
     latest_apc_euro: Mapped[float | None] = mapped_column(Numeric, nullable=True)
     deal_covered_home: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")

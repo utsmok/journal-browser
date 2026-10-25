@@ -62,16 +62,18 @@ QUARTILES_SQL = text(
     """
 )
 
-# Mirrors attach_latest_apc semantics: the latest period row wins, even when
-# its euro_mean is NULL (an aggregate row without amounts is still "latest").
+# Mirrors attach_latest_apc semantics: the newest period with a known cost
+# wins, and the value is that period's highest single reported APC (a real
+# observed price — period means average multi-article years).
 RESET_APC_SQL = text("UPDATE journals SET latest_apc_euro = NULL")
 
 APC_SQL = text(
     """
-    UPDATE journals j SET latest_apc_euro = a.euro_mean
+    UPDATE journals j SET latest_apc_euro = a.euro_max
     FROM (
-        SELECT DISTINCT ON (issn_l) issn_l, euro_mean
+        SELECT DISTINCT ON (issn_l) issn_l, euro_max
         FROM journal_apc_aggregates
+        WHERE euro_max IS NOT NULL
         ORDER BY issn_l, period DESC
     ) a
     WHERE j.issn_l = a.issn_l

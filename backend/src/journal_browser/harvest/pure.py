@@ -18,7 +18,6 @@ absent works retired instead of deleting evidence.
 
 import asyncio
 import contextlib
-import datetime as dt
 import logging
 import re
 import time

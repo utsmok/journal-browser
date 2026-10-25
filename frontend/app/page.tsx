@@ -424,26 +424,25 @@ function SearchView() {
         ),
       },
       {
-        accessorKey: "apc_euro_mean",
-        meta: { columnId: "apc" },
+        accessorKey: "apc_euro_latest",
         header: () => (
           <SortHead
             columnId="apc"
             label="APC"
-            title="Average article processing charge reported by OpenAPC. Click to sort, again to reverse, again to reset"
+            title="Latest APC reported to OpenAPC (highest single cost in the journal's newest reporting period). Click to sort, again to reverse, again to reset"
             state={sortRef.current}
           />
         ),
         cell: (info) => {
           const row = info.row.original;
-          if (row.apc_euro_mean == null)
+          if (row.apc_euro_latest == null)
             return <span className="text-[var(--muted-foreground)]">—</span>;
           return (
             <span
               className="tabular-nums"
-              title={`Latest OpenAPC mean${row.apc_period ? ` (${row.apc_period})` : ""}`}
+              title={`Latest APC reported to OpenAPC (period ${row.apc_period ?? "unknown"}; highest single cost)`}
             >
-              ≈ €{formatApc(row.apc_euro_mean)}
+              €{formatApc(row.apc_euro_latest)}
             </span>
           );
         },
@@ -820,8 +819,8 @@ function SearchView() {
                     </div>
                     <div className="mt-1 text-xs tabular-nums text-[var(--muted-foreground)]">
                       {row.twente_works.toLocaleString("en")} Twente works
-                      {row.apc_euro_mean != null &&
-                        ` · APC ≈ €${formatApc(row.apc_euro_mean)}`}
+                      {row.apc_euro_latest != null &&
+                        ` · APC €${formatApc(row.apc_euro_latest)}`}
                     </div>
                   </li>
                 ))}

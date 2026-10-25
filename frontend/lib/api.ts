@@ -8,28 +8,21 @@ type Schemas = components["schemas"];
  * frontend can code against them while the old backend simply omits them.
  */
 export type JournalListItem = Schemas["JournalListItem"] & {
-  apc_euro_mean?: number | null;
+  apc_euro_latest?: number | null;
   apc_period?: number | null;
   oa_type?: ("gold" | "diamond" | "hybrid" | "subscription") | null;
   primary_topic?: string | null;
 };
 
 export type DealLink = {
-  url: string;
-  text: string;
-  category:
-    | "workflow"
-    | "contract"
-    | "contact"
-    | "publisher_page"
-    | "publisher_site"
-    | "journal_browser"
-    | "openaccessnl_doc"
-    | "flyer"
-    | "other";
+  url?: string | null;
+  text?: string | null;
+  category?: string | null;
 };
 
-export type DealOut = Schemas["DealOut"] & { links?: DealLink[] };
+export type DealOut = Omit<Schemas["DealOut"], "links"> & {
+  links?: DealLink[] | null;
+};
 
 export type JournalDetailResponse = Schemas["JournalDetailResponse"] & {
   journal: JournalListItem;

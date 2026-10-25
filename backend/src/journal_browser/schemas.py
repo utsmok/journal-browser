@@ -30,8 +30,9 @@ class JournalListItem(BaseModel):
     # OpenAlex primary topic (first entry of the topics list); None when the
     # journal has no topics.
     primary_topic: str | None = None
-    # Most-recent OpenAPC evidence; None when the journal has no rows.
-    apc_euro_mean: float | None = None
+    # Highest single APC reported in the journal's most recent OpenAPC
+    # period with cost evidence (not a period mean); None without evidence.
+    apc_euro_latest: float | None = None
     apc_period: str | None = None
 
 
@@ -103,6 +104,14 @@ class StatsYear(BaseModel):
     oa_closed: int
 
 
+class DealLinkOut(BaseModel):
+    """Register link entry ([{url, text, category}], seeded by curation jobs)."""
+
+    url: str | None = None
+    text: str | None = None
+    category: str | None = None
+
+
 class DealOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -126,9 +135,21 @@ class DealOut(BaseModel):
     per_year_oa_counts: dict[str, Any] | None
     needs_curation: bool
     needs_curation_reason: str | None
-    # Register links ([{url, text, category}]); None on rows not yet seeded.
-    links: list[dict[str, Any]] | None = None
+    # Register links; None on rows not yet seeded.
+    links: list[DealLinkOut] | None = None
     journal_count: int = 0
+
+
+class OpenalexTopicOut(BaseModel):
+    """Topic entry of an OpenAlex source object (sorted count desc)."""
+
+    id: str | None = None
+    display_name: str | None = None
+    count: int | None = None
+    score: float | None = None
+    subfield: dict[str, Any] | None = None
+    field: dict[str, Any] | None = None
+    domain: dict[str, Any] | None = None
 
 
 class OpenalexInfo(BaseModel):
@@ -141,7 +162,7 @@ class OpenalexInfo(BaseModel):
     host_organization_name: str | None = None
     first_publication_year: int | None = None
     last_publication_year: int | None = None
-    topics: list[Any] = []
+    topics: list[OpenalexTopicOut] = []
 
 
 class OpenaireInfo(BaseModel):

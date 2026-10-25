@@ -247,26 +247,30 @@ def _order(sort: SortKey, subq: Any) -> tuple[Any, str]:
 
 
 async def attach_latest_apc(session: AsyncSession, items: list[dict[str, Any]]) -> None:
-    """Stamps apc_period/apc_euro_mean (most recent OpenAPC period) onto each
-    item dict in place; one keyed query for the whole page."""
+    """Stamps apc_period/apc_euro_latest (highest single reported APC in the
+    journal's newest OpenAPC period with cost evidence) onto each item dict
+    in place; one keyed query for the whole page."""
     apc_rows = (
         await session.execute(
             select(
                 JournalApcAggregate.issn_l,
                 JournalApcAggregate.period,
-                JournalApcAggregate.euro_mean,
+                JournalApcAggregate.euro_max,
             )
-            .where(JournalApcAggregate.issn_l.in_([i["issn_l"] for i in items]))
+            .where(
+                JournalApcAggregate.issn_l.in_([i["issn_l"] for i in items]),
+                JournalApcAggregate.euro_max.is_not(None),
+            )
             .order_by(JournalApcAggregate.issn_l, JournalApcAggregate.period.desc())
         )
     ).all()
     latest: dict[str, tuple[Any, Any]] = {}
     for r in apc_rows:
-        latest.setdefault(r.issn_l, (r.period, r.euro_mean))
+        latest.setdefault(r.issn_l, (r.period, r.euro_max))
     for item in items:
         hit = latest.get(item["issn_l"])
         item["apc_period"] = str(hit[0]) if hit else None
-        item["apc_euro_mean"] = float(hit[1]) if hit and hit[1] is not None else None
+        item["apc_euro_latest"] = float(hit[1]) if hit and hit[1] is not None else None
 
 
 async def search_journals(

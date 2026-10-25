@@ -145,14 +145,26 @@ async def api(db_engine):
                 IssnMap(issn="1234-5678", issn_l="1234-5678", source="test"),
                 IssnMap(issn="5678-4321", issn_l="1234-5678", source="test"),
                 JournalApcAggregate(
-                    issn_l="1515-1515", period=2023, article_count=5, euro_mean=1800.0
+                    issn_l="1515-1515",
+                    period=2023,
+                    article_count=5,
+                    euro_mean=1800.0,
+                    euro_max=2000.0,
                 ),
                 JournalApcAggregate(
-                    issn_l="1515-1515", period=2024, article_count=8, euro_mean=2200.0
+                    issn_l="1515-1515",
+                    period=2024,
+                    article_count=8,
+                    euro_mean=2200.0,
+                    euro_max=2500.0,
                 ),
                 # gold fixture evidence
                 JournalApcAggregate(
-                    issn_l="3333-3333", period=2024, article_count=3, euro_mean=900.0
+                    issn_l="3333-3333",
+                    period=2024,
+                    article_count=3,
+                    euro_mean=900.0,
+                    euro_max=1000.0,
                 ),
             ]
         )
@@ -342,12 +354,14 @@ async def test_apc_fields_on_list_items(api):
     r = await api.get("/api/v1/journals", params={"q": "priced"})
     assert r.status_code == 200
     (item,) = r.json()["items"]
+    # Latest known cost: highest single APC in the newest period with
+    # evidence (2024), not the period mean.
     assert item["apc_period"] == "2024"
-    assert item["apc_euro_mean"] == 2200.0
+    assert item["apc_euro_latest"] == 2500.0
     r = await api.get("/api/v1/journals", params={"q": "quantum studies"})
     (item,) = r.json()["items"]
     assert item["apc_period"] is None
-    assert item["apc_euro_mean"] is None
+    assert item["apc_euro_latest"] is None
 
 
 @requires_db
