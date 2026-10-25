@@ -29,13 +29,24 @@ services:
       # this at a container-reachable address (e.g. host.docker.internal:5434).
       JB_UT_METADATA_DSN: ${JB_UT_METADATA_DSN:-}
       # Deployment levers (see .env.example); defaults fit a Twente instance.
+      # Everything .env.example documents flows through here, so a new
+      # institute only edits .env and re-runs docker compose up.
       JB_INSTITUTION_NAME: ${JB_INSTITUTION_NAME:-University of Twente}
+      JB_INSTITUTION_SHORT: ${JB_INSTITUTION_SHORT:-Twente}
       JB_INSTITUTION_ROR: ${JB_INSTITUTION_ROR:-https://ror.org/006hf6230}
+      JB_LIBRARY_URL: ${JB_LIBRARY_URL:-https://www.utwente.nl/library}
+      JB_OA_GUIDE_URL: ${JB_OA_GUIDE_URL:-https://www.utwente.nl/en/service-portal/university-library/publication-archiving/open-access}
+      JB_SUPPORT_EMAIL: ${JB_SUPPORT_EMAIL:-open-access@utwente.nl}
+      JB_ADMIN_CONTACT: ${JB_ADMIN_CONTACT:-s.mok@utwente.nl}
+      JB_RESEARCH_PORTAL_URL: ${JB_RESEARCH_PORTAL_URL:-https://research.utwente.nl}
       JB_PURE_OAI_BASE_URL: ${JB_PURE_OAI_BASE_URL:-https://ris.utwente.nl/ws/oai}
       JB_OPENAIRE_ORG_ID: ${JB_OPENAIRE_ORG_ID:-}
       JB_CONTACT_EMAIL: ${JB_CONTACT_EMAIL:-}
       JB_DATA_WINDOW_START: ${JB_DATA_WINDOW_START:-2020}
       JB_DATA_WINDOW_END: ${JB_DATA_WINDOW_END:-0}
+      JB_ENABLE_JOURNAL_CITATIONS: ${JB_ENABLE_JOURNAL_CITATIONS:-false}
+      JB_ENABLE_JISC: ${JB_ENABLE_JISC:-false}
+      JB_JISC_API_KEY: ${JB_JISC_API_KEY:-}
       JB_ADMIN_PASSWORD: ${JB_ADMIN_PASSWORD:-}
       OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
     volumes:
@@ -77,12 +88,19 @@ services:
     environment:
       JB_DATABASE_URL: postgresql+asyncpg://journal:journal@db:5432/journalbrowser
       JB_INSTITUTION_NAME: ${JB_INSTITUTION_NAME:-University of Twente}
+      JB_INSTITUTION_SHORT: ${JB_INSTITUTION_SHORT:-Twente}
       JB_INSTITUTION_ROR: ${JB_INSTITUTION_ROR:-https://ror.org/006hf6230}
+      JB_LIBRARY_URL: ${JB_LIBRARY_URL:-https://www.utwente.nl/library}
+      JB_OA_GUIDE_URL: ${JB_OA_GUIDE_URL:-https://www.utwente.nl/en/service-portal/university-library/publication-archiving/open-access}
+      JB_SUPPORT_EMAIL: ${JB_SUPPORT_EMAIL:-open-access@utwente.nl}
+      JB_ADMIN_CONTACT: ${JB_ADMIN_CONTACT:-s.mok@utwente.nl}
+      JB_RESEARCH_PORTAL_URL: ${JB_RESEARCH_PORTAL_URL:-https://research.utwente.nl}
       JB_PURE_OAI_BASE_URL: ${JB_PURE_OAI_BASE_URL:-https://ris.utwente.nl/ws/oai}
       JB_OPENAIRE_ORG_ID: ${JB_OPENAIRE_ORG_ID:-}
       JB_CONTACT_EMAIL: ${JB_CONTACT_EMAIL:-}
       JB_DATA_WINDOW_START: ${JB_DATA_WINDOW_START:-2020}
       JB_DATA_WINDOW_END: ${JB_DATA_WINDOW_END:-0}
+      JB_BOOTSTRAP: ${JB_BOOTSTRAP:-auto}
       OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
     volumes:
       - ./backend/landing:/app/landing
@@ -103,7 +121,19 @@ services:
     restart: unless-stopped
     environment:
       API_PROXY_URL: http://backend:8000
+      # Same institution env as the backend: the root layout seeds the
+      # server render from these, so the first paint names the right
+      # institute even before /meta hydrates.
+      JB_INSTITUTION_NAME: ${JB_INSTITUTION_NAME:-University of Twente}
+      JB_INSTITUTION_SHORT: ${JB_INSTITUTION_SHORT:-Twente}
+      JB_LIBRARY_URL: ${JB_LIBRARY_URL:-https://www.utwente.nl/library}
+      JB_OA_GUIDE_URL: ${JB_OA_GUIDE_URL:-https://www.utwente.nl/en/service-portal/university-library/publication-archiving/open-access}
+      JB_SUPPORT_EMAIL: ${JB_SUPPORT_EMAIL:-open-access@utwente.nl}
+      JB_ADMIN_CONTACT: ${JB_ADMIN_CONTACT:-s.mok@utwente.nl}
+      JB_RESEARCH_PORTAL_URL: ${JB_RESEARCH_PORTAL_URL:-https://research.utwente.nl}
     ports:
+      # 0.0.0.0 on purpose: the frontend is the public surface, published
+      # through the host's reverse proxy; db/backend stay loopback-only.
       - "3000:3000"
     healthcheck:
       test: ["CMD", "wget", "-qO", "-", "http://127.0.0.1:3000/"]

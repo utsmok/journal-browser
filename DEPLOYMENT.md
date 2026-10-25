@@ -33,8 +33,14 @@ follow these values.
 | `JB_ADMIN_CONTACT` | Personal admin contact in footer/About; empty hides the row | `s.mok@utwente.nl` | your choice |
 | `JB_RESEARCH_PORTAL_URL` | Research portal (Pure) link in data-source attributions | `https://research.utwente.nl` | your portal |
 
-The frontend reads these at runtime from `GET /api/v1/meta/freshness`, so
-changing them only needs a backend restart, not an image rebuild.
+The backend serves these from `GET /api/v1/meta/freshness`, and the frontend
+server seeds its first render from the same variables, so a change needs
+`docker compose up -d` (recreating the containers), not an image rebuild.
+
+One display value is baked at build time instead: `NEXT_PUBLIC_SITE_URL`
+(default `https://journalbrowser.samuelmok.cc`) is the public hostname used
+in citation links on journal pages. Set it in `.env` before the first
+`docker compose up -d --build` of a new instance.
 
 ### Harvesting sources
 
@@ -43,7 +49,7 @@ changing them only needs a backend restart, not an image rebuild.
 | `JB_PURE_OAI_BASE_URL` | Your repository's anonymous OAI-PMH endpoint (works data) | `https://ris.utwente.nl/ws/oai` |
 | `JB_OPENAIRE_ORG_ID` | OpenAIRE organization id (`openorgs____::...`). **Required**; unset = the OpenAIRE harvest is off. Not derivable from the ROR — look it up at `api.openaire.eu/graph/v1/organizations?legalName=<name>` | unset |
 | `OPENALEX_API_KEY` | Free OpenAlex key; needed for cursor-paged harvests only | unset |
-| `JB_CONTACT_EMAIL` | Polite-pool identification sent to OpenAlex | unset |
+| `JB_CONTACT_EMAIL` | Polite-pool identification sent to OpenAlex | `s.f.abma@utwente.nl` |
 | `JB_DATA_WINDOW_START` / `JB_DATA_WINDOW_END` | Inclusive publication-year window for every harvest. `END=0` = open (to now). A smaller window makes a deployment lighter (Groningen runs 2025/2025) | `2020` / `0` |
 
 ### Operations
@@ -53,7 +59,7 @@ changing them only needs a backend restart, not an image rebuild.
 | `JB_DATABASE_URL` | Postgres DSN | local default |
 | `JB_ADMIN_PASSWORD` | Admin panel password (`/admin`); empty disables the panel | empty |
 | `JB_BOOTSTRAP` | `auto` (only on an empty DB), `always`, or `off` | `auto` |
-| `JB_LANDING_DIR` | Raw landing zone for downloaded files | `backend/landing` |
+| `JB_LANDING_DIR` | Raw landing zone for downloaded files. Compose pins the bind mount to `./backend/landing`; the variable applies to non-compose runs | `backend/landing` |
 | `JB_UT_METADATA_DSN` | Twente-only: read-only ut-metadata Postgres for canonical works. Leave empty elsewhere; the works endpoints degrade to stats-only | empty |
 
 ## First boot

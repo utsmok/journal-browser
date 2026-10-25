@@ -51,7 +51,7 @@ don't need it.
 ```
 backend/    FastAPI app, harvest jobs, alembic migrations
 frontend/   Next.js app (App Router)
-data/       Scimago seed CSVs
+data/       Scimago seed CSVs (backend/data/scimagojr)
 landing/    Raw harvest files (gitignored) + curation reports
 ```
 
@@ -60,7 +60,8 @@ landing/    Raw harvest files (gitignored) + curation reports
 Prerequisites: `uv`, Node 22+, Docker (for Postgres), or just use compose.
 
 ```bash
-# backend: test suite (spins up its own throwaway Postgres)
+# backend tests: need the compose Postgres on localhost:5433
+# (docker compose up -d db), or set JB_SKIP_DB_TESTS=1
 cd backend && uv run pytest
 
 # frontend

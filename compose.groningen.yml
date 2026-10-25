@@ -50,6 +50,16 @@ services:
       JB_DATA_WINDOW_START: "2025"
       JB_DATA_WINDOW_END: "2025"
 
+
   frontend:
+    environment:
+      # Same RUG values the backend serves; seeds the SSR fallback.
+      JB_INSTITUTION_NAME: University of Groningen
+      JB_INSTITUTION_SHORT: Groningen
+      JB_LIBRARY_URL: https://www.rug.nl/library
+      JB_OA_GUIDE_URL: https://www.rug.nl/library/open-access/
+      JB_SUPPORT_EMAIL: openaccess@rug.nl
+      JB_ADMIN_CONTACT: ""
+      JB_RESEARCH_PORTAL_URL: https://research.rug.nl
     ports: !override
       - "3002:3000"
