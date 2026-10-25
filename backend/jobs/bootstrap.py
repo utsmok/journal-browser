@@ -84,9 +84,7 @@ def _step_after(args: list[str]) -> str:
 async def run_step(name: str, job_args: list[str]) -> bool:
     started = time.monotonic()
     print(f"bootstrap[{name}]: {' '.join(job_args)}", flush=True)
-    proc = await asyncio.create_subprocess_exec(
-        sys.executable, *job_args, cwd=BACKEND_ROOT
-    )
+    proc = await asyncio.create_subprocess_exec(sys.executable, *job_args, cwd=BACKEND_ROOT)
     code = await proc.wait()
     elapsed = time.monotonic() - started
     if code != 0:

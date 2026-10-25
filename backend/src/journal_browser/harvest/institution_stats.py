@@ -103,11 +103,8 @@ async def harvest_institution_stats(
             await ingest.ingest_record(openalex_id_to_pk(payload.get("id")), payload)
 
             year = payload.get("publication_year")
-            if (
-                isinstance(year, int)
-                and settings.data_window_start
-                <= year
-                <= (settings.data_window_end or current_year)
+            if isinstance(year, int) and settings.data_window_start <= year <= (
+                settings.data_window_end or current_year
             ):
                 status = _oa_status(payload)
                 per_year[(year, status)] += 1

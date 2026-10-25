@@ -1,7 +1,7 @@
 """Limitations registry: add Pure/OpenAIRE/Crossref/corpus rows, refresh texts.
 
 Revision ID: 0009_limitations_refresh
-Revises: 0007_corpus_cutoff
+Revises: 0008_search_denorm
 Create Date: 2026-10-23
 """
 

@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db import get_session
 from ..config import get_settings
+from ..db import get_session
 from ..models import (
     ApcEvidence,
     Deal,
@@ -104,7 +104,8 @@ ATTRIBUTION = {
     "openaire": Attribution(source="openaire", url="https://openaire.eu"),
     "works": Attribution(
         # per-institution label; substituted at response time
-        source="", url="https://openalex.org"
+        source="",
+        url="https://openalex.org",
     ),
     "scimagojr": Attribution(
         source="scimagojr",
@@ -418,10 +419,7 @@ async def journal_detail(issn_l: str, session: SessionDep) -> JournalDetailRespo
             ),
             "works": ATTRIBUTION["works"].model_copy(
                 update={
-                    "source": (
-                        f"openalex works of {get_settings().institution_name}"
-                        " publications"
-                    )
+                    "source": (f"openalex works of {get_settings().institution_name} publications")
                 }
             ),
         },
