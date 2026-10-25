@@ -5,22 +5,22 @@ OpenAlex topic names + titles of the journal's 3 most cited works (from the
 works_stats landing store, one pass). Vectors are L2-normalized, so the
 API's cosine-distance ordering is a plain similarity ranking.
 
-Runs on the host (GPU lives there, not in the API container):
+Uses fastembed (same ONNX model as query-time encoding, CPU-only, runs in
+the bootstrap container):
 
-  uv sync --extra embeddings
-  uv run --extra embeddings python jobs/embed_journals.py [--limit N] [--batch 256]
+  uv run python jobs/embed_journals.py [--limit N] [--batch 256]
 """
 
 import argparse
 import asyncio
 
-import torch
+import numpy as np
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
 from journal_browser.models import Journal
-from journal_browser.services.embeddings import MODEL_NAME, embed_text
+from journal_browser.services.embeddings import MODEL_NAME, embed_text, _query_model
 
 #: Top cited works per journal for the text. Single pass over the ~28k
 #: works_stats rows; journals without stored works simply skip this part.
@@ -73,21 +73,22 @@ async def main(limit: int | None, batch: int) -> None:
     skipped = len(rows) - len(texts)
     print(f"embedding {len(texts)} of {len(rows)} journals (skipped: {skipped} without text)")
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"model={MODEL_NAME} device={device}")
-    from sentence_transformers import SentenceTransformer
+    from fastembed import TextEmbedding
 
-    model = SentenceTransformer(MODEL_NAME, device=device)
-    vectors = model.encode(
-        texts, batch_size=batch, normalize_embeddings=True, show_progress_bar=True
-    )
+    model = _query_model if _query_model is not None else TextEmbedding(model_name=MODEL_NAME)
+    print(f"model={MODEL_NAME} backend=fastembed")
+    vectors = np.stack([np.asarray(v) for v in model.embed(texts, batch_size=batch)])
+    vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
 
     async with session_factory() as session:
         for start in range(0, len(keys), DB_CHUNK):
             chunk = keys[start : start + DB_CHUNK]
             await session.execute(
                 update(Journal),
-                [{"issn_l": k, "embedding": vectors[start + i]} for i, k in enumerate(chunk)],
+                [
+                    {"issn_l": k, "embedding": vectors[start + i].tolist()}
+                    for i, k in enumerate(chunk)
+                ],
                 execution_options={"synchronize_session": False},
             )
             await session.commit()

@@ -1,8 +1,8 @@
 """Embedding text construction and query encoding for journal similarity.
 
-Query-time encoding uses fastembed (ONNX on CPU — no torch, so the API
-image stays small); the host-side GPU backfill uses sentence-transformers
-with the same model. Only jobs/embed_journals.py pulls torch in.
+Query-time encoding uses fastembed (ONNX on CPU, no torch, so the API
+image stays small); jobs/embed_journals.py backfills passages with the
+same model via model.embed.
 """
 
 import re
