@@ -29,14 +29,14 @@ except ImportError:  # pragma: no cover
     AireloomClient = None
 
 
-def _org_id() -> str:
+def _org_id() -> str | None:
     """OpenAIRE organization id for the institution harvest.
 
     The OpenAIRE id is NOT derivable from the ROR — it is a lookup, not a
-    transformation. Configure it via JB_OPENAIRE_ORG_ID; the Twente value is
-    the default.
+    transformation. Unset means the harvest is off (find yours at
+    api.openaire.eu/graph/v1/organizations?legalName=<name>).
     """
-    return _settings().openaire_org_id or "openorgs____::604881198363fedbb5d5478f465305f2"
+    return _settings().openaire_org_id or None
 
 
 def _settings() -> Any:
@@ -85,6 +85,8 @@ async def harvest_openaire_products(
     if AireloomClient is None:  # pragma: no cover
         raise RuntimeError("aireloom is not installed")
     org_id = _org_id()
+    if org_id is None:
+        return {"skipped": "JB_OPENAIRE_ORG_ID is not set"}
     filter_set = f"relOrganizationId={org_id}"
     ingest = IngestSession(session)
     config = {"filter_set": filter_set, "page_size": PAGE_SIZE}

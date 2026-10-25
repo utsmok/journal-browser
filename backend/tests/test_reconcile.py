@@ -253,7 +253,7 @@ async def test_consortium_merge_without_members_flagged(maker):
     async with maker() as s3:
         d = await s3.get(Deal, oanl_id)
         assert d.needs_curation is True
-        assert "verify Twente participation" in d.needs_curation_reason
+        assert "verify University of Twente participation" in d.needs_curation_reason
 
 
 async def test_curation_report_lists_unmatched(maker):
@@ -274,7 +274,7 @@ async def test_curation_report_lists_unmatched(maker):
         path = await render_curation_report(s2)
     text = path.read_text()
     assert "no matching JCT agreement" in text
-    assert "not Twente-affiliated" in text  # unmatched JCT row, no Twente membership
+    assert "not affiliated with University of Twente" in text  # unmatched JCT row
     path.unlink()
 
 

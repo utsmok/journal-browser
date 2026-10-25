@@ -148,12 +148,22 @@ PUBLISHER_JOURNAL_PATTERNS = {"acm": ["association for computing machinery%"]}
 ENUMERATION_HINTS = ("University of", "Universiteit", "TU Delft", "TU/e")
 
 
+def _name_variants(home_name: str) -> tuple[str, ...]:
+    """Casefolded spellings the deal pages use for the home institution
+    ("University of Groningen" pages may write "Groningen University")."""
+    variants = [home_name]
+    m = re.match(r"university of (.+)", home_name)
+    if m:
+        variants.append(f"{m.group(1)} university")
+    return tuple(variants)
+
+
 def _participation(conditions_text: str | None, home_name: str) -> str | None:
     """'named', 'consortium', or None (deal not open to the home institute)."""
     text = conditions_text or ""
     if not text.strip():
         return None
-    if home_name in text.casefold():
+    if any(v in text.casefold() for v in _name_variants(home_name)):
         return "named"
     enumerated = any(h in text for h in ENUMERATION_HINTS)
     if not enumerated and "universit" in text.casefold():
@@ -212,7 +222,12 @@ async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
             )
             stats["linked"] += 1
         if linked is not None and has_journals:
-            continue  # already derived on an earlier reconcile
+            # Earlier reconcile already derived this deal; the flag pass
+            # above re-flagged it, so clear it again (idempotent rerun).
+            if deal.id not in protected and deal.needs_curation:
+                deal.needs_curation = False
+                deal.needs_curation_reason = None
+            continue
         pname = (publisher_names.get(deal.publisher_id or 0) or "").strip()
         # openaccess.nl names carry parenthetical sigla ("... (ACS)") that
         # OpenAlex publisher names lack; match on the bare name.
@@ -381,7 +396,7 @@ async def reconcile_deals(session: AsyncSession) -> dict[str, int]:
             deal.needs_curation = True
             deal.needs_curation_reason = (
                 "consortium deal (ukb/surf) without enumerated members; "
-                "verify Twente participation"
+                f"verify {get_settings().institution_name} participation"
             )
         stats["consortium_needs_review"] = len(set(bare) - protected_bare)
     # openaccess.nl-only deals: parse participation + derive publisher
@@ -623,8 +638,8 @@ async def render_curation_report(
     skipped = len(jct_only) - len(relevant)
     if relevant:
         sections.append(
-            "<h2>Twente-relevant JCT agreements with no openaccess.nl deal "
-            "(publisher/duration unmatched)</h2><ul>"
+            f"<h2>{_esc(get_settings().institution_name)}-relevant JCT agreements "
+            "with no openaccess.nl deal (publisher/duration unmatched)</h2><ul>"
             + "".join(
                 f"<li>#{d.id} {_esc(publisher_names.get(d.publisher_id or 0, '?'))} "
                 f"{_esc(d.esac_id)} [{_esc(d.status)}] {_esc(d.duration_text)}</li>"
@@ -634,8 +649,9 @@ async def render_curation_report(
         )
     if skipped:
         sections.append(
-            f"<p>{skipped} JCT agreements are not Twente-affiliated and are out of "
-            "scope for this browser; they stay in the database for provenance.</p>"
+            f"<p>{skipped} JCT agreements are not affiliated with "
+            f"{_esc(get_settings().institution_name)} and are out of scope for this "
+            "browser; they stay in the database for provenance.</p>"
         )
     # Duplicate-agreement guard: enforce_unique_agreement_data runs before
     # the report and returns the purge/flag actions it took.
