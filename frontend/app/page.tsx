@@ -811,8 +811,7 @@ function SearchView() {
                     </Link>
                     <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
                       {row.publisher_name ?? "Unknown publisher"}
-                      {row.apc_euro_mean != null &&
-                        ` · APC ≈ €${formatApc(row.apc_euro_mean)}`}
+                      {row.primary_topic && ` · ${row.primary_topic}`}
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       <DealBadge covered={row.deal_covered} />
@@ -821,8 +820,8 @@ function SearchView() {
                     </div>
                     <div className="mt-1 text-xs tabular-nums text-[var(--muted-foreground)]">
                       {row.twente_works.toLocaleString("en")} Twente works
-                      {row.twoyr_mean_citedness != null &&
-                        ` · ${row.twoyr_mean_citedness.toFixed(1)} citedness`}
+                      {row.apc_euro_mean != null &&
+                        ` · APC ≈ €${formatApc(row.apc_euro_mean)}`}
                     </div>
                   </li>
                 ))}
