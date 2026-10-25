@@ -6,12 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from . import __version__
 from .config import get_settings
 from .db import get_session
-from .routers import deals, journals, meta
+from .routers import admin, deals, journals, meta
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(journals.router)
 api_router.include_router(deals.router)
 api_router.include_router(meta.router)
+api_router.include_router(admin.router)
 
 
 @api_router.get("/healthz")

@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     # Permanent raw landing zone for downloaded files (CSVs, HTML, JSON).
     landing_dir: str = "landing"
 
+    # Admin panel password (/api/v1/admin + /admin). Empty = panel disabled.
+    admin_password: str = ""
+
     # Curation report output path (reconcile job).
     curation_report_path: str = "landing/reports/curation_report.html"
 

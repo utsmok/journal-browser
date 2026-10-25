@@ -36,6 +36,7 @@ services:
       JB_CONTACT_EMAIL: ${JB_CONTACT_EMAIL:-}
       JB_DATA_WINDOW_START: ${JB_DATA_WINDOW_START:-2020}
       JB_DATA_WINDOW_END: ${JB_DATA_WINDOW_END:-0}
+      JB_ADMIN_PASSWORD: ${JB_ADMIN_PASSWORD:-}
       OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
     volumes:
       # Raw landing copies and job logs must survive container rebuilds.
