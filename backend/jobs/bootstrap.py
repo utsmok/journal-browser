@@ -5,7 +5,7 @@ Designed for a fresh database. docker compose boots this once via the
 exist, so restarts are cheap. Every step is an idempotent standalone job; a
 failure stops the run and names the step.
 
-Usage: uv run python jobs/bootstrap.py [--always]
+Usage: uv run python jobs/bootstrap.py [--always] [--from STEP]
 """
 
 import asyncio
@@ -62,18 +62,34 @@ def run_step(name: str, args: list[str]) -> float:
     return elapsed
 
 
+def _step_after(args: list[str]) -> str:
+    """Parse --from STEP; resume runs this step and everything after it."""
+    try:
+        name = args[args.index("--from") + 1]
+    except (IndexError, ValueError):
+        name = ""
+    if name not in dict(STEPS):
+        sys.exit(f"unknown step {name!r}; valid: {', '.join(n for n, _ in STEPS)}")
+    return name
+
+
 async def main() -> None:
     settings = get_settings()
-    mode = "always" if "--always" in sys.argv else settings.bootstrap
+    args = sys.argv[1:]
+    mode = "always" if "--always" in args else settings.bootstrap
+    resume_from = _step_after(args) if "--from" in args else None
     if mode == "off":
         print("bootstrap: off (JB_BOOTSTRAP=off)")
         return
-    if mode == "auto" and await already_bootstrapped():
+    if "--from" not in args and mode == "auto" and await already_bootstrapped():
         print("bootstrap: journals present, nothing to do (use --always to force)")
         return
     started = time.monotonic()
-    for name, args in STEPS:
-        run_step(name, args)
+    for name, job_args in STEPS:
+        if resume_from is not None and name != resume_from:
+            continue
+        resume_from = None
+        run_step(name, job_args)
     print(f"bootstrap: complete in {(time.monotonic() - started) / 60:.0f}m", flush=True)
 
 
