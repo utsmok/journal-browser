@@ -72,3 +72,7 @@ job like `jobs/apply_curation_2026_10_22.py`. This is because it's apparently
 extremely hard for publishers to just give a list of journals that are covered
 in a publishing deal. (yet another reason to get ri.. uh, i mean move to diamond OA)
 
+
+## License
+
+Apache-2.0 — see [LICENSE](LICENSE).
