@@ -265,7 +265,13 @@ class FreshnessEntry(BaseModel):
 
 class FreshnessResponse(BaseModel):
     institution: str
+    institution_short: str
     ror: str
+    library_url: str
+    oa_guide_url: str
+    support_email: str
+    admin_contact: str | None = None
+    research_portal_url: str
     harvests: list[FreshnessEntry]
     # max timestamps (or year/period maxima for yearly tables)
     tables: dict[str, Any] = {}

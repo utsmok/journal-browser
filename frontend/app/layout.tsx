@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { Inter, Montserrat } from "next/font/google";
-import { Github } from "lucide-react";
 import Link from "next/link";
 import "./globals.css";
 
+import { SiteFooter } from "@/components/site-footer";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NavLink } from "@/components/nav-link";
 import { Providers } from "./providers";
@@ -53,65 +53,6 @@ function SiteHeader() {
         <ThemeToggle />
       </div>
     </header>
-  );
-}
-
-const FOOTER_LINKS: {
-  href: string;
-  label: string;
-  icon?: "github";
-}[] = [
-  {
-    href: "https://www.utwente.nl/library",
-    label: "University of Twente Library",
-  },
-  {
-    href: "https://www.utwente.nl/en/service-portal/university-library/publication-archiving/open-access",
-    label: "Open Access publishing guide",
-  },
-  {
-    href: "mailto:open-access@utwente.nl",
-    label: "open-access@utwente.nl",
-  },
-  {
-    href: "mailto:s.mok@utwente.nl",
-    label: "s.mok@utwente.nl (admin)",
-  },
-  {
-    href: "https://github.com/utsmok/journal-browser",
-    label: "Source code on GitHub",
-    icon: "github",
-  },
-];
-
-function SiteFooter() {
-  return (
-    <footer className="mt-auto bg-[var(--secondary)] text-[var(--secondary-foreground)]">
-      <div className="mx-auto max-w-screen-2xl px-4 py-6 text-sm">
-        <ul className="flex flex-wrap items-center gap-x-6 gap-y-1">
-          {FOOTER_LINKS.map((l) => (
-            <li key={l.href} className="flex items-center gap-1">
-              <a
-                href={l.href}
-                {...(l.href.startsWith("mailto:")
-                  ? {}
-                  : { target: "_blank", rel: "noopener noreferrer" })}
-                className="inline-flex items-center gap-1 underline-offset-2 hover:underline"
-              >
-                {l.icon === "github" && (
-                  <Github aria-hidden className="size-4" />
-                )}
-                <span className={l.icon ? "sr-only" : undefined}>{l.label}</span>
-              </a>
-            </li>
-          ))}
-        </ul>
-        <p className="mt-3 text-xs text-white/70">
-          Data: OpenAlex, cOAlition S Journal Checker Tool, openaccess.nl, OpenAPC,
-          Scimago. Links on every page lead to the upstream source.
-        </p>
-      </div>
-    </footer>
   );
 }
 

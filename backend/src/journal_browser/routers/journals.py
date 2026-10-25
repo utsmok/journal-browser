@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
+from ..config import get_settings
 from ..models import (
     ApcEvidence,
     Deal,
@@ -85,7 +86,8 @@ ATTRIBUTION = {
     ),
     "stats": Attribution(
         source="pure (primary) + openalex (cross-check)",
-        url="https://research.utwente.nl",
+        # per-institution research portal; substituted at response time
+        url="",
         caveat_codes=["window-2020", "pure-canon-primary", "institution-affiliation"],
     ),
     "deals": Attribution(
@@ -101,7 +103,8 @@ ATTRIBUTION = {
     "openalex": Attribution(source="openalex", url="https://openalex.org"),
     "openaire": Attribution(source="openaire", url="https://openaire.eu"),
     "works": Attribution(
-        source="openalex works of Twente publications", url="https://openalex.org"
+        # per-institution label; substituted at response time
+        source="", url="https://openalex.org"
     ),
     "scimagojr": Attribution(
         source="scimagojr",
@@ -408,5 +411,18 @@ async def journal_detail(issn_l: str, session: SessionDep) -> JournalDetailRespo
         twente_metrics=TwenteMetrics(
             **await detail_enrichment.twente_metrics(session, journal.issn_l, ut_rows)
         ),
-        attribution=ATTRIBUTION,
+        attribution={
+            **ATTRIBUTION,
+            "stats": ATTRIBUTION["stats"].model_copy(
+                update={"url": get_settings().research_portal_url}
+            ),
+            "works": ATTRIBUTION["works"].model_copy(
+                update={
+                    "source": (
+                        f"openalex works of {get_settings().institution_name}"
+                        " publications"
+                    )
+                }
+            ),
+        },
     )

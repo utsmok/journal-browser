@@ -17,6 +17,7 @@ import { SourceNote } from "@/components/source-note";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useJournal, useJournalWorks, useSimilar } from "@/hooks/use-api";
+import { useSiteMeta } from "@/hooks/use-site-meta";
 import {
   errorMessage,
   type Attribution,
@@ -293,6 +294,7 @@ function PublicationsCard({
   openalex: OpenalexSource | null;
   worksNote: Partial<Attribution>;
 }) {
+  const site = useSiteMeta();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -323,7 +325,7 @@ function PublicationsCard({
   return (
     <CollapsibleCard
       id="publications"
-      title="Publications (Twente)"
+      title={`Publications (${site.short})`}
       description={
         <p className="text-pretty text-sm text-[var(--muted-foreground)]">
           University corpus (Pure), all years; citations and FWCI from OpenAlex
@@ -337,7 +339,7 @@ function PublicationsCard({
         ) : works.length === 0 ? (
           // Also the pre-integration state: old backends 404 on /works.
           <p className="text-[var(--muted-foreground)]">
-            No Twente publications in the university corpus for this journal.
+            No {site.name} publications in the university corpus for this journal.
           </p>
         ) : (
           <ul className="divide-y divide-[var(--border)]">
@@ -547,6 +549,7 @@ function SectionNav({ sections }: { sections: { id: string; label: string }[] })
 }
 
 function JournalPageInner() {
+  const site = useSiteMeta();
   const params = useParams<{ issn_l: string }>();
   const issnL = params?.issn_l ? decodeURIComponent(params.issn_l) : undefined;
   const backHref = useLastSearchHref();
@@ -697,8 +700,8 @@ function JournalPageInner() {
               title="Open access deal"
               contentClassName="text-sm text-[var(--muted-foreground)]"
             >
-                No current open access deal covering this journal for
-                University of Twente authors. Check{" "}
+                No current open access deal covering this journal for{" "}
+                {site.name} authors. Check{" "}
                 <External href="https://www.openaccess.nl">openaccess.nl</External>{" "}
                 and the{" "}
                 <External href="https://journalcheckertool.org">
@@ -793,7 +796,7 @@ function JournalPageInner() {
               <>
                 Open access per year{" "}
                 <span className="text-sm font-normal text-[var(--muted-foreground)]">
-                  (Twente, 2020+)
+                  ({site.short}, 2020+)
                 </span>
               </>
             }
@@ -806,7 +809,7 @@ function JournalPageInner() {
                 </p>
               )}
               <p className="mt-3 text-sm">
-                {totals.pure_canon.toLocaleString("en")} UT works total since
+                {totals.pure_canon.toLocaleString("en")} {site.short} works total since
                 2020 <span className="text-[var(--muted-foreground)]">(Pure)</span>{" "}
                 · OpenAlex institution filter:{" "}
                 <span className="whitespace-nowrap">
@@ -892,8 +895,8 @@ function JournalPageInner() {
                     )}
                     {twente && (
                       <Metric
-                        label="FWCI (Twente works)"
-                        hint="Field-weighted citation impact of Twente works: citations relative to the average for works of the same year, type, and field. 1.0 means average."
+                        label={`FWCI (${site.short} works)`}
+                        hint={`Field-weighted citation impact of ${site.short} works: citations relative to the average for works of the same year, type, and field. 1.0 means average.`}
                         value={
                           twente.fwci_avg != null && twente.fwci_n > 0
                             ? twente.fwci_avg.toFixed(2)
@@ -912,8 +915,8 @@ function JournalPageInner() {
                     )}
                     {twente && twente.retracted > 0 && (
                       <Metric
-                        label="Retracted Twente works"
-                        hint="Twente works in this journal that OpenAlex marks as retracted."
+                        label={`Retracted ${site.short} works`}
+                        hint={`${site.short} works in this journal that OpenAlex marks as retracted.`}
                         value={twente.retracted.toLocaleString("en")}
                         note={
                           <SourceNote
@@ -926,7 +929,7 @@ function JournalPageInner() {
                     {openaire && (
                       <Metric
                         label="Matched publications"
-                        hint="University of Twente publications that OpenAIRE matched to this journal."
+                        hint={`${site.name} publications that OpenAIRE matched to this journal.`}
                         value={openaire.matched_works.toLocaleString("en")}
                         note={
                           <SourceNote
@@ -1008,7 +1011,7 @@ function JournalPageInner() {
                 )}
                 {data.apc_evidence.length > 0 && (
                   <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-                    {data.apc_evidence.length} Twente APC{" "}
+                    {data.apc_evidence.length} {site.short} APC{" "}
                     {data.apc_evidence.length === 1 ? "record" : "records"}{" "}
                     (latest{" "}
                     {data.apc_evidence[0].period ?? "—"}:{" "}
@@ -1037,18 +1040,18 @@ function JournalPageInner() {
               [
                 {
                   key: "twente",
-                  heading: "Twente publishes here",
-                  note: "Nearest neighbors that carry at least one University of Twente publication.",
+                  heading: `${site.short} publishes here`,
+                  note: `Nearest neighbors that carry at least one ${site.name} publication.`,
                 },
                 {
                   key: "deals",
                   heading: "Covered by a publication deal",
-                  note: "Nearest neighbors with a current open access deal for Twente authors.",
+                  note: `Nearest neighbors with a current open access deal for ${site.short} authors.`,
                 },
                 {
                   key: "all",
                   heading: "Most similar overall",
-                  note: "Nearest neighbors by research-profile similarity alone, regardless of deals or Twente output.",
+                  note: `Nearest neighbors by research-profile similarity alone, regardless of deals or ${site.short} output.`,
                 },
               ] as const
             ).map(
@@ -1081,9 +1084,9 @@ function JournalPageInner() {
                             {s.twente_works > 0 && (
                               <span
                                 className="text-xs text-[var(--muted-foreground)]"
-                                title="Known University of Twente publications in this journal"
+                                title={`Known ${site.name} publications in this journal`}
                               >
-                                {s.twente_works.toLocaleString("en")} UT{" "}
+                                {s.twente_works.toLocaleString("en")} {site.short}{" "}
                                 {s.twente_works === 1 ? "publication" : "publications"}
                               </span>
                             )}

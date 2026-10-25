@@ -32,6 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useSiteMeta } from "@/hooks/use-site-meta";
 import { useFacets, useJournals } from "@/hooks/use-api";
 import { errorMessage, type JournalListItem, type SearchIn, type SortKey } from "@/lib/api";
 
@@ -129,6 +130,7 @@ function SearchView() {
   const sp = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const site = useSiteMeta();
 
   const spQ = sp.get("q") ?? "";
   // A browse-all with no query has nothing to rank, so Twente works is the
@@ -400,7 +402,7 @@ function SearchView() {
           <SortHead
             columnId="twente_works"
             label="Works"
-            title="University of Twente publications in this journal, 2020 onwards. Click to sort, again to reverse, again to reset"
+            title={`${site.name} publications in this journal, 2020 onwards. Click to sort, again to reverse, again to reset`}
             state={sortRef.current}
           />
         ),
@@ -468,7 +470,7 @@ function SearchView() {
         },
       },
     ],
-    [],
+    [site],
   );
 
   // Backend fields the generated types trail (see lib/api.ts).
@@ -548,7 +550,7 @@ function SearchView() {
         </h1>
         <p className="mb-6 max-w-2xl text-[var(--muted-foreground)]">
           Search journals to see whether they are covered by an open access
-          deal, what publishing there costs, and how the University of Twente
+          deal, what publishing there costs, and how the {site.name}{" "}
           publishes in them.
         </p>
         <form
@@ -657,7 +659,9 @@ function SearchView() {
                 >
                   {SORTS.map((s) => (
                     <option key={s.value} value={s.value}>
-                      {s.label}
+                      {s.value === "institution_works"
+                        ? `${site.short} works`
+                        : s.label}
                     </option>
                   ))}
                 </select>
@@ -818,7 +822,7 @@ function SearchView() {
                       <QuartileBadge quartile={row.quartile ?? null} />
                     </div>
                     <div className="mt-1 text-xs tabular-nums text-[var(--muted-foreground)]">
-                      {row.twente_works.toLocaleString("en")} Twente works
+                      {row.twente_works.toLocaleString("en")} {site.short} works
                       {row.apc_euro_latest != null &&
                         ` · APC €${formatApc(row.apc_euro_latest)}`}
                     </div>

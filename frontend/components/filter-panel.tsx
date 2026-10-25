@@ -2,6 +2,7 @@ import { ChevronDown } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { ACCESS_TEXT, DealGlyph, LockIcon, QuartileGlyph } from "@/components/badges";
+import { useSiteMeta } from "@/hooks/use-site-meta";
 
 const OA_TYPE_LABELS: Record<string, string> = {
   gold: "Gold OA",
@@ -216,20 +217,17 @@ function facetLook(key: string, value: string): { icon: ReactNode; tint: string 
 
 /** How each facet group behaves; shown as hover text on the group header. */
 const GROUP_HINTS: Record<string, string> = {
-  deal: "Does a University of Twente open access deal cover APCs in this journal? One choice; click it again to clear.",
   oa: "Is the journal open access as a whole (any OA type)? One choice; click it again to clear.",
   oa_type: "How the journal makes content open access. You can combine several types; click a selected type to remove it.",
   doaj: "Is the journal listed in DOAJ, the quality-controlled open access directory? One choice; click it again to clear.",
   quartile: "SCImago impact quartile of the journal in its subject category. One choice; click it again to clear.",
   has_apc: "Has OpenAPC recorded article processing charges for this journal? One choice; click it again to clear.",
-  has_ut_works: "Has the University of Twente published in this journal (2020 onwards)? One choice; click it again to clear.",
   topic: "OpenAlex topic of the journal's works. One choice; click it again to clear.",
   publisher: "The journal's publisher. One choice; click it again to clear.",
 };
 
 /** Definitions per facet option, shown as hover text on the control. */
 const FACET_TITLES: Record<string, string> = {
-  "deal:covered": "APCs for corresponding UT authors are covered, fully or partly, by a deal.",
   "oa:true": "The journal is fully or partly open access.",
   "oa:false": "Subscription journal with no open access.",
   "oa_type:gold": "Every article is published open access on the journal's own site.",
@@ -241,12 +239,30 @@ const FACET_TITLES: Record<string, string> = {
   "quartile:Q1": "Top 25% of its SCImago subject category by citation metrics.",
   "quartile:Q2": "Second quarter (25-50%) of its SCImago subject category.",
   "quartile:Q3": "Third quarter (50-75%) of its SCImago subject category.",
-  "quartile:Q4": "Last quarter (75-100%) of its SCImago subject category.",
+  "quartile:Q4": "Last quarter (75%) of its SCImago subject category by citation metrics.",
   "has_apc:true": "OpenAPC has recorded APCs paid for articles in this journal.",
   "has_apc:false": "No APC records for this journal in OpenAPC.",
-  "has_ut_works:true": "The University of Twente has at least one publication in this journal since 2020.",
-  "has_ut_works:false": "No known University of Twente publications in this journal since 2020.",
 };
+
+/** Hints that name the institution, resolved per render. */
+function groupHint(key: string, name: string) {
+  if (key === "deal")
+    return `Does a ${name} open access deal cover APCs in this journal? One choice; click it again to clear.`;
+  if (key === "has_ut_works")
+    return `Has ${name} published in this journal (2020 onwards)? One choice; click it again to clear.`;
+  return GROUP_HINTS[key];
+}
+
+function facetTitle(key: string, value: string, name: string, short: string) {
+  const k = `${key}:${value}`;
+  if (k === "deal:covered")
+    return `APCs for corresponding ${short} authors are covered, fully or partly, by a deal.`;
+  if (k === "has_ut_works:true")
+    return `${name} has at least one publication in this journal since 2020.`;
+  if (k === "has_ut_works:false")
+    return `No known ${name} publications in this journal since 2020.`;
+  return FACET_TITLES[k];
+}
 
 function FacetGroup({
   group,
@@ -257,6 +273,7 @@ function FacetGroup({
   onToggle: (key: string, value: string) => void;
   variant: "chips" | "rows";
 }) {
+  const site = useSiteMeta();
   const { key, label, values, activeValues, defaultOpen } = group;
   const chips = variant === "chips";
   const focus =
@@ -274,7 +291,7 @@ function FacetGroup({
     // open never changes value, so React leaves the native toggle alone.
     <details open={defaultOpen} className="group" role="group" aria-label={`Filter by ${label}`}>
       <summary
-        title={GROUP_HINTS[key]}
+        title={groupHint(key, site.name)}
         className={`${focus} flex cursor-pointer select-none list-none items-center justify-between gap-2 rounded py-1.5 text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] [&::-webkit-details-marker]:hidden`}
       >
         <span>{label}</span>
@@ -348,7 +365,7 @@ function FacetGroup({
             </>
           );
           const optionTitle =
-            FACET_TITLES[`${key}:${f.value}`] ??
+            facetTitle(key, f.value, site.name, site.short) ??
             (f.value.length > 24 ? f.value : undefined);
           return zero ? (
             <span key={f.value} aria-disabled="true" title={optionTitle} className={className}>
@@ -387,6 +404,7 @@ export function FilterPanel({
   onToggle: (key: string, value: string) => void;
   variant: "chips" | "rows";
 }) {
+  const site = useSiteMeta();
   const topicValues = topValues(facets.topic, selection.topic);
   const publisherValues = topValues(facets.publisher, selection.publisher);
 
@@ -462,12 +480,12 @@ export function FilterPanel({
     },
     {
       key: "has_ut_works",
-      label: "Twente works",
+      label: `${site.short} works`,
       defaultOpen: true,
       values: Object.entries(facets.ut_works ?? {}).map(([value, count]) => ({
         value,
         count,
-        label: value === "true" ? "Has UT works" : "No UT works",
+        label: value === "true" ? `Has ${site.short} works` : `No ${site.short} works`,
       })),
       activeValues: selection.hasUtWorks !== null ? [selection.hasUtWorks] : [],
     },

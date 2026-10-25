@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useFreshness, useLimitations } from "@/hooks/use-api";
+import { useSiteMeta } from "@/hooks/use-site-meta";
 import { errorMessage } from "@/lib/api";
 
 type SourceInfo = {
@@ -24,14 +25,15 @@ type SourceInfo = {
 const SOURCES: SourceInfo[] = [
   {
     name: "Pure",
-    url: "https://research.utwente.nl",
-    role: "UT publication counts per journal. Pure is the primary figure, and the OpenAlex count below is its cross-check.",
+    // Real portal URL comes from settings at render time (site.researchPortalUrl).
+    url: "",
+    role: "Institution publication counts per journal. Pure is the primary figure, and the OpenAlex count below is its cross-check.",
     table: "institution_works_stats",
   },
   {
     name: "OpenAlex",
     url: "https://openalex.org",
-    role: "Journal records, open access status, citation metrics, and the cross-check on UT publication counts.",
+    role: "Journal records, open access status, citation metrics, and the cross-check on institution publication counts.",
     table: "journals",
   },
   {
@@ -84,6 +86,7 @@ function fmt(value: unknown) {
 }
 
 export default function AboutPage() {
+  const site = useSiteMeta();
   const freshnessQuery = useFreshness();
   const limitationsQuery = useLimitations();
   const freshness = freshnessQuery.data;
@@ -106,7 +109,7 @@ export default function AboutPage() {
         <h1 className="mb-2 text-3xl font-bold">About this browser</h1>
         <p className="max-w-2xl text-[var(--muted-foreground)]">
           A journal browser for{" "}
-          <strong>{freshness?.institution ?? "University of Twente"}</strong>
+          <strong>{freshness?.institution ?? site.name}</strong>
           {freshness?.ror && (
             <>
               {" "}
@@ -176,13 +179,17 @@ export default function AboutPage() {
                 <Github aria-hidden className="size-4" />
                 GitHub
               </a>
-              . Technical questions? Contact the admin,{" "}
-              <a
-                href="mailto:s.mok@utwente.nl"
-                className="text-[var(--primary-text)] underline-offset-2 hover:underline"
-              >
-                s.mok@utwente.nl
-              </a>
+              {site.adminContact && (
+                <>
+                  . Technical questions? Contact the admin,{" "}
+                  <a
+                    href={`mailto:${site.adminContact}`}
+                    className="text-[var(--primary-text)] underline-offset-2 hover:underline"
+                  >
+                    {site.adminContact}
+                  </a>
+                </>
+              )}{" "}
               . For open access policy questions, see the library links in the
               footer.
             </p>
@@ -202,7 +209,7 @@ export default function AboutPage() {
                 >
                   <span>
                     <a
-                      href={info.url}
+                      href={info.url || site.researchPortalUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-0.5 font-semibold text-[var(--primary-text)] hover:underline"
@@ -352,24 +359,24 @@ export default function AboutPage() {
         <Card>
           <CardContent className="pt-6 text-sm">
             <p className="mb-2 text-[var(--muted-foreground)]">
-              Questions about open access publishing at the University of
-              Twente? The library can help.
+              Questions about open access publishing at {site.name}? The
+              library can help.
             </p>
             <ul className="flex flex-wrap gap-x-6 gap-y-1">
               <li>
                 <a
-                  href="https://www.utwente.nl/library"
+                  href={site.libraryUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-0.5 text-[var(--primary-text)] hover:underline"
                 >
-                  University of Twente Library{" "}
+                  {site.name} Library{" "}
                   <ExternalLink aria-hidden className="size-3" />
                 </a>
               </li>
               <li>
                 <a
-                  href="https://www.utwente.nl/en/service-portal/university-library/publication-archiving/open-access"
+                  href={site.oaGuideUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-0.5 text-[var(--primary-text)] hover:underline"
@@ -380,10 +387,10 @@ export default function AboutPage() {
               </li>
               <li>
                 <a
-                  href="mailto:open-access@utwente.nl"
+                  href={`mailto:${site.supportEmail}`}
                   className="text-[var(--primary-text)] hover:underline"
                 >
-                  open-access@utwente.nl
+                  {site.supportEmail}
                 </a>
               </li>
             </ul>

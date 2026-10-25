@@ -17,7 +17,13 @@ services:
     environment:
       JB_DATABASE_URL: postgresql+asyncpg://journal:journal@db:5432/journalbrowser
       JB_INSTITUTION_NAME: University of Groningen
+      JB_INSTITUTION_SHORT: Groningen
       JB_INSTITUTION_ROR: https://ror.org/012p63287
+      JB_LIBRARY_URL: https://www.rug.nl/library
+      JB_OA_GUIDE_URL: https://www.rug.nl/library/open-access/
+      JB_SUPPORT_EMAIL: openaccess@rug.nl
+      JB_ADMIN_CONTACT: ""
+      JB_RESEARCH_PORTAL_URL: https://research.rug.nl
       JB_PURE_OAI_BASE_URL: https://pure.rug.nl/ws/oai
       JB_OPENAIRE_ORG_ID: openorgs____::81371ea94b1a09d3243e73d6ec3527ec
       JB_DATA_WINDOW_START: "2025"
@@ -33,7 +39,13 @@ services:
     environment:
       JB_DATABASE_URL: postgresql+asyncpg://journal:journal@db:5432/journalbrowser
       JB_INSTITUTION_NAME: University of Groningen
+      JB_INSTITUTION_SHORT: Groningen
       JB_INSTITUTION_ROR: https://ror.org/012p63287
+      JB_LIBRARY_URL: https://www.rug.nl/library
+      JB_OA_GUIDE_URL: https://www.rug.nl/library/open-access/
+      JB_SUPPORT_EMAIL: openaccess@rug.nl
+      JB_ADMIN_CONTACT: ""
+      JB_RESEARCH_PORTAL_URL: https://research.rug.nl
       JB_UT_METADATA_DSN: ""
       JB_DATA_WINDOW_START: "2025"
       JB_DATA_WINDOW_END: "2025"

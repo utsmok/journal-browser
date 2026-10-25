@@ -24,17 +24,26 @@ class Settings(BaseSettings):
     )
     cors_origins: list[str] = ["http://localhost:3000"]
 
-    # The browser's home institution. ROR + name are configuration, never
-    # constants: another university sets these two values and nothing else.
+    # The browser's home institution. Another university sets these values
+    # and nothing else; display strings in the frontend come from /meta.
     institution_name: str = "University of Twente"
+    institution_short: str = "Twente"
     institution_ror: str = "https://ror.org/006hf6230"
+    library_url: str = "https://www.utwente.nl/library"
+    oa_guide_url: str = (
+        "https://www.utwente.nl/en/service-portal/university-library/"
+        "publication-archiving/open-access"
+    )
+    support_email: str = "open-access@utwente.nl"
+    # Personal contact shown in the footer; empty = row hidden.
+    admin_contact: str | None = "s.mok@utwente.nl"
+    research_portal_url: str = "https://research.utwente.nl"
     # Resolved OpenAlex institution id (I...). Empty = resolved from the ROR
     # on first harvest and stored in the institutions table.
     institution_openalex_id: str = ""
 
     # OpenAIRE organization id (openorgs____::...) for the product harvest.
-    # Not derivable from the ROR; empty = the Twente id hardcoded in
-    # harvest/openaire.py stays the default.
+    # Not derivable from the ROR; REQUIRED for another institution.
     openaire_org_id: str | None = None
 
     # Permanent raw landing zone for downloaded files (CSVs, HTML, JSON).

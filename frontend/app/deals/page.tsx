@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { Button } from "@/components/ui/button";
 import { useDeals } from "@/hooks/use-api";
+import { useSiteMeta } from "@/hooks/use-site-meta";
 import {
   errorMessage,
   type DealLink,
@@ -17,6 +18,7 @@ import { dealLinkLabel, orderedDealLinks } from "@/lib/deal-links";
 import { cleanProse } from "@/lib/utils";
 
 function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
+  const site = useSiteMeta();
   const capNumbers = Object.entries(deal.cap_numbers ?? {}).sort(
     (a, b) => (parseInt(a[0], 10) || 0) - (parseInt(b[0], 10) || 0),
   );
@@ -33,7 +35,7 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
               Archive
             </Badge>
           ) : (
-            <Badge variant="secondary" title="Current deal: in effect for University of Twente authors.">
+            <Badge variant="secondary" title={`Current deal: in effect for ${site.name} authors.`}>
               Current
             </Badge>
           )}
@@ -135,9 +137,9 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
 }
 
 export default function DealsPage() {
+  const site = useSiteMeta();
   const current = useDeals("current");
   const archive = useDeals("archive");
-
   const section = (
     label: string,
     query: UseQueryResult<DealOut[], Error>,
@@ -147,7 +149,7 @@ export default function DealsPage() {
       <h2 className="mb-1 text-xl font-bold">{label}</h2>
       <p className="mb-4 text-sm text-[var(--muted-foreground)]">
         {query.data
-          ? `${query.data.length} deals covering University of Twente`
+          ? `${query.data.length} deals covering ${site.name}`
           : "Loading…"}
       </p>
       {query.isError ? (
@@ -176,8 +178,8 @@ export default function DealsPage() {
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
       <h1 className="mb-2 text-3xl font-bold">Open access deals</h1>
       <p className="mb-8 max-w-2xl text-[var(--muted-foreground)]">
-        Transformative and read-and-publish agreements relevant to University of
-        Twente authors, with caps, conditions, and workflow summaries.
+        Transformative and read-and-publish agreements relevant to {site.name}{" "}
+        authors, with caps, conditions, and workflow summaries.
       </p>
       {section("Current deals", current)}
       {archive.data?.length === 0 ? (

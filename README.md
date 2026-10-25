@@ -18,6 +18,8 @@ ROR, repository OAI-PMH endpoint, and an OpenAlex key in `.env`, then
    |---|---|---|
    | `JB_INSTITUTION_NAME` | Your institution's English name as deal pages write it | openaccess.nl deal pages |
    | `JB_INSTITUTION_ROR` | Your ROR id | <https://ror.org> search |
+   | `JB_INSTITUTION_SHORT` | Short name for compact UI labels ("Twente works" → "Groningen works") | your choice |
+   | `JB_LIBRARY_URL` etc. | Display links + emails the UI shows (library, OA guide, support, admin, research portal); see `.env.example` | your library's pages |
    | `JB_PURE_OAI_BASE_URL` | Your repository's anonymous OAI-PMH endpoint | Pure: `https://<portal>/ws/oai?verb=Identify` must answer |
    | `JB_OPENAIRE_ORG_ID` | OpenAIRE organization id (unset = OpenAIRE harvest off) | `api.openaire.eu/graph/v1/organizations?legalName=<name>` |
    | `OPENALEX_API_KEY` | Free OpenAlex key for cursor-paged harvests | <https://openalex.org> users page |

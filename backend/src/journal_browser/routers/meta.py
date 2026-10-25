@@ -64,7 +64,13 @@ async def freshness(session: SessionDep) -> FreshnessResponse:
     }
     return FreshnessResponse(
         institution=settings.institution_name,
+        institution_short=settings.institution_short,
         ror=settings.institution_ror,
+        library_url=settings.library_url,
+        oa_guide_url=settings.oa_guide_url,
+        support_email=settings.support_email,
+        admin_contact=settings.admin_contact,
+        research_portal_url=settings.research_portal_url,
         harvests=[
             FreshnessEntry(
                 source=state.source,

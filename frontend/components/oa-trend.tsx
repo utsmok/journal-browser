@@ -1,4 +1,5 @@
 import { OA_STATUS_META, OA_STATUS_ORDER } from "@/components/badges";
+import { useSiteMeta } from "@/hooks/use-site-meta";
 import type { StatsYear } from "@/lib/api";
 
 /**
@@ -7,6 +8,7 @@ import type { StatsYear } from "@/lib/api";
  * closed (top) and sum to that year's works_count.
  */
 export function OaTrend({ stats }: { stats: StatsYear[] }) {
+  const site = useSiteMeta();
   const total = (s: StatsYear) =>
     OA_STATUS_ORDER.reduce((acc, k) => acc + (s[`oa_${k}`] ?? 0), 0);
   const max = Math.max(1, ...stats.map(total));
@@ -16,7 +18,7 @@ export function OaTrend({ stats }: { stats: StatsYear[] }) {
       <div
         className="flex h-44 items-end gap-2"
         role="img"
-        aria-label="Open access status of Twente publications per year"
+        aria-label={`Open access status of ${site.short} publications per year`}
       >
         {stats.map((s) => {
           const t = total(s);
