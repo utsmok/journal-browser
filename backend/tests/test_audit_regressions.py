@@ -70,7 +70,7 @@ async def test_backfill_flags_resets_empty_counts_by_year(db):
         ]
     )
     await db.commit()
-    await db.execute(backfill.UPDATE)
+    await db.execute(backfill.UPDATE, {"window_start": 2020, "window_end": 9999})
     await db.execute(backfill.RESET_EMPTY)
     one = await db.scalar(select(Journal).where(Journal.issn_l == "0000-0001"))
     two = await db.scalar(select(Journal).where(Journal.issn_l == "0000-0002"))

@@ -56,9 +56,8 @@ TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
 HTTP_RETRY_SLEEP = 5.0
 HTTP_RETRY_MAX_SLEEP = 60.0
 
-# Full sweep = every year set from FIRST_YEAR to the current year. Drives the
-# retirement pass (works absent from a full sweep are marked, never deleted).
-FIRST_YEAR = 2020
+# Full sweep = every configured window year (settings.data_window_*). Drives
+# the retirement pass (works absent from a full sweep are marked, never deleted).
 
 
 class PureOaiError(RuntimeError):
@@ -690,16 +689,16 @@ async def harvest_pure_years(
 ) -> dict[str, Any]:
     """Harvest publications:year{Y} sets (oai_dc) into source_records + ut_works.
 
-    One harvest_run per year set. full_sweep=True covers every year 2020..now
-    in one go and retires works absent from the sweep afterwards — so `years`
-    MUST span that whole window, or retirement would stamp works that were
-    simply not part of this (partial) run.
+    One harvest_run per year set. full_sweep=True covers every configured
+    window year in one go and retires works absent from the sweep afterwards
+    — so `years` MUST span the whole window, or retirement would stamp works
+    that were simply not part of this (partial) run.
     """
     if full_sweep:
-        expected = set(range(FIRST_YEAR, dt.date.today().year + 1))
+        expected = set(get_settings().window_years)
         if set(years) != expected:
             raise ValueError(
-                f"full_sweep requires every year set {FIRST_YEAR}..now, got {sorted(years)}"
+                f"full_sweep requires every window year {sorted(expected)}, got {sorted(years)}"
             )
     stats: dict[str, Any] = {"sets": {}}
     totals = {"records_seen": 0, "records_stored": 0, "parse_failures": 0}

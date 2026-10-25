@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 SOURCE = "openalex"
 ENTITY_TYPE = "sources"
 PER_PAGE = 100
-DATA_WINDOW_START = 2020
 
 
 def openalex_id_to_pk(openalex_id: str | None) -> str:
@@ -103,8 +102,12 @@ def journal_values(payload: dict[str, Any]) -> dict[str, Any] | None:
         ),
         default=None,
     )
+    settings = get_settings()
+    window_end = settings.data_window_end or 9999
     works_2020_plus = sum(
-        int(e.get("works_count") or 0) for e in counts if int(e.get("year") or 0) >= 2020
+        int(e.get("works_count") or 0)
+        for e in counts
+        if settings.data_window_start <= int(e.get("year") or 0) <= window_end
     )
     return dict(
         issn_l=issn_l,

@@ -26,7 +26,8 @@ UPDATE = text(
                  ) AS latest,
                sum(CASE WHEN e->>'works_count' ~ '^[0-9]+$'
                         THEN (e->>'works_count')::int ELSE 0 END)
-                 FILTER (WHERE (e->>'year')::int >= 2020) AS total
+                 FILTER (WHERE (e->>'year')::int >= :window_start
+                         AND (e->>'year')::int <= :window_end) AS total
         FROM journals j, jsonb_array_elements(j.counts_by_year) e
         WHERE e->>'year' ~ '^[0-9]+$'
         GROUP BY j.issn_l
@@ -56,9 +57,14 @@ RESET_EMPTY = text(
 
 
 async def main() -> None:
-    engine = create_async_engine(get_settings().database_url)
+    settings = get_settings()
+    engine = create_async_engine(settings.database_url)
+    params = {
+        "window_start": settings.data_window_start,
+        "window_end": settings.data_window_end or 9999,
+    }
     async with engine.begin() as conn:
-        result = await conn.execute(UPDATE)
+        result = await conn.execute(UPDATE, params)
         reset = await conn.execute(RESET_EMPTY)
     await engine.dispose()
     print(json.dumps({"rows_updated": result.rowcount, "rows_reset": reset.rowcount}))

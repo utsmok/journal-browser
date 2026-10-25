@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
 from journal_browser.harvest.pure import (
-    FIRST_YEAR,
     harvest_pure_cerif,
     harvest_pure_years,
 )
@@ -34,8 +33,8 @@ async def main(session, limit: int | None, years=None, cerif=False, full_sweep=F
     else:
         if full_sweep:
             # Retirement is only sound against a complete baseline: every
-            # year set 2020..now, not whatever subset --years named.
-            years = list(range(FIRST_YEAR, dt.date.today().year + 1))
+            # configured window year, not whatever subset --years named.
+            years = get_settings().window_years
         elif years is None:
             years = [dt.date.today().year]
         stats = await harvest_pure_years(session, years, limit=limit, full_sweep=full_sweep)

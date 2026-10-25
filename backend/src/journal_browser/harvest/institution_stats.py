@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 SOURCE = "openalex"
 ENTITY_TYPE = "works_stats"
-WINDOW_START = "2020-01-01"
+
 PER_PAGE = 100
 
 
@@ -61,8 +61,9 @@ async def harvest_institution_stats(
         filter_set = f"institutions.id={inst_id}"
         await session.commit()
 
+        window_from = f"{settings.data_window_start}-01-01"
         ingest = IngestSession(session)
-        config = {"filter": filter_set, "from": WINDOW_START}
+        config = {"filter": filter_set, "from": window_from}
         await ingest.start_run(SOURCE, ENTITY_TYPE, filter_set, config)
 
         async def commit_page(_page: int, _cursor: str | None) -> None:
@@ -78,7 +79,15 @@ async def harvest_institution_stats(
         # work payload lands verbatim in source_records.
         async for item in client.works.iterate(
             page_size=PER_PAGE,
-            filters={"institutions.id": inst_id, "from_publication_date": WINDOW_START},
+            filters={
+                "institutions.id": inst_id,
+                "from_publication_date": window_from,
+                **(
+                    {"to_publication_date": f"{settings.data_window_end}-12-31"}
+                    if settings.data_window_end
+                    else {}
+                ),
+            },
             on_page=commit_page,
         ):
             payload = (
@@ -94,7 +103,12 @@ async def harvest_institution_stats(
             await ingest.ingest_record(openalex_id_to_pk(payload.get("id")), payload)
 
             year = payload.get("publication_year")
-            if isinstance(year, int) and 2020 <= year <= current_year:
+            if (
+                isinstance(year, int)
+                and settings.data_window_start
+                <= year
+                <= (settings.data_window_end or current_year)
+            ):
                 status = _oa_status(payload)
                 per_year[(year, status)] += 1
                 source_pk = openalex_id_to_pk(
@@ -198,8 +212,7 @@ async def write_pure_canon_stats(session: AsyncSession, institution_id: int) -> 
 async def _corresponding_counts(client: AlethecaClient, inst_id: str) -> dict[int, int]:
     """Native per-year corresponding-author counts (known approximation)."""
     counts: dict[int, int] = {}
-    current_year = datetime.now(UTC).year
-    for year in range(2020, current_year + 1):
+    for year in get_settings().window_years:
         try:
             counts[year] = await client.works.count(
                 filters={
