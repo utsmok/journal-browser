@@ -138,6 +138,7 @@ async def _override_protected(session: AsyncSession, deal_ids: list[int]) -> set
     )
     return {int(k) for (k,) in rows.all()}
 
+
 #: Journal-publisher name patterns for openaccess.nl deal publishers whose
 #: name in the OpenAlex journals universe differs from the canonical name.
 PUBLISHER_JOURNAL_PATTERNS = {"acm": ["association for computing machinery%"]}
@@ -377,18 +378,18 @@ async def reconcile_deals(session: AsyncSession) -> dict[str, int]:
             )
         )
     ).scalars()
-    bare = [
-        d.id
-        for d in merged_canonicals
-        if d.id not in twente_deal_ids
-        and not (
-            await session.execute(
-                select(DealInstitution.deal_id)
-                .join(Institution, Institution.id == DealInstitution.institution_id)
-                .where(DealInstitution.deal_id == d.id, Institution.is_home.is_(True))
-            )
-        ).first()
-    ]
+    # Refresh the home-linked set: a canonical that just absorbed a
+    # home-linked JCT row is home-linked now, even though the set computed
+    # before the merge loop does not contain it.
+    if home_id is not None:
+        twente_deal_ids = set(
+            (
+                await session.execute(
+                    select(DealInstitution.deal_id).where(DealInstitution.institution_id == home_id)
+                )
+            ).scalars()
+        )
+    bare = [d.id for d in merged_canonicals if d.id not in twente_deal_ids]
     if bare:
         protected_bare = await _override_protected(session, bare)
         for did in set(bare) - protected_bare:
@@ -418,18 +419,14 @@ async def _merge(session: AsyncSession, canonical: Deal, jct: Deal) -> None:
     # cannot take the value while this row holds it.
     dupes_j = select(DealJournal.issn).where(DealJournal.deal_id == canonical.id)
     await session.execute(
-        sa_delete(DealJournal).where(
-            DealJournal.deal_id == jct.id, DealJournal.issn.in_(dupes_j)
-        )
+        sa_delete(DealJournal).where(DealJournal.deal_id == jct.id, DealJournal.issn.in_(dupes_j))
     )
     await session.execute(
         update(DealJournal).where(DealJournal.deal_id == jct.id).values(deal_id=canonical.id)
     )
     # The derive pass may have linked the canonical already; drop the JCT
     # row's duplicates before re-pointing the rest.
-    dupes = select(DealInstitution.institution_id).where(
-        DealInstitution.deal_id == canonical.id
-    )
+    dupes = select(DealInstitution.institution_id).where(DealInstitution.deal_id == canonical.id)
     await session.execute(
         sa_delete(DealInstitution).where(
             DealInstitution.deal_id == jct.id,
@@ -440,6 +437,19 @@ async def _merge(session: AsyncSession, canonical: Deal, jct: Deal) -> None:
         update(DealInstitution)
         .where(DealInstitution.deal_id == jct.id)
         .values(deal_id=canonical.id)
+    )
+    # A canonical override on the same field would collide with the re-keyed
+    # row under uq_manual_overrides; the canonical row wins, the shadow's
+    # duplicate field drops.
+    dup_fields = select(ManualOverride.field).where(
+        ManualOverride.table_name == "deals", ManualOverride.row_key == str(canonical.id)
+    )
+    await session.execute(
+        sa_delete(ManualOverride).where(
+            ManualOverride.table_name == "deals",
+            ManualOverride.row_key == str(jct.id),
+            ManualOverride.field.in_(dup_fields),
+        )
     )
     await session.execute(
         update(ManualOverride)
@@ -489,9 +499,7 @@ async def enforce_unique_agreement_data(session: AsyncSession) -> list[dict[str,
         return actions
     lists: dict[int, frozenset[str]] = {}
     for d in jct_deals:
-        rows = await session.execute(
-            select(DealJournal.issn).where(DealJournal.deal_id == d.id)
-        )
+        rows = await session.execute(select(DealJournal.issn).where(DealJournal.deal_id == d.id))
         issns = frozenset(r[0] for r in rows.all() if r[0])
         if len(issns) >= 50:
             lists[d.id] = issns
@@ -514,7 +522,6 @@ async def enforce_unique_agreement_data(session: AsyncSession) -> list[dict[str,
             for low, high, o in ((ida, idb, overlap), (idb, ida, overlap)):
                 if low not in best or o > best[low][0]:
                     best[low] = (o, high)
-    actions: list[dict[str, str]] = []
     for loser_id, (overlap, keeper_id) in sorted(best.items()):
         if loser_id not in by_id:
             continue
@@ -523,9 +530,7 @@ async def enforce_unique_agreement_data(session: AsyncSession) -> list[dict[str,
         )
         if loser is None:
             continue
-        await session.execute(
-            sa_delete(DealJournal).where(DealJournal.deal_id == loser.id)
-        )
+        await session.execute(sa_delete(DealJournal).where(DealJournal.deal_id == loser.id))
         reason = (
             f"JCT data CSV is a duplicate of {keeper.esac_id} "
             f"({overlap:.0%} identical ISSNs) - upstream index error; "
@@ -566,12 +571,16 @@ async def _resolve_pair(
     dominant = (row[0] or "").casefold() if row else ""
     if not dominant:
         return a, None
-    names = {a.id: (await _publisher_names(session)).get(a.publisher_id) or "",
-             b.id: (await _publisher_names(session)).get(b.publisher_id) or ""}
+    names = {
+        a.id: (await _publisher_names(session)).get(a.publisher_id) or "",
+        b.id: (await _publisher_names(session)).get(b.publisher_id) or "",
+    }
+
     def _matches(d: Deal) -> bool:
         name = names[d.id].casefold()
         alias = (_canonical_name(_code_of(d.esac_id), name) or "").casefold()
         return dominant in name or dominant in alias or alias in dominant
+
     a_match, b_match = _matches(a), _matches(b)
     if a_match and not b_match:
         return a, b
