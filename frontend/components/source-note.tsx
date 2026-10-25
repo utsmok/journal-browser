@@ -42,7 +42,7 @@ export function SourceNote({ source, url, codes, className }: SourceNoteProps) {
         <span
           role="tooltip"
           id={tooltipId}
-          className="absolute bottom-full left-0 z-30 mb-1.5 hidden w-80 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-3 text-left text-xs shadow-lg after:absolute after:-bottom-1.5 after:left-0 after:right-0 after:h-1.5 after:content-[''] group-hover:block group-focus-within:block group-focus:block"
+          className="absolute bottom-full left-0 z-50 mb-1.5 hidden w-80 max-w-[calc(100vw-2.5rem)] rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-3 text-left text-xs shadow-lg after:absolute after:-bottom-1.5 after:left-0 after:right-0 after:h-1.5 after:content-[''] group-hover:block group-focus-within:block group-focus:block"
         >
           {caveats.map((c) => (
             <span key={c.code} className="mb-2 block last:mb-0">

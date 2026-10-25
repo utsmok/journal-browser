@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Github } from "lucide-react";
 
 import { SourceNote } from "@/components/source-note";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useFreshness, useLimitations } from "@/hooks/use-api";
+import { errorMessage } from "@/lib/api";
 
 type SourceInfo = {
   name: string;
@@ -83,8 +84,10 @@ function fmt(value: unknown) {
 }
 
 export default function AboutPage() {
-  const { data: freshness } = useFreshness();
-  const { data: limitations } = useLimitations();
+  const freshnessQuery = useFreshness();
+  const limitationsQuery = useLimitations();
+  const freshness = freshnessQuery.data;
+  const limitations = limitationsQuery.data;
 
   const tables = (freshness?.tables ?? {}) as Record<string, unknown>;
 
@@ -126,6 +129,66 @@ export default function AboutPage() {
           : find where to publish, what a deal covers, and how much it costs.
         </p>
       </header>
+
+      {(freshnessQuery.isError || limitationsQuery.isError) && (
+        <p aria-live="polite" className="text-sm text-[var(--destructive)]">
+          {errorMessage(
+            freshnessQuery.isError ? freshnessQuery.error : limitationsQuery.error,
+          )}{" "}
+          <button
+            type="button"
+            onClick={() => {
+              freshnessQuery.refetch();
+              limitationsQuery.refetch();
+            }}
+            className="underline underline-offset-2 hover:no-underline"
+          >
+            Retry
+          </button>
+        </p>
+      )}
+
+      <section>
+        <Card>
+          <CardContent className="space-y-3 pt-6 text-sm">
+            <p>
+              This browser is a modernisation of the{" "}
+              <a
+                href="https://library.wur.nl/WebQuery/utbrowser?q=*"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[var(--primary-text)] underline-offset-2 hover:underline"
+              >
+                WUR journal browser
+              </a>
+              , rebuilt on fully open data, released as open source, and easy to
+              self-host.
+            </p>
+            <p>
+              The code is open source under the Apache-2.0 license and available
+              on{" "}
+              <a
+                href="https://github.com/utsmok/journal-browser"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline"
+              >
+                <Github aria-hidden className="size-4" />
+                GitHub
+              </a>
+              . Technical questions? Contact the admin,{" "}
+              <a
+                href="mailto:s.mok@utwente.nl"
+                className="text-[var(--primary-text)] underline-offset-2 hover:underline"
+              >
+                s.mok@utwente.nl
+              </a>
+              . For open access policy questions, see the library links in the
+              footer.
+            </p>
+          </CardContent>
+        </Card>
+      </section>
 
       <section>
         <h2 className="mb-3 text-xl font-bold">Data sources</h2>
@@ -174,6 +237,9 @@ export default function AboutPage() {
           <Card>
             <CardContent className="overflow-x-auto pt-6">
               <table className="w-full text-xs">
+                <caption className="sr-only">
+                  Most recent harvest runs per source, entity, and filter set, with status and finish time
+                </caption>
                 <thead>
                   <tr className="text-left text-[var(--muted-foreground)]">
                     <th className="py-1 pr-3 font-medium">Source</th>
@@ -236,6 +302,11 @@ export default function AboutPage() {
           caveats behind the sources, and each entry links to the data provider.
         </p>
         <div className="grid gap-4 md:grid-cols-2">
+          {(limitations ?? []).length === 0 && !limitationsQuery.isPending ? (
+            <p className="text-sm text-[var(--muted-foreground)]">
+              No limitations registered.
+            </p>
+          ) : null}
           {(limitations ?? []).map((l) => (
             <Card key={l.code}>
               <CardHeader className="pb-3">

@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "tw-animate-css";
 
 /* Theme switching is class-based; the dark: variant must match the class
    itself and everything inside it. */
@@ -11,6 +10,8 @@
   names, so components never hardcode colors.
 */
 :root {
+  /* Native widgets, scrollbars, and carets follow the active theme. */
+  color-scheme: light;
   --background: #f8f9fc;
   --foreground: #12110c;
   --card: #ffffff;
@@ -38,6 +39,7 @@
 
 /* Dark palette: same tokens, hand-rolled (no next-themes). */
 .dark {
+  color-scheme: dark;
   --background: #101318;
   --foreground: #e6e8eb;
   --card: #171b21;
@@ -86,6 +88,14 @@
 @layer base {
   * {
     border-color: var(--border);
+  }
+  /* Browser surfaces the components never draw: selection, scrollbar, caret. */
+  ::selection {
+    background-color: color-mix(in srgb, var(--primary) 28%, transparent);
+    color: var(--foreground);
+  }
+  html {
+    scrollbar-color: color-mix(in srgb, var(--foreground) 35%, transparent) transparent;
   }
   body {
     background-color: var(--background);

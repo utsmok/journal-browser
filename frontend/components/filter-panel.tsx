@@ -1,4 +1,7 @@
 import { ChevronDown } from "lucide-react";
+import type { ReactNode } from "react";
+
+import { ACCESS_TEXT, DealGlyph, LockIcon, QuartileGlyph } from "@/components/badges";
 
 const OA_TYPE_LABELS: Record<string, string> = {
   gold: "Gold OA",
@@ -7,11 +10,11 @@ const OA_TYPE_LABELS: Record<string, string> = {
   subscription: "Subscription (closed)",
 };
 
-export type FacetValue = { value: string; count?: number; label?: string };
+type FacetValue = { value: string; count?: number; label?: string };
 
-export type FacetsData = Record<string, Record<string, number>>;
+type FacetsData = Record<string, Record<string, number>>;
 
-export type FilterSelection = {
+type FilterSelection = {
   deal: string;
   oa: string | null;
   doaj: string | null;
@@ -19,6 +22,7 @@ export type FilterSelection = {
   topic: string;
   publisher: string;
   hasApc: string | null;
+  hasUtWorks: string | null;
   /** Multi-select: values OR together (single-select groups do not). */
   oaTypes: string[];
 };
@@ -45,6 +49,205 @@ function topValues(
   return values;
 }
 
+/** No deal: the agreement document with a slash through it. */
+function NoDealGlyph() {
+  return (
+    <>
+      <rect
+        x={1.6}
+        y={2.6}
+        width={9.4}
+        height={11}
+        rx={1.6}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.8}
+      />
+      <path
+        d="M3.8 4.4 L9.8 13.2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+    </>
+  );
+}
+
+/** DOAJ: the directory volume it is registered in. */
+function DoajGlyph() {
+  return (
+    <>
+      <rect
+        x={2.2}
+        y={2.2}
+        width={9.6}
+        height={11.6}
+        rx={1.6}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.8}
+      />
+      <path d="M5.4 2.2 V13.8" stroke="currentColor" strokeWidth={1.8} />
+    </>
+  );
+}
+
+/** APC: the fee note. */
+function ApcGlyph() {
+  return (
+    <>
+      <rect
+        x={1.2}
+        y={4.6}
+        width={13.6}
+        height={6.8}
+        rx={1.6}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.8}
+      />
+      <circle cx={8} cy={8} r={1.7} fill="currentColor" />
+    </>
+  );
+}
+
+function WorksGlyph() {
+  return (
+    <>
+      <rect
+        x={2.8}
+        y={1.6}
+        width={10.4}
+        height={12.8}
+        rx={1.6}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.8}
+      />
+      <path
+        d="M5.6 5.4h4.8M5.6 8h4.8M5.6 10.6h3"
+        stroke="currentColor"
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+    </>
+  );
+}
+
+/**
+ * Active-state tints reuse the AA-audited hue pairs from the status chips:
+ * idle options show a colored icon on neutral ground, selected options fill
+ * with the same hue.
+ */
+const TINTS = {
+  emerald:
+    "border-emerald-300 bg-emerald-100 text-emerald-900 dark:border-emerald-400/40 dark:bg-emerald-400/15 dark:text-emerald-200",
+  amber:
+    "border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-400/40 dark:bg-amber-400/15 dark:text-amber-200",
+  cyan: "border-cyan-300 bg-cyan-100 text-cyan-900 dark:border-cyan-400/40 dark:bg-cyan-400/15 dark:text-cyan-200",
+  blue: "border-blue-300 bg-blue-100 text-blue-900 dark:border-blue-400/40 dark:bg-blue-400/15 dark:text-blue-200",
+  slate: "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-500/40 dark:bg-slate-500/15 dark:text-slate-200",
+  teal: "border-teal-300 bg-teal-100 text-teal-900 dark:border-teal-400/40 dark:bg-teal-400/15 dark:text-teal-200",
+  brand: "border-[#f06e00]/50 bg-[#f06e00]/10 text-[var(--primary-text)] dark:border-[#f06e00]/40 dark:bg-[#f06e00]/15 dark:text-[#ffa25e]",
+};
+
+/** Idle-state icon colors: same hues as the results-list lockups. */
+const FACET_ICON_TEXT: Record<string, string> = {
+  "deal:covered": ACCESS_TEXT.deal,
+  "deal:other": ACCESS_TEXT.closed,
+  "oa:true": ACCESS_TEXT.brand,
+  "oa:false": ACCESS_TEXT.closed,
+  "oa_type:gold": ACCESS_TEXT.gold,
+  "oa_type:diamond": ACCESS_TEXT.diamond,
+  "oa_type:hybrid": ACCESS_TEXT.hybrid,
+  "oa_type:subscription": ACCESS_TEXT.closed,
+  "doaj:true": "text-teal-700 dark:text-teal-300",
+  "doaj:false": ACCESS_TEXT.closed,
+  "has_apc:true": ACCESS_TEXT.brand,
+  "has_apc:false": ACCESS_TEXT.closed,
+  "has_ut_works:true": ACCESS_TEXT.brand,
+  "has_ut_works:false": ACCESS_TEXT.closed,
+  "quartile:Q1": ACCESS_TEXT.brand,
+  "quartile:Q2": ACCESS_TEXT.closed,
+  "quartile:Q3": ACCESS_TEXT.closed,
+  "quartile:Q4": ACCESS_TEXT.closed,
+};
+
+/** Icon + selected tint per facet option; unlisted options stay neutral. */
+function facetLook(key: string, value: string): { icon: ReactNode; tint: string } {
+  switch (`${key}:${value}`) {
+    case "deal:covered":
+      return { icon: <DealGlyph />, tint: TINTS.emerald };
+    case "oa:true":
+      return { icon: <LockIcon state="open" />, tint: TINTS.brand };
+    case "oa:false":
+      return { icon: <LockIcon state="closed" />, tint: TINTS.slate };
+    case "oa_type:gold":
+      return { icon: <LockIcon state="open" />, tint: TINTS.amber };
+    case "oa_type:diamond":
+      return { icon: <LockIcon state="wide" />, tint: TINTS.cyan };
+    case "oa_type:hybrid":
+      return { icon: <LockIcon state="ajar" />, tint: TINTS.blue };
+    case "oa_type:subscription":
+      return { icon: <LockIcon state="closed" />, tint: TINTS.slate };
+    case "doaj:true":
+    case "doaj:false":
+      return { icon: <DoajGlyph />, tint: value === "true" ? TINTS.teal : TINTS.slate };
+    case "has_apc:true":
+    case "has_apc:false":
+      return { icon: <ApcGlyph />, tint: value === "true" ? TINTS.brand : TINTS.slate };
+    case "has_ut_works:true":
+    case "has_ut_works:false":
+      return { icon: <WorksGlyph />, tint: value === "true" ? TINTS.brand : TINTS.slate };
+    default:
+      // The deal facet's negative value is backend-defined; anything that is
+      // not "covered" is a no-deal option.
+      if (key === "deal")
+        return { icon: <NoDealGlyph />, tint: TINTS.slate };
+      if (key === "quartile")
+        return {
+          icon: <QuartileGlyph />,
+          tint: value === "Q1" ? TINTS.brand : TINTS.slate,
+        };
+      return { icon: null, tint: TINTS.brand };
+  }
+}
+
+/** How each facet group behaves; shown as hover text on the group header. */
+const GROUP_HINTS: Record<string, string> = {
+  deal: "Does a University of Twente open access deal cover APCs in this journal? One choice; click it again to clear.",
+  oa: "Is the journal open access as a whole (any OA type)? One choice; click it again to clear.",
+  oa_type: "How the journal makes content open access. You can combine several types; click a selected type to remove it.",
+  doaj: "Is the journal listed in DOAJ, the quality-controlled open access directory? One choice; click it again to clear.",
+  quartile: "SCImago impact quartile of the journal in its subject category. One choice; click it again to clear.",
+  has_apc: "Has OpenAPC recorded article processing charges for this journal? One choice; click it again to clear.",
+  has_ut_works: "Has the University of Twente published in this journal (2020 onwards)? One choice; click it again to clear.",
+  topic: "OpenAlex topic of the journal's works. One choice; click it again to clear.",
+  publisher: "The journal's publisher. One choice; click it again to clear.",
+};
+
+/** Definitions per facet option, shown as hover text on the control. */
+const FACET_TITLES: Record<string, string> = {
+  "deal:covered": "APCs for corresponding UT authors are covered, fully or partly, by a deal.",
+  "oa:true": "The journal is fully or partly open access.",
+  "oa:false": "Subscription journal with no open access.",
+  "oa_type:gold": "Every article is published open access on the journal's own site.",
+  "oa_type:diamond": "Fully open access journal without fees for readers or authors.",
+  "oa_type:hybrid": "Subscription journal where individual articles can be made open access.",
+  "oa_type:subscription": "No open access; reading the published version requires a subscription.",
+  "doaj:true": "Listed in DOAJ, the Directory of Open Access Journals, a quality-controlled registry for open access journals.",
+  "doaj:false": "Not listed in DOAJ; hybrid and subscription journals usually are not.",
+  "quartile:Q1": "Top 25% of its SCImago subject category by citation metrics.",
+  "quartile:Q2": "Second quarter (25-50%) of its SCImago subject category.",
+  "quartile:Q3": "Third quarter (50-75%) of its SCImago subject category.",
+  "quartile:Q4": "Last quarter (75-100%) of its SCImago subject category.",
+  "has_apc:true": "OpenAPC has recorded APCs paid for articles in this journal.",
+  "has_apc:false": "No APC records for this journal in OpenAPC.",
+  "has_ut_works:true": "The University of Twente has at least one publication in this journal since 2020.",
+  "has_ut_works:false": "No known University of Twente publications in this journal since 2020.",
+};
+
 function FacetGroup({
   group,
   onToggle,
@@ -58,26 +261,20 @@ function FacetGroup({
   const chips = variant === "chips";
   const focus =
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2";
-  // Chips match the historical inline look; rows are the sidebar's
-  // Scopus-style full-width options (label left, count right).
-  const styles = chips
-    ? {
-        active: `rounded-full bg-[var(--primary)] px-3 py-1 text-xs font-medium text-[var(--primary-foreground)] ${focus}`,
-        idle: `rounded-full border border-[var(--border)] bg-[var(--card)] px-3 py-1 text-xs text-[var(--muted-foreground)] hover:border-[var(--primary)] hover:text-[var(--foreground)] ${focus}`,
-        zero:
-          "cursor-not-allowed rounded-full border border-[var(--border)] bg-[var(--muted)] px-3 py-1 text-xs text-[var(--muted-foreground)] opacity-60",
-      }
-    : {
-        active: `flex w-full items-center justify-between gap-3 rounded-md bg-[var(--primary)] px-2.5 py-1.5 text-xs font-medium text-[var(--primary-foreground)] ${focus}`,
-        idle: `flex w-full items-center justify-between gap-3 rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--muted-foreground)] hover:border-[var(--primary)] hover:text-[var(--foreground)] ${focus}`,
-        zero:
-          "flex w-full cursor-not-allowed items-center justify-between gap-3 rounded-md px-2.5 py-1.5 text-xs text-[var(--muted-foreground)] opacity-60",
-      };
+  // One look for both variants: a squared control (not the old pill) that
+  // turns into the value's own hue when selected. Chips lay out inline,
+  // rows span the sidebar with the count on the right.
+  const layout = chips
+    ? "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs"
+    : "flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-1.5 text-xs";
+  const idleClasses = `${layout} border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:border-[var(--primary)] hover:text-[var(--foreground)] ${focus}`;
+  const zeroClasses = `${layout} cursor-not-allowed border border-transparent opacity-60`;
 
   return (
     // open never changes value, so React leaves the native toggle alone.
     <details open={defaultOpen} className="group" role="group" aria-label={`Filter by ${label}`}>
       <summary
+        title={GROUP_HINTS[key]}
         className={`${focus} flex cursor-pointer select-none list-none items-center justify-between gap-2 rounded py-1.5 text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] [&::-webkit-details-marker]:hidden`}
       >
         <span>{label}</span>
@@ -105,32 +302,57 @@ function FacetGroup({
           // Facets with zero results must not invite a click that empties the
           // list, so they render inert.
           const zero = !active && f.count === 0;
+          const look = facetLook(key, f.value);
           const className = active
-            ? styles.active
+            ? `${layout} ${look.tint} border font-medium ${focus}`
             : zero
-              ? styles.zero
-              : styles.idle;
-          const labelNode = chips ? (
-            (f.label ?? (
-              <span className="inline-block max-w-[14rem] truncate align-middle">
-                {f.value}
-              </span>
-            ))
-          ) : (
-            <span className="min-w-0 truncate">{f.label ?? f.value}</span>
-          );
+              ? zeroClasses
+              : idleClasses;
+          const iconNode = look.icon ? (
+            // The glyphs are bare SVG shapes; they need an svg context here
+            // (inside badges they live inside the lockup's own svg).
+            <svg
+              aria-hidden
+              viewBox="0 0 16 16"
+              className={`h-4 w-auto shrink-0 overflow-visible ${
+                active ? "" : FACET_ICON_TEXT[`${key}:${f.value}`] ?? ""
+              }`}
+            >
+              {look.icon}
+            </svg>
+          ) : null;
+          const labelText = f.label ?? f.value;
           const countNode =
             f.count !== undefined ? (
               <span
-                className={chips ? "ml-1 tabular-nums" : "shrink-0 tabular-nums"}
+                className={`shrink-0 tabular-nums ${
+                  chips ? "ml-0.5 opacity-80" : ""
+                }`}
               >
                 {f.count.toLocaleString("en")}
               </span>
             ) : null;
-          return zero ? (
-            <span key={f.value} aria-disabled="true" className={className}>
-              {labelNode}
+          const inner = chips ? (
+            <>
+              {iconNode}
+              <span className="max-w-[14rem] truncate">{labelText}</span>
               {countNode}
+            </>
+          ) : (
+            <>
+              <span className="flex min-w-0 items-center gap-1.5">
+                {iconNode}
+                <span className="truncate">{labelText}</span>
+              </span>
+              {countNode}
+            </>
+          );
+          const optionTitle =
+            FACET_TITLES[`${key}:${f.value}`] ??
+            (f.value.length > 24 ? f.value : undefined);
+          return zero ? (
+            <span key={f.value} aria-disabled="true" title={optionTitle} className={className}>
+              {inner}
             </span>
           ) : (
             <button
@@ -138,11 +360,10 @@ function FacetGroup({
               type="button"
               onClick={() => onToggle(key, f.value)}
               aria-pressed={active}
-              title={f.value.length > 24 ? f.value : undefined}
+              title={optionTitle}
               className={className}
             >
-              {labelNode}
-              {countNode}
+              {inner}
             </button>
           );
         })}
@@ -238,6 +459,17 @@ export function FilterPanel({
         label: value === "true" ? "APC data known" : "No APC data",
       })),
       activeValues: selection.hasApc !== null ? [selection.hasApc] : [],
+    },
+    {
+      key: "has_ut_works",
+      label: "Twente works",
+      defaultOpen: true,
+      values: Object.entries(facets.ut_works ?? {}).map(([value, count]) => ({
+        value,
+        count,
+        label: value === "true" ? "Has UT works" : "No UT works",
+      })),
+      activeValues: selection.hasUtWorks !== null ? [selection.hasUtWorks] : [],
     },
     ...(topicValues.length > 0
       ? [

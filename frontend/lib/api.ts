@@ -1,6 +1,6 @@
 import type { components } from "./api-types";
 
-export type Schemas = components["schemas"];
+type Schemas = components["schemas"];
 
 /**
  * The generated types trail the backend contract (api-types.ts is
@@ -11,6 +11,7 @@ export type JournalListItem = Schemas["JournalListItem"] & {
   apc_euro_mean?: number | null;
   apc_period?: number | null;
   oa_type?: ("gold" | "diamond" | "hybrid" | "subscription") | null;
+  primary_topic?: string | null;
 };
 
 export type DealLink = {
@@ -39,7 +40,7 @@ export type JournalDetailResponse = Schemas["JournalDetailResponse"] & {
 
 export type JournalSearchResponse = Schemas["JournalSearchResponse"];
 
-export type SimilarJournal = {
+type SimilarJournal = {
   issn_l: string;
   title: string | null;
   publisher_name: string | null;
@@ -81,7 +82,7 @@ export type OpenalexSource = {
 };
 
 /** Twente-affiliated work metrics computed from OpenAlex works. */
-export type TwenteMetrics = {
+type TwenteMetrics = {
   openalex_matched: number;
   fwci_avg: number | null;
   fwci_n: number;
@@ -101,7 +102,7 @@ export type TwenteMetrics = {
   } | null;
 };
 
-export type JournalWork = {
+type JournalWork = {
   id: string;
   url: string | null;
   doi: string | null;
@@ -126,17 +127,17 @@ export type WorksPage = {
 
 export type LimitationOut = Schemas["LimitationOut"];
 export type FreshnessResponse = Schemas["FreshnessResponse"];
-export type FreshnessEntry = Schemas["FreshnessEntry"];
 export type StatsYear = Schemas["StatsYear"];
-export type ScimagojrOut = Schemas["ScimagojrOut"];
-export type ApcAggregateOut = Schemas["ApcAggregateOut"];
-export type ApcEvidenceOut = Schemas["ApcEvidenceOut"];
 export type Attribution = Schemas["Attribution"];
 
 export type SortKey =
   | "relevance"
   | "title"
+  | "publisher"
   | "institution_works"
+  | "quartile"
+  | "topic"
+  | "apc"
   | "2yr_mean_citedness";
 
 export type SearchIn = "all" | "title" | "publisher" | "topic";
@@ -150,17 +151,20 @@ export type JournalSearchParams = {
   quartile?: string;
   publisher?: string;
   has_apc?: boolean;
+  has_ut_works?: boolean;
   topic?: string;
   /** Comma-separated multi-select, OR'd server-side. */
   oa_type?: string;
   sort?: SortKey;
+  /** Sort direction; omitted = each key's natural direction. */
+  dir?: "asc" | "desc";
   cursor?: string;
   limit?: number;
   include_facets?: boolean;
 };
 
 /** Error with an HTTP status; message stays technical (console only). */
-export class ApiError extends Error {
+class ApiError extends Error {
   status: number;
   constructor(status: number, path: string) {
     super(`API ${status} on ${path}`);

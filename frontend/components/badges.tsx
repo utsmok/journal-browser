@@ -1,35 +1,199 @@
-import { Badge } from "@/components/ui/badge";
+/**
+ * Access lockups: single-family SVG badges that replace generic pills.
+ *
+ * One visual system, borrowed from the old journal browser's integrated
+ * text-and-lock icon: a padlock whose shackle opens progressively with
+ * access level (closed → ajar → swung → wide), a baseline-aligned
+ * Montserrat wordmark, and one color per access type. Rendered bare (no
+ * pill container) so rows read as icon lockups, not chips.
+ */
 
-export function DealBadge({ covered }: { covered: boolean }) {
-  if (!covered) return null;
-  return <Badge variant="secondary">OA deal</Badge>;
+const WORDMARK_FONT = "var(--font-montserrat), var(--font-inter), ui-sans-serif, sans-serif";
+
+type LockState = "closed" | "ajar" | "open" | "wide";
+
+/** Shackle transforms: the lock opens progressively from closed to wide. */
+const SHACKLE_TRANSFORM: Record<LockState, string | undefined> = {
+  closed: undefined,
+  ajar: "translate(-0.4 -2.4) rotate(-6 7 3)",
+  open: "translate(-1 -3) rotate(-20 4 6)",
+  wide: "translate(-2 -3.4) rotate(-38 4 6)",
+};
+
+/** Icon-only access-type colors, shared with the facet filters. */
+export const ACCESS_TEXT = {
+  gold: "text-amber-700 dark:text-amber-300",
+  diamond: "text-cyan-700 dark:text-cyan-300",
+  hybrid: "text-[#14274c] dark:text-[#8fb3e8]",
+  closed: "text-slate-500 dark:text-slate-300",
+  deal: "text-emerald-700 dark:text-emerald-300",
+  brand: "text-[var(--primary-text)]",
+} as const;
+
+export function LockIcon({ state }: { state: LockState }) {
+  return (
+    <>
+      <rect x={1} y={7} width={10} height={7} rx={1.8} fill="currentColor" />
+      <path
+        d="M4 6.6 V4.2 a3 3 0 0 1 6 0 V6.6"
+        transform={SHACKLE_TRANSFORM[state]}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+    </>
+  );
+}
+
+/** Author copy in a repository: document tray with an arrow dropping in. */
+function GreenGlyph() {
+  return (
+    <>
+      <path
+        d="M2 10.5 V12.6 a1.4 1.4 0 0 0 1.4 1.4 h7.2 a1.4 1.4 0 0 0 1.4 -1.4 V10.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M7 3 V9.5 M4.5 7 L7 9.5 L9.5 7"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </>
+  );
+}
+
+/** Free to read at the publisher: an eye. */
+function BronzeGlyph() {
+  return (
+    <>
+      <path
+        d="M1 8 C3 4.5 5 3 7 3 C9 3 11 4.5 13 8 C11 11.5 9 13 7 13 C5 13 3 11.5 1 8 Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+      />
+      <circle cx={7} cy={8} r={2} fill="currentColor" />
+    </>
+  );
+}
+
+/** UT open access deal: signed agreement with a check. */
+export function DealGlyph() {
+  return (
+    <>
+      <rect
+        x={1.6}
+        y={2.6}
+        width={9.4}
+        height={11}
+        rx={1.6}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.8}
+      />
+      <path
+        d="M4.2 8.2 L6.1 10.1 L9.4 5.9"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </>
+  );
+}
+
+/** Journal rank podium: ascending bars; color carries the Q1 emphasis. */
+export function QuartileGlyph() {
+  return (
+    <>
+      <rect x={1.2} y={9.8} width={2.8} height={4.2} rx={1} fill="currentColor" />
+      <rect x={5.1} y={7.4} width={2.8} height={6.6} rx={1} fill="currentColor" />
+      <rect x={9} y={4.6} width={2.8} height={9.4} rx={1} fill="currentColor" />
+    </>
+  );
+}
+
+function Lockup({
+  label,
+  width,
+  title,
+  className,
+  children,
+}: {
+  label: string;
+  /** ViewBox width; must fit the wordmark (Montserrat Bold 10px, +1.1 tracking). */
+  width: number;
+  title: string;
+  className: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span className={`inline-flex shrink-0 items-center ${className}`} title={title}>
+      <svg
+        viewBox={`0 0 ${width} 16`}
+        className="h-4 w-auto overflow-visible"
+        role="img"
+        aria-label={title}
+        focusable="false"
+      >
+        {children}
+        <text
+          x={15}
+          y={14}
+          fontSize={10}
+          fontWeight={700}
+          letterSpacing={1.1}
+          fill="currentColor"
+          fontFamily={WORDMARK_FONT}
+        >
+          {label}
+        </text>
+      </svg>
+    </span>
+  );
 }
 
 type OaType = "gold" | "diamond" | "hybrid" | "subscription";
 
-const OA_TYPE_META: Record<OaType, { label: string; title: string; className: string }> = {
+/** Access-type lockups: progressive shackle + integrated wordmark. */
+const OA_TYPE_META: Record<OaType, { label: string; title: string; lock: LockState; className: string; width: number }> = {
   gold: {
-    label: "Gold OA",
-    title: "Fully open access journal, listed in DOAJ.",
-    className:
-      "border border-amber-300 bg-amber-100 text-[var(--primary-text)] dark:border-amber-400/40 dark:bg-amber-400/15 dark:text-[var(--primary-text)]",
+    label: "OPEN",
+    title: "Gold open access — every article is published open access on the journal's own site.",
+    lock: "open",
+    className: ACCESS_TEXT.gold,
+    width: 50,
   },
   diamond: {
-    label: "Diamond OA",
-    title: "Open access without article fees for authors or readers.",
-    className:
-      "border border-teal-300 bg-teal-100 text-teal-900 dark:border-teal-400/40 dark:bg-teal-400/15 dark:text-teal-300",
+    label: "DIAMOND",
+    title: "Diamond open access — fully open access journal without fees for readers or authors.",
+    lock: "wide",
+    className: ACCESS_TEXT.diamond,
+    width: 76,
   },
   hybrid: {
-    label: "Hybrid",
-    title: "Subscription journal with open access publishing via a deal.",
-    className:
-      "border border-blue-300 bg-blue-100 text-blue-900 dark:border-blue-400/40 dark:bg-blue-400/15 dark:text-blue-300",
+    label: "HYBRID",
+    title: "Hybrid journal — subscription journal where individual articles can be made open access, often via a UT deal.",
+    lock: "ajar",
+    className: ACCESS_TEXT.hybrid,
+    width: 68,
   },
   subscription: {
-    label: "Subscription",
-    title: "No open access route listed.",
-    className: "bg-[var(--muted)] text-[var(--muted-foreground)]",
+    label: "CLOSED",
+    title: "Subscription journal — reading the published version requires a subscription.",
+    lock: "closed",
+    className: ACCESS_TEXT.closed,
+    width: 68,
   },
 };
 
@@ -50,9 +214,9 @@ export function OaTypeBadge({
   if (!type) return null;
   const meta = OA_TYPE_META[type];
   return (
-    <Badge variant="outline" className={meta.className} title={meta.title}>
-      {meta.label}
-    </Badge>
+    <Lockup label={meta.label} width={meta.width} title={meta.title} className={meta.className}>
+      <LockIcon state={meta.lock} />
+    </Lockup>
   );
 }
 
@@ -68,55 +232,81 @@ export const OA_STATUS_ORDER = [
 
 export const OA_STATUS_META: Record<
   string,
-  { label: string; chip: string; bar: string }
+  { label: string; bar: string }
 > = {
-  gold: {
-    label: "Gold",
-    chip: "border border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-400/40 dark:bg-amber-400/15 dark:text-amber-300",
-    bar: "bg-amber-400 dark:bg-amber-500",
-  },
-  hybrid: {
-    label: "Hybrid",
-    chip: "border border-blue-300 bg-blue-100 text-blue-900 dark:border-blue-400/40 dark:bg-blue-400/15 dark:text-blue-300",
-    bar: "bg-blue-400 dark:bg-blue-500",
+  gold: { label: "Gold", bar: "bg-amber-400 dark:bg-amber-500" },
+  hybrid: { label: "Hybrid", bar: "bg-blue-400 dark:bg-blue-500" },
+  green: { label: "Green", bar: "bg-emerald-400 dark:bg-emerald-500" },
+  bronze: { label: "Bronze", bar: "bg-orange-400 dark:bg-orange-500/80" },
+  diamond: { label: "Diamond", bar: "bg-teal-400 dark:bg-teal-500" },
+  closed: { label: "Closed", bar: "bg-slate-300 dark:bg-slate-600" },
+};
+
+/** Work-level status lockup; reuses the journal lock icons where they map. */
+const OA_STATUS_LOCKUP: Record<string, { label: string; title: string; className: string; width: number; glyph: React.ReactNode }> = {
+  gold: { ...OA_TYPE_META.gold, glyph: <LockIcon state="open" /> },
+  hybrid: { ...OA_TYPE_META.hybrid, glyph: <LockIcon state="ajar" /> },
+  diamond: { ...OA_TYPE_META.diamond, glyph: <LockIcon state="wide" /> },
+  closed: {
+    label: "CLOSED",
+    title: "Closed — no openly accessible version of this publication was found.",
+    className: OA_TYPE_META.subscription.className,
+    width: OA_TYPE_META.subscription.width,
+    glyph: <LockIcon state="closed" />,
   },
   green: {
-    label: "Green",
-    chip: "border border-emerald-300 bg-emerald-100 text-emerald-900 dark:border-emerald-400/40 dark:bg-emerald-400/15 dark:text-emerald-300",
-    bar: "bg-emerald-400 dark:bg-emerald-500",
+    label: "GREEN",
+    title: "Green open access — an author copy of this publication is freely available in a repository.",
+    className: "text-emerald-700 dark:text-emerald-300",
+    width: 59,
+    glyph: <GreenGlyph />,
   },
   bronze: {
-    label: "Bronze",
-    chip: "border border-orange-300 bg-orange-100 text-orange-900 dark:border-orange-400/40 dark:bg-orange-400/15 dark:text-orange-300",
-    bar: "bg-orange-400 dark:bg-orange-500/80",
-  },
-  diamond: {
-    label: "Diamond",
-    chip: "border border-teal-300 bg-teal-100 text-teal-900 dark:border-teal-400/40 dark:bg-teal-400/15 dark:text-teal-300",
-    bar: "bg-teal-400 dark:bg-teal-500",
-  },
-  closed: {
-    label: "Closed",
-    chip: "border border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-500/40 dark:bg-slate-500/15 dark:text-slate-300",
-    bar: "bg-slate-300 dark:bg-slate-600",
+    label: "BRONZE",
+    title: "Bronze open access — free to read on the publisher's site, without an explicit open license.",
+    className: "text-orange-700 dark:text-orange-300",
+    width: 68,
+    glyph: <BronzeGlyph />,
   },
 };
 
-/** Small OA-status chip for a single work; legend/chart reuse the same colors. */
+/** Small OA-status lockup for a single work; legend/chart reuse the same colors. */
 export function OaStatusChip({ status }: { status?: string | null }) {
   if (!status) return null;
-  const meta = OA_STATUS_META[status];
+  const meta = OA_STATUS_LOCKUP[status];
   if (!meta) return null;
   return (
-    <Badge variant="outline" className={meta.chip}>
-      {meta.label}
-    </Badge>
+    <Lockup label={meta.label} width={meta.width} title={meta.title} className={meta.className}>
+      {meta.glyph}
+    </Lockup>
+  );
+}
+
+export function DealBadge({ covered }: { covered: boolean }) {
+  if (!covered) return null;
+  return (
+    <Lockup
+      label="DEAL"
+      width={50}
+      title="Open access deal — APCs for corresponding UT authors are covered (fully or partly) by a UT agreement."
+      className={ACCESS_TEXT.deal}
+    >
+      <DealGlyph />
+    </Lockup>
   );
 }
 
 export function QuartileBadge({ quartile }: { quartile: string | null }) {
   if (!quartile) return null;
+  const isTop = quartile === "Q1";
   return (
-    <Badge variant={quartile === "Q1" ? "default" : "muted"}>{quartile}</Badge>
+    <Lockup
+      label={quartile.toUpperCase()}
+      width={30}
+      title={`Journal impact quartile in its subject category — Q1 means top 25%. This journal: ${quartile}.`}
+      className={isTop ? "text-[var(--primary-text)]" : "text-[var(--muted-foreground)]"}
+    >
+      <QuartileGlyph />
+    </Lockup>
   );
 }

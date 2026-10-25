@@ -25,9 +25,13 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
         <>
           {deal.publisher_name ?? `Deal ${deal.id}`}
           {archived ? (
-            <Badge variant="muted">Archive</Badge>
+            <Badge variant="muted" title="Archived deal: no longer in effect.">
+              Archive
+            </Badge>
           ) : (
-            <Badge variant="secondary">Current</Badge>
+            <Badge variant="secondary" title="Current deal: in effect for University of Twente authors.">
+              Current
+            </Badge>
           )}
           {deal.needs_curation && (
             <Badge

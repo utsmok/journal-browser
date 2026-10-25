@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Montserrat } from "next/font/google";
+import { Github } from "lucide-react";
 import Link from "next/link";
 import "./globals.css";
 
@@ -55,7 +56,11 @@ function SiteHeader() {
   );
 }
 
-const FOOTER_LINKS = [
+const FOOTER_LINKS: {
+  href: string;
+  label: string;
+  icon?: "github";
+}[] = [
   {
     href: "https://www.utwente.nl/library",
     label: "University of Twente Library",
@@ -68,23 +73,35 @@ const FOOTER_LINKS = [
     href: "mailto:open-access@utwente.nl",
     label: "open-access@utwente.nl",
   },
+  {
+    href: "mailto:s.mok@utwente.nl",
+    label: "s.mok@utwente.nl (admin)",
+  },
+  {
+    href: "https://github.com/utsmok/journal-browser",
+    label: "Source code on GitHub",
+    icon: "github",
+  },
 ];
 
 function SiteFooter() {
   return (
     <footer className="mt-auto bg-[var(--secondary)] text-[var(--secondary-foreground)]">
       <div className="mx-auto max-w-screen-2xl px-4 py-6 text-sm">
-        <ul className="flex flex-wrap gap-x-6 gap-y-1">
+        <ul className="flex flex-wrap items-center gap-x-6 gap-y-1">
           {FOOTER_LINKS.map((l) => (
-            <li key={l.href}>
+            <li key={l.href} className="flex items-center gap-1">
               <a
                 href={l.href}
                 {...(l.href.startsWith("mailto:")
                   ? {}
                   : { target: "_blank", rel: "noopener noreferrer" })}
-                className="underline-offset-2 hover:underline"
+                className="inline-flex items-center gap-1 underline-offset-2 hover:underline"
               >
-                {l.label}
+                {l.icon === "github" && (
+                  <Github aria-hidden className="size-4" />
+                )}
+                <span className={l.icon ? "sr-only" : undefined}>{l.label}</span>
               </a>
             </li>
           ))}

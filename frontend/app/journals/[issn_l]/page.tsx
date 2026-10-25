@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Check, Copy, ExternalLink } from "lucide-react";
+import { ArrowLeft, Check, Copy, ExternalLink, X } from "lucide-react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -54,9 +54,10 @@ function External({
   );
 }
 
-function Metric({ label, value, note }: { label: string; value: string; note?: React.ReactNode }) {
+function Metric({ label, value, note, hint }: { label: string; value: string; note?: React.ReactNode; hint?: string }) {
   return (
-    <div>
+    // Focusable so keyboard users can raise the title-tooltip too.
+    <div title={hint} tabIndex={hint ? 0 : undefined}>
       <div className="text-2xl font-semibold tabular-nums">{value}</div>
       <div className="text-xs font-medium">{label}</div>
       {note && <div className="text-[11px] text-[var(--muted-foreground)]">{note}</div>}
@@ -66,26 +67,33 @@ function Metric({ label, value, note }: { label: string; value: string; note?: R
 
 /** Clipboard write with a brief "Copied" affordance; no alerts. */
 function CopyButton({ text, label }: { text: string; label: string }) {
-  const [copied, setCopied] = React.useState(false);
+  const [state, setState] = React.useState<"idle" | "copied" | "failed">("idle");
+  const timer = React.useRef<number | undefined>(undefined);
+  React.useEffect(() => () => window.clearTimeout(timer.current), []);
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch (err) {
-      console.error("Clipboard write failed", err);
+      setState("copied");
+    } catch {
+      setState("failed");
     }
+    timer.current = window.setTimeout(() => setState("idle"), 1500);
   };
+  const title =
+    state === "copied" ? "Copied" : state === "failed" ? "Copy failed" : "Copy";
   return (
     <button
       type="button"
       onClick={copy}
-      aria-label={`${copied ? "Copied" : "Copy"} ${label}`}
-      title={copied ? "Copied" : "Copy"}
-      className="inline-flex size-6 shrink-0 items-center justify-center rounded border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+      aria-label={`${title} ${label}`}
+      aria-live="polite"
+      title={title}
+      className="inline-flex size-6 shrink-0 items-center justify-center rounded border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
     >
-      {copied ? (
+      {state === "copied" ? (
         <Check aria-hidden className="size-3.5 text-emerald-600" />
+      ) : state === "failed" ? (
+        <X aria-hidden className="size-3.5 text-[var(--destructive)]" />
       ) : (
         <Copy aria-hidden className="size-3.5" />
       )}
@@ -147,7 +155,12 @@ function DealPanel({
           Open access deal
           <DealBadge covered />
           {deal.corresponding_authors_only && (
-            <Badge variant="muted">Corresponding authors only</Badge>
+            <Badge
+              variant="muted"
+              title="The deal only funds the APC when the corresponding author is from UT."
+            >
+              Corresponding authors only
+            </Badge>
           )}
           {deal.needs_curation && (
             <Badge
@@ -185,7 +198,7 @@ function DealPanel({
             <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
               Article caps
             </h3>
-            {deal.cap_text && <p className="whitespace-pre-line">{cleanProse(deal.cap_text)}</p>}
+            {deal.cap_text && <p className="whitespace-pre-line text-pretty">{cleanProse(deal.cap_text)}</p>}
             {capNumbers.length > 0 && (
               <ul className="mt-1.5 flex flex-wrap gap-1.5">
                 {capNumbers.map(([year, count]) => (
@@ -205,7 +218,7 @@ function DealPanel({
             <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
               Included article types
             </h3>
-            <p>{cleanProse(deal.article_types_text)}</p>
+            <p className="text-pretty">{cleanProse(deal.article_types_text)}</p>
           </div>
         )}
         {deal.workflow_text && (
@@ -213,7 +226,7 @@ function DealPanel({
             <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
               Workflow
             </h3>
-            <p>{cleanProse(deal.workflow_text)}</p>
+            <p className="text-pretty">{cleanProse(deal.workflow_text)}</p>
           </div>
         )}
         <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-[var(--border)] pt-3">
@@ -368,6 +381,7 @@ function PublicationsCard({
                 {w.is_retracted && (
                   <Badge
                     variant="outline"
+                    title="This publication was retracted, per OpenAlex."
                     className="border-red-300 bg-red-100 text-red-700 dark:border-red-400/40 dark:bg-red-400/15 dark:text-red-300"
                   >
                     Retracted
@@ -641,7 +655,10 @@ function JournalPageInner() {
           {data.type
             ? ` · ${data.type.charAt(0).toUpperCase()}${data.type.slice(1)}`
             : ""}{" "}
-          · ISSN-L {journal.issn_l}
+          ·{" "}
+          <span title="ISSN-L links the print and online ISSNs of one journal into a single identifier">
+            ISSN-L {journal.issn_l}
+          </span>
           {data.issns.length > 1 && ` (${data.issns.join(", ")})`}
         </p>
         {(data.homepage_url || openalex?.url) && (
@@ -817,6 +834,7 @@ function JournalPageInner() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <Metric
                   label="2-year mean citedness"
+                  hint="Average number of citations that works from the last two years have received, as counted by OpenAlex."
                   value={
                     journal.twoyr_mean_citedness != null
                       ? journal.twoyr_mean_citedness.toFixed(1)
@@ -825,11 +843,13 @@ function JournalPageInner() {
                 />
                 <Metric
                   label="h-index"
+                  hint="h works of this journal have received at least h citations each (OpenAlex)."
                   value={num("h_index")?.toLocaleString("en") ?? "—"}
                   note="OpenAlex"
                 />
                 <Metric
                   label="i10 index"
+                  hint="Number of works of this journal with at least 10 citations (OpenAlex)."
                   value={num("i10_index")?.toLocaleString("en") ?? "—"}
                   note="OpenAlex"
                 />
@@ -844,6 +864,7 @@ function JournalPageInner() {
                     {openalex?.cited_by_count != null && (
                       <Metric
                         label="Total citations"
+                        hint="All citations to works of this journal that OpenAlex has recorded."
                         value={openalex.cited_by_count.toLocaleString("en")}
                         note={
                           <SourceNote
@@ -856,6 +877,7 @@ function JournalPageInner() {
                     {openalex?.works_count != null && (
                       <Metric
                         label="Works count"
+                        hint="Number of works of this journal known to OpenAlex."
                         value={openalex.works_count.toLocaleString("en")}
                         note={
                           <SourceNote
@@ -868,6 +890,7 @@ function JournalPageInner() {
                     {twente && (
                       <Metric
                         label="FWCI (Twente works)"
+                        hint="Field-weighted citation impact of Twente works: citations relative to the average for works of the same year, type, and field. 1.0 means average."
                         value={
                           twente.fwci_avg != null && twente.fwci_n > 0
                             ? twente.fwci_avg.toFixed(2)
@@ -887,6 +910,7 @@ function JournalPageInner() {
                     {twente && twente.retracted > 0 && (
                       <Metric
                         label="Retracted Twente works"
+                        hint="Twente works in this journal that OpenAlex marks as retracted."
                         value={twente.retracted.toLocaleString("en")}
                         note={
                           <SourceNote
@@ -899,6 +923,7 @@ function JournalPageInner() {
                     {openaire && (
                       <Metric
                         label="Matched publications"
+                        hint="University of Twente publications that OpenAIRE matched to this journal."
                         value={openaire.matched_works.toLocaleString("en")}
                         note={
                           <SourceNote
@@ -916,15 +941,18 @@ function JournalPageInner() {
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     <Metric
                       label="SJR"
+                      hint="SCImago Journal Rank: prestige-weighted average citations per recent work. Higher is better."
                       value={latestSjr.sjr !== null ? latestSjr.sjr.toFixed(3) : "—"}
                       note={latestSjr.year ? String(latestSjr.year) : undefined}
                     />
                     <Metric
                       label="Best quartile"
+                      hint="Best quartile the journal reaches in any of its SCImago subject categories."
                       value={latestSjr.best_quartile ?? "—"}
                     />
                     <Metric
                       label="SJR h-index"
+                      hint="h-index of the journal as computed by SCImago."
                       value={latestSjr.h_index?.toLocaleString("en") ?? "—"}
                     />
                   </div>
@@ -946,12 +974,15 @@ function JournalPageInner() {
             >
                 {data.apc_aggregates.length > 0 && (
                   <table className="w-full text-xs">
+                    <caption className="sr-only">
+                      OpenAPC cost evidence per publishing year: number of recorded APCs, mean, and observed range in euros
+                    </caption>
                     <thead>
                       <tr className="text-left text-[var(--muted-foreground)]">
-                        <th className="py-1 pr-2 font-medium">Year</th>
-                        <th className="py-1 pr-2 font-medium">APCs</th>
-                        <th className="py-1 pr-2 font-medium">Mean €</th>
-                        <th className="py-1 font-medium">Range €</th>
+                        <th className="py-1 pr-2 font-medium" title="Publishing year of the articles with recorded APCs">Year</th>
+                        <th className="py-1 pr-2 font-medium" title="Articles with an APC recorded in OpenAPC for this journal and year">APCs</th>
+                        <th className="py-1 pr-2 font-medium" title="Average APC paid, in euros">Mean €</th>
+                        <th className="py-1 font-medium" title="Lowest to highest APC recorded, in euros">Range €</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1014,7 +1045,7 @@ function JournalPageInner() {
                 {
                   key: "all",
                   heading: "Most similar overall",
-                  note: undefined,
+                  note: "Nearest neighbors by research-profile similarity alone, regardless of deals or Twente output.",
                 },
               ] as const
             ).map(

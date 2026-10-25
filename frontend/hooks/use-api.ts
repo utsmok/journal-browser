@@ -16,7 +16,7 @@ import {
 } from "@/lib/api";
 
 /** TanStack Query key factory: one place owns every cache key shape. */
-export const qk = {
+const qk = {
   journals: (params: JournalSearchParams) => ["journals", params] as const,
   facets: (filters: JournalSearchParams) => ["facets", filters] as const,
   journal: (issnL: string) => ["journal", issnL] as const,

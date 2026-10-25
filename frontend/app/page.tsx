@@ -6,7 +6,14 @@ import {
   useReactTable,
   type ColumnDef,
 } from "@tanstack/react-table";
-import { ChevronLeft, ChevronRight, Search } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsUpDown,
+  Search,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -31,9 +38,68 @@ import { errorMessage, type JournalListItem, type SearchIn, type SortKey } from 
 const SORTS: { value: SortKey; label: string }[] = [
   { value: "relevance", label: "Relevance" },
   { value: "title", label: "Title A–Z" },
+  { value: "publisher", label: "Publisher A–Z" },
   { value: "institution_works", label: "Twente works" },
-  { value: "2yr_mean_citedness", label: "2-year mean citedness" },
+  { value: "quartile", label: "Quartile" },
+  { value: "topic", label: "Topic A–Z" },
+  { value: "apc", label: "APC (high–low)" },
 ];
+
+// Sortable columns: backend key + natural direction. The header button
+// cycles natural → reversed → off (back to the mode's default sort).
+const COLUMN_SORTS: Record<string, { key: SortKey; natural: "asc" | "desc" }> = {
+  title: { key: "title", natural: "asc" },
+  publisher: { key: "publisher", natural: "asc" },
+  twente_works: { key: "institution_works", natural: "desc" },
+  quartile: { key: "quartile", natural: "asc" },
+  apc: { key: "apc", natural: "desc" },
+  topic: { key: "topic", natural: "asc" },
+};
+
+function SortHead({
+  columnId,
+  label,
+  state,
+  title,
+}: {
+  columnId: string;
+  label: string;
+  state: {
+    sort: SortKey;
+    dir: "asc" | "desc" | null;
+    cycleSort: (columnId: string) => void;
+    disabled?: boolean;
+  };
+  title?: string;
+}) {
+  // Semantic ranking ignores sort params, so the buttons would lie.
+  if (state.disabled)
+    return <span className="inline-flex items-center gap-1 opacity-60">{label}</span>;
+  const spec = COLUMN_SORTS[columnId];
+  const active = !!spec && state.sort === spec.key;
+  const current = active ? (state.dir ?? spec!.natural) : null;
+  const atNatural = active && current === spec!.natural;
+  const Icon = !active ? ChevronsUpDown : current === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <button
+      type="button"
+      onClick={() => state.cycleSort(columnId)}
+      title={
+        title ??
+        (active
+          ? `Sorted ${current === "asc" ? "A–Z, low–high" : "Z–A, high–low"}; click to ${atNatural ? "reverse" : "reset"}`
+          : `Sort by ${label}`)
+      }
+      className="inline-flex items-center gap-1 hover:text-[var(--foreground)]"
+    >
+      {label}
+      <Icon
+        aria-hidden
+        className={`size-3 ${active ? "text-[var(--primary-text)]" : "opacity-50"}`}
+      />
+    </button>
+  );
+}
 
 const SEARCH_IN_OPTIONS: { value: SearchIn; label: string }[] = [
   { value: "all", label: "Everything" },
@@ -68,6 +134,9 @@ function SearchView() {
   // A browse-all with no query has nothing to rank, so Twente works is the
   // sensible default order.
   const sort = (sp.get("sort") ?? (spQ ? "relevance" : "institution_works")) as SortKey;
+  const dirParam = sp.get("dir");
+  const dir: "asc" | "desc" | null =
+    dirParam === "asc" || dirParam === "desc" ? dirParam : null;
   const deal = sp.get("deal") ?? "";
   const oa = sp.get("oa");
   const doaj = sp.get("doaj");
@@ -75,6 +144,7 @@ function SearchView() {
   const topic = sp.get("topic") ?? "";
   const publisher = sp.get("publisher") ?? "";
   const hasApc = sp.get("has_apc");
+  const hasUtWorks = sp.get("has_ut_works");
   const searchIn = (sp.get("search_in") ?? "all") as SearchIn;
   // oa_type is the one multi-select facet: comma-joined in the URL, OR'd
   // server-side.
@@ -202,9 +272,11 @@ function SearchView() {
     quartile: quartile || undefined,
     publisher: publisher || undefined,
     has_apc: hasApc === null ? undefined : hasApc === "true",
+    has_ut_works: hasUtWorks === null ? undefined : hasUtWorks === "true",
     topic: topic || undefined,
     oa_type: oaTypes.join(",") || undefined,
     sort,
+    dir: dir ?? undefined,
     cursor,
     limit: 40,
     include_facets: false,
@@ -223,6 +295,7 @@ function SearchView() {
     topic,
     publisher,
     hasApc,
+    hasUtWorks,
     oaTypes,
   };
 
@@ -240,42 +313,81 @@ function SearchView() {
   const handleFacetToggle = (key: string, value: string) =>
     key === "oa_type" ? toggleOaType(value) : toggleFilter(key, value);
 
+  // Tri-state column sort: natural → reversed → off. Off removes both
+  // params so the mode default applies (relevance with a query, Twente
+  // works for browse-all).
+  const cycleSort = (columnId: string) => {
+    const spec = COLUMN_SORTS[columnId];
+    if (!spec) return;
+    if (sort !== spec.key) {
+      update({ sort: spec.key, dir: spec.natural });
+      return;
+    }
+    const atNatural = (dir ?? spec.natural) === spec.natural;
+    update(
+      atNatural
+        ? { sort: spec.key, dir: spec.natural === "asc" ? "desc" : "asc" }
+        : { sort: undefined, dir: undefined },
+    );
+  };
+
+  // Headers render through memoized column defs; the ref keeps their
+  // closures reading the current sort state without re-creating the defs.
+  const sortRef = React.useRef({ sort, dir, cycleSort, disabled: semanticMode });
+  sortRef.current = { sort, dir, cycleSort, disabled: semanticMode };
+
   const columns = React.useMemo<ColumnDef<JournalListItem>[]>(
     () => [
       {
         accessorKey: "title",
-        header: "Journal",
+        meta: { columnId: "title" },
+        header: () => (
+          <SortHead
+            columnId="title"
+            label="Journal"
+            state={sortRef.current}
+          />
+        ),
+        cell: (info) => (
+          <div className="max-w-md">
+            <Link
+              href={`/journals/${info.row.original.issn_l}`}
+              className="font-medium text-[var(--foreground)] underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+            >
+              {info.row.original.title ?? info.row.original.issn_l}
+            </Link>
+          </div>
+        ),
+      },
+      {
+        accessorKey: "publisher_name",
+        meta: { columnId: "publisher" },
+        header: () => (
+          <SortHead
+            columnId="publisher"
+            label="Publisher"
+            state={sortRef.current}
+          />
+        ),
         cell: (info) => {
-          const row = info.row.original;
+          const v = info.getValue<string | null>();
           return (
-            <div className="max-w-md">
-              <Link
-                href={`/journals/${row.issn_l}`}
-                className="font-medium text-[var(--foreground)] underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-              >
-                {row.title ?? row.issn_l}
-              </Link>
-              <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
-                <span>{row.publisher_name ?? "Unknown publisher"}</span>
-                {row.apc_euro_mean != null && (
-                  <span title="Average article processing charge reported by OpenAPC">
-                    APC ≈ €{formatApc(row.apc_euro_mean)}
-                    {row.apc_period ? ` (${row.apc_period}, OpenAPC)` : " (OpenAPC)"}
-                  </span>
-                )}
-              </div>
-            </div>
+            <span className="block max-w-40 truncate" title={v ?? undefined}>
+              {v ?? "—"}
+            </span>
           );
         },
       },
       {
         accessorKey: "deal_covered",
-        header: "Deal",
+        // Orderable via the facet, not the column; screen readers still get
+        // a column name.
+        header: () => <span className="sr-only">Deal coverage</span>,
         cell: (info) => <DealBadge covered={info.getValue<boolean>()} />,
       },
       {
         accessorKey: "is_oa",
-        header: "OA",
+        header: () => <span className="sr-only">Open access type</span>,
         cell: (info) => {
           const row = info.row.original;
           return <OaTypeBadge oaType={row.oa_type} isOa={row.is_oa} />;
@@ -283,14 +395,14 @@ function SearchView() {
       },
       {
         accessorKey: "twente_works",
+        meta: { columnId: "twente_works" },
         header: () => (
-          <span title="University of Twente publications in this journal, 2020 onwards">
-            Twente works
-            <span className="sr-only">
-              {" "}
-              — University of Twente publications, 2020 onwards
-            </span>
-          </span>
+          <SortHead
+            columnId="twente_works"
+            label="Works"
+            title="University of Twente publications in this journal, 2020 onwards. Click to sort, again to reverse, again to reset"
+            state={sortRef.current}
+          />
         ),
         cell: (info) => (
           <span className="tabular-nums">{info.getValue<number>()}</span>
@@ -298,29 +410,60 @@ function SearchView() {
       },
       {
         accessorKey: "quartile",
-        header: "Quartile",
+        meta: { columnId: "quartile" },
+        header: () => (
+          <SortHead
+            columnId="quartile"
+            label="Q"
+            title="SCImago quartile. Click to sort, again to reverse, again to reset"
+            state={sortRef.current}
+          />
+        ),
         cell: (info) => (
           <QuartileBadge quartile={info.getValue<string | null>()} />
         ),
       },
       {
-        accessorKey: "twoyr_mean_citedness",
+        accessorKey: "apc_euro_mean",
+        meta: { columnId: "apc" },
         header: () => (
-          <span title="2-year mean citedness (OpenAlex)">
-            2-yr citedness
-            <span className="sr-only"> (OpenAlex)</span>
-          </span>
+          <SortHead
+            columnId="apc"
+            label="APC"
+            title="Average article processing charge reported by OpenAPC. Click to sort, again to reverse, again to reset"
+            state={sortRef.current}
+          />
         ),
         cell: (info) => {
-          const v = info.getValue<number | null>();
-          return v === null ? (
-            <span className="text-[var(--muted-foreground)]">—</span>
-          ) : (
+          const row = info.row.original;
+          if (row.apc_euro_mean == null)
+            return <span className="text-[var(--muted-foreground)]">—</span>;
+          return (
             <span
               className="tabular-nums"
-              title="2-year mean citedness (OpenAlex)"
+              title={`Latest OpenAPC mean${row.apc_period ? ` (${row.apc_period})` : ""}`}
             >
-              {v.toFixed(1)}
+              ≈ €{formatApc(row.apc_euro_mean)}
+            </span>
+          );
+        },
+      },
+      {
+        accessorKey: "primary_topic",
+        meta: { columnId: "topic" },
+        header: () => (
+          <SortHead
+            columnId="topic"
+            label="Topic"
+            title="Primary OpenAlex topic of the journal's works. Click to sort, again to reverse, again to reset"
+            state={sortRef.current}
+          />
+        ),
+        cell: (info) => {
+          const v = info.getValue<string | null>();
+          return (
+            <span className="block max-w-44 truncate" title={v ?? undefined}>
+              {v || "—"}
             </span>
           );
         },
@@ -337,6 +480,14 @@ function SearchView() {
     getCoreRowModel: getCoreRowModel(),
   });
 
+  // Screen readers learn the live sort order from the th, not the button.
+  const ariaSortFor = (meta: unknown): "ascending" | "descending" | undefined => {
+    const columnId = (meta as { columnId?: string } | undefined)?.columnId;
+    const spec = columnId ? COLUMN_SORTS[columnId] : undefined;
+    if (!spec || semanticMode || sortRef.current.sort !== spec.key) return undefined;
+    return (sortRef.current.dir ?? spec.natural) === "asc" ? "ascending" : "descending";
+  };
+
   const pParam = parseInt(sp.get("p") ?? "", 10);
   const page =
     Number.isFinite(pParam) && pParam > 0 ? pParam : stack.length + 1;
@@ -350,6 +501,7 @@ function SearchView() {
       topic ||
       publisher ||
       hasApc !== null ||
+      hasUtWorks !== null ||
       oaTypes.length > 0,
   );
   const hasNonQueryFilters = Boolean(
@@ -360,6 +512,7 @@ function SearchView() {
       topic ||
       publisher ||
       hasApc !== null ||
+      hasUtWorks !== null ||
       oaTypes.length > 0,
   );
   const clearFilters = () =>
@@ -373,6 +526,7 @@ function SearchView() {
       topic: undefined,
       publisher: undefined,
       has_apc: undefined,
+      has_ut_works: undefined,
       oa_type: undefined,
     });
 
@@ -390,7 +544,7 @@ function SearchView() {
       <div className="flex flex-col min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[960px]:gap-6 min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
         {/* Hero and search: first in stacked flow, top of the results column from 960px. */}
         <section className="order-1 mb-8 min-[960px]:col-start-2 min-[960px]:row-start-1 min-[960px]:mb-6">
-        <h1 className="mb-3 text-3xl font-bold">
+        <h1 className="mb-3 text-3xl font-bold text-balance">
           Find the best home for your next article
         </h1>
         <p className="mb-6 max-w-2xl text-[var(--muted-foreground)]">
@@ -433,9 +587,10 @@ function SearchView() {
           {!semanticMode && (
             <select
               aria-label="Search scope"
+              title="Which field the query matches: everything, journal title, publisher, or topic"
               value={searchIn}
               onChange={(event) => update({ search_in: event.target.value })}
-              className="h-10 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 text-sm"
+              className="h-10 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
             >
               {SEARCH_IN_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -450,7 +605,7 @@ function SearchView() {
           >
             <input
               type="checkbox"
-              className="size-4 accent-[var(--primary)]"
+              className="size-4 accent-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
               checked={sp.get("mode") === "semantic"}
               onChange={(event) =>
                 update({ mode: event.target.checked ? "semantic" : undefined })
@@ -496,9 +651,10 @@ function SearchView() {
                 <label htmlFor="sort" className="whitespace-nowrap">Sort by</label>
                 <select
                   id="sort"
+                  title="Order of the results. Match by meaning always ranks by similarity instead"
                   value={sort}
                   onChange={(event) => update({ sort: event.target.value })}
-                  className="h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2"
+                  className="h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
                 >
                   {SORTS.map((s) => (
                     <option key={s.value} value={s.value}>
@@ -511,6 +667,7 @@ function SearchView() {
                     variant="ghost"
                     size="sm"
                     className="text-[var(--muted-foreground)]"
+                    title="Clears the search text and all active filters"
                     onClick={clearFilters}
                   >
                     {hasNonQueryFilters ? "Reset filters" : "Reset search"}
@@ -677,7 +834,10 @@ function SearchView() {
                     {table.getHeaderGroups().map((group) => (
                       <TableRow key={group.id}>
                         {group.headers.map((header) => (
-                          <TableHead key={header.id}>
+                          <TableHead
+                            key={header.id}
+                            aria-sort={ariaSortFor(header.column.columnDef.meta)}
+                          >
                             {flexRender(
                               header.column.columnDef.header,
                               header.getContext(),
@@ -688,18 +848,35 @@ function SearchView() {
                     ))}
                   </TableHeader>
                   <TableBody>
-                    {table.getRowModel().rows.map((row) => (
-                      <TableRow key={row.id}>
-                        {row.getVisibleCells().map((cell) => (
-                          <TableCell key={cell.id}>
-                            {flexRender(
-                              cell.column.columnDef.cell,
-                              cell.getContext(),
-                            )}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
+                    {table.getRowModel().rows.map((row) => {
+                      // Whole-row click target; ctrl/cmd-click opens a tab.
+                      const href = `/journals/${row.original.issn_l}`;
+                      return (
+                        <TableRow
+                          key={row.id}
+                          className={[
+                            "cursor-pointer",
+                            row.original.deal_covered
+                              ? "bg-emerald-50/80 hover:bg-emerald-100 dark:bg-emerald-400/[0.08] dark:hover:bg-emerald-400/[0.12]"
+                              : "",
+                          ].join(" ")}
+                          onClick={(event) => {
+                            if (event.metaKey || event.ctrlKey)
+                              window.open(href, "_blank", "noopener");
+                            else router.push(href);
+                          }}
+                        >
+                          {row.getVisibleCells().map((cell) => (
+                            <TableCell key={cell.id}>
+                              {flexRender(
+                                cell.column.columnDef.cell,
+                                cell.getContext(),
+                              )}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
