@@ -3,10 +3,11 @@
 A public search tool that helps researchers at the University of Twente find where to
 publish: which journals are covered by open access deals, what publishing there costs,
 how Twente publishes in them, and what they are about. Replaces the WUR-hosted
-[Open Access Journal Browser](https://library.wur.nl/WebQuery/utbrowser) using ONLY openly 
-available data. Built as a proof of concept for Twente first, maybe i'll tinker with it
-so it's easy for other universities to run. The basic stack should transfer over, but
-it'll need a lot of hand-tuning at this stage to deploy for other institutes. 
+[Open Access Journal Browser](https://library.wur.nl/WebQuery/utbrowser) using ONLY openly
+available data. Any Dutch institute can run its own instance: set the institution
+ROR, repository OAI-PMH endpoint, and an OpenAlex key in `.env`, then
+`docker compose up` — the one-shot `bootstrap` service fills the database
+automatically (journals, deals, APCs, repository works, stats).
 
 
 ## Stack
@@ -50,27 +51,29 @@ uv run uvicorn journal_browser.main:create_app --factory --reload
 cd frontend && npm install && npm run dev
 ```
 
-Copy `.env.example` to `.env` and set the API keys before running harvest
-jobs.
+Copy `.env.example` to `.env` and set the institution levers (ROR + name,
+OAI-PMH endpoint, OpenAlex key). On `docker compose up` the `bootstrap`
+service runs `backend/jobs/bootstrap.py`: OpenAlex journals sweep →
+openaccess.nl + JCT deal harvest (with the duplicate-sheet guard) → OpenAPC →
+Scimago (seeded from `backend/data/`, scimagojr.com is Cloudflare-hard) →
+repository OAI-PMH (`harvest_pure`) → OpenAlex/Crossref enrichment → OpenAIRE
+→ per-journal stats → flags → embeddings. Every step is an idempotent job; a
+failure keeps the backend down and the failing step is named in
+`docker compose logs bootstrap`. Restart with `JB_BOOTSTRAP=always` (or
+`jobs/bootstrap.py --always`) to re-run the whole pipeline on demand.
 
-## Data pipeline (run order)
+`JB_DATA_WINDOW_START` / `JB_DATA_WINDOW_END` bound every harvest
+(default 2020..now).
 
-```bash
-cd backend
-uv run python jobs/harvest_journals.py       # OpenAlex sources sweep (lands raw payloads)
-uv run python jobs/backfill_issn_l.py        # deal_journals.issn_l via issn_map
-uv run python jobs/ingest_openapc.py         # OpenAPC aggregates + Twente evidence
-uv run python jobs/ingest_scimagojr.py       # yearly exports from landing/scimagojr/
-uv run python jobs/harvest_pure.py           # Pure OAI -> canonical UT works
-uv run python jobs/enrich_works.py           # OpenAlex/Crossref enrichment by DOI
-uv run python jobs/harvest_stats.py          # Twente works 2020+ -> per-journal stats
-uv run python jobs/backfill_flags.py         # recompute works_2020_plus / last_active_year
-```
-
-**Deals are manually added.** New or changed deals should go in through a curation
-job like `jobs/apply_curation_2026_10_22.py`. This is because it's apparently 
-extremely hard for publishers to just give a list of journals that are covered
-in a publishing deal. (yet another reason to get ri.. uh, i mean move to diamond OA)
+Deals are auto-harvested from openaccess.nl (the canonical NL register) and
+the JCT public dump; `ManualOverride` rows keep hand fixes winning over
+re-harvests. When JCT links two agreements to one wrong sheet (live case:
+Emerald 2025 UKB served Elsevier's list), `reconcile` assigns the sheet to
+the publisher it actually matches and flags the other deal
+`needs_curation`. One-off curation helpers remain for gaps the public
+sources cannot fill: `jobs/apply_curation_2026_10_22.py` (frozen snapshot
+register), `jobs/ingest_emerald_contract.py` (OCR'd contract journal list),
+`jobs/seed_deal_links.py`.
 
 
 ## License

@@ -23,11 +23,20 @@ services:
     restart: unless-stopped
     environment:
       JB_DATABASE_URL: postgresql+asyncpg://journal:journal@db:5432/journalbrowser
-      # Canonical Twente publications (ut-metadata Postgres). Empty/unset =
-      # feature off; wrong/unreachable DSN degrades the same way at runtime.
-      # Note: inside compose, localhost is the container — point this at a
-      # container-reachable address (e.g. host.docker.internal:5434).
+      # Canonical publications from a ut-metadata Postgres (read-only).
+      # Empty/unset = feature off; wrong/unreachable DSN degrades the same
+      # way at runtime. Inside compose, localhost is the container — point
+      # this at a container-reachable address (e.g. host.docker.internal:5434).
       JB_UT_METADATA_DSN: ${JB_UT_METADATA_DSN:-}
+      # Deployment levers (see .env.example); defaults fit a Twente instance.
+      JB_INSTITUTION_NAME: ${JB_INSTITUTION_NAME:-University of Twente}
+      JB_INSTITUTION_ROR: ${JB_INSTITUTION_ROR:-https://ror.org/006hf6230}
+      JB_PURE_OAI_BASE_URL: ${JB_PURE_OAI_BASE_URL:-https://ris.utwente.nl/ws/oai}
+      JB_OPENAIRE_ORG_ID: ${JB_OPENAIRE_ORG_ID:-}
+      JB_CONTACT_EMAIL: ${JB_CONTACT_EMAIL:-}
+      JB_DATA_WINDOW_START: ${JB_DATA_WINDOW_START:-2020}
+      JB_DATA_WINDOW_END: ${JB_DATA_WINDOW_END:-0}
+      OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
     volumes:
       # Raw landing copies and job logs must survive container rebuilds.
       - ./backend/landing:/app/landing
@@ -49,6 +58,32 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    depends_on:
+      db:
+        condition: service_healthy
+      bootstrap:
+        condition: service_completed_successfully
+
+  # One-shot initial harvest on a fresh database (jobs/bootstrap.py). Auto
+  # mode exits in seconds once journals exist, so every `up` re-runs it
+  # harmlessly; a failure keeps the backend down where the logs point at it.
+  bootstrap:
+    build: ./backend
+    restart: "no"
+    environment:
+      JB_DATABASE_URL: postgresql+asyncpg://journal:journal@db:5432/journalbrowser
+      JB_INSTITUTION_NAME: ${JB_INSTITUTION_NAME:-University of Twente}
+      JB_INSTITUTION_ROR: ${JB_INSTITUTION_ROR:-https://ror.org/006hf6230}
+      JB_PURE_OAI_BASE_URL: ${JB_PURE_OAI_BASE_URL:-https://ris.utwente.nl/ws/oai}
+      JB_OPENAIRE_ORG_ID: ${JB_OPENAIRE_ORG_ID:-}
+      JB_CONTACT_EMAIL: ${JB_CONTACT_EMAIL:-}
+      JB_DATA_WINDOW_START: ${JB_DATA_WINDOW_START:-2020}
+      JB_DATA_WINDOW_END: ${JB_DATA_WINDOW_END:-0}
+      OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
+    volumes:
+      - ./backend/landing:/app/landing
+    command: >
+      sh -c "uv run --no-dev alembic upgrade head && uv run --no-dev python jobs/bootstrap.py"
     depends_on:
       db:
         condition: service_healthy

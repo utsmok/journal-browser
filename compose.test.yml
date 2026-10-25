@@ -1,0 +1,41 @@
+# Fresh-deployment test stack: own ports, own landing dir, own volume
+# (project-scoped via -p jb-test). Simulates another institute's first boot
+# with the publication window pinned to 2025 only.
+#
+#   export OPENALEX_API_KEY=...
+#   docker compose -p jb-test -f docker-compose.yml -f compose.test.yml up -d --build
+#
+# !override replaces the base lists (ports/volumes merge by appending).
+services:
+  db:
+    ports: !override
+      - "127.0.0.1:5533:5432"
+
+  bootstrap:
+    volumes: !override
+      - ./backend/landing-test:/app/landing
+    environment:
+      JB_DATABASE_URL: postgresql+asyncpg://journal:journal@db:5432/journalbrowser
+      JB_DATA_WINDOW_START: "2025"
+      JB_DATA_WINDOW_END: "2025"
+      # Prove self-sufficiency: no ut-metadata DB behind a fresh deploy.
+      JB_UT_METADATA_DSN: ""
+      JB_INSTITUTION_NAME: ${JB_INSTITUTION_NAME:-University of Twente}
+      JB_INSTITUTION_ROR: ${JB_INSTITUTION_ROR:-https://ror.org/006hf6230}
+      JB_PURE_OAI_BASE_URL: ${JB_PURE_OAI_BASE_URL:-https://ris.utwente.nl/ws/oai}
+      OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
+
+  backend:
+    ports: !override
+      - "127.0.0.1:8001:8000"
+    volumes: !override
+      - ./backend/landing-test:/app/landing
+    environment:
+      JB_DATABASE_URL: postgresql+asyncpg://journal:journal@db:5432/journalbrowser
+      JB_UT_METADATA_DSN: ""
+      JB_DATA_WINDOW_START: "2025"
+      JB_DATA_WINDOW_END: "2025"
+
+  frontend:
+    ports: !override
+      - "3001:3000"
