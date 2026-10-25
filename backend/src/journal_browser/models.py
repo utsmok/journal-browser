@@ -233,7 +233,10 @@ class DealJournal(Base):
     )
 
     __table_args__ = (
-        CheckConstraint("source IN ('jct', 'manual')", name="ck_deal_journals_source"),
+        CheckConstraint(
+            "source IN ('jct', 'manual', 'publisher-pattern')",
+            name="ck_deal_journals_source",
+        ),
     )
 
 

@@ -17,6 +17,7 @@ from journal_browser.models import (
     DealInstitution,
     DealJournal,
     Institution,
+    Journal,
     ManualOverride,
     Publisher,
 )
@@ -290,6 +291,12 @@ async def test_duplicate_data_guard_purges_cross_publisher(maker):
         els2 = await _deal(session, pub_els.id, esac_id="els2024vanderbilt")
         for d in (els, eme, els2):
             d.start_year, d.end_year = 2025, 2027
+        inst = Institution(
+            name="University of Twente", ror="https://ror.org/006hf6230", is_home=True
+        )
+        session.add(inst)
+        await session.flush()
+        session.add(DealInstitution(deal_id=eme.id, institution_id=inst.id))
         issns = [f"{i:04d}-0000" for i in range(60)]
         for target in (els, eme, els2):
             for i, issn in enumerate(issns):
@@ -331,3 +338,82 @@ async def test_duplicate_data_guard_purges_cross_publisher(maker):
         assert "els2025ukb" in flagged.needs_curation_reason or "els2024" in (
             flagged.needs_curation_reason or ""
         )
+        # Participation survives a wrong sheet: consortium membership is real.
+        links = (await s3.execute(
+            select(DealInstitution).where(DealInstitution.deal_id == flagged.id)
+        )).scalars().all()
+        assert len(links) == 1
+
+
+async def test_derive_nl_deal_coverage_links_and_covers(maker):
+    """openaccess.nl-only deals: participation parsed from conditions text,
+    journals from the publisher corpus; non-participating deals untouched."""
+    from journal_browser.harvest.reconcile import derive_nl_deal_coverage
+
+    async with maker() as session:
+        inst = Institution(
+            name="University of Twente", ror="https://ror.org/006hf6230", is_home=True
+        )
+        session.add(inst)
+        pub_acm = await _publisher(session, "ACM")
+        pub_dgb = await _publisher(session, "De Gruyter Brill")
+        pub_ign = await _publisher(session, "Unknown Press")
+        pub_acs = await _publisher(session, "American Chemical Society (ACS)")
+        acm = await _deal(
+            session, pub_acm.id,
+            openaccess_nl_url="https://www.openaccess.nl/en/publisherdeal/acm-2021-2030",
+            conditions_text="License and conditions: ... University of Twente ... (duration 2026-2028)",
+        )
+        dgb = await _deal(
+            session, pub_dgb.id,
+            openaccess_nl_url="https://www.openaccess.nl/en/publisherdeal/de-gruyter-brill-2026-2028",
+            conditions_text="Eligible institutions are: University of Amsterdam, VU University Amsterdam",
+        )
+        ign = await _deal(
+            session, pub_ign.id,
+            openaccess_nl_url="https://www.openaccess.nl/en/publisherdeal/unknown-2026",
+            conditions_text="License and conditions: University of Twente participates",
+        )
+        acs = await _deal(
+            session, pub_acs.id,
+            openaccess_nl_url="https://www.openaccess.nl/en/publisherdeal/american-chemical-society-acs-2026-2028",
+            conditions_text=(
+                "The corresponding author must be associated with a participating "
+                "Dutch university or organization."
+            ),
+        )
+        for d in (acm, dgb, ign, acs):
+            d.start_year, d.end_year = 2026, 2028
+        for i, (issn, pname) in enumerate(
+            [("0001-0001", "Association for Computing Machinery"),
+             ("0002-0002", "Association for Computing Machinery"),
+             ("0003-0003", "De Gruyter"),
+             ("0004-0004", "American Chemical Society")]
+        ):
+            session.add(Journal(issn_l=issn, title=f"J{i}", publisher_name=pname))
+        await session.commit()
+        acm_id, dgb_id, acs_id = acm.id, dgb.id, acs.id
+
+    async with maker() as s2:
+        stats = await derive_nl_deal_coverage(s2)
+        await s2.commit()
+    # named: ACM + Unknown; consortium (no enumeration): ACS; De Gruyter out
+    assert stats["linked"] == 3
+    assert stats["covered"] == 2  # ACM + ACS resolve; Unknown Press has no corpus
+
+    async with maker() as s3:
+        linked = set((await s3.execute(select(DealInstitution.deal_id))).scalars())
+        assert acm_id in linked and acs_id in linked and dgb_id not in linked
+        rows = (await s3.execute(
+            select(DealJournal).where(DealJournal.deal_id == acm_id)
+        )).scalars().all()
+        assert {r.issn for r in rows} == {"0001-0001", "0002-0002"}
+        acs_rows = (await s3.execute(
+            select(DealJournal).where(DealJournal.deal_id == acs_id)
+        )).scalars().all()
+        assert {r.issn for r in acs_rows} == {"0004-0004"}
+        assert all(r.source == "publisher-pattern" for r in rows + acs_rows)
+        # idempotent: a second derive adds nothing
+        stats2 = await derive_nl_deal_coverage(s3)
+        await s3.commit()
+        assert stats2["pattern_journals"] == 0

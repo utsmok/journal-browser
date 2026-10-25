@@ -70,10 +70,18 @@ the JCT public dump; `ManualOverride` rows keep hand fixes winning over
 re-harvests. When JCT links two agreements to one wrong sheet (live case:
 Emerald 2025 UKB served Elsevier's list), `reconcile` assigns the sheet to
 the publisher it actually matches and flags the other deal
-`needs_curation`. One-off curation helpers remain for gaps the public
-sources cannot fill: `jobs/apply_curation_2026_10_22.py` (frozen snapshot
-register), `jobs/ingest_emerald_contract.py` (OCR'd contract journal list),
-`jobs/seed_deal_links.py`.
+`needs_curation`. The one remaining manual helper covers a gap the public
+sources cannot fill: `jobs/ingest_emerald_contract.py` (OCR'd contract
+journal list, needed only while the JCT dump serves Emerald the wrong
+sheet).
+
+Deals that only exist on openaccess.nl (no JCT sheet — ACM, ACS,
+Amsterdam University Press, IOS Press) are derived automatically:
+participation is parsed from the deal page's conditions text (an
+enumerated institution list, or "all Dutch universities" when none is
+enumerated), and coverage is the publisher's journal corpus
+(`deal_journals.source = 'publisher-pattern'`). Pages whose list omits
+your institution leave the deal unlinked, and the purge drops it.
 
 
 ## License

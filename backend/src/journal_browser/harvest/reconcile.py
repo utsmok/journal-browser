@@ -14,7 +14,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import func, select, text, update
+from sqlalchemy import func, or_, select, text, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
@@ -30,6 +31,7 @@ from ..models import (
     UtWork,
     WorkIdentity,
 )
+from .common import get_home_institution
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +62,8 @@ CODE_ALIASES = {
     "cambridge": "Cambridge University Press",
     "cup": "Cambridge University Press",
     "cam": "Cambridge University Press",
-    "emerald": "Emerald",
-    "eme": "Emerald",
+    "emerald": "Emerald Publishing group",
+    "eme": "Emerald Publishing group",
     "lww": "Lippincott, Williams & Wilkins (LWW)",
     "degruyter": "De Gruyter Brill",
     "dgbrill": "De Gruyter Brill",
@@ -135,6 +137,130 @@ async def _override_protected(session: AsyncSession, deal_ids: list[int]) -> set
         )
     )
     return {int(k) for (k,) in rows.all()}
+
+#: Journal-publisher name patterns for openaccess.nl deal publishers whose
+#: name in the OpenAlex journals universe differs from the canonical name.
+PUBLISHER_JOURNAL_PATTERNS = {"acm": ["association for computing machinery%"]}
+
+#: Wording that marks a deal page WITH an institution enumeration. Pages
+#: that list none of these describe a national (UKB-wide) deal instead, so
+#: every Dutch university participates unless the text says otherwise.
+ENUMERATION_HINTS = ("University of", "Universiteit", "TU Delft", "TU/e")
+
+
+def _participation(conditions_text: str | None, home_name: str) -> str | None:
+    """'named', 'consortium', or None (deal not open to the home institute)."""
+    text = conditions_text or ""
+    if not text.strip():
+        return None
+    if home_name in text.casefold():
+        return "named"
+    enumerated = any(h in text for h in ENUMERATION_HINTS)
+    if not enumerated and "universit" in text.casefold():
+        return "consortium"
+    return None
+
+
+async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
+    """Participation + journal coverage for openaccess.nl-only deals.
+
+    These deals have no JCT sheet, but the deal pages state both facts:
+    participation as an institution list in the conditions text
+    ("Participating in the agreement are: ... <home institution> ...") or,
+    when no institutions are enumerated, as a national UKB-wide deal; and
+    coverage as all journals of the publisher. Deals that exclude the home
+    institution stay unlinked (the purge drops them); publishers with no
+    corpus match keep their needs_curation flag.
+    """
+    home = await get_home_institution(session)
+    stats = {"nl_deals": 0, "linked": 0, "covered": 0, "pattern_journals": 0}
+    if home is None:
+        return stats
+    deals = list(
+        (
+            await session.execute(
+                select(Deal).where(
+                    Deal.openaccess_nl_url.is_not(None),
+                    Deal.esac_id.is_(None),
+                    Deal.status == "current",
+                )
+            )
+        ).scalars()
+    )
+    stats["nl_deals"] = len(deals)
+    publisher_names = await _publisher_names(session)
+    protected = await _override_protected(session, [d.id for d in deals])
+    home_name = (home.name or "").casefold()
+    for deal in deals:
+        participation = _participation(deal.conditions_text, home_name)
+        if participation is None:
+            continue
+        linked = await session.scalar(
+            select(DealInstitution.deal_id).where(
+                DealInstitution.deal_id == deal.id,
+                DealInstitution.institution_id == home.id,
+            )
+        )
+        has_journals = await session.scalar(
+            select(func.count()).select_from(DealJournal).where(DealJournal.deal_id == deal.id)
+        )
+        if linked is None:
+            await session.execute(
+                pg_insert(DealInstitution)
+                .values(deal_id=deal.id, institution_id=home.id)
+                .on_conflict_do_nothing(index_elements=["deal_id", "institution_id"])
+            )
+            stats["linked"] += 1
+        if linked is not None and has_journals:
+            continue  # already derived on an earlier reconcile
+        pname = (publisher_names.get(deal.publisher_id or 0) or "").strip()
+        # openaccess.nl names carry parenthetical sigla ("... (ACS)") that
+        # OpenAlex publisher names lack; match on the bare name.
+        base = re.sub(r"\s*\([^)]*\)\s*$", "", pname).strip()
+        patterns = PUBLISHER_JOURNAL_PATTERNS.get(pname.casefold(), [f"{base}%"]) if base else []
+        if has_journals or not patterns:
+            continue
+        journals = (
+            await session.execute(
+                select(Journal.issn_l, Journal.title).where(
+                    or_(*[Journal.publisher_name.ilike(p) for p in patterns]),
+                    Journal.issn_l.is_not(None),
+                )
+            )
+        ).all()
+        if not journals:
+            continue
+        await session.execute(
+            pg_insert(DealJournal)
+            .values(
+                [
+                    {
+                        "deal_id": deal.id,
+                        "issn": issn_l,
+                        "issn_l": issn_l,
+                        "journal_name": title,
+                        "source": "publisher-pattern",
+                    }
+                    for issn_l, title in journals
+                ]
+            )
+            .on_conflict_do_nothing(index_elements=["deal_id", "issn"])
+        )
+        deal.provenance = list(deal.provenance or []) + [
+            {
+                "source": "reconcile",
+                "derived": "publisher-pattern",
+                "participation": participation,
+                "patterns": patterns,
+                "at": datetime.now(UTC).isoformat(),
+            }
+        ]
+        if deal.id not in protected and deal.needs_curation:
+            deal.needs_curation = False
+            deal.needs_curation_reason = None
+        stats["covered"] += 1
+        stats["pattern_journals"] += len(journals)
+    return stats
 
 
 async def reconcile_deals(session: AsyncSession) -> dict[str, int]:
@@ -258,6 +384,9 @@ async def reconcile_deals(session: AsyncSession) -> dict[str, int]:
                 "verify Twente participation"
             )
         stats["consortium_needs_review"] = len(set(bare) - protected_bare)
+    # openaccess.nl-only deals: parse participation + derive publisher
+    # coverage before the commit (may clear the no-JCT curation flags).
+    stats.update(await derive_nl_deal_coverage(session))
     await session.commit()
     logger.info("reconcile: %s", stats)
     return stats
@@ -272,8 +401,25 @@ async def _merge(session: AsyncSession, canonical: Deal, jct: Deal) -> None:
     status = jct.status
     # Drop the shadow row first: esac_id is UNIQUE, the canonical row
     # cannot take the value while this row holds it.
+    dupes_j = select(DealJournal.issn).where(DealJournal.deal_id == canonical.id)
+    await session.execute(
+        sa_delete(DealJournal).where(
+            DealJournal.deal_id == jct.id, DealJournal.issn.in_(dupes_j)
+        )
+    )
     await session.execute(
         update(DealJournal).where(DealJournal.deal_id == jct.id).values(deal_id=canonical.id)
+    )
+    # The derive pass may have linked the canonical already; drop the JCT
+    # row's duplicates before re-pointing the rest.
+    dupes = select(DealInstitution.institution_id).where(
+        DealInstitution.deal_id == canonical.id
+    )
+    await session.execute(
+        sa_delete(DealInstitution).where(
+            DealInstitution.deal_id == jct.id,
+            DealInstitution.institution_id.in_(dupes),
+        )
     )
     await session.execute(
         update(DealInstitution)
@@ -314,9 +460,11 @@ async def enforce_unique_agreement_data(session: AsyncSession) -> list[dict[str,
     Sheet (live case 2026-10: eme2025ukb served the Elsevier UKB sheet, so
     Emerald's coverage silently doubled as Elsevier). For each suspect pair,
     the agreement whose publisher matches the shared list's dominant
-    publisher keeps its rows; the other gets its derived journal/institution
-    rows removed (verbatim evidence stays in source_records + landing) and a
-    needs_curation flag until the JCT curators publish the correct sheet.
+    publisher keeps its rows; the other loses its journal rows (verbatim
+    evidence stays in source_records + landing) and keeps a needs_curation
+    flag until the JCT curators publish the correct sheet. Institution
+    links survive: consortium participation is real even when the sheet
+    is wrong.
 
     Returns the actions taken, for the curation report.
     """
@@ -362,9 +510,6 @@ async def enforce_unique_agreement_data(session: AsyncSession) -> list[dict[str,
             continue
         await session.execute(
             sa_delete(DealJournal).where(DealJournal.deal_id == loser.id)
-        )
-        await session.execute(
-            sa_delete(DealInstitution).where(DealInstitution.deal_id == loser.id)
         )
         reason = (
             f"JCT data CSV is a duplicate of {keeper.esac_id} "
