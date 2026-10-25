@@ -64,7 +64,7 @@ CODE_ALIASES = {
     "cam": "Cambridge University Press",
     "emerald": "Emerald Publishing group",
     "eme": "Emerald Publishing group",
-    "lww": "Lippincott, Williams & Wilkins (LWW)",
+    "lww": "Lippincott Williams & Wilkins (LWW)",
     "degruyter": "De Gruyter Brill",
     "dgbrill": "De Gruyter Brill",
     "dgb": "De Gruyter Brill",
