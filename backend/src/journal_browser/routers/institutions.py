@@ -22,7 +22,7 @@ class InstitutionOut(BaseModel):
     short_name: str | None = None
     is_default: bool
     data_window_start: int
-    data_window_end: int | None = None
+    data_window_end: int = 0  # 0 = open
     library_url: str | None = None
     oa_guide_url: str | None = None
     support_email: str | None = None

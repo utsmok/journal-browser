@@ -301,7 +301,9 @@ async def test_title_sort_pages_with_lower_case_cursor(api):
 
 @requires_db
 async def test_search_in_publisher_scope(api):
-    r = await api.get("/api/v1/ut/journals", params={"q": "massachusetts", "search_in": "publisher"})
+    r = await api.get(
+        "/api/v1/ut/journals", params={"q": "massachusetts", "search_in": "publisher"}
+    )
     assert r.status_code == 200
     assert _issns(r.json()) == {"1234-5678"}
     # Same query in the title scope must not match the publisher.
@@ -312,7 +314,9 @@ async def test_search_in_publisher_scope(api):
     r = await api.get("/api/v1/ut/journals", params={"q": "massachusetts"})
     assert {"1234-5678"} <= _issns(r.json())
     # LIKE wildcards in user input stay literal, no crash.
-    r = await api.get("/api/v1/ut/journals", params={"q": "mass%achu_setts", "search_in": "publisher"})
+    r = await api.get(
+        "/api/v1/ut/journals", params={"q": "mass%achu_setts", "search_in": "publisher"}
+    )
     assert r.status_code == 200
     assert r.json()["total"] == 0
 

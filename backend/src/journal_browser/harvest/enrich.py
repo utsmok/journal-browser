@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..harvest.common import canonical_oa_status, normalize_issn, resolve_issn_l
 from ..ingest import IngestSession
-from ..models import Journal, Work, WorkIdentity
+from ..models import WORK_IDENTITY_UQ, Journal, Work, WorkIdentity
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,7 @@ async def _confirm_identity(
             confidence=confidence,
             status="confirmed",
         )
-        .on_conflict_do_nothing(constraint="uq_work_identity_inst_source")
+        .on_conflict_do_nothing(constraint=WORK_IDENTITY_UQ)
     )
     await session.execute(stmt)
 
@@ -232,7 +232,7 @@ async def enrich_openalex(
                             confidence=0.0,
                             status="missing",
                         )
-                        .on_conflict_do_nothing(constraint="uq_work_identity_inst_source")
+                        .on_conflict_do_nothing(constraint=WORK_IDENTITY_UQ)
                     )
                     await session.execute(stmt)
             await ingest.commit()

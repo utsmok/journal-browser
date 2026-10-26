@@ -592,6 +592,11 @@ class Work(Base):
     )
 
 
+# ON CONFLICT targets live as literals in harvest code; this constant is
+# the single name the model, the migration, and those statements share.
+WORK_IDENTITY_UQ = "uq_work_identity_source"
+
+
 class WorkIdentity(Base):
     """Cross-source identity link between an external record and a work.
 
@@ -622,7 +627,7 @@ class WorkIdentity(Base):
             ondelete="CASCADE",
         ),
         UniqueConstraint(
-            "institution_id", "source", "source_pk", name="uq_work_identity_source"
+            "institution_id", "source", "source_pk", name=WORK_IDENTITY_UQ
         ),
         Index("ix_work_identity_inst_work", "institution_id", "work_id"),
     )

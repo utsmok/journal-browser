@@ -61,6 +61,9 @@ INST_STEPS: list[tuple[str, list[str]]] = [
     ("enrich", ["jobs/enrich_works.py"]),
     ("openaire", ["jobs/harvest_openaire.py"]),
     ("stats", ["jobs/harvest_stats.py"]),
+    # Participation derive + coverage flags: makes onboarding (one row +
+    # this layer) self-sufficient without rerunning global deal merging.
+    ("reconcile", ["jobs/reconcile.py"]),
 ]
 
 #: Per-institution dependencies: names within an institution are prefixed
@@ -71,6 +74,7 @@ INST_DEPS: dict[str, list[str]] = {
     # DOI-to-work matching reads the institution's works
     "openaire": ["pure", "deals-issn-l"],
     "stats": ["enrich", "openaire", "openapc", "scimagojr", "flags"],
+    "reconcile": ["stats", "deals-reconcile"],
 }
 
 #: Institution-neutral, so it runs once after every stats layer.

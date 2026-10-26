@@ -318,7 +318,11 @@ async def test_ut_metadata_unavailable_degrades_to_stats_only(api, client, monke
 
     r = await client.get("/api/v1/tu/journals/1234-5678")
     metrics = r.json()["institution_metrics"]
-    assert (metrics["canonical_total"], metrics["canonical_retracted"], metrics["canonical_oa"]) == (
+    assert (
+        metrics["canonical_total"],
+        metrics["canonical_retracted"],
+        metrics["canonical_oa"],
+    ) == (
         None,
         None,
         None,

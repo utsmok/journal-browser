@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..ingest import IngestSession
-from ..models import Work, WorkIdentity
+from ..models import WORK_IDENTITY_UQ, Work, WorkIdentity
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +154,7 @@ async def _confirm(
             confidence=1.0,
             status="confirmed",
         )
-        .on_conflict_do_nothing(constraint="uq_work_identity_inst_source")
+        .on_conflict_do_nothing(constraint=WORK_IDENTITY_UQ)
     )
     await session.execute(stmt)
 
@@ -229,7 +229,7 @@ async def match_openaire_titles(
                 status="candidate",
                 note=f"openaire title: {r.title[:160]}",
             )
-            .on_conflict_do_nothing(constraint="uq_work_identity_inst_source")
+            .on_conflict_do_nothing(constraint=WORK_IDENTITY_UQ)
         )
         await session.execute(stmt)
     await session.commit()

@@ -30,11 +30,16 @@ def _covered_join(institution_id: int):
     )
 
     def covered(q):
-        return q.join(
-            DealInstitution,
-            (DealInstitution.deal_id == Deal.id)
-            & (DealInstitution.institution_id == institution_id),
-        ).join(DealJournal, (DealJournal.deal_id == Deal.id) & dj_scope)
+        return (
+            q.join(
+                DealInstitution,
+                (DealInstitution.deal_id == Deal.id)
+                & (DealInstitution.institution_id == institution_id),
+            )
+            # LEFT JOIN: a participating deal shows even when its
+            # effective journal list is empty (count 0).
+            .outerjoin(DealJournal, (DealJournal.deal_id == Deal.id) & dj_scope)
+        )
 
     return covered
 
@@ -55,7 +60,7 @@ async def list_deals(
 ) -> list[DealOut]:
     covered = _covered_join(institution.id)
     query = covered(
-        select(Deal, Publisher.name, func.count(DealJournal.issn_l))
+        select(Deal, Publisher.name, func.count(DealJournal.issn_l.distinct()))
         .outerjoin(Publisher, Publisher.id == Deal.publisher_id)
         .group_by(Deal.id, Publisher.name)
     )
@@ -73,7 +78,7 @@ async def deal_detail(
     row = (
         await session.execute(
             covered(
-                select(Deal, Publisher.name, func.count(DealJournal.issn_l))
+                select(Deal, Publisher.name, func.count(DealJournal.issn_l.distinct()))
                 .outerjoin(Publisher, Publisher.id == Deal.publisher_id)
                 .where(Deal.id == deal_id)
                 .group_by(Deal.id, Publisher.name)
