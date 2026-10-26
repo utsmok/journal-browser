@@ -15,6 +15,7 @@ export function SiteNav() {
   return (
     <nav aria-label="Main" className="flex items-center gap-4 sm:gap-6 text-sm">
       <NavLink href={`${prefix}/`} label="Search" />
+      <NavLink href={`${prefix}/author`} label="Authors" />
       <NavLink href={`${prefix}/deals`} label="Deals" />
       <NavLink href={`${prefix}/about`} label="About" />
       <NavLink href="/" label="All universities" />

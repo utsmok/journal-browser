@@ -134,6 +134,87 @@ export type FreshnessResponse = Schemas["FreshnessResponse"];
 export type StatsYear = Schemas["StatsYear"];
 export type Attribution = Schemas["Attribution"];
 
+// --- Author profiles (Pure-based, per institution) ---
+
+export type AuthorSearchItem = {
+  pure_uuid: string;
+  name: string;
+  faculty: string | null;
+  research_group: string | null;
+  n_works: number;
+  orcid: string | null;
+};
+
+export type AuthorSearchResponse = {
+  /** False when this institution has no author data at all (e.g. /rug/author). */
+  enabled: boolean;
+  total: number;
+  items: AuthorSearchItem[];
+};
+
+export type AuthorSimilarJournal = {
+  issn_l: string;
+  title: string | null;
+  /** Similarity (1 - cosine distance); higher is more similar. */
+  score: number;
+  oa_type: "gold" | "diamond" | "hybrid" | "subscription";
+  deal_covered: boolean;
+};
+
+export type AuthorProfile = {
+  author: {
+    pure_uuid: string;
+    name: string;
+    orcid: string | null;
+    openalex_author_id: string | null;
+    openaire_person_id: string | null;
+    crossref_orcid: string | null;
+    faculty: string | null;
+    research_group: string | null;
+    orgs: string[];
+    n_works: number;
+  };
+  /** Per-year OA counts for the author's works, sorted year descending. */
+  oa_by_year: {
+    year: number;
+    total: number;
+    gold: number;
+    green: number;
+    hybrid: number;
+    bronze: number;
+    closed: number;
+  }[];
+  journals: {
+    issn_l: string;
+    title: string | null;
+    n_works: number;
+    oa_type: "gold" | "diamond" | "hybrid" | "subscription";
+  }[];
+  topics: { name: string; n: number }[];
+  similar: {
+    all: AuthorSimilarJournal[];
+    deals: AuthorSimilarJournal[];
+    diamond: AuthorSimilarJournal[];
+  };
+  /** The author's hybrid/subscription journals with diamond/deal alternatives. */
+  alternatives: {
+    issn_l: string;
+    title: string | null;
+    n_works: number;
+    options: AuthorSimilarJournal[];
+  }[];
+  /** Most recent works, year descending, capped at 200. */
+  works: {
+    pure_uuid: string;
+    title: string;
+    year: number;
+    doi: string | null;
+    oa_status: string | null;
+    journal_issn_l: string | null;
+    journal_title: string | null;
+  }[];
+};
+
 export type SortKey =
   | "relevance"
   | "title"
@@ -216,4 +297,18 @@ export async function apiGet<T>(
     if (!(err instanceof ApiError)) console.error(`Fetch failed on ${path}`, err);
     throw err;
   }
+}
+
+export async function fetchAuthors(
+  inst: string,
+  q?: string,
+): Promise<AuthorSearchResponse> {
+  return apiGet<AuthorSearchResponse>(`/${inst}/authors`, { q, limit: 50 });
+}
+
+export async function fetchAuthor(
+  inst: string,
+  pureUuid: string,
+): Promise<AuthorProfile> {
+  return apiGet<AuthorProfile>(`/${inst}/authors/${encodeURIComponent(pureUuid)}`);
 }
