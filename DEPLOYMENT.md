@@ -89,6 +89,9 @@ Useful variants (run inside the backend image, e.g.
 - `--always` re-runs the whole pipeline (every job is idempotent).
 - `--from <step>` re-runs one step and everything after it, serially, in the
   listed order — the repair path.
+- `--institution <code>` re-runs only that institution's layer (repository
+  harvest, enrichment, OpenAIRE, stats, participation, flags). Global steps
+  are skipped — the shared layer is already in place.
 
 ## What the harvests build
 
@@ -139,20 +142,37 @@ exchanges the password for a 12-hour signed token; the panel is read-only by
 design — configuration changes belong in `.env` plus a restart, so the panel
 cannot drift from the deployment.
 
-## Deploying a second institution
+## Adding a second institution
 
-`compose.groningen.yml` is the tested reference (University of Groningen,
-ports 5543/8002/3002):
+One deployment serves any number of universities at `/{code}/...` paths
+(for example `/ut` and `/rug`). The journal universe, deal register,
+OpenAPC, Scimago, and embeddings are shared; each institution only adds
+its own works corpus, stats, and participation. Onboarding is one SQL
+statement plus one harvest run — no second stack, no extra ports:
 
-```bash
-docker compose -p jb-groningen -f docker-compose.yml -f compose.groningen.yml up -d --build
+```sql
+-- The institutions table already lists every openaccess.nl participant
+-- (inactive, no code); claim the row instead of inserting a new one.
+UPDATE institutions SET
+  code = 'rug', short_name = 'RUG', active = true,
+  ror = 'https://ror.org/012p63287',
+  pure_oai_base_url = 'https://pure.rug.nl/ws/oai',
+  openaire_org_id = 'openorgs____::81371ea94b1a09d3243e73d6ec3527ec',
+  data_window_start = 2025, data_window_end = 2025,
+  library_url = 'https://www.rug.nl/library',
+  support_email = 'openaccess@rug.nl'
+WHERE name = 'Rijksuniversiteit Groningen';
 ```
 
-The override sets Groningen's identity and display variables, their Pure
-OAI-PMH endpoint (`https://pure.rug.nl/ws/oai`), their OpenAIRE org id, a
-2025-only data window, an isolated landing directory, and its own ports. Copy
-the pattern for another institute: identity block, sources block, ports,
-landing dir. Nothing else in the image is institution-specific.
+```bash
+# Runs only the per-institution layers (pure, enrich, openaire, stats,
+# participation, flags); the global layer is already in place.
+docker compose run --rm bootstrap sh -c "uv run --no-dev python jobs/bootstrap.py --institution rug"
+```
+
+The landing page (`/`) lists every active institution and redirects to it
+when only one exists. `JB_*` env vars still configure the default
+institution; every other institution reads its config from its row.
 
 ## Maintenance
 
@@ -167,3 +187,28 @@ landing dir. Nothing else in the image is institution-specific.
 - **Upgrading the stack:** `git pull && docker compose up -d --build`. Check
   this file's changelog-worthy notes before major version bumps; new settings
   always default to the Twente values, so existing deployments keep working.
+
+## Backbone export
+
+Everything institution-neutral lives in global tables with no institution
+columns, so a filled database doubles as a bootstrap backbone for a fresh
+instance (another university's own deployment starts hours ahead by
+restoring them before its first boot):
+
+| Table | Contents |
+|---|---|
+| `journals` | OpenAlex journal universe (ISSN-L keyed) |
+| `issn_l_map` | ISSN to ISSN-L resolution |
+| `publishers`, `deals`, `deal_journals` (shared rows: `institution_id IS NULL`) | NL deal register and journal lists |
+| `apc_evidence`, `openapc` | APC evidence and OpenAPC prices |
+| `scimagojr_metrics` | Scimago quartiles |
+| `jct` | Journal Checker Tool data |
+| `journal_embeddings` | Semantic-search vectors (institution-neutral) |
+| `works_metadata_cache` | OpenAlex per-work enrichment cache |
+
+Export with `pg_dump -Fc -t journals -t issn_l_map ...` and restore into the
+fresh database before `docker compose up`; `auto` bootstrap then only runs
+the institution-specific layers. Institution-scoped tables (`works`,
+`institution_works_stats`, `journal_flags`, `harvest_runs`,
+`harvest_state`, `deal_institutions`, plus per-institution `deal_journals`
+rows) stay behind — they are per-deployment data.

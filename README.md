@@ -26,10 +26,10 @@ label follows the configured institution.
    `http://localhost:3000` — the deal register should list your
    institution's current NL deals with journal counts.
 
-The full guide — configuration reference, harvest internals, admin panel,
-second-institute deployment, maintenance — is in
-[DEPLOYMENT.md](DEPLOYMENT.md). A tested second-institute reference stack
-lives in `compose.groningen.yml` (University of Groningen).
+The site serves multiple universities at `/{code}` paths (for example
+`/ut`, `/rug`) with a landing chooser at `/`. The full guide —
+configuration reference, harvest internals, admin panel, adding a second
+institution, maintenance — is in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Stack
 
