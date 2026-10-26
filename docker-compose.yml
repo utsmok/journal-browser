@@ -82,8 +82,10 @@ services:
   bootstrap:
     build: ./backend
     restart: "no"
-    # Root only to hand the bind-mounted landing dir (compose creates it
-    # root-owned) to uid 1000; the jobs then drop privileges via su.
+    # Root only for the entrypoint's chown: docker creates the bind-mounted
+    # landing dir root-owned on fresh hosts; docker-entrypoint.sh hands it to
+    # uid 1000 and drops privileges, so even `compose run` one-offs never
+    # write root-owned files into the host mount.
     user: root
     environment:
       JB_DATABASE_URL: postgresql+asyncpg://journal:journal@db:5432/journalbrowser
@@ -105,10 +107,8 @@ services:
     volumes:
       - ./backend/landing:/app/landing
     command: >
-      sh -c "chown -R 1000:1000 /app/landing &&
-             su app -s /bin/sh -c 'cd /app &&
-             uv run --no-dev alembic upgrade head &&
-             uv run --no-dev python jobs/bootstrap.py'"
+      sh -c "uv run --no-dev alembic upgrade head &&
+             uv run --no-dev python jobs/bootstrap.py"
     depends_on:
       db:
         condition: service_healthy

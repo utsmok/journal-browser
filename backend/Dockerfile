@@ -23,6 +23,7 @@ RUN uv run --no-dev python -c "from fastembed import TextEmbedding; list(TextEmb
 USER app
 
 EXPOSE 8000
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # Migrations run at container start so `docker compose up` is self-contained.
 CMD ["sh", "-c", "uv run --no-dev alembic upgrade head && uv run --no-dev uvicorn journal_browser.main:app --host 0.0.0.0 --port 8000"]
