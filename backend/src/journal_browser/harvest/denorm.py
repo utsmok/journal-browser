@@ -101,9 +101,9 @@ QUARTILES_SQL = text(
     """
 )
 
-# Mirrors attach_latest_apc semantics: the newest period with a known cost
-# wins, and the value is that period's highest single reported APC (a real
-# observed price — period means average multi-article years).
+# Mirrors the OpenAPC fallback in attach_apc_display: the newest period with
+# a known cost wins, and the value is that period's highest single reported
+# APC (a real observed price — period means average multi-article years).
 RESET_APC_SQL = text("UPDATE journals SET latest_apc_euro = NULL")
 
 APC_SQL = text(

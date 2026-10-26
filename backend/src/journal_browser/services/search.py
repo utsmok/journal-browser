@@ -76,6 +76,15 @@ SIMILAR_ALL_LIMIT = 10
 
 APC_EXISTS = exists(select(1).where(JournalApcAggregate.issn_l == Journal.issn_l))
 
+
+def _list_price(currency: str) -> Any:
+    """OpenAlex list-price APC in one currency; None without an entry."""
+    path = text(f"'$[*] ? (@.currency == \"{currency}\")'::jsonpath")
+    return cast(
+        func.jsonb_path_query_first(Journal.apc_prices, path).op("->>")("price"),
+        Numeric,
+    )
+
 #: Per-journal OA type (owner-approved 2026-10-23). DOAJ = fully-OA venue;
 #: OpenAPC evidence on a DOAJ journal splits gold vs diamond; a covered
 #: non-DOAJ journal is hybrid via the agreement; rest is subscription.
@@ -179,7 +188,12 @@ def base_query(
             func.coalesce(J.topics.op("->")(0).op("->>")("display_name"), "").label(
                 "primary_topic"
             ),
-            J.latest_apc_euro.label("latest_apc"),
+            # Display/sort price: OpenAlex list price (EUR, then USD), else
+            # the OpenAPC latest cost. apc_prices order is unspecified, so
+            # the currency match goes through jsonb_path_query_first.
+            func.coalesce(
+                _list_price("EUR"), _list_price("USD"), J.latest_apc_euro
+            ).label("apc_price"),
         )
         .select_from(J)
         .join(flags, flags.c.issn_l == J.issn_l)
@@ -268,7 +282,7 @@ def _order(sort: SortKey, subq: Any) -> tuple[Any, str]:
     if sort == "topic":
         return subq.c.primary_topic, "asc"
     if sort == "apc":
-        return func.coalesce(subq.c.latest_apc, 0), "desc"
+        return func.coalesce(subq.c.apc_price, 0), "desc"
     if sort == "institution_works":
         return func.coalesce(subq.c.works, 0), "desc"
     if sort == "2yr_mean_citedness":
@@ -276,31 +290,90 @@ def _order(sort: SortKey, subq: Any) -> tuple[Any, str]:
     return func.coalesce(subq.c.rank, 0), "desc"  # relevance
 
 
-async def attach_latest_apc(session: AsyncSession, items: list[dict[str, Any]]) -> None:
-    """Stamps apc_period/apc_euro_latest (highest single reported APC in the
-    journal's newest OpenAPC period with cost evidence) onto each item dict
-    in place; one keyed query for the whole page."""
-    apc_rows = (
+async def attach_apc_display(session: AsyncSession, items: list[dict[str, Any]]) -> None:
+    """Stamp display APC fields onto each item dict in place (page-sized).
+
+    OpenAlex list price wins (EUR, then USD, else first entry); without one,
+    the OpenAPC observed range over the newest two evidence periods, plus
+    per-period stats for the tooltip. One keyed query per source table.
+    """
+    issns = [i["issn_l"] for i in items]
+    list_price: dict[str, tuple[str, float]] = {}
+    for issn_l, prices in (
+        await session.execute(
+            select(Journal.issn_l, Journal.apc_prices).where(Journal.issn_l.in_(issns))
+        )
+    ).all():
+        entries = [
+            p for p in (prices or []) if isinstance(p, dict) and p.get("price") is not None
+        ]
+        by_currency = {p.get("currency"): p["price"] for p in entries}
+        matched = next((c for c in ("EUR", "USD") if c in by_currency), None)
+        if matched:
+            list_price[issn_l] = (matched, float(by_currency[matched]))
+        elif entries:
+            list_price[issn_l] = (str(entries[0].get("currency") or ""), float(entries[0]["price"]))
+
+    aggs: dict[str, list[Any]] = {}
+    for row in (
         await session.execute(
             select(
                 JournalApcAggregate.issn_l,
                 JournalApcAggregate.period,
+                JournalApcAggregate.article_count,
+                JournalApcAggregate.euro_min,
                 JournalApcAggregate.euro_max,
+                JournalApcAggregate.euro_mean,
             )
-            .where(
-                JournalApcAggregate.issn_l.in_([i["issn_l"] for i in items]),
-                JournalApcAggregate.euro_max.is_not(None),
-            )
+            .where(JournalApcAggregate.issn_l.in_(issns))
+            .where(JournalApcAggregate.euro_max.is_not(None))
             .order_by(JournalApcAggregate.issn_l, JournalApcAggregate.period.desc())
         )
-    ).all()
-    latest: dict[str, tuple[Any, Any]] = {}
-    for r in apc_rows:
-        latest.setdefault(r.issn_l, (r.period, r.euro_max))
+    ).all():
+        aggs.setdefault(row.issn_l, []).append(row)
+
     for item in items:
-        hit = latest.get(item["issn_l"])
-        item["apc_period"] = str(hit[0]) if hit else None
-        item["apc_euro_latest"] = float(hit[1]) if hit and hit[1] is not None else None
+        hit = list_price.get(item["issn_l"])
+        if hit is not None:
+            item.update(
+                apc_source="openalex",
+                apc_currency=hit[0],
+                apc_price=hit[1],
+                apc_low=None,
+                apc_high=None,
+                apc_stats=[],
+            )
+            continue
+        rows = aggs.get(item["issn_l"]) or []
+        if not rows:
+            item.update(
+                apc_source=None,
+                apc_currency=None,
+                apc_price=None,
+                apc_low=None,
+                apc_high=None,
+                apc_stats=[],
+            )
+            continue
+        window = [r for r in rows if r.period >= rows[0].period - 1]
+        lows = [float(r.euro_min if r.euro_min is not None else r.euro_max) for r in window]
+        item.update(
+            apc_source="openapc",
+            apc_currency=None,
+            apc_price=None,
+            apc_low=min(lows),
+            apc_high=max(float(r.euro_max) for r in window),
+            apc_stats=[
+                {
+                    "period": r.period,
+                    "article_count": r.article_count,
+                    "euro_min": None if r.euro_min is None else float(r.euro_min),
+                    "euro_max": float(r.euro_max),
+                    "euro_mean": None if r.euro_mean is None else float(r.euro_mean),
+                }
+                for r in rows
+            ],
+        )
 
 
 async def search_journals(
@@ -398,7 +471,7 @@ async def search_journals(
     # Most-recent OpenAPC period per journal for the page only (<= limit
     # rows); one extra keyed query beats a lateral join on every page.
     if rows:
-        await attach_latest_apc(session, items)
+        await attach_apc_display(session, items)
 
     # Facets only depend on the filter set, never on cursor/page/sort — page
     # turns skip the aggregate and pass the count through instead.
@@ -844,7 +917,7 @@ async def semantic_search(
         item.pop("dist", None)
         items.append(item)
     if items:
-        await attach_latest_apc(session, items)
+        await attach_apc_display(session, items)
     return {
         "items": items,
         "total": total,

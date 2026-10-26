@@ -8,8 +8,19 @@ type Schemas = components["schemas"];
  * frontend can code against them while the old backend simply omits them.
  */
 export type JournalListItem = Schemas["JournalListItem"] & {
-  apc_euro_latest?: number | null;
-  apc_period?: number | null;
+  /** Display APC: OpenAlex list price when known, else the OpenAPC range. */
+  apc_source?: "openalex" | "openapc" | null;
+  apc_price?: number | null;
+  apc_currency?: string | null;
+  apc_low?: number | null;
+  apc_high?: number | null;
+  apc_stats?: {
+    period: number;
+    article_count: number;
+    euro_min: number | null;
+    euro_max: number | null;
+    euro_mean: number | null;
+  }[];
   oa_type?: ("gold" | "diamond" | "hybrid" | "subscription") | null;
   primary_topic?: string | null;
 };

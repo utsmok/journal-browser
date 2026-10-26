@@ -30,10 +30,16 @@ class JournalListItem(BaseModel):
     # OpenAlex primary topic (first entry of the topics list); None when the
     # journal has no topics.
     primary_topic: str | None = None
-    # Highest single APC reported in the journal's most recent OpenAPC
-    # period with cost evidence (not a period mean); None without evidence.
-    apc_euro_latest: float | None = None
-    apc_period: str | None = None
+    # Display APC for results rows: OpenAlex list price when known
+    # (apc_price + apc_currency, EUR preferred), else the OpenAPC observed
+    # range over the journal's newest two evidence periods (apc_low/high)
+    # with per-period stats for the tooltip. All None without either source.
+    apc_source: str | None = None
+    apc_currency: str | None = None
+    apc_price: float | None = None
+    apc_low: float | None = None
+    apc_high: float | None = None
+    apc_stats: list["ApcAggregateOut"] = []
 
 
 class JournalSearchResponse(BaseModel):
