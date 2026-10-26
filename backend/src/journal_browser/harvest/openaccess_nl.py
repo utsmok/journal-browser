@@ -16,11 +16,24 @@ from bs4 import BeautifulSoup
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..ingest import IngestSession
+from ..ingest import IngestSession, apply_overrides
 from ..models import Deal, Publisher
 from .common import download_to_landing, run_harvest
 
 logger = logging.getLogger(__name__)
+
+# Deal fields this source rewrites on every scrape; ManualOverride rows
+# (admin edits via /admin/deals) win over the scraped value.
+_DEAL_FIELDS = [
+    "status",
+    "start_year",
+    "end_year",
+    "cap_text",
+    "cap_numbers",
+    "summary",
+    "needs_curation",
+    "needs_curation_reason",
+]
 
 SOURCE = "openaccess.nl"
 BASE_URL = "https://www.openaccess.nl"
@@ -329,10 +342,13 @@ async def _upsert_deal(
         "needs_curation_reason": "; ".join(page["curation_reasons"]) or None,
     }
     if deal is None:
-        session.add(Deal(publisher_id=publisher_id, duration_text=item["duration_text"], **values))
+        deal = Deal(publisher_id=publisher_id, duration_text=item["duration_text"], **values)
+        session.add(deal)
+        await session.flush()  # id needed for the override row_key
     else:
         for key, value in values.items():
             setattr(deal, key, value)
+    await apply_overrides(session, "deals", str(deal.id), deal, _DEAL_FIELDS)
     return needs_curation
 
 

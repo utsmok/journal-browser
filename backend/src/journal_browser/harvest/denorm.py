@@ -132,6 +132,7 @@ DEAL_FLAGS_SQL = text(
              AND di.institution_id = f.institution_id
         WHERE dj.issn_l = f.issn_l
           AND d.status = 'current'
+          AND NOT dj.excluded
           AND dj.institution_id IS NOT DISTINCT FROM
               (CASE WHEN di.journal_override THEN di.institution_id ELSE NULL END)
     )

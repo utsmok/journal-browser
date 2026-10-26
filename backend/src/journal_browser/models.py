@@ -308,6 +308,9 @@ class DealJournal(Base):
     needs_curation: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
+    # Admin-removed from the deal (PUT /admin/deals/{id}/journals). The row
+    # is kept so the JCT upsert cannot resurrect it; hidden from coverage.
+    excluded: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
 
     __table_args__ = (
         CheckConstraint(

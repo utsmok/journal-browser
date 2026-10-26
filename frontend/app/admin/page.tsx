@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { LoginForm } from "@/components/admin/login-form";
+import { CreateDealForm, DealEditor, DealsTable } from "@/components/admin/deal-editor";
 import { RunsTable, StatusBadge } from "@/components/admin/runs-table";
 import {
   GlobalSettingsForm,
@@ -22,6 +23,7 @@ import {
   AdminError,
   adminGet,
   useAdminToken,
+  type AdminDeal,
   type AdminRun,
   type FlaggedDeal,
 } from "@/lib/admin";
@@ -33,6 +35,11 @@ export default function AdminPage() {
   const [runs, setRuns] = useState<AdminRun[]>([]);
   const [flagged, setFlagged] = useState<FlaggedDeal[]>([]);
   const [runsError, setRunsError] = useState<string | null>(null);
+  const [deals, setDeals] = useState<AdminDeal[]>([]);
+  const [dealsError, setDealsError] = useState<string | null>(null);
+  const [dealsEpoch, setDealsEpoch] = useState(0);
+  const [selectedDealId, setSelectedDealId] = useState<number | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
   const directory = useInstitutionsDirectory();
   const unis = directory.data ?? [];
 
@@ -70,6 +77,28 @@ export default function AdminPage() {
     };
   }, [token, instFilter, setToken]);
 
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    adminGet<AdminDeal[]>("/deals", token)
+      .then((d) => {
+        if (cancelled) return;
+        setDeals(d);
+        setDealsError(null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        if (err instanceof AdminError && err.status === 401) {
+          setToken(null);
+          return;
+        }
+        setDealsError(`Could not load deals (${err instanceof Error ? err.message : err}).`);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, dealsEpoch, setToken]);
+
   if (!token) return <LoginForm onToken={setToken} />;
 
   return (
@@ -106,6 +135,52 @@ export default function AdminPage() {
       </section>
 
       <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Deals ({deals.length})</h2>
+          <div className="flex items-center gap-2">
+            {selectedDealId && (
+              <Button variant="outline" size="sm" onClick={() => setSelectedDealId(null)}>
+                Close editor
+              </Button>
+            )}
+            <Button
+              size="sm"
+              onClick={() => {
+                setShowCreate((s) => !s);
+                setSelectedDealId(null);
+              }}
+            >
+              {showCreate ? "Cancel" : "Add deal"}
+            </Button>
+          </div>
+        </div>
+        {dealsError && <p className="text-sm text-destructive">{dealsError}</p>}
+        <DealsTable deals={deals} selectedId={selectedDealId} onSelect={setSelectedDealId} />
+        {showCreate && (
+          <CreateDealForm
+            token={token}
+            onUnauthorized={setToken}
+            onCreated={(id) => {
+              setShowCreate(false);
+              setSelectedDealId(id);
+              setDealsEpoch((e) => e + 1);
+            }}
+            onCancel={() => setShowCreate(false)}
+          />
+        )}
+        {selectedDealId && (
+          <DealEditor
+            key={selectedDealId}
+            dealId={selectedDealId}
+            token={token}
+            institutions={unis}
+            onUnauthorized={setToken}
+            onChanged={() => setDealsEpoch((e) => e + 1)}
+          />
+        )}
+      </section>
+
+      <section className="space-y-3">
         <h2 className="text-lg font-semibold">
           Deals flagged for curation ({flagged.length})
         </h2>
@@ -121,7 +196,12 @@ export default function AdminPage() {
           </TableHeader>
           <TableBody>
             {flagged.map((deal) => (
-              <TableRow key={deal.id}>
+              <TableRow
+                key={deal.id}
+                className="cursor-pointer"
+                title="Click to edit this deal"
+                onClick={() => setSelectedDealId(deal.id)}
+              >
                 <TableCell>{deal.publisher}</TableCell>
                 <TableCell className="font-mono text-xs">{deal.esac_id ?? "—"}</TableCell>
                 <TableCell>

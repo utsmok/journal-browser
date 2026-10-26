@@ -6,18 +6,22 @@ password change invalidates old tokens immediately). GET endpoints show
 recent harvest runs and deals flagged for curation. GET/PUT /settings read
 and write the settings.yaml overlay (reloaded live, no restart) and
 GET/PUT /institutions/{code} the per-university configuration rows.
+/deals is the curation CRUD: edits are recorded as manual_overrides and
+survive every re-harvest; removed deal journals are flagged, not deleted.
 """
 
 import hashlib
 import hmac
 import os
 import time
+from datetime import date
 from typing import Annotated, Any
 
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
-from sqlalchemy import desc, func, select
+from sqlalchemy import delete, desc, func, select, text, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import (
@@ -27,7 +31,19 @@ from ..config import (
     settings_yaml_path,
 )
 from ..db import get_session
-from ..models import Deal, DealJournal, HarvestRun, Institution, Publisher
+from ..harvest.common import get_institution_by_code, normalize_issn
+from ..harvest.denorm import refresh_deal_flags
+from ..models import (
+    Deal,
+    DealInstitution,
+    DealJournal,
+    HarvestRun,
+    Institution,
+    IssnMap,
+    Journal,
+    ManualOverride,
+    Publisher,
+)
 from ..settings_schema import SETTINGS_REGISTRY, value_for_response
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -313,3 +329,369 @@ async def update_institution(
         setattr(inst, key, value)
     await session.commit()
     return _institution_payload(inst)
+
+
+# ── Deals: curation CRUD ────────────────────────────────────────────────────
+# Every accepted edit writes a manual_overrides row (table_name="deals",
+# row_key=str(deal id)), which apply_overrides re-applies after each
+# harvester upsert — that is what makes edits stick. Removing a deal
+# journal sets excluded=true and keeps the row so the JCT upsert cannot
+# resurrect it.
+
+# Fields PUT /admin/deals/{id} accepts.
+DEAL_EDITABLE = {
+    "status",
+    "start_year",
+    "end_year",
+    "corresponding_authors_only",
+    "cap_numbers",
+    "cap_text",
+    "summary",
+    "esac_id",
+    "publisher_id",
+}
+
+
+def _validate_deal_field(key: str, value: Any) -> None:
+    if key == "status":
+        if value not in ("current", "archive"):
+            raise HTTPException(400, "status must be 'current' or 'archive'")
+    elif key in ("start_year", "end_year", "publisher_id"):
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise HTTPException(400, f"{key}: expected int")
+    elif key == "corresponding_authors_only":
+        if not isinstance(value, bool):
+            raise HTTPException(400, "corresponding_authors_only: expected bool")
+    elif key in ("cap_text", "summary", "esac_id"):
+        if not isinstance(value, str):
+            raise HTTPException(400, f"{key}: expected string")
+    elif key == "cap_numbers" and value is not None and (
+        not isinstance(value, dict)
+        or not all(
+            isinstance(k, str)
+            and len(k) == 4
+            and k.isdigit()
+            and isinstance(v, int)
+            and not isinstance(v, bool)
+            for k, v in value.items()
+        )
+    ):
+        raise HTTPException(400, "cap_numbers: expected {\"yyyy\": count} or null")
+
+
+def _deal_payload(
+    deal: Deal, publisher: str | None, journal_count: int, participations: list[str]
+) -> dict[str, Any]:
+    return {
+        "id": deal.id,
+        "publisher_id": deal.publisher_id,
+        "publisher": publisher,
+        "esac_id": deal.esac_id,
+        "status": deal.status,
+        "start_year": deal.start_year,
+        "end_year": deal.end_year,
+        "corresponding_authors_only": deal.corresponding_authors_only,
+        "capped": bool(deal.cap_numbers),
+        "cap_numbers": deal.cap_numbers,
+        "cap_text": deal.cap_text,
+        "summary": deal.summary,
+        "journal_count": journal_count,
+        "participations": participations,
+        "needs_curation": deal.needs_curation,
+        "needs_curation_reason": deal.needs_curation_reason,
+    }
+
+
+async def _deal_detail(session: AsyncSession, deal_id: int) -> dict[str, Any]:
+    row = (
+        await session.execute(
+            select(Deal, Publisher.name)
+            .outerjoin(Publisher, Publisher.id == Deal.publisher_id)
+            .where(Deal.id == deal_id)
+        )
+    ).first()
+    if row is None:
+        raise HTTPException(404, f"unknown deal: {deal_id}")
+    deal, publisher = row
+    journal_count = await session.scalar(
+        select(func.count()).where(
+            DealJournal.deal_id == deal_id, DealJournal.excluded.is_(False)
+        )
+    )
+    codes = (
+        (
+            await session.execute(
+                select(Institution.code)
+                .join(DealInstitution, DealInstitution.institution_id == Institution.id)
+                .where(DealInstitution.deal_id == deal_id)
+                .order_by(Institution.code)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    journals = (
+        (
+            await session.execute(
+                select(DealJournal)
+                .where(DealJournal.deal_id == deal_id)
+                .order_by(DealJournal.issn, DealJournal.institution_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {
+        **_deal_payload(deal, publisher, int(journal_count or 0), list(codes)),
+        "journals": [
+            {
+                "issn": dj.issn,
+                "issn_l": dj.issn_l,
+                "journal_name": dj.journal_name,
+                "source": dj.source,
+                "excluded": dj.excluded,
+            }
+            for dj in journals
+        ],
+    }
+
+
+async def _refresh_deal_flags(session: AsyncSession) -> None:
+    """Deal writes change per-institution coverage; recompute every host."""
+    for iid in (await session.execute(select(Institution.id))).scalars():
+        await refresh_deal_flags(session, iid)
+    await session.commit()
+
+
+async def _get_deal_or_404(session: AsyncSession, deal_id: int) -> Deal:
+    deal = await session.get(Deal, deal_id)
+    if deal is None:
+        raise HTTPException(404, f"unknown deal: {deal_id}")
+    return deal
+
+
+@router.get("/deals")
+async def list_deals(session: SessionDep, _: AdminDep) -> list[dict[str, Any]]:
+    counts = (
+        select(DealJournal.deal_id, func.count().label("n"))
+        .where(DealJournal.excluded.is_(False))
+        .group_by(DealJournal.deal_id)
+        .subquery()
+    )
+    rows = (
+        await session.execute(
+            select(Deal, Publisher.name, func.coalesce(counts.c.n, 0))
+            .outerjoin(Publisher, Publisher.id == Deal.publisher_id)
+            .outerjoin(counts, counts.c.deal_id == Deal.id)
+            .order_by(Publisher.name, Deal.id)
+        )
+    ).all()
+    participations: dict[int, list[str]] = {}
+    for deal_id, code in (
+        await session.execute(
+            select(DealInstitution.deal_id, Institution.code)
+            .join(Institution, Institution.id == DealInstitution.institution_id)
+            .order_by(Institution.code)
+        )
+    ).all():
+        participations.setdefault(deal_id, []).append(code)
+    return [
+        _deal_payload(deal, name, int(count), participations.get(deal.id, []))
+        for deal, name, count in rows
+    ]
+
+
+@router.get("/deals/{deal_id}")
+async def get_deal(deal_id: int, session: SessionDep, _: AdminDep) -> dict[str, Any]:
+    await _get_deal_or_404(session, deal_id)
+    return await _deal_detail(session, deal_id)
+
+
+class DealCreate(BaseModel):
+    publisher_id: int | None = None
+    publisher_name: str | None = None
+    esac_id: str | None = None
+    status: str = "current"
+    start_year: int | None = None
+    end_year: int | None = None
+    corresponding_authors_only: bool | None = None
+
+
+@router.post("/deals", status_code=201)
+async def create_deal(body: DealCreate, session: SessionDep, _: AdminDep) -> dict[str, Any]:
+    _validate_deal_field("status", body.status)
+    if body.publisher_id is None and not body.publisher_name:
+        raise HTTPException(422, "publisher_id or publisher_name is required")
+    if body.esac_id is not None:
+        clash = await session.scalar(select(Deal.id).where(Deal.esac_id == body.esac_id))
+        if clash is not None:
+            raise HTTPException(409, f"esac_id already in use by deal {clash}")
+    publisher_id = body.publisher_id
+    if publisher_id is None:
+        pub = Publisher(name=body.publisher_name)
+        session.add(pub)
+        await session.flush()
+        publisher_id = pub.id
+    elif await session.get(Publisher, publisher_id) is None:
+        raise HTTPException(404, f"unknown publisher: {publisher_id}")
+    deal = Deal(
+        publisher_id=publisher_id,
+        esac_id=body.esac_id,
+        status=body.status,
+        start_year=body.start_year,
+        end_year=body.end_year,
+        corresponding_authors_only=body.corresponding_authors_only,
+    )
+    session.add(deal)
+    await session.commit()
+    await _refresh_deal_flags(session)
+    return await _deal_detail(session, deal.id)
+
+
+@router.put("/deals/{deal_id}")
+async def update_deal(
+    deal_id: int, body: dict[str, Any], session: SessionDep, _: AdminDep
+) -> dict[str, Any]:
+    deal = await _get_deal_or_404(session, deal_id)
+    for key, value in body.items():
+        if key not in DEAL_EDITABLE:
+            raise HTTPException(400, f"unknown or immutable deal field: {key}")
+        _validate_deal_field(key, value)
+    if body.get("esac_id") not in (None, deal.esac_id):
+        clash = await session.scalar(
+            select(Deal.id).where(Deal.esac_id == body["esac_id"], Deal.id != deal_id)
+        )
+        if clash is not None:
+            raise HTTPException(409, f"esac_id already in use by deal {clash}")
+    if (
+        "publisher_id" in body
+        and body["publisher_id"] != deal.publisher_id
+        and await session.get(Publisher, body["publisher_id"]) is None
+    ):
+        raise HTTPException(404, f"unknown publisher: {body['publisher_id']}")
+    changed = {k: v for k, v in body.items() if getattr(deal, k) != v}
+    if not changed:
+        return await _deal_detail(session, deal_id)
+    for key, value in changed.items():
+        setattr(deal, key, value)
+    # A human reviewed the deal: clear the curation flag and pin the date.
+    # (needs_curation sticks because the openaccess.nl harvester re-applies
+    # overrides for it; last_reviewed stays JCT-owned by design.)
+    if deal.needs_curation:
+        changed["needs_curation"] = False
+        changed["needs_curation_reason"] = None
+        deal.needs_curation = False
+        deal.needs_curation_reason = None
+    deal.last_reviewed = date.today()
+    for field, value in changed.items():
+        await session.execute(
+            pg_insert(ManualOverride)
+            .values(table_name="deals", row_key=str(deal_id), field=field, value=value)
+            .on_conflict_do_update(
+                index_elements=["table_name", "row_key", "field"],
+                set_={"value": value, "set_at": func.now()},
+            )
+        )
+    await session.commit()
+    await _refresh_deal_flags(session)
+    return await _deal_detail(session, deal_id)
+
+
+class DealJournalAdd(BaseModel):
+    issn: str
+    journal_name: str | None = None
+
+
+class DealJournalsBody(BaseModel):
+    add: list[DealJournalAdd] = []
+    remove: list[str] = []
+
+
+class DealParticipationsBody(BaseModel):
+    add: list[str] = []
+    remove: list[str] = []
+
+
+def _norm_issn_or_400(raw: str) -> str:
+    issn = normalize_issn(raw)
+    if issn is None:
+        raise HTTPException(400, f"invalid ISSN: {raw!r}")
+    return issn
+
+
+async def _resolve_issn_l(session: AsyncSession, issn: str) -> str | None:
+    issn_l = await session.scalar(select(Journal.issn_l).where(Journal.issn_l == issn))
+    if issn_l is None:
+        issn_l = await session.scalar(select(IssnMap.issn_l).where(IssnMap.issn == issn))
+    return issn_l
+
+
+@router.put("/deals/{deal_id}/journals")
+async def update_deal_journals(
+    deal_id: int, body: DealJournalsBody, session: SessionDep, _: AdminDep
+) -> dict[str, Any]:
+    await _get_deal_or_404(session, deal_id)
+    for add in body.add:
+        issn = _norm_issn_or_400(add.issn)
+        issn_l = await _resolve_issn_l(session, issn)
+        updates: dict[str, Any] = {"excluded": False, "issn_l": issn_l}
+        if add.journal_name:
+            updates["journal_name"] = add.journal_name
+        await session.execute(
+            pg_insert(DealJournal)
+            .values(
+                deal_id=deal_id,
+                issn=issn,
+                issn_l=issn_l,
+                journal_name=add.journal_name,
+                source="manual",
+                excluded=False,
+            )
+            .on_conflict_do_update(
+                index_elements=["deal_id", "issn"],
+                index_where=text("institution_id IS NULL"),
+                set_=updates,
+            )
+        )
+    if body.remove:
+        # Flag, never delete: a deleted row would be re-inserted by the
+        # next JCT harvest.
+        await session.execute(
+            update(DealJournal)
+            .where(
+                DealJournal.deal_id == deal_id,
+                DealJournal.issn.in_([_norm_issn_or_400(raw) for raw in body.remove]),
+            )
+            .values(excluded=True)
+        )
+    await session.commit()
+    await _refresh_deal_flags(session)
+    return await _deal_detail(session, deal_id)
+
+
+@router.put("/deals/{deal_id}/participations")
+async def update_deal_participations(
+    deal_id: int, body: DealParticipationsBody, session: SessionDep, _: AdminDep
+) -> dict[str, Any]:
+    await _get_deal_or_404(session, deal_id)
+    for code in body.add:
+        inst = await get_institution_by_code(session, code)
+        if inst is None:
+            raise HTTPException(404, f"unknown institution: {code}")
+        await session.execute(
+            pg_insert(DealInstitution)
+            .values(deal_id=deal_id, institution_id=inst.id)
+            .on_conflict_do_nothing(index_elements=["deal_id", "institution_id"])
+        )
+    for code in body.remove:
+        inst = await get_institution_by_code(session, code)
+        if inst is None:
+            raise HTTPException(404, f"unknown institution: {code}")
+        await session.execute(
+            delete(DealInstitution).where(
+                DealInstitution.deal_id == deal_id, DealInstitution.institution_id == inst.id
+            )
+        )
+    await session.commit()
+    await _refresh_deal_flags(session)
+    return await _deal_detail(session, deal_id)

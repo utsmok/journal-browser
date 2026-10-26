@@ -25,6 +25,7 @@ from sqlalchemy import (
 from sqlalchemy import exc as sa_exc
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..config import get_settings
 from ..models import IssnMap, Journal, JournalApcAggregate, JournalFlags
 
 # institution_id -> (monotonic time, facets, total); unfiltered browse facets only
@@ -132,6 +133,9 @@ def base_query(
     apply."""
     J = Journal
     F = JournalFlags
+    # Admin ignore-list (settings.yaml): hidden from every listing, detail
+    # by ISSN still works. Read at call time so admin edits land live.
+    ignored = get_settings().ignored_issns
     # OpenAlex publishes this metric as "two_yr_mean_citedness".
     twoyr = cast(J.summary_stats.op("->>")("two_yr_mean_citedness"), Numeric).label("twoyr")
     flags = (
@@ -184,6 +188,7 @@ def base_query(
             J.issn_l.is_not(None),
             flags.c.works_window_plus > 3,
             flags.c.browse_excluded.is_not(True),
+            *([J.issn_l.not_in(sorted(set(ignored)))] if ignored else []),
         )
     )
     if oa_types:
@@ -443,7 +448,9 @@ async def facet_counts(
     # the hot path. Bounded staleness (5 min) after a harvest is acceptable.
     cacheable = not any([q, oa, doaj, quartile, topic, publisher, has_apc is not None,
                          has_works is not None, oa_types, deal != "any", search_in != "all"])
-    cache_key = ("facets", institution_id)
+    # The ignore-list shapes the counts; fold it in so an admin edit
+    # invalidates immediately instead of serving stale facets for 5 min.
+    cache_key = ("facets", institution_id, hash(tuple(sorted(get_settings().ignored_issns))))
     if cacheable:
         hit = _FACET_CACHE.get(cache_key)
         if hit and time.monotonic() - hit[0] < 300:

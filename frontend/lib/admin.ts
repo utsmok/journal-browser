@@ -55,6 +55,14 @@ export function adminPut<T>(path: string, token: string, body: unknown): Promise
   });
 }
 
+export function adminPost<T>(path: string, token: string, body: unknown): Promise<T> {
+  return adminFetch<T>(path, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 /** Session-cached admin token plus a setter that persists/removes it. */
 export function useAdminToken(): [string | null, (token: string | null) => void] {
   const [token, setToken] = useState<string | null>(null);
@@ -134,3 +142,34 @@ export type InstitutionSettings = {
   active: boolean | null;
   is_default: boolean | null;
 };
+
+/** GET /admin/deals and the base of GET /admin/deals/{id}. */
+export type AdminDeal = {
+  id: number;
+  publisher_id: number | null;
+  publisher: string | null;
+  esac_id: string | null;
+  status: "current" | "archive";
+  start_year: number | null;
+  end_year: number | null;
+  corresponding_authors_only: boolean;
+  capped: boolean;
+  cap_numbers: Record<string, number> | null;
+  cap_text: string | null;
+  summary: string | null;
+  journal_count: number;
+  participations: string[];
+  needs_curation: boolean;
+  needs_curation_reason: string | null;
+};
+
+export type AdminDealJournal = {
+  issn: string;
+  issn_l: string | null;
+  journal_name: string | null;
+  source: "jct" | "manual" | "publisher-pattern";
+  excluded: boolean;
+};
+
+/** GET/PUT/POST /admin/deals…: a deal plus its journal membership list. */
+export type AdminDealDetail = AdminDeal & { journals: AdminDealJournal[] };

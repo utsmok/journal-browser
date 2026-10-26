@@ -10,13 +10,15 @@ from .routers import admin, deals, institutions, journals, meta
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(institutions.router)
+# Admin before the scoped router: /admin/deals must not be captured by
+# /{institution_code}/deals.
+api_router.include_router(admin.router)
 # Institution-scoped surface: /api/v1/{code}/journals|deals|meta/...
 scoped_router = APIRouter(prefix="/{institution_code}")
 scoped_router.include_router(journals.router)
 scoped_router.include_router(deals.router)
 scoped_router.include_router(meta.router)
 api_router.include_router(scoped_router)
-api_router.include_router(admin.router)
 
 
 @api_router.get("/healthz")
