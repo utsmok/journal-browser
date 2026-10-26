@@ -35,7 +35,7 @@ async def run(session, institution) -> bool:
         "authors",
         f"inst:{institution.code}",
         {"source": "ut-metadata"},
-        lambda _ingest: ingest_authors(session, institution.id, engine),
+        lambda _ingest: ingest_authors(session, institution.id, engine, institution.ror),
         session,
         institution_id=institution.id,
     )

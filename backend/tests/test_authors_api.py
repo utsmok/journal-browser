@@ -41,9 +41,11 @@ def _journal(issn_l: str, **kw) -> Journal:
 
 @pytest.fixture
 async def authors_api(db, institution_factory):
-    """ut: one author (Alice, 4 works) in J1 (covered hybrid) + J2
-    (subscription); candidates J3 (diamond), J4 (covered), J5 (below
-    cutoff), J6 (browse-excluded); rug: no author data at all."""
+    """ut: four authors — Alice (confirmed, 4 works) in J1 (covered hybrid)
+    + J2 (subscription), Carol (confirmed, 1 work), Dan (confirmed, 50
+    works), Bob (unconfirmed, 50 works); candidates J3 (diamond), J4
+    (covered), J5 (below cutoff), J6 (browse-excluded); rug: no author
+    data at all."""
 
     async def _override():
         async with async_sessionmaker(db.bind, expire_on_commit=False)() as session:
@@ -103,18 +105,67 @@ async def authors_api(db, institution_factory):
             _work("w-2021", 2021, "1234-5678", "diamond"),
         ]
     )
-    alice = Author(
-        institution_id=ut.id,
-        pure_uuid="alice-uuid",
-        name="Alice Author",
-        orcid="0000-0002-1111",
-        openalex_author_id="a5038098443",
-        faculty="Faculty of Science and Technology",
-        research_group="Quantum Transport in Matter",
-        orgs=["Quantum Transport in Matter", "University of Twente"],
-        n_works=4,
+    TNW = "Faculty of Science and Technology"
+    BMS = "Faculty of Behavioural, Management and Social Sciences"
+    session.add_all(
+        [
+            # Confirmed: shows in search by default.
+            Author(
+                institution_id=ut.id,
+                pure_uuid="alice-uuid",
+                name="Alice Author",
+                orcid="0000-0002-1111",
+                openalex_author_id="a5038098443",
+                faculty=TNW,
+                research_group="Quantum Transport in Matter",
+                orgs=["Quantum Transport in Matter", "University of Twente"],
+                n_works=4,
+                confirmed=True,
+                last_pub_year=2024,
+                primary_topic="Physics",
+            ),
+            # Confirmed, no orcid, never published in-window.
+            Author(
+                institution_id=ut.id,
+                pure_uuid="carol-uuid",
+                name="Carol Navigator",
+                faculty=TNW,
+                research_group="Quantum Navigation",
+                orgs=["Quantum Navigation"],
+                n_works=1,
+                confirmed=True,
+                last_pub_year=None,
+                primary_topic="Physics",
+            ),
+            # Confirmed, heavy producer in the 2020-2021 bucket.
+            Author(
+                institution_id=ut.id,
+                pure_uuid="dan-uuid",
+                name="Dan Datagov",
+                orcid="0000-0002-3333",
+                faculty=BMS,
+                research_group="Governance of Data",
+                orgs=["Governance of Data"],
+                n_works=50,
+                confirmed=True,
+                last_pub_year=2021,
+                primary_topic="Chemistry",
+            ),
+            # Unconfirmed: hidden from search while the flag is on.
+            Author(
+                institution_id=ut.id,
+                pure_uuid="bob-uuid",
+                name="Bob Noaffiliation",
+                faculty=TNW,
+                research_group="Quantum Navigation",
+                orgs=["Quantum Navigation"],
+                n_works=50,
+                confirmed=False,
+                last_pub_year=2025,
+                primary_topic="Chemistry",
+            ),
+        ]
     )
-    session.add(alice)
     await session.flush()
     def _edge(work: str) -> AuthorWork:
         return AuthorWork(
@@ -134,9 +185,10 @@ async def test_search_ranked_and_filtered(authors_api):
     assert r.status_code == 200
     body = r.json()
     assert body["enabled"] is True
-    assert body["total"] == 1
-    assert [item["pure_uuid"] for item in body["items"]] == ["alice-uuid"]
-    item = body["items"][0]
+    # Bob is unconfirmed and hidden while require_confirmed_affiliation is on.
+    assert body["total"] == 3
+    assert [item["pure_uuid"] for item in body["items"]] == ["dan-uuid", "alice-uuid", "carol-uuid"]
+    item = body["items"][1]
     assert item == {
         "pure_uuid": "alice-uuid",
         "name": "Alice Author",
@@ -144,6 +196,9 @@ async def test_search_ranked_and_filtered(authors_api):
         "research_group": "Quantum Transport in Matter",
         "n_works": 4,
         "orcid": "0000-0002-1111",
+        "confirmed": True,
+        "last_pub_year": 2024,
+        "primary_topic": "Physics",
     }
     hit = await authors_api.get("/api/v1/ut/authors", params={"q": "alice"})
     assert hit.json()["total"] == 1 and len(hit.json()["items"]) == 1
@@ -154,7 +209,10 @@ async def test_search_ranked_and_filtered(authors_api):
 @requires_db
 async def test_search_not_enabled_and_unknown_institution(authors_api):
     body = (await authors_api.get("/api/v1/rug/authors")).json()
-    assert body == {"enabled": False, "total": 0, "items": []}
+    assert body == {
+        "enabled": False, "total": 0, "offset": 0, "sort": "works_desc",
+        "items": [], "facets": {},
+    }
     assert (await authors_api.get("/api/v1/nonsense/authors")).status_code == 404
 
 
@@ -224,3 +282,150 @@ async def test_profile_works_sorted_and_joined(authors_api):
 @requires_db
 async def test_profile_unknown_author(authors_api):
     assert (await authors_api.get("/api/v1/ut/authors/nope")).status_code == 404
+
+
+@requires_db
+async def test_require_confirmed_affiliation_toggle(authors_api, db):
+    from sqlalchemy import update
+
+    from journal_browser.models import Institution
+
+    # Default on: Bob (unconfirmed) is hidden from search but his profile
+    # endpoint stays reachable.
+    body = (await authors_api.get("/api/v1/ut/authors", params={"q": "bob"})).json()
+    assert body["total"] == 0 and body["items"] == []
+    assert (await authors_api.get("/api/v1/ut/authors/bob-uuid")).status_code == 200
+
+    await db.execute(
+        update(Institution)
+        .where(Institution.code == "ut")
+        .values(require_confirmed_affiliation=False)
+    )
+    await db.commit()
+
+    body = (await authors_api.get("/api/v1/ut/authors")).json()
+    assert body["total"] == 4
+    assert [i["pure_uuid"] for i in body["items"]] == [
+        "bob-uuid", "dan-uuid", "alice-uuid", "carol-uuid",
+    ]
+    bob = next(i for i in body["items"] if i["pure_uuid"] == "bob-uuid")
+    assert bob["confirmed"] is False
+    # Facet counts respect the flag: Bob joins the 50+ / 2025-2026 buckets.
+    assert {f["value"]: f["count"] for f in body["facets"]["works"]} == {"1-4": 2, "50+": 2}
+    assert {f["value"]: f["count"] for f in body["facets"]["last_pub"]} == {
+        "2020-2021": 1, "2022-2024": 1, "2025-2026": 1, "none": 1,
+    }
+
+
+@requires_db
+async def test_facets_and_filters(authors_api):
+    body = (await authors_api.get("/api/v1/ut/authors")).json()
+    facets = body["facets"]
+    # has_orcid is boolean: no facet list.
+    assert set(facets) == {"faculty", "org", "works", "last_pub", "topic"}
+    assert facets["faculty"] == [
+        {"value": "Faculty of Science and Technology", "count": 2},
+        {"value": "Faculty of Behavioural, Management and Social Sciences", "count": 1},
+    ]
+    assert facets["org"] == [
+        {"value": "Governance of Data", "count": 1},
+        {"value": "Quantum Navigation", "count": 1},
+        {"value": "Quantum Transport in Matter", "count": 1},
+    ]
+    # Strata edges: n_works 1 and 4 -> "1-4", 50 -> "50+".
+    assert facets["works"] == [{"value": "1-4", "count": 2}, {"value": "50+", "count": 1}]
+    assert facets["last_pub"] == [
+        {"value": "2020-2021", "count": 1},
+        {"value": "2022-2024", "count": 1},
+        {"value": "none", "count": 1},
+    ]
+    assert facets["topic"] == [{"value": "Physics", "count": 2}, {"value": "Chemistry", "count": 1}]
+
+    # Own dimension stays unfiltered in its facet; the others apply.
+    tnw = "Faculty of Science and Technology"
+    body = (await authors_api.get("/api/v1/ut/authors", params={"faculty": tnw})).json()
+    assert body["total"] == 2
+    assert [i["pure_uuid"] for i in body["items"]] == ["alice-uuid", "carol-uuid"]
+    assert len(body["facets"]["faculty"]) == 2
+    assert body["facets"]["topic"] == [{"value": "Physics", "count": 2}]
+
+    # Comma multi-select ORs within a dimension.
+    body = (
+        await authors_api.get("/api/v1/ut/authors", params={"last_pub": "none,2020-2021"})
+    ).json()
+    assert [i["pure_uuid"] for i in body["items"]] == ["dan-uuid", "carol-uuid"]
+
+    # Dimensions AND together.
+    body = (
+        await authors_api.get(
+            "/api/v1/ut/authors", params={"faculty": tnw, "org": "Quantum Navigation"}
+        )
+    ).json()
+    assert [i["pure_uuid"] for i in body["items"]] == ["carol-uuid"]
+
+    body = (await authors_api.get("/api/v1/ut/authors", params={"works": "50+"})).json()
+    assert [i["pure_uuid"] for i in body["items"]] == ["dan-uuid"]
+
+    body = (await authors_api.get("/api/v1/ut/authors", params={"has_orcid": "no"})).json()
+    assert [i["pure_uuid"] for i in body["items"]] == ["carol-uuid"]
+    body = (await authors_api.get("/api/v1/ut/authors", params={"has_orcid": "yes"})).json()
+    assert [i["pure_uuid"] for i in body["items"]] == ["dan-uuid", "alice-uuid"]
+
+    body = (await authors_api.get("/api/v1/ut/authors", params={"topic": "Physics"})).json()
+    assert body["total"] == 2
+
+    # Unknown filter values: empty result set, no error.
+    r = await authors_api.get("/api/v1/ut/authors", params={"works": "7-9"})
+    assert r.status_code == 200
+    assert r.json()["total"] == 0 and r.json()["items"] == []
+    # Every facet but its own dimension collapses; works keeps its buckets.
+    facets = r.json()["facets"]
+    assert facets["works"] == [{"value": "1-4", "count": 2}, {"value": "50+", "count": 1}]
+    assert all(v == [] for k, v in facets.items() if k != "works")
+    r = await authors_api.get("/api/v1/ut/authors", params={"has_orcid": "maybe"})
+    assert r.status_code == 200 and r.json()["total"] == 0
+    r = await authors_api.get("/api/v1/ut/authors", params={"last_pub": "stone-age"})
+    assert r.status_code == 200 and r.json()["total"] == 0
+
+
+@requires_db
+async def test_sort_keys_and_offset_paging(authors_api):
+    # Default works_desc: 50, 4, 1.
+    r = await authors_api.get("/api/v1/ut/authors")
+    assert [i["pure_uuid"] for i in r.json()["items"]] == ["dan-uuid", "alice-uuid", "carol-uuid"]
+    assert r.json()["sort"] == "works_desc" and r.json()["offset"] == 0
+
+    body = (await authors_api.get("/api/v1/ut/authors", params={"sort": "name_asc"})).json()
+    assert [i["pure_uuid"] for i in body["items"]] == ["alice-uuid", "carol-uuid", "dan-uuid"]
+    body = (await authors_api.get("/api/v1/ut/authors", params={"sort": "name_desc"})).json()
+    assert [i["pure_uuid"] for i in body["items"]] == ["dan-uuid", "carol-uuid", "alice-uuid"]
+
+    # Nulls last: 2024, 2021, then carol's null.
+    body = (await authors_api.get("/api/v1/ut/authors", params={"sort": "last_pub_desc"})).json()
+    assert [i["pure_uuid"] for i in body["items"]] == ["alice-uuid", "dan-uuid", "carol-uuid"]
+    assert body["sort"] == "last_pub_desc"
+
+    # Sort applies after filters; q keeps its prefix-rank only on the
+    # default sort.
+    body = (
+        await authors_api.get(
+            "/api/v1/ut/authors",
+            params={"sort": "last_pub_desc", "faculty": "Faculty of Science and Technology"},
+        )
+    ).json()
+    assert [i["pure_uuid"] for i in body["items"]] == ["alice-uuid", "carol-uuid"]
+
+    # Offset pages within the same filtered set; total stays unpaginated.
+    body = (await authors_api.get("/api/v1/ut/authors", params={"offset": 1, "limit": 2})).json()
+    assert [i["pure_uuid"] for i in body["items"]] == ["alice-uuid", "carol-uuid"]
+    assert body["total"] == 3 and body["offset"] == 1
+    body = (await authors_api.get("/api/v1/ut/authors", params={"offset": 9})).json()
+    assert body["items"] == [] and body["total"] == 3
+
+    # Facets ignore offset (they describe the filtered set).
+    body = (await authors_api.get("/api/v1/ut/authors", params={"offset": 1})).json()
+    assert body["facets"]["works"] == [{"value": "1-4", "count": 2}, {"value": "50+", "count": 1}]
+
+    # Unknown sort key: 422 (Literal validation); negative offset too.
+    assert (await authors_api.get("/api/v1/ut/authors", params={"sort": "nope"})).status_code == 422
+    assert (await authors_api.get("/api/v1/ut/authors", params={"offset": -1})).status_code == 422

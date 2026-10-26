@@ -1,6 +1,6 @@
 """/api/v1/{code}/authors: author roster + profile, ut-metadata ingest."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,9 +27,40 @@ async def search_authors(
     institution: InstitutionDep,
     q: str | None = None,
     limit: int = Query(authors_service.DEFAULT_LIMIT, ge=1, le=authors_service.MAX_LIMIT),
+    faculty: Annotated[str | None, Query(max_length=200)] = None,
+    org: Annotated[str | None, Query(max_length=200)] = None,
+    has_orcid: Annotated[str | None, Query(max_length=20)] = None,
+    works: Annotated[str | None, Query(max_length=60)] = None,
+    last_pub: Annotated[str | None, Query(max_length=60)] = None,
+    topic: Annotated[str | None, Query(max_length=200)] = None,
+    sort: Annotated[Literal["works_desc", "name_asc", "name_desc", "last_pub_desc"], Query()] = (
+        "works_desc"
+    ),
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> AuthorSearchResponse:
+    # Comma-separated multi-selects, OR'd within a dimension, AND'd across
+    # dimensions (the journals oa_type convention). Unknown values match
+    # nothing: empty result, no error.
+    def _split(raw: str | None) -> list[str] | None:
+        values = [v for v in (raw or "").split(",") if v]
+        return values or None
+
     return AuthorSearchResponse(
-        **await authors_service.search_authors(session, institution.id, q, limit)
+        **await authors_service.search_authors(
+            session,
+            institution.id,
+            q,
+            limit,
+            require_confirmed=institution.require_confirmed_affiliation,
+            faculty=_split(faculty),
+            org=_split(org),
+            has_orcid=has_orcid,
+            works=_split(works),
+            last_pub=_split(last_pub),
+            topic=_split(topic),
+            sort=sort,
+            offset=offset,
+        )
     )
 
 

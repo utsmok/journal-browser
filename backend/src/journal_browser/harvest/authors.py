@@ -19,10 +19,10 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy import delete, insert, text
+from sqlalchemy import delete, insert, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from ..models import Author, AuthorWork
+from ..models import Author, AuthorWork, Journal
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,8 @@ class SourceData:
     persons: dict[str, dict[str, Any]] = field(default_factory=dict)
     # org id -> (pure_uuid, display_name).
     orgs: dict[int, tuple[str, str]] = field(default_factory=dict)
+    # org id -> bare ROR id (None when the org has none).
+    org_rors: dict[int, str | None] = field(default_factory=dict)
     # org_tree closure: org_id -> [(depth, ancestor_id)].
     tree: dict[int, list[tuple[int, int]]] = field(default_factory=dict)
     # work_authors edges resolved onto canonical Pure work uuids.
@@ -101,10 +103,11 @@ async def fetch_source(engine: AsyncEngine) -> SourceData:
             )
         )
         data.persons = {row["uuid"]: row["payload"] for row in rows.mappings()}
-        for org_id, pure_uuid, name in await conn.execute(
-            text("SELECT id, pure_uuid, display_name FROM org")
+        for org_id, pure_uuid, name, ror in await conn.execute(
+            text("SELECT id, pure_uuid, display_name, ror FROM org")
         ):
             data.orgs[org_id] = (pure_uuid, name)
+            data.org_rors[org_id] = ror
         for org_id, ancestor_id, depth in await conn.execute(
             text("SELECT org_id, ancestor_id, depth FROM org_tree")
         ):
@@ -243,6 +246,39 @@ def augment_faculty(author: dict[str, Any], data: SourceData) -> str | None:
     return faculty_from_chains(chains)
 
 
+def _ror_id(ror: str | None) -> str | None:
+    """Bare ROR id: source org.ror stores '006hf6230', institutions.ror the
+    'https://ror.org/006hf6230' URL form."""
+    return ror.rstrip("/").rsplit("/", 1)[-1] if ror else None
+
+
+def is_confirmed(payload: dict[str, Any], data: SourceData, ror: str | None) -> bool:
+    """Confirmed affiliated iff a CERIF payload exists and some affiliation
+    org's closure (self at depth 0) reaches the institution's ROR org."""
+    target = _ror_id(ror)
+    if target is None or not payload:
+        return False
+    for org_id in _affiliation_org_ids(payload, data.orgs):
+        for _depth, ancestor_id in data.tree.get(org_id, []):
+            if _ror_id(data.org_rors.get(ancestor_id)) == target:
+                return True
+    return False
+
+
+def primary_topic_from_venues(
+    venues: dict[str, int], topics_by_issn: dict[str, list[Any]]
+) -> str | None:
+    """Works-weighted mode over the venues' journal topic display names,
+    ties alphabetical; None without journals or topics."""
+    weights: dict[str, int] = {}
+    for issn, n in venues.items():
+        for topic in topics_by_issn.get(issn) or []:
+            name = topic.get("display_name") if isinstance(topic, dict) else None
+            if name:
+                weights[name] = weights.get(name, 0) + n
+    return min(weights, key=lambda name: (-weights[name], name)) if weights else None
+
+
 def build_edge_map(
     edges: list[tuple[str, str]],
     index: dict[str, str],
@@ -258,27 +294,57 @@ def build_edge_map(
     return mapping
 
 
-async def ingest_authors(session: AsyncSession, institution_id: int, engine: AsyncEngine) -> dict:
+async def ingest_authors(
+    session: AsyncSession, institution_id: int, engine: AsyncEngine, inst_ror: str | None
+) -> dict:
     """Full pull + full-replace upsert for one institution.
 
     authors upserts in place (identity fields + derived attributes);
     author_works is deleted and rebuilt, so works retired since the last
-    run drop out of every count. n_works counts the stored edges."""
+    run drop out of every count. n_works counts the stored edges.
+    last_pub_year / primary_topic derive from those same edges; confirmed
+    checks the person payload's affiliations against the institution ROR."""
     data = await fetch_source(engine)
-    local_work_uuids = set(
-        await session.scalars(
-            text(
-                "SELECT pure_uuid FROM works "
-                "WHERE institution_id = :iid AND retired_at IS NULL"
-            ),
-            {"iid": institution_id},
-        )
-    )
+    local_works = {
+        row["pure_uuid"]: (row["year"], row["journal_issn_l"])
+        for row in (
+            await session.execute(
+                text(
+                    "SELECT pure_uuid, year, journal_issn_l FROM works "
+                    "WHERE institution_id = :iid AND retired_at IS NULL"
+                ),
+                {"iid": institution_id},
+            )
+        ).mappings()
+    }
     index = author_id_index(data.authors)
-    edge_map = build_edge_map(data.edges, index, local_work_uuids)
+    edge_map = build_edge_map(data.edges, index, set(local_works))
+
+    # One pass over the new edge set: last publication year and per-venue
+    # work counts (primary_topic weighting input).
+    last_years: dict[str, int | None] = {}
+    venues_by_author: dict[str, dict[str, int]] = {}
+    for author_uuid, work_uuids in edge_map.items():
+        venues: dict[str, int] = {}
+        last_year: int | None = None
+        for w in work_uuids:
+            year, issn = local_works[w]
+            if year is not None and (last_year is None or year > last_year):
+                last_year = year
+            if issn:
+                venues[issn] = venues.get(issn, 0) + 1
+        last_years[author_uuid] = last_year
+        venues_by_author[author_uuid] = venues
+    issns = {issn for venues in venues_by_author.values() for issn in venues}
+    topics_by_issn: dict[str, list[Any]] = {}
+    if issns:
+        rows = await session.execute(
+            select(Journal.issn_l, Journal.topics).where(Journal.issn_l.in_(issns))
+        )
+        topics_by_issn = {issn: topics or [] for issn, topics in rows.all()}
 
     author_rows = []
-    stats = {"with_faculty": 0, "with_research_group": 0}
+    stats = {"with_faculty": 0, "with_research_group": 0, "confirmed": 0}
     for author in data.authors:
         payload = data.persons.get(author["pure_uuid"], {})
         faculty, research_group, org_names = derive_identity(payload, data)
@@ -288,10 +354,14 @@ async def ingest_authors(session: AsyncSession, institution_id: int, engine: Asy
             stats["with_faculty"] += 1
         if research_group is not None:
             stats["with_research_group"] += 1
+        uuid = author["pure_uuid"]
+        confirmed = is_confirmed(payload, data, inst_ror)
+        if confirmed:
+            stats["confirmed"] += 1
         author_rows.append(
             {
                 "institution_id": institution_id,
-                "pure_uuid": author["pure_uuid"],
+                "pure_uuid": uuid,
                 "name": author["name"] or "",
                 "orcid": author["orcid"],
                 "openalex_author_id": author["openalex_author_id"],
@@ -300,14 +370,19 @@ async def ingest_authors(session: AsyncSession, institution_id: int, engine: Asy
                 "faculty": faculty,
                 "research_group": research_group,
                 "orgs": org_names,
-                "n_works": len(edge_map.get(author["pure_uuid"], ())),
+                "n_works": len(edge_map.get(uuid, ())),
+                "confirmed": confirmed,
+                "last_pub_year": last_years.get(uuid),
+                "primary_topic": primary_topic_from_venues(
+                    venues_by_author.get(uuid, {}), topics_by_issn
+                ),
             }
         )
     if author_rows:
         # Full-replace: authors that left the source roster must not linger
         # with stale n_works, so clear the institution's rows and reinsert.
         await session.execute(delete(Author).where(Author.institution_id == institution_id))
-        # asyncpg caps one statement at 32767 bound params; 11 per author row.
+        # asyncpg caps one statement at 32767 bound params; 14 per author row.
         for start in range(0, len(author_rows), 2000):
             await session.execute(insert(Author), author_rows[start : start + 2000])
     await session.execute(delete(AuthorWork).where(AuthorWork.institution_id == institution_id))

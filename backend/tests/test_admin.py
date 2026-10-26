@@ -189,7 +189,20 @@ async def test_institutions_get_put(admin_api):
     body = r.json()
     assert body["data_window_start"] == 2019
     assert body["active"] is True
-    for bad in ({"data_window_start": "x"}, {"active": "yes"}):
+    # Author-search confirmation flag round-trips (default on).
+    assert body["require_confirmed_affiliation"] is True
+    r = await admin_api.put(
+        "/api/v1/admin/institutions/ut",
+        headers=headers,
+        json={"require_confirmed_affiliation": False},
+    )
+    assert r.status_code == 200
+    assert r.json()["require_confirmed_affiliation"] is False
+    for bad in (
+        {"data_window_start": "x"},
+        {"active": "yes"},
+        {"require_confirmed_affiliation": 1},
+    ):
         r = await admin_api.put("/api/v1/admin/institutions/ut", headers=headers, json=bad)
         assert r.status_code == 400
 

@@ -1,5 +1,6 @@
-"""Author ingest: pure transforms (faculty/group/org derivation, edge join)
-and an end-to-end idempotency run against the local DB with a fake source."""
+"""Author ingest: pure transforms (faculty/group/org derivation, edge join,
+affiliation confirmation, primary topic) and an end-to-end idempotency run
+against the local DB with a fake source."""
 
 from conftest import requires_db
 from journal_browser.harvest.authors import (
@@ -8,11 +9,14 @@ from journal_browser.harvest.authors import (
     author_id_index,
     build_edge_map,
     derive_identity,
+    is_confirmed,
+    primary_topic_from_venues,
 )
 from journal_browser.harvest.authors import ingest_authors as run_ingest
-from journal_browser.models import Author, AuthorWork, HarvestRun, Work
+from journal_browser.models import Author, AuthorWork, HarvestRun, Journal, Work
 
 UT_UUID = "ut-root-uuid"
+UT_ROR = "https://ror.org/006hf6230"
 TNW = "Faculty of Science and Technology"
 DEPT = "Quantum Transport in Matter"
 
@@ -49,6 +53,8 @@ def _payload(*affiliation_org_uuids: str) -> dict:
 def _data() -> SourceData:
     data = SourceData()
     data.orgs = _orgs()
+    # Source org.ror: bare ROR ids; UT root has one, faculty/dept/Delft none.
+    data.org_rors = {1: "006hf6230", 2: None, 3: None, 4: "012p63287"}
     data.tree = _tree()
     return data
 
@@ -109,6 +115,36 @@ def test_augment_faculty_no_path():
     assert augment_faculty(author, data) is None
 
 
+def test_is_confirmed_branches():
+    data = _data()
+    # Child-of-faculty (dept -> TNW -> UT root) and the UT root affiliation
+    # itself (depth 0) both resolve to the institution ROR; URL form.
+    assert is_confirmed(_payload("dept-uuid"), data, UT_ROR) is True
+    assert is_confirmed(_payload("ut-root-uuid"), data, UT_ROR) is True
+    assert is_confirmed(_payload("tnw-uuid"), data, UT_ROR) is True
+    # Sibling org not under the ROR org; missing payload; no institution ROR.
+    assert is_confirmed(_payload("delft-uuid"), data, UT_ROR) is False
+    assert is_confirmed({}, data, UT_ROR) is False
+    assert is_confirmed(_payload("dept-uuid"), data, None) is False
+
+
+def test_primary_topic_weighting_and_ties():
+    topics = {"j1": [{"id": "T1", "display_name": "Physics"},
+                     {"id": "T2", "display_name": "Chemistry"}],
+              "j2": [{"id": "T2", "display_name": "Chemistry"}]}
+    # Each venue contributes its works count to every topic: Chemistry 4.
+    assert primary_topic_from_venues({"j1": 3, "j2": 1}, topics) == "Chemistry"
+    # Tie (both topics from one venue, 1:1) breaks alphabetically.
+    assert primary_topic_from_venues({"j1": 1}, topics) == "Chemistry"
+    both = {"j1": [{"id": "T1", "display_name": "Zeta"}],
+            "j2": [{"id": "T1", "display_name": "Alpha"}]}
+    assert primary_topic_from_venues({"j1": 1, "j2": 1}, both) == "Alpha"
+    # No venues / no topics / malformed entries -> None.
+    assert primary_topic_from_venues({}, topics) is None
+    assert primary_topic_from_venues({"j9": 2}, topics) is None
+    assert primary_topic_from_venues({"j1": 2}, {"j1": [None, "x", {"display_name": None}]}) is None
+
+
 def test_edge_map_lowercase_and_alt_ids():
     authors = [
         {"pure_uuid": "a-uuid", "openalex_author_id": "A5038098443", "openalex_alt_ids": ["A999"]},
@@ -167,6 +203,20 @@ def _fixture_source() -> SourceData:
     return data
 
 
+def _journal(issn_l: str, topics: list) -> Journal:
+    return Journal(
+        issn_l=issn_l,
+        title=f"Journal {issn_l}",
+        type="journal",
+        is_oa=False,
+        is_in_doaj=False,
+        in_scimago=False,
+        works_2020_plus=10,
+        search_text=f"Journal {issn_l}",
+        topics=topics,
+    )
+
+
 @requires_db
 async def test_ingest_idempotent(db, institution_factory, monkeypatch):
     from datetime import UTC, datetime
@@ -178,12 +228,14 @@ async def test_ingest_idempotent(db, institution_factory, monkeypatch):
 
     monkeypatch.setattr("journal_browser.harvest.authors.fetch_source", _source)
 
-    inst = await institution_factory(code="ut")
+    inst = await institution_factory(code="ut", ror=UT_ROR)
     run = HarvestRun(source="pure", entity_type="works", status="completed", config_fingerprint="t")
     db.add(run)
     await db.flush()
     db.add_all(
         [
+            _journal("1111-1111", [{"id": "T1", "display_name": "Physics"}]),
+            _journal("2222-2221", [{"id": "T2", "display_name": "Chemistry"}]),
             Work(
                 institution_id=inst.id,
                 pure_uuid="w1",
@@ -191,6 +243,7 @@ async def test_ingest_idempotent(db, institution_factory, monkeypatch):
                 norm_title="work one",
                 year=2023,
                 oa_status="gold",
+                journal_issn_l="1111-1111",
                 first_seen_run=run.id,
                 last_seen_run=run.id,
             ),
@@ -201,6 +254,7 @@ async def test_ingest_idempotent(db, institution_factory, monkeypatch):
                 norm_title="work two",
                 year=2022,
                 oa_status="closed",
+                journal_issn_l="2222-2221",
                 first_seen_run=run.id,
                 last_seen_run=run.id,
             ),
@@ -208,18 +262,29 @@ async def test_ingest_idempotent(db, institution_factory, monkeypatch):
     )
     await db.flush()
 
-    stats = await run_ingest(db, inst.id, None)
+    stats = await run_ingest(db, inst.id, None, inst.ror)
     await db.commit()
-    assert stats == {"authors": 2, "edges": 3, "with_faculty": 2, "with_research_group": 1}
+    assert stats == {
+        "authors": 2, "edges": 3, "with_faculty": 2, "with_research_group": 1, "confirmed": 1,
+    }
 
     a_rows = {row.pure_uuid: row for row in (await db.execute(select(Author))).scalars()}
     assert a_rows["a-uuid"].faculty == TNW
     assert a_rows["a-uuid"].research_group == DEPT
     assert a_rows["a-uuid"].n_works == 2
     assert a_rows["a-uuid"].orgs == [DEPT, "University of Twente"]
-    # b: no CERIF affiliations, faculty via the canonical-person fallback
+    # a: dept -> TNW -> UT root closure reaches the institution ROR.
+    assert a_rows["a-uuid"].confirmed is True
+    assert a_rows["a-uuid"].last_pub_year == 2023
+    # Physics 1 vs Chemistry 1 tie -> alphabetical.
+    assert a_rows["a-uuid"].primary_topic == "Chemistry"
+    # b: no CERIF affiliations (unconfirmed), faculty via canonical-person
+    # fallback.
     assert a_rows["b-uuid"].faculty == TNW
     assert a_rows["b-uuid"].n_works == 1
+    assert a_rows["b-uuid"].confirmed is False
+    assert a_rows["b-uuid"].last_pub_year == 2023
+    assert a_rows["b-uuid"].primary_topic == "Physics"
 
     edges = {
         (row.author_pure_uuid, row.work_pure_uuid)
@@ -228,16 +293,20 @@ async def test_ingest_idempotent(db, institution_factory, monkeypatch):
     assert edges == {("a-uuid", "w1"), ("a-uuid", "w2"), ("b-uuid", "w1")}
 
     # Rerun: identical end state (upsert + full edge replace, no dupes).
-    await run_ingest(db, inst.id, None)
+    await run_ingest(db, inst.id, None, inst.ror)
     await db.commit()
-    assert len((await db.execute(select(Author))).scalars().all()) == 2
+    rows = {row.pure_uuid: row for row in (await db.execute(select(Author))).scalars()}
+    assert len(rows) == 2
     assert len((await db.execute(select(AuthorWork))).scalars().all()) == 3
+    assert rows["a-uuid"].confirmed is True
+    assert rows["a-uuid"].last_pub_year == 2023
+    assert rows["a-uuid"].primary_topic == "Chemistry"
 
     # Retiring a work drops it (and its author edge count) on the next run.
     w1 = await db.scalar(select(Work).where(Work.pure_uuid == "w1"))
     w1.retired_at = datetime.now(UTC)
     await db.commit()
-    await run_ingest(db, inst.id, None)
+    await run_ingest(db, inst.id, None, inst.ror)
     await db.commit()
     remaining = {
         (row.author_pure_uuid, row.work_pure_uuid)
@@ -245,3 +314,10 @@ async def test_ingest_idempotent(db, institution_factory, monkeypatch):
     }
     # w1 was both authors' shared edge; only Alice's w2 survives.
     assert remaining == {("a-uuid", "w2")}
+    final = {row.pure_uuid: row for row in (await db.execute(select(Author))).scalars()}
+    assert final["a-uuid"].n_works == 1
+    assert final["a-uuid"].last_pub_year == 2022
+    assert final["a-uuid"].primary_topic == "Chemistry"  # single venue, 1 work
+    assert final["b-uuid"].n_works == 0
+    assert final["b-uuid"].last_pub_year is None
+    assert final["b-uuid"].primary_topic is None

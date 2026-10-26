@@ -262,6 +262,7 @@ INSTITUTION_EDITABLE: dict[str, str] = {
     "admin_contact": "string",
     "research_portal_url": "string",
     "active": "bool",
+    "require_confirmed_affiliation": "bool",
 }
 # String fields the DB allows to be NULL; explicit null clears the value.
 INSTITUTION_NULLABLE = set(INSTITUTION_EDITABLE) - {
@@ -289,6 +290,7 @@ def _institution_payload(inst: Institution) -> dict[str, Any]:
         "admin_contact": inst.admin_contact,
         "research_portal_url": inst.research_portal_url,
         "active": inst.active,
+        "require_confirmed_affiliation": inst.require_confirmed_affiliation,
     }
 
 

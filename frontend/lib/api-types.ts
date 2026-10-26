@@ -440,6 +440,13 @@ export interface components {
             /** Options */
             options: components["schemas"]["AuthorSimilarJournal"][];
         };
+        /** AuthorFacet */
+        AuthorFacet: {
+            /** Value */
+            value: string;
+            /** Count */
+            count: number;
+        };
         /** AuthorItem */
         AuthorItem: {
             /** Pure Uuid */
@@ -454,6 +461,12 @@ export interface components {
             n_works: number;
             /** Orcid */
             orcid: string | null;
+            /** Confirmed */
+            confirmed: boolean;
+            /** Last Pub Year */
+            last_pub_year?: number | null;
+            /** Primary Topic */
+            primary_topic?: string | null;
         };
         /** AuthorJournalRow */
         AuthorJournalRow: {
@@ -510,8 +523,25 @@ export interface components {
             enabled: boolean;
             /** Total */
             total: number;
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
+            /**
+             * Sort
+             * @default works_desc
+             */
+            sort: string;
             /** Items */
             items: components["schemas"]["AuthorItem"][];
+            /**
+             * Facets
+             * @default {}
+             */
+            facets: {
+                [key: string]: components["schemas"]["AuthorFacet"][];
+            };
         };
         /** AuthorSimilarBundle */
         AuthorSimilarBundle: {
@@ -1882,6 +1912,14 @@ export interface operations {
             query?: {
                 q?: string | null;
                 limit?: number;
+                faculty?: string | null;
+                org?: string | null;
+                has_orcid?: string | null;
+                works?: string | null;
+                last_pub?: string | null;
+                topic?: string | null;
+                sort?: "works_desc" | "name_asc" | "name_desc" | "last_pub_desc";
+                offset?: number;
             };
             header?: never;
             path: {

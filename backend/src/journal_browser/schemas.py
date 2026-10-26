@@ -291,6 +291,11 @@ class FreshnessResponse(BaseModel):
 # ── Author browsing (ut-metadata ingest) ───────────────────────────────────
 
 
+class AuthorFacet(BaseModel):
+    value: str
+    count: int
+
+
 class AuthorItem(BaseModel):
     pure_uuid: str
     name: str
@@ -298,12 +303,20 @@ class AuthorItem(BaseModel):
     research_group: str | None
     n_works: int
     orcid: str | None
+    confirmed: bool
+    last_pub_year: int | None = None
+    primary_topic: str | None = None
 
 
 class AuthorSearchResponse(BaseModel):
     enabled: bool
     total: int
+    offset: int = 0
+    sort: str = "works_desc"
     items: list[AuthorItem]
+    # faculty/org/works/last_pub/topic buckets under all filters except the
+    # facet's own dimension; has_orcid is boolean and has no facet list.
+    facets: dict[str, list[AuthorFacet]] = {}
 
 
 class AuthorOut(BaseModel):

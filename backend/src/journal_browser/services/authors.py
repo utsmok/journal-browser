@@ -6,7 +6,7 @@ apply to every suggestion; the oa_type case is shared via search._oa_type."""
 
 from typing import Any
 
-from sqlalchemy import and_, case, func, or_, select, text
+from sqlalchemy import and_, case, false, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Author, AuthorWork, Journal, JournalFlags, Work
@@ -26,33 +26,189 @@ WORKS_CAP = 200
 _YEAR_BUCKETS = ("gold", "green", "hybrid", "bronze", "closed")
 
 
-async def search_authors(
-    session: AsyncSession, institution_id: int, q: str | None, limit: int
+#: Works-count strata and last-publication-year buckets (facet vocabulary).
+WORKS_STRATA = ("1-4", "5-19", "20-49", "50+")
+LAST_PUB_BUCKETS = ("2025-2026", "2022-2024", "2020-2021", "none")
+
+_WORKS_BOUNDS = {"1-4": (1, 4), "5-19": (5, 19), "20-49": (20, 49)}  # 50+ = >= 50
+_LAST_PUB_BOUNDS = {"2025-2026": (2025, 2026), "2022-2024": (2022, 2024), "2020-2021": (2020, 2021)}
+
+
+def _works_cond(values: list[str]) -> Any:
+    """OR of stratum ranges; an unknown value matches nothing (no error)."""
+    parts = []
+    for value in values:
+        if value == "50+":
+            parts.append(Author.n_works >= 50)
+        elif bounds := _WORKS_BOUNDS.get(value):
+            parts.append(Author.n_works.between(*bounds))
+    return or_(*parts) if parts else false()
+
+
+def _last_pub_cond(values: list[str]) -> Any:
+    parts = []
+    for value in values:
+        if value == "none":
+            parts.append(Author.last_pub_year.is_(None))
+        elif bounds := _LAST_PUB_BOUNDS.get(value):
+            parts.append(Author.last_pub_year.between(*bounds))
+    return or_(*parts) if parts else false()
+
+
+def _has_orcid_cond(value: str) -> Any:
+    if value == "yes":
+        return Author.orcid.is_not(None)
+    if value == "no":
+        return Author.orcid.is_(None)
+    return false()
+
+
+def _filter_conds(
+    faculty: list[str] | None,
+    org: list[str] | None,
+    has_orcid: str | None,
+    works: list[str] | None,
+    last_pub: list[str] | None,
+    topic: list[str] | None,
 ) -> dict[str, Any]:
-    """Author roster for one institution. total is the q-filtered match
-    count (the whole roster when q is empty); items are the top matches."""
+    """One condition per active facet dimension; keyed so a facet's counts
+    can drop its own dimension while keeping all others."""
+    conds: dict[str, Any] = {}
+    if faculty:
+        conds["faculty"] = Author.faculty.in_(faculty)
+    if org:
+        conds["org"] = Author.research_group.in_(org)
+    if topic:
+        conds["topic"] = Author.primary_topic.in_(topic)
+    if works:
+        conds["works"] = _works_cond(works)
+    if last_pub:
+        conds["last_pub"] = _last_pub_cond(last_pub)
+    if has_orcid:
+        conds["has_orcid"] = _has_orcid_cond(has_orcid)
+    return conds
+
+
+def _works_expr() -> Any:
+    return case(
+        (Author.n_works >= 50, "50+"),
+        (Author.n_works >= 20, "20-49"),
+        (Author.n_works >= 5, "5-19"),
+        (Author.n_works >= 1, "1-4"),
+    )
+
+
+def _last_pub_expr() -> Any:
+    return case(
+        (Author.last_pub_year.is_(None), "none"),
+        (Author.last_pub_year >= 2025, "2025-2026"),
+        (Author.last_pub_year >= 2022, "2022-2024"),
+        (Author.last_pub_year >= 2020, "2020-2021"),
+    )
+
+
+async def _facets(session: AsyncSession, base: list[Any], conds: dict[str, Any]) -> dict[str, Any]:
+    """Per-dimension {value, count} lists under every filter except the
+    facet's own (has_orcid is a plain boolean, no facet list). ~3.6k authors,
+    so query-time counts; no cache."""
+    exprs: dict[str, Any] = {
+        "faculty": Author.faculty,
+        "org": Author.research_group,
+        "works": _works_expr(),
+        "last_pub": _last_pub_expr(),
+        "topic": Author.primary_topic,
+    }
+    out: dict[str, Any] = {}
+    for name, expr in exprs.items():
+        others = [cond for key, cond in conds.items() if key != name]
+        rows = (
+            await session.execute(
+                select(expr, func.count().label("n"))
+                .where(*base, *others, expr.is_not(None))
+                .group_by(expr)
+                .order_by(func.count().desc(), expr)
+            )
+        ).all()
+        out[name] = [{"value": value, "count": n} for value, n in rows if value is not None]
+    return out
+
+
+#: Author search sort keys (works_desc default).
+SORT_KEYS = ("works_desc", "name_asc", "name_desc", "last_pub_desc")
+
+
+async def search_authors(
+    session: AsyncSession,
+    institution_id: int,
+    q: str | None,
+    limit: int,
+    require_confirmed: bool,
+    faculty: list[str] | None = None,
+    org: list[str] | None = None,
+    has_orcid: str | None = None,
+    works: list[str] | None = None,
+    last_pub: list[str] | None = None,
+    topic: list[str] | None = None,
+    sort: str = "works_desc",
+    offset: int = 0,
+) -> dict[str, Any]:
+    """Author roster for one institution. total is the filter match count
+    (the whole roster when nothing is set); items are the offset/limit page
+    of the sorted matches. require_confirmed restricts the search list to
+    authors.confirmed; profile endpoints stay unfiltered. Facet counts and
+    total describe the filtered set, never the page."""
     roster = await session.scalar(
         select(func.count()).select_from(Author).where(Author.institution_id == institution_id)
     )
     if not roster:
-        return {"enabled": False, "total": 0, "items": []}
-    query = select(Author).where(Author.institution_id == institution_id)
+        return {"enabled": False, "total": 0, "items": [], "facets": {}}
+    base: list[Any] = [Author.institution_id == institution_id]
+    if require_confirmed:
+        base.append(Author.confirmed.is_(True))
+    q_cond = None
     if q and q.strip():
         qstr = q.strip()
-        cond = Author.name.ilike(f"%{_like(qstr)}%", escape="\\")
-        total = await session.scalar(select(func.count()).select_from(Author).where(cond))
-        query = query.where(cond).order_by(
+        q_cond = Author.name.ilike(f"%{_like(qstr)}%", escape="\\")
+    conds = _filter_conds(faculty, org, has_orcid, works, last_pub, topic)
+    query = select(Author).where(*base, *conds.values())
+    if q_cond is not None:
+        query = query.where(q_cond)
+    total = await session.scalar(
+        select(func.count())
+        .select_from(Author)
+        .where(*base, *conds.values(), *([q_cond] if q_cond is not None else []))
+    )
+    # Sort after filters; stable tiebreak by name, then pure_uuid. The q
+    # prefix-rank boost only applies to the default works sort.
+    if sort == "name_asc":
+        order = (func.lower(Author.name).asc(), Author.pure_uuid)
+    elif sort == "name_desc":
+        order = (func.lower(Author.name).desc(), Author.pure_uuid)
+    elif sort == "last_pub_desc":
+        order = (
+            Author.last_pub_year.desc().nulls_last(),
+            func.lower(Author.name),
+            Author.pure_uuid,
+        )
+    elif q_cond is not None:
+        order = (
             case((Author.name.ilike(f"{_like(qstr)}%", escape="\\"), 1), else_=0).desc(),
             Author.n_works.desc(),
             func.lower(Author.name),
+            Author.pure_uuid,
         )
     else:
-        total = roster
-        query = query.order_by(Author.n_works.desc(), func.lower(Author.name))
-    rows = (await session.execute(query.limit(min(limit, MAX_LIMIT)))).scalars().all()
+        order = (Author.n_works.desc(), func.lower(Author.name), Author.pure_uuid)
+    rows = (
+        await session.execute(query.order_by(*order).offset(offset).limit(min(limit, MAX_LIMIT)))
+    ).scalars().all()
+    facet_base = list(base) + ([q_cond] if q_cond is not None else [])
+    facets = await _facets(session, facet_base, conds)
     return {
         "enabled": True,
         "total": total,
+        "offset": offset,
+        "sort": sort,
         "items": [
             {
                 "pure_uuid": a.pure_uuid,
@@ -61,9 +217,13 @@ async def search_authors(
                 "research_group": a.research_group,
                 "n_works": a.n_works,
                 "orcid": a.orcid,
+                "confirmed": a.confirmed,
+                "last_pub_year": a.last_pub_year,
+                "primary_topic": a.primary_topic,
             }
             for a in rows
         ],
+        "facets": facets,
     }
 
 
