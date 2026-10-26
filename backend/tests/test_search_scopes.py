@@ -223,11 +223,11 @@ def _issns(body: dict) -> set[str]:
 
 @requires_db
 async def test_malformed_cursor_is_400(api):
-    r = await api.get("/api/v1/journals", params={"cursor": "not-a-cursor"})
+    r = await api.get("/api/v1/ut/journals", params={"cursor": "not-a-cursor"})
     assert r.status_code == 400
     # Valid base64 but not JSON.
     junk = base64.urlsafe_b64encode(b"nonsense").decode()
-    r = await api.get("/api/v1/journals", params={"cursor": junk})
+    r = await api.get("/api/v1/ut/journals", params={"cursor": junk})
     assert r.status_code == 400
 
 
@@ -245,7 +245,7 @@ async def test_null_twoyr_sort_pages_cleanly(api):
         }
         if cursor:
             params["cursor"] = cursor
-        r = await api.get("/api/v1/journals", params=params)
+        r = await api.get("/api/v1/ut/journals", params=params)
         assert r.status_code == 200
         body = r.json()
         seen += [i["issn_l"] for i in body["items"]]
@@ -269,7 +269,7 @@ async def test_relevance_sort_pages_cleanly(api):
         params = {"sort": "relevance", "q": "journal", "limit": 2}
         if cursor:
             params["cursor"] = cursor
-        r = await api.get("/api/v1/journals", params=params)
+        r = await api.get("/api/v1/ut/journals", params=params)
         assert r.status_code == 200
         body = r.json()
         seen += [i["issn_l"] for i in body["items"]]
@@ -288,7 +288,7 @@ async def test_title_sort_pages_with_lower_case_cursor(api):
         params = {"sort": "title", "q": "journal", "limit": 3}
         if cursor:
             params["cursor"] = cursor
-        r = await api.get("/api/v1/journals", params=params)
+        r = await api.get("/api/v1/ut/journals", params=params)
         assert r.status_code == 200
         body = r.json()
         seen += [i["issn_l"] for i in body["items"]]
@@ -301,18 +301,18 @@ async def test_title_sort_pages_with_lower_case_cursor(api):
 
 @requires_db
 async def test_search_in_publisher_scope(api):
-    r = await api.get("/api/v1/journals", params={"q": "massachusetts", "search_in": "publisher"})
+    r = await api.get("/api/v1/ut/journals", params={"q": "massachusetts", "search_in": "publisher"})
     assert r.status_code == 200
     assert _issns(r.json()) == {"1234-5678"}
     # Same query in the title scope must not match the publisher.
-    r = await api.get("/api/v1/journals", params={"q": "massachusetts", "search_in": "title"})
+    r = await api.get("/api/v1/ut/journals", params={"q": "massachusetts", "search_in": "title"})
     assert r.status_code == 200
     assert r.json()["total"] == 0
     # The "all" scope matches publisher too.
-    r = await api.get("/api/v1/journals", params={"q": "massachusetts"})
+    r = await api.get("/api/v1/ut/journals", params={"q": "massachusetts"})
     assert {"1234-5678"} <= _issns(r.json())
     # LIKE wildcards in user input stay literal, no crash.
-    r = await api.get("/api/v1/journals", params={"q": "mass%achu_setts", "search_in": "publisher"})
+    r = await api.get("/api/v1/ut/journals", params={"q": "mass%achu_setts", "search_in": "publisher"})
     assert r.status_code == 200
     assert r.json()["total"] == 0
 
@@ -320,10 +320,10 @@ async def test_search_in_publisher_scope(api):
 @requires_db
 async def test_search_in_topic_scope(api):
     # "chemistry" appears only in the topic display_name, not the title.
-    r = await api.get("/api/v1/journals", params={"q": "chemistry", "search_in": "topic"})
+    r = await api.get("/api/v1/ut/journals", params={"q": "chemistry", "search_in": "topic"})
     assert r.status_code == 200
     assert _issns(r.json()) == {"2222-2222"}
-    r = await api.get("/api/v1/journals", params={"q": "chemistry", "search_in": "title"})
+    r = await api.get("/api/v1/ut/journals", params={"q": "chemistry", "search_in": "title"})
     assert r.json()["total"] == 0
 
 
@@ -332,7 +332,7 @@ async def test_issn_query_resolves_variants(api):
     # Print variant via IssnMap, hyphenless and spaced forms via
     # normalized direct comparison.
     for q in ("5678-4321", "56784321", "1234 5678", "1234-5678"):
-        r = await api.get("/api/v1/journals", params={"q": q})
+        r = await api.get("/api/v1/ut/journals", params={"q": q})
         assert r.status_code == 200, q
         assert _issns(r.json()) == {"1234-5678"}, q
 
@@ -341,19 +341,19 @@ async def test_issn_query_resolves_variants(api):
 async def test_fuzzy_fallback_sets_flag(api):
     # Both words misspelled: FTS, prefix and scopes all miss; the trigram
     # retry must find it and set fuzzy.
-    r = await api.get("/api/v1/journals", params={"q": "bioinformatiks quaterly"})
+    r = await api.get("/api/v1/ut/journals", params={"q": "bioinformatiks quaterly"})
     assert r.status_code == 200
     body = r.json()
     assert body["fuzzy"] is True
     assert _issns(body) == {"1111-1111"}
     # A clean hit does not set the flag.
-    r = await api.get("/api/v1/journals", params={"q": "bioinformatics"})
+    r = await api.get("/api/v1/ut/journals", params={"q": "bioinformatics"})
     assert r.json()["fuzzy"] is False
 
 
 @requires_db
 async def test_publisher_and_apc_facets(api):
-    body = (await api.get("/api/v1/journals")).json()
+    body = (await api.get("/api/v1/ut/journals")).json()
     facets = body["facets"]
     assert facets["apc"] == {"true": 2, "false": len(body["items"]) - 2}
     # Cross-consistency: every non-publisher facet sums to the total.
@@ -364,7 +364,7 @@ async def test_publisher_and_apc_facets(api):
     # Active has_apc filter: apc facet excludes its own filter (matches the
     # unfiltered counts); publisher facet respects it.
     browse_facets = facets
-    body = (await api.get("/api/v1/journals", params={"has_apc": "true"})).json()
+    body = (await api.get("/api/v1/ut/journals", params={"has_apc": "true"})).json()
     assert body["total"] == 2
     assert body["facets"]["apc"] == browse_facets["apc"]
     assert set(_issns(body)) == {"3333-3333", "1515-1515"}
@@ -373,7 +373,7 @@ async def test_publisher_and_apc_facets(api):
     # apc facet respects it (only 1515-1515 has apc evidence and its
     # publisher is MIT Press -> all non-MIT journals drop out).
     params = {"publisher": "Massachusetts Institute of Technology Press"}
-    body = (await api.get("/api/v1/journals", params=params)).json()
+    body = (await api.get("/api/v1/ut/journals", params=params)).json()
     assert _issns(body) == {"1234-5678"}
 
 
@@ -382,25 +382,25 @@ async def test_facet_variants_drop_own_filter(api):
     """Regression: chip facets must drop exactly their own filter. The
     variants used to re-include it, so e.g. deal=covered rendered the "No
     deal" chip with a zero count."""
-    browse = (await api.get("/api/v1/journals")).json()
-    body = (await api.get("/api/v1/journals", params={"deal": "covered"})).json()
+    browse = (await api.get("/api/v1/ut/journals")).json()
+    body = (await api.get("/api/v1/ut/journals", params={"deal": "covered"})).json()
     assert body["total"] == 2  # 5555-5555 and 1313-1313 are deal-covered
     assert body["facets"]["deal_coverage"] == browse["facets"]["deal_coverage"]
 
-    body = (await api.get("/api/v1/journals", params={"oa": "true"})).json()
+    body = (await api.get("/api/v1/ut/journals", params={"oa": "true"})).json()
     assert body["facets"]["oa"] == browse["facets"]["oa"]
 
     # The apc facet drops only its own filter: has_ut_works stays applied.
     # Regression: it used to drop has_ut_works too. 1414-1414 is the only
     # home-works fixture and has no APC evidence.
-    params = {"has_apc": "true", "has_ut_works": "true"}
-    body = (await api.get("/api/v1/journals", params=params)).json()
+    params = {"has_apc": "true", "has_works": "true"}
+    body = (await api.get("/api/v1/ut/journals", params=params)).json()
     assert body["total"] == 0
     assert body["facets"]["apc"] == {"true": 0, "false": 1}
 
 @requires_db
 async def test_has_apc_filter(api):
-    r = await api.get("/api/v1/journals", params={"has_apc": "false"})
+    r = await api.get("/api/v1/ut/journals", params={"has_apc": "false"})
     assert r.status_code == 200
     body = r.json()
     assert "1515-1515" not in _issns(body)
@@ -410,14 +410,14 @@ async def test_has_apc_filter(api):
 
 @requires_db
 async def test_apc_fields_on_list_items(api):
-    r = await api.get("/api/v1/journals", params={"q": "priced"})
+    r = await api.get("/api/v1/ut/journals", params={"q": "priced"})
     assert r.status_code == 200
     (item,) = r.json()["items"]
     # Latest known cost: highest single APC in the newest period with
     # evidence (2024), not the period mean.
     assert item["apc_period"] == "2024"
     assert item["apc_euro_latest"] == 2500.0
-    r = await api.get("/api/v1/journals", params={"q": "quantum studies"})
+    r = await api.get("/api/v1/ut/journals", params={"q": "quantum studies"})
     (item,) = r.json()["items"]
     assert item["apc_period"] is None
     assert item["apc_euro_latest"] is None
@@ -425,7 +425,7 @@ async def test_apc_fields_on_list_items(api):
 
 @requires_db
 async def test_oa_type_mapping(api):
-    r = await api.get("/api/v1/journals")
+    r = await api.get("/api/v1/ut/journals")
     by_issn = {i["issn_l"]: i["oa_type"] for i in r.json()["items"]}
     assert by_issn["3333-3333"] == "gold"  # doaj + apc evidence
     assert by_issn["4444-4444"] == "diamond"  # doaj, no evidence
@@ -438,13 +438,13 @@ async def test_oa_type_mapping(api):
 @requires_db
 async def test_oa_type_facet_filter(api):
     # OR semantics: gold OR diamond returns exactly those fixtures.
-    r = await api.get("/api/v1/journals", params={"oa_type": "gold,diamond"})
+    r = await api.get("/api/v1/ut/journals", params={"oa_type": "gold,diamond"})
     assert r.status_code == 200
     items = r.json()["items"]
     assert {i["issn_l"] for i in items} == {"3333-3333", "1515-1515", "4444-4444"}
 
     # Single value narrows to one fixture.
-    r = await api.get("/api/v1/journals", params={"oa_type": "diamond"})
+    r = await api.get("/api/v1/ut/journals", params={"oa_type": "diamond"})
     assert r.status_code == 200
     assert _issns(r.json()) == {"4444-4444"}
 
@@ -456,13 +456,13 @@ async def test_oa_type_facet_filter(api):
     assert oa_facets["hybrid"] == 2
 
     # Unknown vocabulary is a 400, not a silent empty result.
-    r = await api.get("/api/v1/journals", params={"oa_type": "gold,bogus"})
+    r = await api.get("/api/v1/ut/journals", params={"oa_type": "gold,bogus"})
     assert r.status_code == 400
 
 
 @requires_db
 async def test_proceedings_exclusion(api):
-    body = (await api.get("/api/v1/journals")).json()
+    body = (await api.get("/api/v1/ut/journals")).json()
     issns = _issns(body)
     assert "1212-1212" not in issns  # pattern + no deal + no UT works
     assert "1313-1313" in issns  # deal-covered proceedings stay
@@ -473,12 +473,12 @@ async def test_proceedings_exclusion(api):
 
 @requires_db
 async def test_similar_journals(api):
-    r = await api.get("/api/v1/journals/1234-5678/similar")
+    r = await api.get("/api/v1/ut/journals/1234-5678/similar")
     assert r.status_code == 200
     # No topic overlap with anything: three empty lists.
-    assert r.json() == {"twente": [], "deals": [], "all": []}
+    assert r.json() == {"institution": [], "deals": [], "all": []}
 
-    r = await api.get("/api/v1/journals/7777-7777/similar")
+    r = await api.get("/api/v1/ut/journals/7777-7777/similar")
     assert r.status_code == 200
     bundle = r.json()
     items = bundle["all"]
@@ -493,14 +493,14 @@ async def test_similar_journals(api):
         "quartile",
         "is_oa",
         "deal_covered",
-        "twente_works",
+        "works",
         "shared_topics",
     }
     # Fixture journals carry no UT works and no deal, so the teaser cuts are
     # empty and every item lands in "all" only.
-    assert bundle["twente"] == []
+    assert bundle["institution"] == []
     assert bundle["deals"] == []
 
     # Unknown journal -> 404.
-    r = await api.get("/api/v1/journals/0000-0000/similar")
+    r = await api.get("/api/v1/ut/journals/0000-0000/similar")
     assert r.status_code == 404

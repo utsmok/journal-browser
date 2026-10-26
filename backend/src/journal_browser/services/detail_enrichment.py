@@ -90,14 +90,14 @@ async def list_works(
     }
 
 
-async def twente_metrics(
+async def institution_metrics(
     session: AsyncSession,
     issn_l: str,
     institution_id: int,
     ut_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Aggregates over the journal's stored OpenAlex works (SQL, one pass),
-    plus ut-metadata-grounded totals when the canonical store is reachable."""
+    plus canonical-store totals when the external works store is reachable."""
     rows = _journal_works(issn_l, institution_id)
     fwci = cast(rows.c.payload["fwci"].astext, Float)
     total, fwci_avg, fwci_n, retracted, cited_total = (
@@ -117,14 +117,14 @@ async def twente_metrics(
         "fwci_n": fwci_n,
         "retracted": retracted,
         "cited_total": cited_total,
-        "ut_total": None,
-        "ut_retracted": None,
-        "ut_oa": None,
+        "canonical_total": None,
+        "canonical_retracted": None,
+        "canonical_oa": None,
     }
     if ut_rows is not None:
-        metrics["ut_total"] = len(ut_rows)
-        metrics["ut_retracted"] = sum(1 for r in ut_rows if r["is_retracted"])
-        metrics["ut_oa"] = ut_metadata.oa_buckets(ut_rows)
+        metrics["canonical_total"] = len(ut_rows)
+        metrics["canonical_retracted"] = sum(1 for r in ut_rows if r["is_retracted"])
+        metrics["canonical_oa"] = ut_metadata.oa_buckets(ut_rows)
     return metrics
 
 

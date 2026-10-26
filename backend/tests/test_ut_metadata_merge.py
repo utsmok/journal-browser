@@ -267,7 +267,7 @@ async def test_works_union_and_detail_ut_metrics(api, client, monkeypatch):
 
     monkeypatch.setattr(ut_metadata, "ut_works_for_journal", fake_ut_rows)
 
-    r = await client.get("/api/v1/journals/1234-5678/works")
+    r = await client.get("/api/v1/tu/journals/1234-5678/works")
     assert r.status_code == 200
     body = r.json()
     # 1 merged (10.1/one) + 2 ut-only + 1 stats-only = 4; ut-3 has no year ->
@@ -285,11 +285,11 @@ async def test_works_union_and_detail_ut_metrics(api, client, monkeypatch):
     assert items[2]["in_openalex"] is True
     assert items[2]["work_type"] is None
 
-    r = await client.get("/api/v1/journals/1234-5678")
-    metrics = r.json()["twente_metrics"]
-    assert metrics["ut_total"] == 3
-    assert metrics["ut_retracted"] == 3
-    assert metrics["ut_oa"] == {
+    r = await client.get("/api/v1/tu/journals/1234-5678")
+    metrics = r.json()["institution_metrics"]
+    assert metrics["canonical_total"] == 3
+    assert metrics["canonical_retracted"] == 3
+    assert metrics["canonical_oa"] == {
         "gold": 1,
         "hybrid": 1,
         "green": 0,
@@ -310,15 +310,15 @@ async def test_ut_metadata_unavailable_degrades_to_stats_only(api, client, monke
 
     monkeypatch.setattr(ut_metadata, "ut_works_for_journal", unavailable)
 
-    r = await client.get("/api/v1/journals/1234-5678/works")
+    r = await client.get("/api/v1/tu/journals/1234-5678/works")
     assert r.status_code == 200
     body = r.json()
     assert body["total"] == 2
     assert all(i["in_openalex"] is True for i in body["items"])
 
-    r = await client.get("/api/v1/journals/1234-5678")
-    metrics = r.json()["twente_metrics"]
-    assert (metrics["ut_total"], metrics["ut_retracted"], metrics["ut_oa"]) == (
+    r = await client.get("/api/v1/tu/journals/1234-5678")
+    metrics = r.json()["institution_metrics"]
+    assert (metrics["canonical_total"], metrics["canonical_retracted"], metrics["canonical_oa"]) == (
         None,
         None,
         None,

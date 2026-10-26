@@ -8,24 +8,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..db import get_session
-from ..harvest.common import ensure_default_institution
 from ..models import (
     ApcEvidence,
     Deal,
     DealInstitution,
     DealJournal,
-    Institution,
     InstitutionWorksStats,
     Journal,
     JournalApcAggregate,
     Publisher,
     ScimagojrMetric,
 )
+from ..routers.institutions import InstitutionDep
 from ..schemas import (
     ApcAggregateOut,
     ApcEvidenceOut,
     Attribution,
     DealOut,
+    InstitutionMetrics,
     JournalDetailResponse,
     JournalListItem,
     JournalSearchResponse,
@@ -35,7 +35,6 @@ from ..schemas import (
     SimilarJournalItem,
     SimilarJournalsBundle,
     StatsYear,
-    TwenteMetrics,
     WorksPage,
 )
 from ..services import detail_enrichment
@@ -45,10 +44,6 @@ from ..services import ut_metadata as ut_metadata_service
 router = APIRouter(prefix="/journals", tags=["journals"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
-
-HOME_INST = (
-    select(Institution.id).where(Institution.is_default.is_(True)).scalar_subquery()
-)
 
 #: DealOut fields that map 1:1 onto Deal columns.
 DEAL_FIELDS = [
@@ -133,6 +128,7 @@ def _to_list_item(data: dict) -> JournalListItem:
 @router.get("", response_model=JournalSearchResponse)
 async def search_journals(
     session: SessionDep,
+    institution: InstitutionDep,
     q: Annotated[str | None, Query(max_length=200)] = None,
     search_in: Annotated[str, Query(pattern="^(all|title|publisher|topic)$")] = "all",
     deal: Annotated[str, Query(pattern="^(any|covered|not_covered)$")] = "any",
@@ -142,7 +138,7 @@ async def search_journals(
     topic: Annotated[str | None, Query(max_length=100)] = None,
     publisher: Annotated[str | None, Query(max_length=200)] = None,
     has_apc: bool | None = None,
-    has_ut_works: bool | None = None,
+    has_works: bool | None = None,
     oa_type: Annotated[str | None, Query(max_length=60)] = None,
     sort: Annotated[
         str,
@@ -159,7 +155,6 @@ async def search_journals(
     oa_types = [v for v in (oa_type or "").split(",") if v]
     if unknown := [v for v in oa_types if v not in search_service.OA_TYPES]:
         raise HTTPException(status_code=400, detail=f"unknown oa_type: {unknown}")
-    institution = await ensure_default_institution(session)
     try:
         result = await search_service.search_journals(
             session,
@@ -173,7 +168,7 @@ async def search_journals(
             topic=topic,
             publisher=publisher,
             has_apc=has_apc,
-            has_ut_works=has_ut_works,
+            has_works=has_works,
             oa_types=oa_types or None,
             sort=sort,
             dir=dir,
@@ -195,12 +190,12 @@ async def search_journals(
 @router.get("/semantic-search", response_model=JournalSearchResponse)
 async def semantic_search_journals(
     session: SessionDep,
+    institution: InstitutionDep,
     q: Annotated[str, Query(min_length=2, max_length=512)],
     limit: Annotated[int, Query(ge=1, le=100)] = 40,
     cursor: str | None = None,
 ) -> JournalSearchResponse:
     """Free-text "journals like this description" search over embeddings."""
-    institution = await ensure_default_institution(session)
     try:
         result = await search_service.semantic_search(
             session, q, institution.id, limit, cursor
@@ -215,8 +210,9 @@ async def semantic_search_journals(
 
 
 @router.get("/{issn_l}/similar", response_model=SimilarJournalsBundle)
-async def similar_journals(issn_l: str, session: SessionDep) -> SimilarJournalsBundle:
-    institution = await ensure_default_institution(session)
+async def similar_journals(
+    issn_l: str, session: SessionDep, institution: InstitutionDep
+) -> SimilarJournalsBundle:
     similar = await search_service.similar_journals(session, issn_l, institution.id)
     if similar is None:
         raise HTTPException(status_code=404, detail="journal not found")
@@ -229,13 +225,13 @@ async def similar_journals(issn_l: str, session: SessionDep) -> SimilarJournalsB
 async def journal_works(
     issn_l: str,
     session: SessionDep,
+    institution: InstitutionDep,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> WorksPage:
     known = await session.scalar(select(Journal.issn_l).where(Journal.issn_l == issn_l.upper()))
     if known is None:
         raise HTTPException(status_code=404, detail="journal not found")
-    institution = await ensure_default_institution(session)
     ut_rows = await ut_metadata_service.ut_works_for_journal(known)
     return WorksPage(
         **await detail_enrichment.list_works(
@@ -245,16 +241,17 @@ async def journal_works(
 
 
 @router.get("/{issn_l}", response_model=JournalDetailResponse)
-async def journal_detail(issn_l: str, session: SessionDep) -> JournalDetailResponse:
+async def journal_detail(
+    issn_l: str, session: SessionDep, institution: InstitutionDep
+) -> JournalDetailResponse:
     journal = await session.scalar(select(Journal).where(Journal.issn_l == issn_l.upper()))
     if journal is None:
         raise HTTPException(status_code=404, detail="journal not found")
-    institution = await ensure_default_institution(session)
 
     # Effective coverage: a shared deal_journals row applies unless the
     # institution's relation opts into a scoped override list.
     dj_scope = DealJournal.institution_id.is_not_distinct_from(
-        case((DealInstitution.journal_override.is_(True), HOME_INST), else_=None)
+        case((DealInstitution.journal_override.is_(True), institution.id), else_=None)
     )
     deal_rows = (
         await session.execute(
@@ -265,7 +262,7 @@ async def journal_detail(issn_l: str, session: SessionDep) -> JournalDetailRespo
             .join(
                 DealInstitution,
                 (DealInstitution.deal_id == Deal.id)
-                & (DealInstitution.institution_id == HOME_INST),
+                & (DealInstitution.institution_id == institution.id),
             )
             .join(
                 DealJournal,
@@ -288,7 +285,7 @@ async def journal_detail(issn_l: str, session: SessionDep) -> JournalDetailRespo
                 select(InstitutionWorksStats)
                 .where(
                     InstitutionWorksStats.issn_l == journal.issn_l,
-                    InstitutionWorksStats.institution_id == HOME_INST,
+                    InstitutionWorksStats.institution_id == institution.id,
                 )
                 .order_by(InstitutionWorksStats.year)
             )
@@ -372,7 +369,7 @@ async def journal_detail(issn_l: str, session: SessionDep) -> JournalDetailRespo
             in_scimago=journal.in_scimago,
             last_active_year=journal.last_active_year,
             deal_covered=bool(deals),
-            twente_works=sum(s.works_count for s in stats),
+            works=sum(s.works_count for s in stats),
             quartile=sjr_rows[-1].best_quartile if sjr_rows else None,
             twoyr_mean_citedness=summary_stats.get("two_yr_mean_citedness"),
             oa_type=search_service.oa_type_value(
@@ -431,8 +428,8 @@ async def journal_detail(issn_l: str, session: SessionDep) -> JournalDetailRespo
                 session, journal.issn_l, institution.id
             )
         ),
-        twente_metrics=TwenteMetrics(
-            **await detail_enrichment.twente_metrics(
+        institution_metrics=InstitutionMetrics(
+            **await detail_enrichment.institution_metrics(
                 session, journal.issn_l, institution.id, ut_rows
             )
         ),

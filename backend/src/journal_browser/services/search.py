@@ -115,7 +115,7 @@ def base_query(
     topic: str | None = None,
     publisher: str | None = None,
     has_apc: bool | None = None,
-    has_ut_works: bool | None = None,
+    has_works: bool | None = None,
     oa_types: list[str] | None = None,
     fuzzy: bool = False,
 ):
@@ -160,7 +160,7 @@ def base_query(
             J.in_scimago,
             J.last_active_year,
             covered.label("deal_covered"),
-            flags.c.works_count.label("twente_works"),
+            flags.c.works_count.label("works"),
             J.latest_quartile.label("quartile"),
             twoyr,
             oa_type,
@@ -239,9 +239,9 @@ def base_query(
         query = query.where(J.publisher_name == publisher)
     if has_apc is not None:
         query = query.where(APC_EXISTS if has_apc else ~APC_EXISTS)
-    if has_ut_works is not None:
+    if has_works is not None:
         query = query.where(
-            flags.c.works_count > 0 if has_ut_works else flags.c.works_count == 0
+            flags.c.works_count > 0 if has_works else flags.c.works_count == 0
         )
     return query
 
@@ -259,7 +259,7 @@ def _order(sort: SortKey, subq: Any) -> tuple[Any, str]:
     if sort == "apc":
         return func.coalesce(subq.c.latest_apc, 0), "desc"
     if sort == "institution_works":
-        return func.coalesce(subq.c.twente_works, 0), "desc"
+        return func.coalesce(subq.c.works, 0), "desc"
     if sort == "2yr_mean_citedness":
         return func.coalesce(subq.c.twoyr, 0), "desc"
     return func.coalesce(subq.c.rank, 0), "desc"  # relevance
@@ -305,7 +305,7 @@ async def search_journals(
     topic: str | None = None,
     publisher: str | None = None,
     has_apc: bool | None = None,
-    has_ut_works: bool | None = None,
+    has_works: bool | None = None,
     oa_types: list[str] | None = None,
     sort: SortKey = "relevance",
     dir: str | None = None,
@@ -324,7 +324,7 @@ async def search_journals(
         topic=topic,
         publisher=publisher,
         has_apc=has_apc,
-        has_ut_works=has_ut_works,
+        has_works=has_works,
         oa_types=oa_types,
     )
     subq = base_query(**filters).subquery()
@@ -419,7 +419,7 @@ async def facet_counts(
     topic: str | None = None,
     publisher: str | None = None,
     has_apc: bool | None = None,
-    has_ut_works: bool | None = None,
+    has_works: bool | None = None,
     oa_types: list[str] | None = None,
 ) -> tuple[dict[str, dict[str, int]], int]:
     """Facet counts over the query-filtered set. Each facet's own filter is
@@ -448,7 +448,7 @@ async def facet_counts(
         topic=topic,
         publisher=publisher,
         has_apc=has_apc,
-        has_ut_works=has_ut_works,
+        has_works=has_works,
         oa_types=oa_types,
     ).subquery()
     total, (covered, oa_true, doaj_true, q1, q2, q3, q4) = await _one(
@@ -480,7 +480,7 @@ async def facet_counts(
         topic=topic,
         publisher=publisher,
         has_apc=has_apc,
-        has_ut_works=has_ut_works,
+        has_works=has_works,
         oa_types=oa_types,
     )
 
@@ -564,20 +564,21 @@ async def facet_counts(
     )
     facets["apc"] = {"true": int(apc_true), "false": int(apc_total) - int(apc_true)}
 
-    # Twente-works facet: journals with/without at least one known UT
-    # publication, own filter excluded so both options stay visible.
-    if has_ut_works is None:
-        utw_base, utw_total = base, total
+    # Institution-works facet: journals with/without at least one known
+    # institution publication, own filter excluded so both options stay
+    # visible.
+    if has_works is None:
+        works_base, works_total = base, total
     else:
-        utw_base = variant_subq("has_ut_works")
-        utw_total = await session.scalar(select(func.count()).select_from(utw_base)) or 0
-    utw_true = (
+        works_base = variant_subq("has_works")
+        works_total = await session.scalar(select(func.count()).select_from(works_base)) or 0
+    works_true = (
         await session.scalar(
-            select(func.count()).select_from(utw_base).where(utw_base.c.twente_works > 0)
+            select(func.count()).select_from(works_base).where(works_base.c.works > 0)
         )
         or 0
     )
-    facets["ut_works"] = {"true": int(utw_true), "false": int(utw_total) - int(utw_true)}
+    facets["works"] = {"true": int(works_true), "false": int(works_total) - int(works_true)}
     return facets, total
 
 
@@ -587,7 +588,7 @@ async def similar_journals(
     """Three cutoff-passing similar-journal lists, nearest first in embedding
     space (cosine; jobs/embed_journals.py backfills the vectors):
 
-    - "twente": journals with at least one known institution publication
+    - "institution": journals with at least one known institution publication
     - "deals": journals covered by a publication deal
     - "all": unfiltered apart from the base cutoffs
 
@@ -608,7 +609,7 @@ async def similar_journals(
     # Scope filters apply to the flags columns exposed by base_query's
     # subquery (works_count / deal_covered are per-institution now).
     scopes = {
-        "twente": (lambda s: s.c.twente_works > 0, SIMILAR_FILTERED_LIMIT),
+        "institution": (lambda s: s.c.works > 0, SIMILAR_FILTERED_LIMIT),
         "deals": (lambda s: s.c.deal_covered.is_(True), SIMILAR_FILTERED_LIMIT),
         "all": (None, SIMILAR_ALL_LIMIT),
     }
@@ -631,7 +632,7 @@ async def similar_journals(
 
     names = [t["display_name"] for t in (self_row.topics or []) if t.get("display_name")]
     if not names:
-        return {"twente": [], "deals": [], "all": []}
+        return {"institution": [], "deals": [], "all": []}
     elems = func.jsonb_array_elements(Journal.topics).table_valued("value")
     shared = (
         select(func.count())

@@ -1,4 +1,4 @@
-"""Detail enrichment tests: openalex/openaire/twente_metrics on the detail
+"""Detail enrichment tests: openalex/openaire/institution_metrics on the detail
 bundle, per-year oa_* stats columns, and the paginated /works list."""
 
 from datetime import UTC, datetime
@@ -262,7 +262,7 @@ async def api(db_engine):
 
 @requires_db
 async def test_works_pagination_and_sort(api):
-    r = await api.get(f"/api/v1/journals/{MAIN_ISSN}/works", params={"page_size": 2})
+    r = await api.get(f"/api/v1/tu/journals/{MAIN_ISSN}/works", params={"page_size": 2})
     assert r.status_code == 200
     body = r.json()
     assert [i["id"] for i in body["items"]] == ["W2", "W1"]
@@ -270,30 +270,30 @@ async def test_works_pagination_and_sort(api):
     assert body["page"] == 1
     assert body["page_size"] == 2
 
-    r = await api.get(f"/api/v1/journals/{MAIN_ISSN}/works", params={"page": 2, "page_size": 2})
+    r = await api.get(f"/api/v1/tu/journals/{MAIN_ISSN}/works", params={"page": 2, "page_size": 2})
     body = r.json()
     assert [i["id"] for i in body["items"]] == ["W3"]
 
-    r = await api.get(f"/api/v1/journals/{MAIN_ISSN}/works", params={"page": 4, "page_size": 2})
+    r = await api.get(f"/api/v1/tu/journals/{MAIN_ISSN}/works", params={"page": 4, "page_size": 2})
     assert r.json()["items"] == []
     assert r.json()["total"] == 3
 
 
 @requires_db
 async def test_works_page_size_capped_at_50(api):
-    r = await api.get(f"/api/v1/journals/{MAIN_ISSN}/works", params={"page_size": 51})
+    r = await api.get(f"/api/v1/tu/journals/{MAIN_ISSN}/works", params={"page_size": 51})
     assert r.status_code == 422
 
 
 @requires_db
 async def test_works_404_unknown_journal(api):
-    r = await api.get("/api/v1/journals/0000-0000/works")
+    r = await api.get("/api/v1/tu/journals/0000-0000/works")
     assert r.status_code == 404
 
 
 @requires_db
 async def test_works_item_shape(api):
-    r = await api.get(f"/api/v1/journals/{MAIN_ISSN}/works")
+    r = await api.get(f"/api/v1/tu/journals/{MAIN_ISSN}/works")
     item = r.json()["items"][0]  # W2
     assert item == {
         "id": "W2",
@@ -320,7 +320,7 @@ async def test_works_item_shape(api):
 
 @requires_db
 async def test_detail_enrichment(api):
-    r = await api.get(f"/api/v1/journals/{MAIN_ISSN}")
+    r = await api.get(f"/api/v1/tu/journals/{MAIN_ISSN}")
     assert r.status_code == 200
     body = r.json()
 
@@ -340,15 +340,15 @@ async def test_detail_enrichment(api):
 
     assert body["openaire"] == {"matched_works": 2}
 
-    assert body["twente_metrics"] == {
+    assert body["institution_metrics"] == {
         "openalex_matched": 3,
         "fwci_avg": 2.0,
         "fwci_n": 2,
         "retracted": 1,
         "cited_total": 21,
-        "ut_total": None,
-        "ut_retracted": None,
-        "ut_oa": None,
+        "canonical_total": None,
+        "canonical_retracted": None,
+        "canonical_oa": None,
     }
 
     for key in ("openalex", "openaire", "works"):
@@ -360,28 +360,28 @@ async def test_detail_enrichment(api):
 
 @requires_db
 async def test_detail_enrichment_without_source_rows(api):
-    r = await api.get(f"/api/v1/journals/{OTHER_ISSN}")
+    r = await api.get(f"/api/v1/tu/journals/{OTHER_ISSN}")
     assert r.status_code == 200
     body = r.json()
     assert body["openalex"] is None
     # u3 matched once for this journal.
     assert body["openaire"] == {"matched_works": 1}
     # Only W4 (no fwci) belongs to this journal.
-    assert body["twente_metrics"] == {
+    assert body["institution_metrics"] == {
         "openalex_matched": 1,
         "fwci_avg": None,
         "fwci_n": 0,
         "retracted": 0,
         "cited_total": 3,
-        "ut_total": None,
-        "ut_retracted": None,
-        "ut_oa": None,
+        "canonical_total": None,
+        "canonical_retracted": None,
+        "canonical_oa": None,
     }
 
 
 @requires_db
 async def test_stats_rows_carry_oa_columns(api):
-    r = await api.get(f"/api/v1/journals/{MAIN_ISSN}")
+    r = await api.get(f"/api/v1/tu/journals/{MAIN_ISSN}")
     stats = {s["year"]: s for s in r.json()["stats"]}
     assert set(stats) == {2021, 2022}
     for year in stats:

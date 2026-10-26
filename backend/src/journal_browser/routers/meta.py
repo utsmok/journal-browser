@@ -7,9 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..config import get_settings
 from ..db import get_session
-from ..harvest.common import get_default_institution
 from ..models import (
     ApcEvidence,
     Deal,
@@ -20,6 +18,7 @@ from ..models import (
     Limitation,
     ScimagojrMetric,
 )
+from ..routers.institutions import InstitutionDep
 from ..schemas import FreshnessEntry, FreshnessResponse, LimitationOut
 
 router = APIRouter(prefix="/meta", tags=["meta"])
@@ -39,13 +38,17 @@ async def list_limitations(
 
 
 @router.get("/freshness", response_model=FreshnessResponse)
-async def freshness(session: SessionDep) -> FreshnessResponse:
-    settings = get_settings()
+async def freshness(session: SessionDep, institution: InstitutionDep) -> FreshnessResponse:
     harvests = list(
         (
             await session.execute(
                 select(HarvestState, HarvestRun.finished_at)
                 .outerjoin(HarvestRun, HarvestRun.id == HarvestState.last_run_id)
+                # This institution's states plus the shared global layer.
+                .where(
+                    (HarvestState.institution_id == institution.id)
+                    | (HarvestState.institution_id.is_(None))
+                )
                 .order_by(HarvestState.source, HarvestState.entity_type)
             )
         ).all()
@@ -63,18 +66,17 @@ async def freshness(session: SessionDep) -> FreshnessResponse:
         "scimagojr_metrics": await table_ts(select(func.max(ScimagojrMetric.year))),
         "apc_evidence": await table_ts(select(func.max(ApcEvidence.period))),
     }
-    inst = await get_default_institution(session)
     return FreshnessResponse(
-        institution=inst.name if inst else settings.institution_name,
-        institution_short=inst.short_name if inst else settings.institution_short,
-        ror=inst.ror if inst else settings.institution_ror,
-        library_url=inst.library_url if inst else settings.library_url,
-        oa_guide_url=inst.oa_guide_url if inst else settings.oa_guide_url,
-        support_email=inst.support_email if inst else settings.support_email,
-        admin_contact=inst.admin_contact if inst else settings.admin_contact,
-        research_portal_url=inst.research_portal_url if inst else settings.research_portal_url,
-        data_window_start=inst.data_window_start if inst else settings.data_window_start,
-        data_window_end=inst.data_window_end if inst else settings.data_window_end,
+        institution=institution.name,
+        institution_short=institution.short_name,
+        ror=institution.ror,
+        library_url=institution.library_url,
+        oa_guide_url=institution.oa_guide_url,
+        support_email=institution.support_email,
+        admin_contact=institution.admin_contact,
+        research_portal_url=institution.research_portal_url,
+        data_window_start=institution.data_window_start,
+        data_window_end=institution.data_window_end,
         harvests=[
             FreshnessEntry(
                 source=state.source,

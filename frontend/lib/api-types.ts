@@ -4,15 +4,15 @@
  */
 
 export interface paths {
-    "/api/v1/journals": {
+    "/api/v1/institutions": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Search Journals */
-        get: operations["search_journals_api_v1_journals_get"];
+        /** List Institutions */
+        get: operations["list_institutions_api_v1_institutions_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -21,7 +21,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/journals/semantic-search": {
+    "/api/v1/{institution_code}/journals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search Journals */
+        get: operations["search_journals_api_v1__institution_code__journals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/{institution_code}/journals/semantic-search": {
         parameters: {
             query?: never;
             header?: never;
@@ -32,7 +49,7 @@ export interface paths {
          * Semantic Search Journals
          * @description Free-text "journals like this description" search over embeddings.
          */
-        get: operations["semantic_search_journals_api_v1_journals_semantic_search_get"];
+        get: operations["semantic_search_journals_api_v1__institution_code__journals_semantic_search_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -41,7 +58,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/journals/{issn_l}/similar": {
+    "/api/v1/{institution_code}/journals/{issn_l}/similar": {
         parameters: {
             query?: never;
             header?: never;
@@ -49,7 +66,7 @@ export interface paths {
             cookie?: never;
         };
         /** Similar Journals */
-        get: operations["similar_journals_api_v1_journals__issn_l__similar_get"];
+        get: operations["similar_journals_api_v1__institution_code__journals__issn_l__similar_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -58,7 +75,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/journals/{issn_l}/works": {
+    "/api/v1/{institution_code}/journals/{issn_l}/works": {
         parameters: {
             query?: never;
             header?: never;
@@ -66,7 +83,7 @@ export interface paths {
             cookie?: never;
         };
         /** Journal Works */
-        get: operations["journal_works_api_v1_journals__issn_l__works_get"];
+        get: operations["journal_works_api_v1__institution_code__journals__issn_l__works_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -75,7 +92,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/journals/{issn_l}": {
+    "/api/v1/{institution_code}/journals/{issn_l}": {
         parameters: {
             query?: never;
             header?: never;
@@ -83,7 +100,7 @@ export interface paths {
             cookie?: never;
         };
         /** Journal Detail */
-        get: operations["journal_detail_api_v1_journals__issn_l__get"];
+        get: operations["journal_detail_api_v1__institution_code__journals__issn_l__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -92,7 +109,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/deals": {
+    "/api/v1/{institution_code}/deals": {
         parameters: {
             query?: never;
             header?: never;
@@ -100,7 +117,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Deals */
-        get: operations["list_deals_api_v1_deals_get"];
+        get: operations["list_deals_api_v1__institution_code__deals_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -109,7 +126,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/deals/{deal_id}": {
+    "/api/v1/{institution_code}/deals/{deal_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -117,7 +134,7 @@ export interface paths {
             cookie?: never;
         };
         /** Deal Detail */
-        get: operations["deal_detail_api_v1_deals__deal_id__get"];
+        get: operations["deal_detail_api_v1__institution_code__deals__deal_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -126,7 +143,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/meta/limitations": {
+    "/api/v1/{institution_code}/meta/limitations": {
         parameters: {
             query?: never;
             header?: never;
@@ -134,7 +151,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Limitations */
-        get: operations["list_limitations_api_v1_meta_limitations_get"];
+        get: operations["list_limitations_api_v1__institution_code__meta_limitations_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -143,7 +160,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/meta/freshness": {
+    "/api/v1/{institution_code}/meta/freshness": {
         parameters: {
             query?: never;
             header?: never;
@@ -151,7 +168,7 @@ export interface paths {
             cookie?: never;
         };
         /** Freshness */
-        get: operations["freshness_api_v1_meta_freshness_get"];
+        get: operations["freshness_api_v1__institution_code__meta_freshness_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -290,6 +307,47 @@ export interface components {
             caveat_codes: string[];
         };
         /**
+         * CanonicalOa
+         * @description ut-metadata oa_status distribution over a journal's works.
+         */
+        CanonicalOa: {
+            /**
+             * Gold
+             * @default 0
+             */
+            gold: number;
+            /**
+             * Hybrid
+             * @default 0
+             */
+            hybrid: number;
+            /**
+             * Green
+             * @default 0
+             */
+            green: number;
+            /**
+             * Bronze
+             * @default 0
+             */
+            bronze: number;
+            /**
+             * Diamond
+             * @default 0
+             */
+            diamond: number;
+            /**
+             * Closed
+             * @default 0
+             */
+            closed: number;
+            /**
+             * Unknown
+             * @default 0
+             */
+            unknown: number;
+        };
+        /**
          * DealLinkOut
          * @description Register link entry ([{url, text, category}], seeded by curation jobs).
          */
@@ -372,34 +430,35 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
-        /** FreshnessResponse */
+        /**
+         * FreshnessResponse
+         * @description Config comes from the institution row; unset optional fields are
+         *     None rather than global defaults.
+         */
         FreshnessResponse: {
             /** Institution */
             institution: string;
             /** Institution Short */
-            institution_short: string;
+            institution_short?: string | null;
             /** Ror */
-            ror: string;
+            ror?: string | null;
             /** Library Url */
-            library_url: string;
+            library_url?: string | null;
             /** Oa Guide Url */
-            oa_guide_url: string;
+            oa_guide_url?: string | null;
             /** Support Email */
-            support_email: string;
+            support_email?: string | null;
             /** Admin Contact */
             admin_contact?: string | null;
             /** Research Portal Url */
-            research_portal_url: string;
+            research_portal_url?: string | null;
             /**
              * Data Window Start
              * @default 2020
              */
             data_window_start: number;
-            /**
-             * Data Window End
-             * @default 0
-             */
-            data_window_end: number;
+            /** Data Window End */
+            data_window_end?: number | null;
             /** Harvests */
             harvests: components["schemas"]["FreshnessEntry"][];
             /**
@@ -414,6 +473,66 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * InstitutionMetrics
+         * @description OpenAlex view of this institution's publications in this journal,
+         *     plus canonical-store totals when the external works store is reachable
+         *     (otherwise the canonical_* keys are None).
+         */
+        InstitutionMetrics: {
+            /**
+             * Openalex Matched
+             * @default 0
+             */
+            openalex_matched: number;
+            /** Fwci Avg */
+            fwci_avg?: number | null;
+            /**
+             * Fwci N
+             * @default 0
+             */
+            fwci_n: number;
+            /**
+             * Retracted
+             * @default 0
+             */
+            retracted: number;
+            /**
+             * Cited Total
+             * @default 0
+             */
+            cited_total: number;
+            /** Canonical Total */
+            canonical_total?: number | null;
+            /** Canonical Retracted */
+            canonical_retracted?: number | null;
+            canonical_oa?: components["schemas"]["CanonicalOa"] | null;
+        };
+        /** InstitutionOut */
+        InstitutionOut: {
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Short Name */
+            short_name?: string | null;
+            /** Is Default */
+            is_default: boolean;
+            /** Data Window Start */
+            data_window_start: number;
+            /** Data Window End */
+            data_window_end?: number | null;
+            /** Library Url */
+            library_url?: string | null;
+            /** Oa Guide Url */
+            oa_guide_url?: string | null;
+            /** Support Email */
+            support_email?: string | null;
+            /** Admin Contact */
+            admin_contact?: string | null;
+            /** Research Portal Url */
+            research_portal_url?: string | null;
         };
         /** JournalDetailResponse */
         JournalDetailResponse: {
@@ -500,7 +619,7 @@ export interface components {
              *       "cited_total": 0
              *     }
              */
-            twente_metrics: components["schemas"]["TwenteMetrics"];
+            institution_metrics: components["schemas"]["InstitutionMetrics"];
             /**
              * Attribution
              * @default {}
@@ -534,10 +653,10 @@ export interface components {
              */
             deal_covered: boolean;
             /**
-             * Twente Works
+             * Works
              * @default 0
              */
-            twente_works: number;
+            works: number;
             /** Quartile */
             quartile?: string | null;
             /** Twoyr Mean Citedness */
@@ -681,8 +800,8 @@ export interface components {
             is_oa: boolean | null;
             /** Deal Covered */
             deal_covered: boolean;
-            /** Twente Works */
-            twente_works: number;
+            /** Works */
+            works: number;
             /** Shared Topics */
             shared_topics: number;
             /** Similarity */
@@ -694,8 +813,8 @@ export interface components {
          *     teaser cuts, plus the general list.
          */
         SimilarJournalsBundle: {
-            /** Twente */
-            twente: components["schemas"]["SimilarJournalItem"][];
+            /** Institution */
+            institution: components["schemas"]["SimilarJournalItem"][];
             /** Deals */
             deals: components["schemas"]["SimilarJournalItem"][];
             /** All */
@@ -724,82 +843,6 @@ export interface components {
             oa_diamond: number;
             /** Oa Closed */
             oa_closed: number;
-        };
-        /**
-         * TwenteMetrics
-         * @description OpenAlex view of Twente publications in this journal, plus
-         *     ut-metadata-grounded totals when the canonical store is reachable
-         *     (otherwise the ut_* keys are None).
-         */
-        TwenteMetrics: {
-            /**
-             * Openalex Matched
-             * @default 0
-             */
-            openalex_matched: number;
-            /** Fwci Avg */
-            fwci_avg?: number | null;
-            /**
-             * Fwci N
-             * @default 0
-             */
-            fwci_n: number;
-            /**
-             * Retracted
-             * @default 0
-             */
-            retracted: number;
-            /**
-             * Cited Total
-             * @default 0
-             */
-            cited_total: number;
-            /** Ut Total */
-            ut_total?: number | null;
-            /** Ut Retracted */
-            ut_retracted?: number | null;
-            ut_oa?: components["schemas"]["UtOa"] | null;
-        };
-        /**
-         * UtOa
-         * @description ut-metadata oa_status distribution over a journal's UT works.
-         */
-        UtOa: {
-            /**
-             * Gold
-             * @default 0
-             */
-            gold: number;
-            /**
-             * Hybrid
-             * @default 0
-             */
-            hybrid: number;
-            /**
-             * Green
-             * @default 0
-             */
-            green: number;
-            /**
-             * Bronze
-             * @default 0
-             */
-            bronze: number;
-            /**
-             * Diamond
-             * @default 0
-             */
-            diamond: number;
-            /**
-             * Closed
-             * @default 0
-             */
-            closed: number;
-            /**
-             * Unknown
-             * @default 0
-             */
-            unknown: number;
         };
         /** ValidationError */
         ValidationError: {
@@ -864,7 +907,27 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    search_journals_api_v1_journals_get: {
+    list_institutions_api_v1_institutions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstitutionOut"][];
+                };
+            };
+        };
+    };
+    search_journals_api_v1__institution_code__journals_get: {
         parameters: {
             query?: {
                 q?: string | null;
@@ -876,7 +939,7 @@ export interface operations {
                 topic?: string | null;
                 publisher?: string | null;
                 has_apc?: boolean | null;
-                has_ut_works?: boolean | null;
+                has_works?: boolean | null;
                 oa_type?: string | null;
                 sort?: string;
                 dir?: string | null;
@@ -885,7 +948,9 @@ export interface operations {
                 include_facets?: boolean;
             };
             header?: never;
-            path?: never;
+            path: {
+                institution_code: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -910,7 +975,7 @@ export interface operations {
             };
         };
     };
-    semantic_search_journals_api_v1_journals_semantic_search_get: {
+    semantic_search_journals_api_v1__institution_code__journals_semantic_search_get: {
         parameters: {
             query: {
                 q: string;
@@ -918,7 +983,9 @@ export interface operations {
                 cursor?: string | null;
             };
             header?: never;
-            path?: never;
+            path: {
+                institution_code: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -943,12 +1010,13 @@ export interface operations {
             };
         };
     };
-    similar_journals_api_v1_journals__issn_l__similar_get: {
+    similar_journals_api_v1__institution_code__journals__issn_l__similar_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 issn_l: string;
+                institution_code: string;
             };
             cookie?: never;
         };
@@ -974,7 +1042,7 @@ export interface operations {
             };
         };
     };
-    journal_works_api_v1_journals__issn_l__works_get: {
+    journal_works_api_v1__institution_code__journals__issn_l__works_get: {
         parameters: {
             query?: {
                 page?: number;
@@ -983,6 +1051,7 @@ export interface operations {
             header?: never;
             path: {
                 issn_l: string;
+                institution_code: string;
             };
             cookie?: never;
         };
@@ -1008,12 +1077,13 @@ export interface operations {
             };
         };
     };
-    journal_detail_api_v1_journals__issn_l__get: {
+    journal_detail_api_v1__institution_code__journals__issn_l__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 issn_l: string;
+                institution_code: string;
             };
             cookie?: never;
         };
@@ -1039,13 +1109,15 @@ export interface operations {
             };
         };
     };
-    list_deals_api_v1_deals_get: {
+    list_deals_api_v1__institution_code__deals_get: {
         parameters: {
             query?: {
                 status?: string;
             };
             header?: never;
-            path?: never;
+            path: {
+                institution_code: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -1070,12 +1142,13 @@ export interface operations {
             };
         };
     };
-    deal_detail_api_v1_deals__deal_id__get: {
+    deal_detail_api_v1__institution_code__deals__deal_id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 deal_id: number;
+                institution_code: string;
             };
             cookie?: never;
         };
@@ -1101,7 +1174,7 @@ export interface operations {
             };
         };
     };
-    list_limitations_api_v1_meta_limitations_get: {
+    list_limitations_api_v1__institution_code__meta_limitations_get: {
         parameters: {
             query?: {
                 source?: string | null;
@@ -1132,11 +1205,13 @@ export interface operations {
             };
         };
     };
-    freshness_api_v1_meta_freshness_get: {
+    freshness_api_v1__institution_code__meta_freshness_get: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                institution_code: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -1148,6 +1223,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FreshnessResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -1190,6 +1274,7 @@ export interface operations {
     list_runs_api_v1_admin_runs_get: {
         parameters: {
             query?: {
+                institution?: string | null;
                 limit?: number;
             };
             header?: never;

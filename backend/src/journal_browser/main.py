@@ -6,12 +6,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from . import __version__
 from .config import get_settings
 from .db import get_session
-from .routers import admin, deals, journals, meta
+from .routers import admin, deals, institutions, journals, meta
 
 api_router = APIRouter(prefix="/api/v1")
-api_router.include_router(journals.router)
-api_router.include_router(deals.router)
-api_router.include_router(meta.router)
+api_router.include_router(institutions.router)
+# Institution-scoped surface: /api/v1/{code}/journals|deals|meta/...
+scoped_router = APIRouter(prefix="/{institution_code}")
+scoped_router.include_router(journals.router)
+scoped_router.include_router(deals.router)
+scoped_router.include_router(meta.router)
+api_router.include_router(scoped_router)
 api_router.include_router(admin.router)
 
 

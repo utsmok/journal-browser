@@ -74,13 +74,18 @@ async def login(body: LoginIn) -> dict[str, Any]:
 async def list_runs(
     session: SessionDep,
     _: AdminDep,
+    institution: Annotated[str | None, Query(max_length=32)] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
 ) -> list[dict[str, Any]]:
-    rows = (
-        (await session.execute(select(HarvestRun).order_by(desc(HarvestRun.id)).limit(limit)))
-        .scalars()
-        .all()
-    )
+    query = select(HarvestRun).order_by(desc(HarvestRun.id)).limit(limit)
+    if institution is not None:
+        from ..harvest.common import get_institution_by_code
+
+        inst = await get_institution_by_code(session, institution)
+        if inst is None:
+            raise HTTPException(status_code=400, detail=f"unknown institution: {institution}")
+        query = query.where(HarvestRun.institution_id == inst.id)
+    rows = (await session.execute(query)).scalars().all()
     return [
         {
             "id": r.id,

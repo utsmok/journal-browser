@@ -27,7 +27,9 @@ async def deals_api(db_engine):
 
     app.dependency_overrides[get_session] = _override
     async with maker() as session:
-        home = Institution(name="University of Twente", is_default=True)
+        home = Institution(
+            name="University of Twente", code="ut", active=True, is_default=True
+        )
         session.add(home)
         await session.flush()
         pub = Publisher(name="Springer")
@@ -81,22 +83,24 @@ async def deals_api(db_engine):
 
 
 @requires_db
-async def test_listing_has_no_scope_and_lists_the_register(deals_api):
+async def test_listing_shows_only_participating_deals(deals_api):
     client, (twente_id, foreign_id, _) = deals_api
-    r = await client.get("/api/v1/deals")
+    r = await client.get("/api/v1/ut/deals")
     assert r.status_code == 200
     got = {d["id"] for d in r.json()}
-    assert {twente_id, foreign_id} <= got
-    assert "twente_relevant" not in r.json()[0]
+    # Participation = deal_institutions row: the shared register hides
+    # deals this institution is not part of (no purge needed).
+    assert got == {twente_id}
+    assert foreign_id not in got
     # Unknown params are ignored; payload equals the plain listing.
     assert {
-        d["id"] for d in (await client.get("/api/v1/deals", params={"scope": "home"})).json()
+        d["id"] for d in (await client.get("/api/v1/ut/deals", params={"scope": "home"})).json()
     } == got
 
 
 @requires_db
 async def test_journal_panel_requires_home_link(deals_api):
     client, (_, _, issn) = deals_api
-    body = (await client.get(f"/api/v1/journals/{issn}")).json()
+    body = (await client.get(f"/api/v1/ut/journals/{issn}")).json()
     assert len(body["deals"]) == 1
     assert body["deals"][0]["esac_id"] == "sn2024ukb"

@@ -73,7 +73,7 @@ async def api(db_engine):
 
 @requires_db
 async def test_cutoff_excludes_low_activity_journals(api):
-    r = await api.get("/api/v1/journals")
+    r = await api.get("/api/v1/ut/journals")
     assert r.status_code == 200
     body = r.json()
     assert body["total"] == 2
@@ -84,14 +84,14 @@ async def test_cutoff_excludes_low_activity_journals(api):
 @requires_db
 async def test_scope_param_is_gone(api):
     # Unknown query params are ignored; the response carries no badge field.
-    plain = (await api.get("/api/v1/journals")).json()
-    scoped = (await api.get("/api/v1/journals", params={"scope": "all"})).json()
+    plain = (await api.get("/api/v1/ut/journals")).json()
+    scoped = (await api.get("/api/v1/ut/journals", params={"scope": "all"})).json()
     assert scoped["total"] == plain["total"] == 2
     assert "in_quality_bar" not in plain["items"][0]
 
 
 @requires_db
 async def test_facets_reflect_cutoff(api):
-    body = (await api.get("/api/v1/journals")).json()
+    body = (await api.get("/api/v1/ut/journals")).json()
     assert sum(body["facets"]["oa"].values()) == 2
     assert body["facets"]["doaj"]["true"] == 0

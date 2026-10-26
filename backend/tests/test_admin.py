@@ -32,7 +32,7 @@ async def admin_api(db_engine, monkeypatch):
 
     app.dependency_overrides[get_session] = _override
     async with maker() as session:
-        home = Institution(name="University of Twente", is_default=True)
+        home = Institution(name="University of Twente", code="ut", active=True, is_default=True)
         session.add(home)
         await session.flush()
         pub = Publisher(name="Emerald Publishing group")

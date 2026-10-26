@@ -23,7 +23,7 @@ class JournalListItem(BaseModel):
     in_scimago: bool = False
     last_active_year: int | None = None
     deal_covered: bool = False
-    twente_works: int = 0
+    works: int = 0
     quartile: str | None = None
     twoyr_mean_citedness: float | None = None
     oa_type: str = "subscription"
@@ -51,7 +51,7 @@ class SimilarJournalItem(BaseModel):
     quartile: str | None
     is_oa: bool | None
     deal_covered: bool
-    twente_works: int
+    works: int
     shared_topics: int
     # Embedding-cosine similarity (0-1); null on the shared-topic fallback.
     similarity: float | None = None
@@ -61,7 +61,7 @@ class SimilarJournalsBundle(BaseModel):
     """Similar-journal lists: UT-publishing venues and deal-covered venues as
     teaser cuts, plus the general list."""
 
-    twente: list[SimilarJournalItem]
+    institution: list[SimilarJournalItem]
     deals: list[SimilarJournalItem]
     all: list[SimilarJournalItem]
 
@@ -169,8 +169,8 @@ class OpenaireInfo(BaseModel):
     matched_works: int = 0
 
 
-class UtOa(BaseModel):
-    """ut-metadata oa_status distribution over a journal's UT works."""
+class CanonicalOa(BaseModel):
+    """ut-metadata oa_status distribution over a journal's works."""
 
     gold: int = 0
     hybrid: int = 0
@@ -181,19 +181,19 @@ class UtOa(BaseModel):
     unknown: int = 0
 
 
-class TwenteMetrics(BaseModel):
-    """OpenAlex view of Twente publications in this journal, plus
-    ut-metadata-grounded totals when the canonical store is reachable
-    (otherwise the ut_* keys are None)."""
+class InstitutionMetrics(BaseModel):
+    """OpenAlex view of this institution's publications in this journal,
+    plus canonical-store totals when the external works store is reachable
+    (otherwise the canonical_* keys are None)."""
 
     openalex_matched: int = 0
     fwci_avg: float | None = None
     fwci_n: int = 0
     retracted: int = 0
     cited_total: int = 0
-    ut_total: int | None = None
-    ut_retracted: int | None = None
-    ut_oa: UtOa | None = None
+    canonical_total: int | None = None
+    canonical_retracted: int | None = None
+    canonical_oa: CanonicalOa | None = None
 
 
 class WorkItem(BaseModel):
@@ -239,7 +239,7 @@ class JournalDetailResponse(BaseModel):
     apc_evidence: list[ApcEvidenceOut] = []
     openalex: OpenalexInfo | None = None
     openaire: OpenaireInfo = OpenaireInfo()
-    twente_metrics: TwenteMetrics = TwenteMetrics()
+    institution_metrics: InstitutionMetrics = InstitutionMetrics()
     attribution: dict[str, Attribution] = {}
 
 
@@ -264,16 +264,19 @@ class FreshnessEntry(BaseModel):
 
 
 class FreshnessResponse(BaseModel):
+    """Config comes from the institution row; unset optional fields are
+    None rather than global defaults."""
+
     institution: str
-    institution_short: str
-    ror: str
-    library_url: str
-    oa_guide_url: str
-    support_email: str
+    institution_short: str | None = None
+    ror: str | None = None
+    library_url: str | None = None
+    oa_guide_url: str | None = None
+    support_email: str | None = None
     admin_contact: str | None = None
-    research_portal_url: str
+    research_portal_url: str | None = None
     data_window_start: int = 2020
-    data_window_end: int = 0
+    data_window_end: int | None = None
     harvests: list[FreshnessEntry]
     # max timestamps (or year/period maxima for yearly tables)
     tables: dict[str, Any] = {}
