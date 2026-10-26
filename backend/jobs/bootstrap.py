@@ -145,7 +145,10 @@ def build_plan(codes: list[str], only_institution: str | None) -> tuple[list, di
     else:
         wanted = {f"{name}:{only_institution}" for name, _ in INST_STEPS}
         steps = [s for s in steps if s[0] in wanted]
-        deps = {k: v for k, v in deps.items() if k in wanted}
+        # Global-layer deps (deals-issn-l, openapc, ...) are not part of this
+        # plan; their outputs already exist in this database, so drop them or
+        # run_parallel would wait forever and silently skip the step.
+        deps = {k: [d for d in v if d in wanted] for k, v in deps.items() if k in wanted}
     return steps, deps
 
 
