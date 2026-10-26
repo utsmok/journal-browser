@@ -449,21 +449,7 @@ async def facet_counts(
     )
 
     def base_cte(**override: Any) -> Any:
-        # Compact per-journal topic-name array: lets the topic facet explode
-        # the CTE itself (~0.1 KB/row) instead of re-joining journals for the
-        # full ~1-2 KB topics document.
-        return (
-            base_query(**{**defaults, **override})
-            .add_columns(
-                func.coalesce(
-                    func.jsonb_path_query_array(
-                        Journal.topics, text("'$[*].\"display_name\"'")
-                    ),
-                    text("'[]'::jsonb"),
-                ).label("topic_names")
-            )
-            .cte("facet_base")
-        )
+        return base_query(**{**defaults, **override}).cte("facet_base")
 
     def variant_cte(*drop: str) -> Any:
         """The filtered base minus the dropped facet's own filter."""
@@ -505,16 +491,20 @@ async def facet_counts(
         ).scalar_subquery()
 
     def _topic_counts(cte: Any) -> Any:
-        # jsonb_array_elements_text(cte.topic_names) is an implicit LATERAL:
-        # valid PostgreSQL that SQLAlchemy's cartesian lint cannot model, so
-        # the caller filters that one warning. Counts are exact.
-        elems = func.jsonb_array_elements_text(cte.c.topic_names).table_valued("value", name="t")
+        """Top-15 topic histogram as its own statement: exploding ~130k topic
+        arrays dwarfs the other aggregates, so it must not inflate the shared
+        CTE statement for every request. Implicit LATERAL (valid PostgreSQL);
+        the caller silences the lint."""
+        elems = func.jsonb_array_elements(
+            func.coalesce(Journal.topics, text("'[]'::jsonb"))
+        ).table_valued("value", name="t")
         inner = (
             select(
-                elems.c.value.label("k"),
+                elems.c.value.op("->>")("display_name").label("k"),
                 func.count().label("n"),
             )
-            .select_from(cte, elems)
+            .select_from(cte, Journal, elems)
+            .where(Journal.issn_l == cte.c.issn_l)
             .group_by(text("1"))
             .order_by(text("2 DESC"))
             .limit(15)
@@ -524,35 +514,35 @@ async def facet_counts(
             func.jsonb_agg(func.jsonb_build_array(inner.c.k, inner.c.n))
         ).scalar_subquery()
 
-    base = base_cte()
-    # The topic explode below is an implicit LATERAL: valid PostgreSQL that
-    # SQLAlchemy's linter cannot model and flags as cartesian. Suppress that
-    # one warning; the counts are exact.
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore", message=".*cartesian product.*", category=sa_exc.SAWarning
-        )
-        row = (
-            await session.execute(
-                select(
-                    func.count().label("total"),
-                    func.count().filter(base.c.deal_covered.is_(True)).label("covered"),
-                    func.count().filter(base.c.is_oa.is_(True)).label("oa_true"),
-                    func.count().filter(base.c.is_in_doaj.is_(True)).label("doaj_true"),
-                    func.count().filter(base.c.quartile == "Q1").label("q1"),
-                    func.count().filter(base.c.quartile == "Q2").label("q2"),
-                    func.count().filter(base.c.quartile == "Q3").label("q3"),
-                    func.count().filter(base.c.quartile == "Q4").label("q4"),
-                    func.count()
-                    .filter(exists(select(1).where(JournalApcAggregate.issn_l == base.c.issn_l)))
-                    .label("apc_true"),
-                    func.count().filter(base.c.works > 0).label("works_true"),
-                    _oa_type_counts(base).label("oa_type_counts"),
-                    _publisher_counts(base).label("publisher_counts"),
-                    _topic_counts(base).label("topic_counts"),
-                ).select_from(base)
+    async def _topic_facet(cte: Any) -> dict[str, int]:
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", message=".*cartesian product.*", category=sa_exc.SAWarning
             )
-        ).one()
+            topics = (await session.execute(select(_topic_counts(cte)))).scalar_one()
+        return {k: int(n) for k, n in (topics or [])}
+
+    base = base_cte()
+    row = (
+        await session.execute(
+            select(
+                func.count().label("total"),
+                func.count().filter(base.c.deal_covered.is_(True)).label("covered"),
+                func.count().filter(base.c.is_oa.is_(True)).label("oa_true"),
+                func.count().filter(base.c.is_in_doaj.is_(True)).label("doaj_true"),
+                func.count().filter(base.c.quartile == "Q1").label("q1"),
+                func.count().filter(base.c.quartile == "Q2").label("q2"),
+                func.count().filter(base.c.quartile == "Q3").label("q3"),
+                func.count().filter(base.c.quartile == "Q4").label("q4"),
+                func.count()
+                .filter(exists(select(1).where(JournalApcAggregate.issn_l == base.c.issn_l)))
+                .label("apc_true"),
+                func.count().filter(base.c.works > 0).label("works_true"),
+                _oa_type_counts(base).label("oa_type_counts"),
+                _publisher_counts(base).label("publisher_counts"),
+            ).select_from(base)
+        )
+    ).one()
     total = int(row.total or 0)
 
     def split(n: Any) -> tuple[int, int]:
@@ -578,8 +568,8 @@ async def facet_counts(
         "works": {"true": works_true, "false": works_false},
         "oa_type": dict(row.oa_type_counts or {}),
         "publisher": {k: int(n) for k, n in (row.publisher_counts or [])},
-        "topic": {k: int(n) for k, n in (row.topic_counts or [])},
     }
+    facets["topic"] = await _topic_facet(base)
 
     # Active own filters need a variant pass (chip shows what selecting it
     # would yield under the remaining filters); inactive facets keep the
@@ -613,12 +603,7 @@ async def facet_counts(
         )
     if topic:
         tp = variant_cte("topic")
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore", message=".*cartesian product.*", category=sa_exc.SAWarning
-            )
-            topics = (await session.execute(select(_topic_counts(tp)))).scalar_one()
-        facets["topic"] = {k: int(n) for k, n in (topics or [])}
+        facets["topic"] = await _topic_facet(tp)
 
     if publisher:
         pb = variant_cte("publisher")
