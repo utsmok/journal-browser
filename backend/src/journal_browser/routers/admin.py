@@ -10,6 +10,7 @@ GET/PUT /institutions/{code} the per-university configuration rows.
 survive every re-harvest; removed deal journals are flagged, not deleted.
 """
 
+import asyncio
 import hashlib
 import hmac
 import os
@@ -22,7 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import delete, desc, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from ..config import (
     get_settings,
@@ -456,11 +457,50 @@ async def _deal_detail(session: AsyncSession, deal_id: int) -> dict[str, Any]:
     }
 
 
-async def _refresh_deal_flags(session: AsyncSession) -> None:
-    """Deal writes change per-institution coverage; recompute every host."""
-    for iid in (await session.execute(select(Institution.id))).scalars():
-        await refresh_deal_flags(session, iid)
-    await session.commit()
+async def _refresh_deal_flags_soon() -> None:
+    """Recompute every host's coverage on a fresh connection."""
+    engine = create_async_engine(get_settings().database_url)
+    try:
+        maker = async_sessionmaker(engine)
+        async with maker() as session:
+            for iid in (await session.execute(select(Institution.id))).scalars():
+                await refresh_deal_flags(session, iid)
+            await session.commit()
+    finally:
+        await engine.dispose()
+
+
+_flags_task: asyncio.Task | None = None
+_flags_rerun = False
+
+
+def _schedule_flags_refresh() -> None:
+    """Deal writes change per-institution coverage, but the full recompute
+    takes tens of seconds on live data — run it in the background so admin
+    edits return instantly. Coverage lags the write by about that long."""
+    global _flags_task, _flags_rerun
+    if _flags_task is not None and not _flags_task.done():
+        # A pass is running; it may miss this commit, so run once more after.
+        _flags_rerun = True
+        return
+    _flags_task = asyncio.create_task(_flags_refresh_loop())
+
+
+async def _flags_refresh_loop() -> None:
+    global _flags_rerun
+    while True:
+        _flags_rerun = False
+        try:
+            await _refresh_deal_flags_soon()
+        except Exception:  # noqa: BLE001 - background job; log and stop
+            import logging
+
+            logging.getLogger("journal_browser.admin").exception(
+                "background deal-flags refresh failed"
+            )
+            return
+        if not _flags_rerun:
+            return
 
 
 async def _get_deal_or_404(session: AsyncSession, deal_id: int) -> Deal:
@@ -544,7 +584,7 @@ async def create_deal(body: DealCreate, session: SessionDep, _: AdminDep) -> dic
     )
     session.add(deal)
     await session.commit()
-    await _refresh_deal_flags(session)
+    _schedule_flags_refresh()
     return await _deal_detail(session, deal.id)
 
 
@@ -593,7 +633,7 @@ async def update_deal(
             )
         )
     await session.commit()
-    await _refresh_deal_flags(session)
+    _schedule_flags_refresh()
     return await _deal_detail(session, deal_id)
 
 
@@ -665,7 +705,7 @@ async def update_deal_journals(
             .values(excluded=True)
         )
     await session.commit()
-    await _refresh_deal_flags(session)
+    _schedule_flags_refresh()
     return await _deal_detail(session, deal_id)
 
 
@@ -693,5 +733,5 @@ async def update_deal_participations(
             )
         )
     await session.commit()
-    await _refresh_deal_flags(session)
+    _schedule_flags_refresh()
     return await _deal_detail(session, deal_id)
