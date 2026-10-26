@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..ingest import IngestSession, apply_overrides
-from ..models import Deal, DealInstitution, DealJournal, Institution, Publisher
+from ..models import Deal, DealInstitution, DealJournal, Institution, ManualOverride, Publisher
 from .common import download_to_landing, normalize_issn, parse_csv_rows, run_harvest
 
 logger = logging.getLogger(__name__)
@@ -249,6 +249,16 @@ async def _store_agreement(
         ror = row.get("ROR ID", "").strip()
         name = _clean(row.get("Institution Name")) or ror
         institution_id = await _upsert_institution(session, ror, name)
+        # An admin removal is recorded as an override tombstone; respect it.
+        removed = await session.scalar(
+            select(ManualOverride.id).where(
+                ManualOverride.table_name == "deal_institutions",
+                ManualOverride.row_key == f"{deal_id}:{institution_id}",
+                ManualOverride.field == "removed",
+            )
+        )
+        if removed is not None:
+            continue
         first_seen = _clean(row.get("Institution First Seen"))
         last_seen = _clean(row.get("Institution Last Seen"))
         await session.execute(

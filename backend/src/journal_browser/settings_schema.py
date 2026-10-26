@@ -81,7 +81,8 @@ SETTINGS_REGISTRY: list[FieldDef] = [
        "Browser origins allowed to call the API. Applied at startup, so a "
        "restart is needed."),
     _f("ignored_issns", "global", "list", "Ignored ISSNs",
-       "ISSNs excluded from listings; scaffold, not applied anywhere yet."),
+       "ISSN-Ls excluded from every journal listing (search, facets, "
+       "similar, semantic). One per line, XXXX-XXXX; applied live."),
     _f("pure_oai_base_url", "global", "string", "Pure OAI-PMH endpoint",
        "Default institutional-repository OAI-PMH endpoint (first-boot seed)."),
     _f("pure_oai_min_spacing", "global", "number", "Pure request spacing (s)",

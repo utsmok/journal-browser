@@ -37,8 +37,14 @@ def _covered_join(institution_id: int):
                 & (DealInstitution.institution_id == institution_id),
             )
             # LEFT JOIN: a participating deal shows even when its
-            # effective journal list is empty (count 0).
-            .outerjoin(DealJournal, (DealJournal.deal_id == Deal.id) & dj_scope)
+            # effective journal list is empty (count 0). Admin-excluded
+            # journals stay out of counts and membership everywhere.
+            .outerjoin(
+                DealJournal,
+                (DealJournal.deal_id == Deal.id)
+                & dj_scope
+                & DealJournal.excluded.is_not(True),
+            )
         )
 
     return covered

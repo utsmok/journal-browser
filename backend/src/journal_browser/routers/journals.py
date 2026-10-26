@@ -268,6 +268,7 @@ async def journal_detail(
                 DealJournal,
                 (DealJournal.deal_id == Deal.id)
                 & dj_scope
+                & DealJournal.excluded.is_not(True)
                 & (DealJournal.issn_l == journal.issn_l),
             )
             .outerjoin(Publisher, Publisher.id == Deal.publisher_id)

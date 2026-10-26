@@ -32,7 +32,11 @@ from ..config import (
     settings_yaml_path,
 )
 from ..db import get_session
-from ..harvest.common import get_institution_by_code, normalize_issn
+from ..harvest.common import (
+    get_active_institutions,
+    get_institution_by_code,
+    normalize_issn,
+)
 from ..harvest.denorm import refresh_deal_flags
 from ..models import (
     Deal,
@@ -227,6 +231,15 @@ async def update_settings(body: SettingsUpdate, _: AdminDep) -> dict[str, Any]:
             raise HTTPException(400, f"{key}: expected {f.type}")
         if f.type == "secret" and value in ("", MASK):
             continue  # keep the existing value
+        if key == "ignored_issns":
+            # Journal filters compare against journals.issn_l (XXXX-XXXX);
+            # normalize on write so "12345678" or lowercase still matches.
+            normalized = sorted({n for n in (normalize_issn(v) for v in value) if n})
+            if len(normalized) != len(value):
+                raise HTTPException(
+                    400, "ignored_issns: entries must be valid ISSNs"
+                )
+            value = normalized
         doc[key] = value
     _write_settings_yaml(doc)
     reset_settings_cache()
@@ -328,6 +341,14 @@ async def update_institution(
         updates.pop("external_works_dsn")
     for key, value in updates.items():
         setattr(inst, key, value)
+    if updates.get("is_default") is True:
+        # Only one default: demote everyone else in the same transaction,
+        # otherwise the root-path institution becomes nondeterministic.
+        await session.execute(
+            update(Institution)
+            .where(Institution.id != inst.id, Institution.is_default.is_(True))
+            .values(is_default=False)
+        )
     await session.commit()
     return _institution_payload(inst)
 
@@ -364,8 +385,9 @@ def _validate_deal_field(key: str, value: Any) -> None:
         if not isinstance(value, bool):
             raise HTTPException(400, "corresponding_authors_only: expected bool")
     elif key in ("cap_text", "summary", "esac_id"):
-        if not isinstance(value, str):
-            raise HTTPException(400, f"{key}: expected string")
+        # Nullable columns: the editor sends null to clear the field.
+        if value is not None and not isinstance(value, str):
+            raise HTTPException(400, f"{key}: expected string or null")
     elif key == "cap_numbers" and value is not None and (
         not isinstance(value, dict)
         or not all(
@@ -424,7 +446,10 @@ async def _deal_detail(session: AsyncSession, deal_id: int) -> dict[str, Any]:
             await session.execute(
                 select(Institution.code)
                 .join(DealInstitution, DealInstitution.institution_id == Institution.id)
-                .where(DealInstitution.deal_id == deal_id)
+                .where(
+                    DealInstitution.deal_id == deal_id,
+                    Institution.code.is_not(None),
+                )
                 .order_by(Institution.code)
             )
         )
@@ -458,13 +483,14 @@ async def _deal_detail(session: AsyncSession, deal_id: int) -> dict[str, Any]:
 
 
 async def _refresh_deal_flags_soon() -> None:
-    """Recompute every host's coverage on a fresh connection."""
+    """Recompute hosted institutions' coverage on a fresh connection."""
     engine = create_async_engine(get_settings().database_url)
     try:
         maker = async_sessionmaker(engine)
         async with maker() as session:
-            for iid in (await session.execute(select(Institution.id))).scalars():
-                await refresh_deal_flags(session, iid)
+            hosted = await get_active_institutions(session)
+            for inst in hosted:
+                await refresh_deal_flags(session, inst.id)
             await session.commit()
     finally:
         await engine.dispose()
@@ -531,6 +557,9 @@ async def list_deals(session: SessionDep, _: AdminDep) -> list[dict[str, Any]]:
         await session.execute(
             select(DealInstitution.deal_id, Institution.code)
             .join(Institution, Institution.id == DealInstitution.institution_id)
+            # Registry institutions (no code) participate in JCT deals but
+            # are not hosted here; a null code breaks the string[] contract.
+            .where(Institution.code.is_not(None))
             .order_by(Institution.code)
         )
     ).all():
@@ -714,6 +743,29 @@ async def update_deal_participations(
     deal_id: int, body: DealParticipationsBody, session: SessionDep, _: AdminDep
 ) -> dict[str, Any]:
     await _get_deal_or_404(session, deal_id)
+    for code in body.remove:
+        inst = await get_institution_by_code(session, code)
+        if inst is None:
+            raise HTTPException(404, f"unknown institution: {code}")
+        await session.execute(
+            delete(DealInstitution).where(
+                DealInstitution.deal_id == deal_id, DealInstitution.institution_id == inst.id
+            )
+        )
+        # Tombstone: the JCT harvester re-inserts sheet participations on every
+        # run, so a removal is recorded as an override it must respect.
+        await session.execute(
+            pg_insert(ManualOverride)
+            .values(
+                table_name="deal_institutions",
+                row_key=f"{deal_id}:{inst.id}",
+                field="removed",
+                value=True,
+            )
+            .on_conflict_do_update(
+                index_elements=["table_name", "row_key", "field"], set_={"value": True}
+            )
+        )
     for code in body.add:
         inst = await get_institution_by_code(session, code)
         if inst is None:
@@ -723,13 +775,11 @@ async def update_deal_participations(
             .values(deal_id=deal_id, institution_id=inst.id)
             .on_conflict_do_nothing(index_elements=["deal_id", "institution_id"])
         )
-    for code in body.remove:
-        inst = await get_institution_by_code(session, code)
-        if inst is None:
-            raise HTTPException(404, f"unknown institution: {code}")
+        # Re-adding clears any removal tombstone so JCT can manage it again.
         await session.execute(
-            delete(DealInstitution).where(
-                DealInstitution.deal_id == deal_id, DealInstitution.institution_id == inst.id
+            delete(ManualOverride).where(
+                ManualOverride.table_name == "deal_institutions",
+                ManualOverride.row_key == f"{deal_id}:{inst.id}",
             )
         )
     await session.commit()

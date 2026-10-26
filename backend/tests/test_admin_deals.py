@@ -70,7 +70,7 @@ async def admin_api(db_engine, monkeypatch):
                 Journal(issn_l="1111-1111", title="J One", type="journal"),
                 IssnMap(issn="9999-8888", issn_l="0000-0000", source="test"),
                 DealJournal(deal_id=deal.id, issn="0000-0000", issn_l="0000-0000", source="jct"),
-                DealJournal(deal_id=deal.id, issn="1111-1111", source="jct"),
+                DealJournal(deal_id=deal.id, issn="1111-1111", issn_l="1111-1111", source="jct"),
             ]
         )
         await session.commit()
@@ -355,3 +355,162 @@ async def test_ignored_issns_filter_and_cache(search_api, monkeypatch):
     _ignore(monkeypatch, [])
     body = (await search_api.get("/api/v1/ut/journals")).json()
     assert body["total"] == 2
+
+
+@requires_db
+async def test_clear_nullable_fields_with_null(admin_api):
+    """The editor sends null to clear cap_text/summary/esac_id (P2 finding)."""
+    headers = await _login(admin_api)
+    deal_id = (await admin_api.get("/api/v1/admin/deals", headers=headers)).json()[0]["id"]
+    r = await admin_api.put(
+        f"/api/v1/admin/deals/{deal_id}",
+        headers=headers,
+        json={"cap_text": None, "summary": None},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["cap_text"] is None and body["summary"] is None
+
+
+@requires_db
+async def test_participation_tombstone_blocks_jct(admin_api, db_engine):
+    """Removing a participation records a tombstone the JCT harvester
+    respects; re-adding clears it (P2 finding)."""
+    from journal_browser.harvest.jct import _store_agreement
+    from journal_browser.models import Deal, DealInstitution, ManualOverride
+
+    headers = await _login(admin_api)
+    deal_id = (await admin_api.get("/api/v1/admin/deals", headers=headers)).json()[0]["id"]
+    r = await admin_api.put(
+        f"/api/v1/admin/deals/{deal_id}/participations",
+        headers=headers,
+        json={"add": ["ut"]},
+    )
+    assert r.status_code == 200 and r.json()["participations"] == ["ut"]
+
+    r = await admin_api.put(
+        f"/api/v1/admin/deals/{deal_id}/participations",
+        headers=headers,
+        json={"remove": ["ut"]},
+    )
+    assert r.status_code == 200 and r.json()["participations"] == []
+
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with maker() as session:
+        deal = await session.scalar(select(Deal).where(Deal.id == deal_id))
+        inst = await session.scalar(select(Institution).where(Institution.code == "ut"))
+        # The exact JCT upsert path: must NOT resurrect a removed participation.
+        await _store_agreement(
+            session,
+            {
+                "esac_id": deal.esac_id or "em2019caul",
+                "end_date": "",
+                "ca_only": "no",
+                "data_url": "https://jct.example/em",
+                "last_reviewed": "",
+            },
+            journals=[],
+            institutions=[{"ROR ID": "https://ror.org/006hf6230",
+                           "Institution Name": "University of Twente",
+                           "Institution First Seen": "2026", "Institution Last Seen": "2026"}],
+            fetched_at="2026-10-26",
+        )
+        await session.commit()
+        assert await session.scalar(
+            select(DealInstitution).where(
+                DealInstitution.deal_id == deal_id,
+                DealInstitution.institution_id == inst.id,
+            )
+        ) is None
+        assert await session.scalar(select(ManualOverride).where(
+            ManualOverride.table_name == "deal_institutions",
+            ManualOverride.row_key == f"{deal_id}:{inst.id}")) is not None
+
+    # Re-add clears the tombstone.
+    r = await admin_api.put(
+        f"/api/v1/admin/deals/{deal_id}/participations",
+        headers=headers,
+        json={"add": ["ut"]},
+    )
+    assert r.status_code == 200 and r.json()["participations"] == ["ut"]
+    async with maker() as session:
+        assert await session.scalar(select(ManualOverride).where(
+            ManualOverride.table_name == "deal_institutions",
+            ManualOverride.row_key == f"{deal_id}:{inst.id}")) is None
+
+
+@requires_db
+async def test_excluded_journal_hidden_from_public_deal_counts(admin_api, db_engine):
+    """Admin-excluded journals leave public deal counts and detail coverage."""
+    from journal_browser.models import DealJournal
+
+    headers = await _login(admin_api)
+    deal_id = (await admin_api.get("/api/v1/admin/deals", headers=headers)).json()[0]["id"]
+    r = await admin_api.put(
+        f"/api/v1/admin/deals/{deal_id}/journals",
+        headers=headers,
+        json={"remove": ["0000-0000"]},
+    )
+    assert r.status_code == 200
+    assert r.json()["journal_count"] == 1
+
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with maker() as session:
+        row = await session.scalar(
+            select(DealJournal).where(
+                DealJournal.deal_id == deal_id, DealJournal.issn == "0000-0000"
+            )
+        )
+        assert row.excluded is True  # removed, not deleted
+
+    # The public list only shows deals the institution participates in.
+    r = await admin_api.put(
+        f"/api/v1/admin/deals/{deal_id}/participations",
+        headers=headers,
+        json={"add": ["ut"]},
+    )
+    assert r.status_code == 200
+
+    public = await admin_api.get("/api/v1/ut/deals")
+    assert public.status_code == 200
+    mine = [d for d in public.json() if d["id"] == deal_id]
+    assert mine and mine[0]["journal_count"] == 1
+
+
+@requires_db
+async def test_is_default_is_exclusive(admin_api):
+    headers = await _login(admin_api)
+    r = await admin_api.put(
+        "/api/v1/admin/institutions/rug", headers=headers, json={"is_default": True}
+    )
+    assert r.status_code == 200 and r.json()["is_default"] is True
+    ut = (await admin_api.get("/api/v1/admin/institutions/ut", headers=headers)).json()
+    assert ut["is_default"] is False
+
+
+@requires_db
+async def test_ignored_issns_normalized_and_validated(admin_api, tmp_path, monkeypatch):
+    """Entries are ISSN-shaped on write; junk is a 400 (P3 finding)."""
+    monkeypatch.setenv("JB_SETTINGS_YAML", str(tmp_path / "settings.yaml"))
+    from journal_browser.config import reset_settings_cache
+
+    reset_settings_cache()
+    headers = await _login(admin_api)
+    r = await admin_api.put(
+        "/api/v1/admin/settings",
+        headers=headers,
+        json={"values": {"ignored_issns": ["12345678"]}},
+    )
+    assert r.status_code == 200
+    assert r.json()["values"]["ignored_issns"] == ["1234-5678"]
+    r = await admin_api.put(
+        "/api/v1/admin/settings",
+        headers=headers,
+        json={"values": {"ignored_issns": ["not-an-issn"]}},
+    )
+    assert r.status_code == 400
+    r = await admin_api.put(
+        "/api/v1/admin/settings", headers=headers, json={"values": {"ignored_issns": []}}
+    )
+    assert r.status_code == 200
+    reset_settings_cache()
