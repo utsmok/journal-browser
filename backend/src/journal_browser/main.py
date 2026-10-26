@@ -25,6 +25,16 @@ async def healthz(session: AsyncSession = Depends(get_session)) -> dict:
     return {"status": "ok", "version": __version__}
 
 
+def _warm_embedding_model() -> None:
+    """Load the ~130 MB ONNX query encoder off the request path, so the
+    first semantic search after a restart does not pay the model load."""
+    import threading
+
+    from .services.embeddings import encode_query
+
+    threading.Thread(target=lambda: encode_query("warmup"), daemon=True).start()
+
+
 def create_app() -> "FastAPI":  # noqa: F821
     from fastapi import FastAPI
 
@@ -37,6 +47,7 @@ def create_app() -> "FastAPI":  # noqa: F821
         allow_headers=["*"],
     )
     app.include_router(api_router)
+    _warm_embedding_model()
     return app
 
 

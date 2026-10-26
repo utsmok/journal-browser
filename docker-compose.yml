@@ -8,6 +8,9 @@ services:
       POSTGRES_USER: journal
       POSTGRES_PASSWORD: journal
       POSTGRES_DB: journalbrowser
+    # HNSW index builds (pgvector) need shared memory beyond the 64 MB
+    # container default; the graph for ~134k vectors peaks around 100 MB.
+    shm_size: 512mb
     ports:
       - "127.0.0.1:5433:5432" # host 5433: machines often run a local postgres on 5432
     volumes:

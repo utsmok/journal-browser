@@ -615,6 +615,10 @@ async def similar_journals(
     }
     out: dict[str, list[dict[str, Any]]] = {}
     if self_row.embedding is not None:
+        # Same iterative HNSW scan as semantic search: the deal/institution
+        # cuts filter most rows, exactly the case strict_order handles.
+        await session.execute(text("SET LOCAL hnsw.iterative_scan = strict_order"))
+        await session.execute(text(f"SET LOCAL hnsw.ef_search = {SIMILAR_ALL_LIMIT * 10}"))
         distance = Journal.embedding.cosine_distance(self_row.embedding).label("dist")
         for key, (cond, limit) in scopes.items():
             subq = (
@@ -707,12 +711,15 @@ async def semantic_search(
         .where(Journal.embedding.is_not(None))
         .subquery()
     )
-    # Exact ranking: the HNSW index yields at most hnsw.ef_search tuples
-    # (default 40), which silently caps any LIMIT above that and corrupts
-    # offset paging. Planner flags scope to this request's transaction; the
-    # exact scan + top-N sort over 129k rows costs tens of milliseconds.
-    await session.execute(text("SET LOCAL enable_indexscan = off"))
-    await session.execute(text("SET LOCAL enable_indexonlyscan = off"))
+    # Iterative HNSW scan (pgvector 0.8): strict_order keeps distance
+    # ordering exact across the flags join and offset paging, and iterates
+    # past ef_search until enough tuples pass the filter, so no silent cap.
+    # ef_search scales with paging depth (per-iteration batch); the exact
+    # scan this replaced cost ~0.8 s over ~134k vectors.
+    await session.execute(text("SET LOCAL hnsw.iterative_scan = strict_order"))
+    await session.execute(
+        text(f"SET LOCAL hnsw.ef_search = {max(200, offset + limit + 100)}")
+    )
     total = (await session.execute(select(func.count()).select_from(subq))).scalar_one()
     rows = (
         await session.execute(
