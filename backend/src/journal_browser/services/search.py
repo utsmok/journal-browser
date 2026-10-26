@@ -501,6 +501,19 @@ async def facet_counts(
         return {k: int(n) for k, n in (topics or [])}
 
     base = base_sub()
+    # APC evidence as a select-list column: inside a count FILTER the EXISTS
+    # correlates against the whole base per row (730ms); as a column the
+    # planner converts it to one hash semi-join (~40ms).
+    base = (
+        select(
+            base,
+            exists(select(1).where(JournalApcAggregate.issn_l == base.c.issn_l)).label(
+                "apc_evidence"
+            ),
+        )
+        .select_from(base)
+        .subquery()
+    )
     # One pass over the join: window counts turn the histograms into plain
     # aggregates, so the base is evaluated exactly once with no multi-reference
     # materialization (a shared CTE scanned per aggregate measured ~3x this).
@@ -524,9 +537,7 @@ async def facet_counts(
                 func.count().filter(counted.c.quartile == "Q2").label("q2"),
                 func.count().filter(counted.c.quartile == "Q3").label("q3"),
                 func.count().filter(counted.c.quartile == "Q4").label("q4"),
-                func.count()
-                .filter(exists(select(1).where(JournalApcAggregate.issn_l == counted.c.issn_l)))
-                .label("apc_true"),
+                func.count().filter(counted.c.apc_evidence).label("apc_true"),
                 func.count().filter(counted.c.works > 0).label("works_true"),
                 func.jsonb_object_agg(counted.c.oa_type, counted.c.oa_n).label(
                     "oa_type_counts"
@@ -630,10 +641,19 @@ async def facet_counts(
             sorted((counts or {}).items(), key=lambda kv: (-kv[1], kv[0]))[:15]
         )
     if has_apc is not None:
-        apc = variant_sub("has_apc")
-        apc_total, (apc_true,) = await _flag_counts(
-            apc, exists(select(1).where(JournalApcAggregate.issn_l == apc.c.issn_l))
+        apc = base_sub(has_apc=None)
+        # Same semi-join hoist as the main statement.
+        apc = (
+            select(
+                apc,
+                exists(select(1).where(JournalApcAggregate.issn_l == apc.c.issn_l)).label(
+                    "apc_evidence"
+                ),
+            )
+            .select_from(apc)
+            .subquery()
         )
+        apc_total, (apc_true,) = await _flag_counts(apc, apc.c.apc_evidence)
         facets["apc"] = {"true": apc_true, "false": apc_total - apc_true}
     if has_works is not None:
         wk = variant_sub("has_works")
