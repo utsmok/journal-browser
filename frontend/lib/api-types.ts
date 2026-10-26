@@ -266,6 +266,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/{institution_code}/authors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search Authors */
+        get: operations["search_authors_api_v1__institution_code__authors_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/{institution_code}/authors/{pure_uuid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Author Profile */
+        get: operations["author_profile_api_v1__institution_code__authors__pure_uuid__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/{institution_code}/deals": {
         parameters: {
             query?: never;
@@ -394,6 +428,153 @@ export interface components {
              * @default []
              */
             caveat_codes: string[];
+        };
+        /** AuthorAlternative */
+        AuthorAlternative: {
+            /** Issn L */
+            issn_l: string;
+            /** Title */
+            title: string | null;
+            /** N Works */
+            n_works: number;
+            /** Options */
+            options: components["schemas"]["AuthorSimilarJournal"][];
+        };
+        /** AuthorItem */
+        AuthorItem: {
+            /** Pure Uuid */
+            pure_uuid: string;
+            /** Name */
+            name: string;
+            /** Faculty */
+            faculty: string | null;
+            /** Research Group */
+            research_group: string | null;
+            /** N Works */
+            n_works: number;
+            /** Orcid */
+            orcid: string | null;
+        };
+        /** AuthorJournalRow */
+        AuthorJournalRow: {
+            /** Issn L */
+            issn_l: string;
+            /** Title */
+            title: string | null;
+            /** N Works */
+            n_works: number;
+            /** Oa Type */
+            oa_type: string;
+        };
+        /** AuthorOut */
+        AuthorOut: {
+            /** Pure Uuid */
+            pure_uuid: string;
+            /** Name */
+            name: string;
+            /** Orcid */
+            orcid: string | null;
+            /** Openalex Author Id */
+            openalex_author_id: string | null;
+            /** Openaire Person Id */
+            openaire_person_id: string | null;
+            /** Crossref Orcid */
+            crossref_orcid: string | null;
+            /** Faculty */
+            faculty: string | null;
+            /** Research Group */
+            research_group: string | null;
+            /** Orgs */
+            orgs: string[];
+            /** N Works */
+            n_works: number;
+        };
+        /** AuthorProfileResponse */
+        AuthorProfileResponse: {
+            author: components["schemas"]["AuthorOut"];
+            /** Oa By Year */
+            oa_by_year: components["schemas"]["AuthorYearRow"][];
+            /** Journals */
+            journals: components["schemas"]["AuthorJournalRow"][];
+            /** Topics */
+            topics: components["schemas"]["AuthorTopicRow"][];
+            similar: components["schemas"]["AuthorSimilarBundle"];
+            /** Alternatives */
+            alternatives: components["schemas"]["AuthorAlternative"][];
+            /** Works */
+            works: components["schemas"]["AuthorWorkItem"][];
+        };
+        /** AuthorSearchResponse */
+        AuthorSearchResponse: {
+            /** Enabled */
+            enabled: boolean;
+            /** Total */
+            total: number;
+            /** Items */
+            items: components["schemas"]["AuthorItem"][];
+        };
+        /** AuthorSimilarBundle */
+        AuthorSimilarBundle: {
+            /** All */
+            all: components["schemas"]["AuthorSimilarJournal"][];
+            /** Deals */
+            deals: components["schemas"]["AuthorSimilarJournal"][];
+            /** Diamond */
+            diamond: components["schemas"]["AuthorSimilarJournal"][];
+        };
+        /** AuthorSimilarJournal */
+        AuthorSimilarJournal: {
+            /** Issn L */
+            issn_l: string;
+            /** Title */
+            title: string | null;
+            /** Score */
+            score: number;
+            /** Oa Type */
+            oa_type: string;
+            /** Deal Covered */
+            deal_covered: boolean;
+        };
+        /** AuthorTopicRow */
+        AuthorTopicRow: {
+            /** Name */
+            name: string;
+            /** N */
+            n: number;
+        };
+        /** AuthorWorkItem */
+        AuthorWorkItem: {
+            /** Pure Uuid */
+            pure_uuid: string;
+            /** Title */
+            title: string;
+            /** Year */
+            year: number;
+            /** Doi */
+            doi: string | null;
+            /** Oa Status */
+            oa_status: string | null;
+            /** Journal Issn L */
+            journal_issn_l: string | null;
+            /** Journal Title */
+            journal_title: string | null;
+        };
+        /** AuthorYearRow */
+        AuthorYearRow: {
+            /** Year */
+            year: number;
+            /** Total */
+            total: number;
+            /** Gold */
+            gold: number;
+            /** Green */
+            green: number;
+            /** Hybrid */
+            hybrid: number;
+            /** Bronze */
+            bronze: number;
+            /** Closed */
+            closed: number;
         };
         /**
          * CanonicalOa
@@ -1683,6 +1864,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JournalDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_authors_api_v1__institution_code__authors_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    author_profile_api_v1__institution_code__authors__pure_uuid__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pure_uuid: string;
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorProfileResponse"];
                 };
             };
             /** @description Validation Error */

@@ -286,3 +286,97 @@ class FreshnessResponse(BaseModel):
     harvests: list[FreshnessEntry]
     # max timestamps (or year/period maxima for yearly tables)
     tables: dict[str, Any] = {}
+
+
+# ── Author browsing (ut-metadata ingest) ───────────────────────────────────
+
+
+class AuthorItem(BaseModel):
+    pure_uuid: str
+    name: str
+    faculty: str | None
+    research_group: str | None
+    n_works: int
+    orcid: str | None
+
+
+class AuthorSearchResponse(BaseModel):
+    enabled: bool
+    total: int
+    items: list[AuthorItem]
+
+
+class AuthorOut(BaseModel):
+    pure_uuid: str
+    name: str
+    orcid: str | None
+    openalex_author_id: str | None
+    openaire_person_id: str | None
+    crossref_orcid: str | None
+    faculty: str | None
+    research_group: str | None
+    orgs: list[str]
+    n_works: int
+
+
+class AuthorYearRow(BaseModel):
+    year: int
+    total: int
+    gold: int
+    green: int
+    hybrid: int
+    bronze: int
+    closed: int
+
+
+class AuthorJournalRow(BaseModel):
+    issn_l: str
+    title: str | None
+    n_works: int
+    oa_type: str
+
+
+class AuthorTopicRow(BaseModel):
+    name: str
+    n: int
+
+
+class AuthorSimilarJournal(BaseModel):
+    issn_l: str
+    title: str | None
+    score: float
+    oa_type: str
+    deal_covered: bool
+
+
+class AuthorSimilarBundle(BaseModel):
+    all: list[AuthorSimilarJournal]
+    deals: list[AuthorSimilarJournal]
+    diamond: list[AuthorSimilarJournal]
+
+
+class AuthorAlternative(BaseModel):
+    issn_l: str
+    title: str | None
+    n_works: int
+    options: list[AuthorSimilarJournal]
+
+
+class AuthorWorkItem(BaseModel):
+    pure_uuid: str
+    title: str
+    year: int
+    doi: str | None
+    oa_status: str | None
+    journal_issn_l: str | None
+    journal_title: str | None
+
+
+class AuthorProfileResponse(BaseModel):
+    author: AuthorOut
+    oa_by_year: list[AuthorYearRow]
+    journals: list[AuthorJournalRow]
+    topics: list[AuthorTopicRow]
+    similar: AuthorSimilarBundle
+    alternatives: list[AuthorAlternative]
+    works: list[AuthorWorkItem]

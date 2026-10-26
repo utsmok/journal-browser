@@ -8,6 +8,7 @@ import warnings
 from datetime import date
 from typing import Any
 
+from currency_converter import CurrencyConverter
 from sqlalchemy import (
     Numeric,
     String,
@@ -25,8 +26,6 @@ from sqlalchemy import (
 )
 from sqlalchemy import exc as sa_exc
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from currency_converter import CurrencyConverter
 
 from ..config import get_settings
 from ..models import IssnMap, Journal, JournalApcAggregate, JournalFlags
