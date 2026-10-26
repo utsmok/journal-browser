@@ -64,6 +64,9 @@ INST_STEPS: list[tuple[str, list[str]]] = [
     # Participation derive + coverage flags: makes onboarding (one row +
     # this layer) self-sufficient without rerunning global deal merging.
     ("reconcile", ["jobs/reconcile.py"]),
+    # Author roster from the external canonical-works DB (skips cleanly
+    # without a DSN; onboarding needs one institutions row + this layer).
+    ("authors", ["jobs/ingest_authors.py"]),
 ]
 
 #: Per-institution dependencies: names within an institution are prefixed
@@ -75,6 +78,7 @@ INST_DEPS: dict[str, list[str]] = {
     "openaire": ["pure", "deals-issn-l"],
     "stats": ["enrich", "openaire", "openapc", "scimagojr", "flags"],
     "reconcile": ["stats", "deals-reconcile"],
+    "authors": ["reconcile"],
 }
 
 #: Institution-neutral, so it runs once after every stats layer.
