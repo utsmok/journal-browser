@@ -97,8 +97,7 @@ Useful variants (run inside the backend image, e.g.
 | `harvest_journals` | OpenAlex | The journal universe (~177k rows), ISSNs, topics, OA status |
 | `scrape_openaccess_nl` | openaccess.nl | Deal pages: narrative, conditions, participation text |
 | `ingest_jct` | cOAlition S JCT public dump | ESAC agreements + journal lists |
-| `reconcile` | the two above | The per-institution deal register (see below) |
-| `purge_non_twente_deals` | register | Drops deals your institution is not part of |
+| `reconcile` | the two above | The deal register; participation per hosted institution (non-participation = no `deal_institutions` row; shared deals are never deleted) |
 | `backfill_issn_l` | issn_map | Links deal journal ISSNs to the canonical ISSN-L |
 | `ingest_openapc` | OpenAPC dataset | APC evidence and per-journal aggregates |
 | `ingest_scimagojr` | seeded from `backend/data/` | Quartiles (scimagojr.com is Cloudflare-hard; drop fresh CSVs in `backend/data/` to update) |

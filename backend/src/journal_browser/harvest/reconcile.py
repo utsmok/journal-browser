@@ -30,7 +30,7 @@ from ..models import (
     Work,
     WorkIdentity,
 )
-from .common import get_default_institution
+from .common import get_active_institutions, get_default_institution
 
 logger = logging.getLogger(__name__)
 
@@ -177,15 +177,17 @@ async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
 
     These deals have no JCT sheet, but the deal pages state both facts:
     participation as an institution list in the conditions text
-    ("Participating in the agreement are: ... <home institution> ...") or,
-    when no institutions are enumerated, as a national UKB-wide deal; and
-    coverage as all journals of the publisher. Deals that exclude the home
-    institution stay unlinked (the purge drops them); publishers with no
+    ("Participating in the agreement are: ... <institution> ...") or, when
+    no institutions are enumerated, as a national UKB-wide deal; and
+    coverage as all journals of the publisher. Participation is derived
+    once per hosted institution from the same conditions text; journals
+    coverage rows are shared (institution_id NULL). Non-participating
+    institutions simply get no deal_institutions row; publishers with no
     corpus match keep their needs_curation flag.
     """
-    home = await get_default_institution(session)
+    hosted = await get_active_institutions(session)
     stats = {"nl_deals": 0, "linked": 0, "covered": 0, "pattern_journals": 0}
-    if home is None:
+    if not hosted:
         return stats
     deals = list(
         (
@@ -201,15 +203,18 @@ async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
     stats["nl_deals"] = len(deals)
     publisher_names = await _publisher_names(session)
     protected = await _override_protected(session, [d.id for d in deals])
-    home_name = (home.name or "").casefold()
     for deal in deals:
-        participation = _participation(deal.conditions_text, home_name)
-        if participation is None:
+        participants = [
+            inst
+            for inst in hosted
+            if _participation(deal.conditions_text, (inst.name or "").casefold()) is not None
+        ]
+        if not participants:
             continue
         linked = await session.scalar(
             select(DealInstitution.deal_id).where(
                 DealInstitution.deal_id == deal.id,
-                DealInstitution.institution_id == home.id,
+                DealInstitution.institution_id.in_([i.id for i in participants]),
             )
         )
         has_journals = await session.scalar(
@@ -218,10 +223,14 @@ async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
         if linked is None:
             await session.execute(
                 pg_insert(DealInstitution)
-                .values(deal_id=deal.id, institution_id=home.id)
+                .values(
+                    [
+                        {"deal_id": deal.id, "institution_id": inst.id} for inst in participants
+                    ]
+                )
                 .on_conflict_do_nothing(index_elements=["deal_id", "institution_id"])
             )
-            stats["linked"] += 1
+            stats["linked"] += len(participants)
         if linked is not None and has_journals:
             # Earlier reconcile already derived this deal; the flag pass
             # above re-flagged it, so clear it again (idempotent rerun).
@@ -269,7 +278,7 @@ async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
             {
                 "source": "reconcile",
                 "derived": "publisher-pattern",
-                "participation": participation,
+                "participants": [i.code or i.name for i in participants],
                 "patterns": patterns,
                 "at": datetime.now(UTC).isoformat(),
             }

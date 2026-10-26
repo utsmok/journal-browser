@@ -7,7 +7,14 @@ journals sweep dominates wall time while Pure/OpenAPC/deal scrapes run
 beside it). Every step is an idempotent standalone job; a failure stops
 new steps from starting and names the failed ones.
 
+Two layers: global steps build the shared core once (journals universe,
+deal register, OpenAPC, Scimago, ISSN-L); per-institution steps run once
+for every hosted institution (Pure, enrich, OpenAIRE, stats). Embeddings
+are institution-neutral and run last. `--institution CODE` runs only that
+institution's layer (onboarding = one institutions row + this).
+
 Usage: uv run python jobs/bootstrap.py [--always] [--from STEP]
+       uv run python jobs/bootstrap.py --institution rug
 """
 
 import asyncio
@@ -16,69 +23,87 @@ import time
 from pathlib import Path
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
+from journal_browser.harvest.common import get_active_institutions
 from journal_browser.models import Journal
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 
 # Topological order (also the --from resume order). DEPS gates concurrency.
-STEPS: list[tuple[str, list[str]]] = [
+GLOBAL_STEPS: list[tuple[str, list[str]]] = [
     ("journals", ["jobs/harvest_journals.py"]),
     ("deals-openaccess-nl", ["jobs/scrape_openaccess_nl.py"]),
     ("deals-jct", ["jobs/ingest_jct.py"]),
     ("openapc", ["jobs/ingest_openapc.py"]),
-    ("pure", ["jobs/harvest_pure.py", "--full-sweep"]),
+    # pattern derivation needs publisher names; matching needs both sources
     ("deals-reconcile", ["jobs/reconcile.py"]),
-    ("deals-purge-foreign", ["jobs/purge_non_twente_deals.py"]),
     ("deals-issn-l", ["jobs/backfill_issn_l.py"]),
     ("scimagojr", ["jobs/ingest_scimagojr.py"]),
-    ("enrich", ["jobs/enrich_works.py"]),
-    ("openaire", ["jobs/harvest_openaire.py"]),
-    ("stats", ["jobs/harvest_stats.py"]),
     ("flags", ["jobs/backfill_flags.py"]),
-    ("embeddings", ["jobs/embed_journals.py"]),
 ]
 
-DEPS: dict[str, list[str]] = {
+GLOBAL_DEPS: dict[str, list[str]] = {
     "journals": [],
     "deals-openaccess-nl": [],
     "deals-jct": [],
     "openapc": [],  # aggregates are ISSN-keyed, no journals needed
-    "pure": [],
-    # pattern derivation needs publisher names; matching needs both sources
     "deals-reconcile": ["journals", "deals-openaccess-nl", "deals-jct"],
-    "deals-purge-foreign": ["deals-reconcile"],
-    "deals-issn-l": ["deals-purge-foreign"],
+    "deals-issn-l": ["deals-reconcile"],
     "scimagojr": ["journals"],  # resolves ISSNs against the journals universe
-    "enrich": ["pure"],
-    "openaire": ["pure"],  # DOI-to-work matching reads ut_works
-    "stats": ["deals-issn-l", "openapc", "scimagojr", "enrich", "openaire"],
-    "flags": ["deals-reconcile", "stats"],
-    "embeddings": ["stats"],  # embeds the stats-built landing text
+    "flags": ["journals"],  # works_2020_plus / last_active_year recompute
 }
+
+#: Per-institution layer, in order. Every step takes --institution CODE.
+INST_STEPS: list[tuple[str, list[str]]] = [
+    ("pure", ["jobs/harvest_pure.py", "--full-sweep"]),
+    ("enrich", ["jobs/enrich_works.py"]),
+    ("openaire", ["jobs/harvest_openaire.py"]),
+    ("stats", ["jobs/harvest_stats.py"]),
+]
+
+#: Per-institution dependencies: names within an institution are prefixed
+#: "step:code"; cross-layer deps name global steps.
+INST_DEPS: dict[str, list[str]] = {
+    "pure": [],
+    "enrich": ["pure"],
+    # DOI-to-work matching reads the institution's works
+    "openaire": ["pure", "deals-issn-l"],
+    "stats": ["enrich", "openaire", "openapc", "scimagojr", "flags"],
+}
+
+#: Institution-neutral, so it runs once after every stats layer.
+EMBEDDINGS_STEP = ("embeddings", ["jobs/embed_journals.py"])
+
+
+async def hosted_codes() -> list[str]:
+    engine = create_async_engine(get_settings().database_url)
+    maker = async_sessionmaker(engine, expire_on_commit=False)
+    async with maker() as session:
+        codes = [inst.code for inst in await get_active_institutions(session)]
+    await engine.dispose()
+    return [c for c in codes if c]
 
 
 async def already_bootstrapped() -> bool:
     engine = create_async_engine(get_settings().database_url)
-    try:
-        async with engine.connect() as conn:
-            count = await conn.scalar(select(func.count()).select_from(Journal))
-        return bool(count)
-    finally:
-        await engine.dispose()
+    maker = async_sessionmaker(engine, expire_on_commit=False)
+    async with maker() as session:
+        count = await session.scalar(select(func.count()).select_from(Journal))
+    await engine.dispose()
+    return bool(count)
 
 
-def _step_after(args: list[str]) -> str:
+def _step_after(args: list[str]) -> str | None:
     """Parse --from STEP; resume runs this step and everything after it."""
-    try:
-        name = args[args.index("--from") + 1]
-    except (IndexError, ValueError):
-        name = ""
-    if name not in dict(STEPS):
-        sys.exit(f"unknown step {name!r}; valid: {', '.join(n for n, _ in STEPS)}")
-    return name
+    if "--from" not in args:
+        return None
+    i = args.index("--from")
+    if i + 1 >= len(args):
+        print("bootstrap: --from requires a step name", file=sys.stderr)
+        raise SystemExit(2)
+    return args[i + 1]
 
 
 async def run_step(name: str, job_args: list[str]) -> bool:
@@ -94,9 +119,35 @@ async def run_step(name: str, job_args: list[str]) -> bool:
     return True
 
 
-async def run_serial(from_step: str | None) -> int:
+def build_plan(codes: list[str], only_institution: str | None) -> tuple[list, dict]:
+    """(steps, deps) for the run: global layer, per-institution layers,
+    embeddings last. only_institution drops the global layer and embeddings
+    (they are shared and already built)."""
+    steps = list(GLOBAL_STEPS)
+    deps = dict(GLOBAL_DEPS)
+    stats_names: list[str] = []
+    for code in codes:
+        for name, job_args in INST_STEPS:
+            full = f"{name}:{code}"
+            steps.append((full, job_args + ["--institution", code]))
+            deps[full] = [
+                dep if dep in GLOBAL_DEPS else f"{dep}:{code}" for dep in INST_DEPS[name]
+            ]
+            if name == "stats":
+                stats_names.append(full)
+    if only_institution is None:
+        steps.append(EMBEDDINGS_STEP)
+        deps[EMBEDDINGS_STEP[0]] = stats_names
+    else:
+        wanted = {f"{name}:{only_institution}" for name, _ in INST_STEPS}
+        steps = [s for s in steps if s[0] in wanted]
+        deps = {k: v for k, v in deps.items() if k in wanted}
+    return steps, deps
+
+
+async def run_serial(steps: list, deps: dict, from_step: str | None) -> int:
     started = time.monotonic()
-    for name, job_args in STEPS:
+    for name, job_args in steps:
         if from_step is not None and name != from_step:
             continue
         from_step = None
@@ -106,19 +157,19 @@ async def run_serial(from_step: str | None) -> int:
     return 0
 
 
-async def run_parallel() -> int:
+async def run_parallel(steps: list, deps: dict) -> int:
     started = time.monotonic()
     running: dict[asyncio.Task, str] = {}
     done: set[str] = set()
     failed: list[str] = []
-    pending = [name for name, _ in STEPS]
+    pending = [name for name, _ in steps]
     while pending or running:
         # launch every step whose dependencies succeeded
         for name in list(pending):
-            if failed or not all(dep in done for dep in DEPS[name]):
+            if failed or not all(dep in done for dep in deps[name]):
                 continue
             pending.remove(name)
-            task = asyncio.create_task(run_step(name, dict(STEPS)[name]))
+            task = asyncio.create_task(run_step(name, dict(steps)[name]))
             running[task] = name
         if not running:  # only unsatisfiable steps left
             break
@@ -145,16 +196,34 @@ async def main() -> int:
     args = sys.argv[1:]
     mode = "always" if "--always" in args else settings.bootstrap
     resume_from = _step_after(args) if "--from" in args else None
-    if mode == "off":
+    only_institution = None
+    if "--institution" in args:
+        i = args.index("--institution")
+        if i + 1 >= len(args):
+            print("bootstrap: --institution requires a code", file=sys.stderr)
+            return 2
+        only_institution = args[i + 1]
+    if mode == "off" and only_institution is None:
         print("bootstrap: off (JB_BOOTSTRAP=off)")
         return 0
-    if "--from" not in args and mode == "auto" and await already_bootstrapped():
+    codes = await hosted_codes()
+    if only_institution is not None and only_institution not in codes:
+        print(f"bootstrap: unknown or inactive institution {only_institution!r} "
+              f"(hosted: {', '.join(codes) or 'none'})", file=sys.stderr)
+        return 2
+    if (
+        "--from" not in args
+        and "--institution" not in args
+        and mode == "auto"
+        and await already_bootstrapped()
+    ):
         print("bootstrap: journals present, nothing to do (use --always to force)")
         return 0
+    steps, deps = build_plan(codes, only_institution)
     # --from is repair mode: serial, in listed order
     if resume_from is not None:
-        return await run_serial(resume_from)
-    return await run_parallel()
+        return await run_serial(steps, deps, resume_from)
+    return await run_parallel(steps, deps)
 
 
 if __name__ == "__main__":

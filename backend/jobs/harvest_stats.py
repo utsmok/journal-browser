@@ -1,11 +1,10 @@
-"""Institution statistics harvest (2020+ window, collect-only).
+"""Institution statistics harvest (data window from the institution row).
 
-Usage: uv run python jobs/harvest_stats.py [limit]
+Usage: uv run python jobs/harvest_stats.py [--institution CODE] [--limit N]
 """
 
 import asyncio
 import json
-import sys
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -18,8 +17,7 @@ from journal_browser.harvest.institution_stats import (
 )
 
 
-async def main(code: str | None = None) -> None:
-    limit = int(sys.argv[1]) if len(sys.argv) > 1 else None
+async def main(code: str | None = None, limit: int | None = None) -> None:
     engine = create_async_engine(get_settings().database_url)
     maker = async_sessionmaker(engine, expire_on_commit=False)
     async with maker() as session:
@@ -37,5 +35,6 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--institution", default=None, help="institution code (default: env)")
-    args, rest = parser.parse_known_args()
-    asyncio.run(main(args.institution))
+    parser.add_argument("--limit", type=int, default=None)
+    args = parser.parse_args()
+    asyncio.run(main(args.institution, args.limit))
