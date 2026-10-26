@@ -355,12 +355,12 @@ export async function fetchAuthors(
   return apiGet<AuthorSearchResponse>(`/${inst}/authors`, {
     q,
     limit: opts.limit,
-    faculty: filters.faculty?.join(","),
-    org: filters.org?.join(","),
+    faculty: filters.faculty?.join("|"),
+    org: filters.org?.join("|"),
     has_orcid: filters.has_orcid,
-    works: filters.works?.join(","),
-    last_pub: filters.last_pub?.join(","),
-    topic: filters.topic?.join(","),
+    works: filters.works?.join("|"),
+    last_pub: filters.last_pub?.join("|"),
+    topic: filters.topic?.join("|"),
     sort: opts.sort,
     offset: opts.offset,
   });

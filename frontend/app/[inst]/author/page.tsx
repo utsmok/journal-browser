@@ -67,7 +67,7 @@ function paramValues(
   sp: { get(key: string): string | null },
   key: string,
 ): string[] {
-  return (sp.get(key) ?? "").split(",").filter(Boolean);
+  return (sp.get(key) ?? "").split("|").filter(Boolean);
 }
 
 /** Top 8 buckets, with every active value kept visible even outside the top 8. */
@@ -199,7 +199,7 @@ function AuthorsView() {
     const next = current.includes(value)
       ? current.filter((v) => v !== value)
       : [...current, value];
-    setParams({ [key]: next.join(",") || undefined });
+    setParams({ [key]: next.join("|") || undefined });
   };
 
   const clearFilters = () =>

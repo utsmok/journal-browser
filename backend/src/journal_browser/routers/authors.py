@@ -42,7 +42,8 @@ async def search_authors(
     # dimensions (the journals oa_type convention). Unknown values match
     # nothing: empty result, no error.
     def _split(raw: str | None) -> list[str] | None:
-        values = [v for v in (raw or "").split(",") if v]
+        # "|" not ",": faculty/org/topic values contain commas
+        values = [v for v in (raw or "").split("|") if v]
         return values or None
 
     return AuthorSearchResponse(

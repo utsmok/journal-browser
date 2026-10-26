@@ -349,11 +349,16 @@ async def test_facets_and_filters(authors_api):
     assert len(body["facets"]["faculty"]) == 2
     assert body["facets"]["topic"] == [{"value": "Physics", "count": 2}]
 
-    # Comma multi-select ORs within a dimension.
+    # Pipe multi-select ORs within a dimension ("|", not ",": facet values contain commas).
     body = (
-        await authors_api.get("/api/v1/ut/authors", params={"last_pub": "none,2020-2021"})
+        await authors_api.get("/api/v1/ut/authors", params={"last_pub": "none|2020-2021"})
     ).json()
     assert [i["pure_uuid"] for i in body["items"]] == ["dan-uuid", "carol-uuid"]
+
+    # A facet value containing a comma survives (regression: comma was the separator).
+    bms = "Faculty of Behavioural, Management and Social Sciences"
+    body = (await authors_api.get("/api/v1/ut/authors", params={"faculty": bms})).json()
+    assert body["total"] == 1
 
     # Dimensions AND together.
     body = (
