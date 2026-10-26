@@ -11,9 +11,7 @@ GET/PUT /institutions/{code} the per-university configuration rows.
 import hashlib
 import hmac
 import os
-import tempfile
 import time
-from pathlib import Path
 from typing import Annotated, Any
 
 import yaml
@@ -174,16 +172,17 @@ def _value_ok(ftype: str, value: Any) -> bool:
 
 
 def _write_settings_yaml(doc: dict[str, Any]) -> None:
-    """Atomic YAML write (tmp + rename) so readers never see a half file."""
+    """Write YAML in place with fsync. tmp+rename would be atomic, but the
+    compose bind mount makes rename(2) fail with EBUSY (you cannot replace a
+    mount point), so truncate-and-write is the only portable option; the
+    reader side tolerates a partial file by ignoring YAML errors until the
+    next mtime change."""
     path = settings_yaml_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=".settings-", suffix=".yaml")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            yaml.safe_dump(doc, fh, sort_keys=True)
-        os.replace(tmp_name, path)
-    finally:
-        Path(tmp_name).unlink(missing_ok=True)  # no-op after a successful replace
+    with path.open("w", encoding="utf-8") as fh:
+        yaml.safe_dump(doc, fh, sort_keys=True)
+        fh.flush()
+        os.fsync(fh.fileno())
 
 
 @router.get("/settings")

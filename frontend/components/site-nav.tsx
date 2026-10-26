@@ -5,9 +5,8 @@ import { usePathname } from "next/navigation";
 
 import { NavLink } from "@/components/nav-link";
 
-/** Nav links scoped to the current institution segment; global surfaces
- * (landing chooser, admin) carry no segment, and the per-institution
- * pages would 404 there, so only the brand link remains. */
+/** Nav links scoped to the current institution segment; the "All
+ * universities" link reaches the global landing chooser from any uni page. */
 export function SiteNav() {
   const pathname = usePathname() ?? "/";
   const seg = pathname.split("/")[1] ?? "";
@@ -18,6 +17,7 @@ export function SiteNav() {
       <NavLink href={`${prefix}/`} label="Search" />
       <NavLink href={`${prefix}/deals`} label="Deals" />
       <NavLink href={`${prefix}/about`} label="About" />
+      <NavLink href="/" label="All universities" />
     </nav>
   );
 }

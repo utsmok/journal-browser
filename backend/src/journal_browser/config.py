@@ -136,8 +136,17 @@ def get_settings() -> Settings:
     if _cache.get("mtime") != mtime or "settings" not in _cache:
         base = Settings()
         overlay = load_settings_yaml() if mtime is not None else {}
-        _cache["settings"] = Settings.model_validate({**base.model_dump(), **overlay})
-        _cache["mtime"] = mtime
+        merged = {**base.model_dump(), **overlay}
+        try:
+            _cache["settings"] = Settings.model_validate(merged)
+            # Only pin the mtime on success: a partial-file read retries.
+            _cache["mtime"] = mtime
+        except Exception:
+            # In-place writes are not atomic: a concurrent read can catch a
+            # truncated file. Keep the last good overlay until the write is
+            # done (the next mtime check re-reads).
+            if "settings" not in _cache:
+                raise
     return _cache["settings"]
 
 

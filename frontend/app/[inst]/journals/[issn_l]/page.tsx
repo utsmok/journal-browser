@@ -17,7 +17,7 @@ import { SourceNote } from "@/components/source-note";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useJournal, useJournalWorks, useSimilar } from "@/hooks/use-api";
-import { useInstitution } from "@/hooks/use-institution";
+import { instHref, useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import {
   errorMessage,
@@ -463,11 +463,12 @@ function PublicationsCard({
   );
 }
 
-/** href for "Back to search": the last search this tab ran, else the home page. */
+/** href for "Back to search": the last search this tab ran, else this
+ * university's search home (never the global landing). */
 function useLastSearchHref(): string {
-  const [href, setHref] = React.useState("/");
+  const [href, setHref] = React.useState(instHref("/"));
   React.useEffect(() => {
-    setHref(sessionStorage.getItem("jb-last-search") ?? "/");
+    setHref(sessionStorage.getItem("jb-last-search") ?? instHref("/"));
   }, []);
   return href;
 }

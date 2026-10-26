@@ -150,6 +150,8 @@ async def seed_deal_journals(client: AlethecaClient, session: AsyncSession) -> d
     """Fetch sources for all deal-list ISSNs (keyless, 50/batch)."""
     from ..models import DealJournal
 
+    ingest = IngestSession(session)
+    await ingest.start_run(SOURCE, ENTITY_TYPE, "all", {"route": "seed"})
     issns = [
         row.issn
         for row in (await session.execute(select(DealJournal.issn).distinct())).all()
@@ -159,11 +161,18 @@ async def seed_deal_journals(client: AlethecaClient, session: AsyncSession) -> d
     for i in range(0, len(issns), 50):
         batch = issns[i : i + 50]
         found = await client.sources.batch_get(batch, field="issn")
+        page = []
         for source in found.values():
             payload = _payload_dict(source)
-            if payload and await _upsert_journal(session, payload):
+            if payload and payload.get("id"):
+                page.append((payload["id"], payload))
+        await ingest.ingest_records(page)
+        for _, payload in page:
+            if await _upsert_journal(session, payload):
                 stats["sources_found"] += 1
         await session.commit()
+    stats = await ingest.finish_run("completed", stats)
+    await session.commit()
     return stats
 
 

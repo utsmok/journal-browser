@@ -38,3 +38,48 @@ async def test_page_upsert_conflict_updates_existing(db):
     row = await db.get(Journal, "0043-1354")
     assert row.title == "New"
     assert row.search_text == "New"
+
+
+@requires_db
+async def test_seed_deal_journals_lands_raw_payloads(db):
+    """Regression: the seed route stores verbatim source payloads in
+    source_records, same as the sweep route."""
+    from types import SimpleNamespace
+
+    from journal_browser.harvest.openalex_journals import seed_deal_journals
+    from journal_browser.models import Deal, DealJournal, HarvestRun, SourceRecord
+
+    payload = {
+        "id": "https://openalex.org/S1",
+        "issn_l": "0043-1354",
+        "display_name": "Seed J",
+        "apc_prices": [{"currency": "EUR", "price": 2500}],
+    }
+
+    class FakeSources:
+        async def batch_get(self, issns, field=None):
+            return {issns[0]: dict(payload)}
+
+    deal = Deal(status="current")
+    db.add(deal)
+    await db.flush()
+    db.add(DealJournal(deal_id=deal.id, issn="0043-1354", source="jct"))
+    await db.flush()
+
+    stats = await seed_deal_journals(SimpleNamespace(sources=FakeSources()), db)
+    assert stats["sources_found"] == 1
+    row = await db.get(Journal, "0043-1354")
+    assert row.title == "Seed J"
+    assert row.apc_prices == [{"currency": "EUR", "price": 2500}]
+    raw = (
+        await db.execute(
+            select(SourceRecord).where(
+                SourceRecord.source == "openalex",
+                SourceRecord.entity_type == "sources",
+                SourceRecord.source_pk == payload["id"],
+            )
+        )
+    ).scalar_one()
+    assert raw.payload["apc_prices"] == [{"currency": "EUR", "price": 2500}]
+    run = await db.get(HarvestRun, raw.harvest_run_id)
+    assert run.status == "completed" and run.stats["records_stored"] == 1
