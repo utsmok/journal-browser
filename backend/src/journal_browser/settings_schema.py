@@ -72,9 +72,6 @@ SETTINGS_REGISTRY: list[FieldDef] = [
        "Free-tier key for OpenAlex harvests; single-entity lookups stay keyless."),
     _f("jisc_api_key", "global", "secret", "JISC API key",
        "Credentials for the JISC integration (feature currently off)."),
-    _f("ut_metadata_dsn", "global", "secret", "ut-metadata DSN",
-       "Read-only Postgres DSN with canonical Twente publications; empty "
-       "degrades ut-works endpoints to works_stats-only."),
     _f("contact_email", "global", "string", "Contact email",
        "Sent to OpenAlex for polite-pool identification."),
     _f("cors_origins", "global", "list", "CORS origins",

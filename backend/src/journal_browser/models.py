@@ -220,9 +220,9 @@ class Institution(Base):
     support_email: Mapped[str | None] = mapped_column(Text, nullable=True)
     admin_contact: Mapped[str | None] = mapped_column(Text, nullable=True)
     research_portal_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Hosted + served at /{code}/...; is_default marks the root redirect.
+    # Hosted + served at /{code}/...; the env-seeded home institution resolves
+    # by ROR, not by a flag.
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
-    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
 
     @property
     def window_years(self) -> list[int]:

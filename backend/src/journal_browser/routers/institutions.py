@@ -20,7 +20,6 @@ class InstitutionOut(BaseModel):
     code: str
     name: str
     short_name: str | None = None
-    is_default: bool
     data_window_start: int
     data_window_end: int = 0  # 0 = open
     library_url: str | None = None
@@ -37,7 +36,6 @@ async def list_institutions(session: SessionDep) -> list[InstitutionOut]:
             code=inst.code or "",
             name=inst.name,
             short_name=inst.short_name,
-            is_default=inst.is_default,
             data_window_start=inst.data_window_start,
             data_window_end=inst.data_window_end,
             library_url=inst.library_url,

@@ -193,7 +193,7 @@ async def api(db_engine, monkeypatch):
 
     app.dependency_overrides[get_session] = _override
     async with maker() as session:
-        home = Institution(name="Test U", code="tu", active=True, is_default=True)
+        home = Institution(name="Test U", code="tu", active=True)
         session.add(home)
         await session.flush()
         # works_stats records resolve their institution through the run.

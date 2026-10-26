@@ -20,7 +20,7 @@ from ..ingest import IngestSession, sha256_bytes
 from ..models import ApcEvidence, JournalApcAggregate, RawFile, SourceRecord
 from .common import (
     download_to_landing,
-    ensure_default_institution,
+    ensure_home_institution,
     issn_checksum_ok,
     lookup_issn_l,
     normalize_issn,
@@ -244,7 +244,7 @@ async def _body(ingest: IngestSession, limit: int | None) -> dict[str, Any]:
     await ingest.commit()
 
     # 4. Per-article evidence for the home institution (full replace).
-    home = await ensure_default_institution(session)
+    home = await ensure_home_institution(session)
     inst_name = home.name
     evidence, filled = await build_evidence(rows_for("ta"), inst_name, resolve, contracts_map)
     stats["twente_rows"] = len(evidence)

@@ -122,7 +122,7 @@ export type SettingsResponse = {
   values: Record<string, string | number | boolean | null>;
 };
 
-/** GET/PUT /admin/institutions/{code}; external_works_dsn masked like secrets. */
+/** GET/PUT /admin/institutions/{code}. */
 export type InstitutionSettings = {
   code: string;
   name: string;
@@ -131,7 +131,6 @@ export type InstitutionSettings = {
   openalex_id: string | null;
   pure_oai_base_url: string | null;
   openaire_org_id: string | null;
-  external_works_dsn: string | null;
   data_window_start: number | null;
   data_window_end: number | null;
   library_url: string | null;
@@ -140,7 +139,6 @@ export type InstitutionSettings = {
   admin_contact: string | null;
   research_portal_url: string | null;
   active: boolean | null;
-  is_default: boolean | null;
 };
 
 /** GET /admin/deals and the base of GET /admin/deals/{id}. */

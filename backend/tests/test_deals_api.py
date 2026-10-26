@@ -28,7 +28,7 @@ async def deals_api(db_engine):
     app.dependency_overrides[get_session] = _override
     async with maker() as session:
         home = Institution(
-            name="University of Twente", code="ut", active=True, is_default=True
+            name="University of Twente", code="ut", active=True
         )
         session.add(home)
         await session.flush()

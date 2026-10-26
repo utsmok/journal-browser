@@ -29,7 +29,6 @@ async def _institution(db) -> Institution:
         name="University of Twente",
         code="ut",
         active=True,
-        is_default=True,
         pure_oai_base_url="https://pure.example.com/oai",
     )
     db.add(inst)

@@ -123,7 +123,7 @@ async def api(db_engine):
     app.dependency_overrides[get_session] = _override
     async with maker() as session:
         session.add_all([_journal(MAIN_ISSN), _journal(OTHER_ISSN)])
-        home = Institution(name="Test U", code="tu", active=True, is_default=True)
+        home = Institution(name="Test U", code="tu", active=True)
         session.add(home)
         await session.flush()
         # works_stats records are institution-scoped via their harvest run.

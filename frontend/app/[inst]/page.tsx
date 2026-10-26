@@ -118,6 +118,27 @@ function formatApc(euro: number) {
   return rounded.toLocaleString("en");
 }
 
+/** Symbol for OpenAlex list-price currencies; ISO-code fallback for the rest. */
+const APC_SYMBOLS: Record<string, string> = { EUR: "€", USD: "$", GBP: "£" };
+
+function apcAmount(currency: string | null | undefined, price: number) {
+  return `${(currency && APC_SYMBOLS[currency]) || `${currency ?? ""} `}${formatApc(price)}`;
+}
+
+/** Per-period OpenAPC detail lines for the ? tooltip. */
+function apcStatsText(stats: NonNullable<JournalListItem["apc_stats"]>) {
+  return stats
+    .map((s) => {
+      const low = s.euro_min ?? s.euro_max;
+      const range =
+        low != null && low !== s.euro_max
+          ? `${formatApc(low)}–${formatApc(s.euro_max ?? 0)}`
+          : formatApc(s.euro_max ?? 0);
+      return `${s.period}: ${range} EUR · ${s.article_count} article${s.article_count === 1 ? "" : "s"} · mean ${formatApc(s.euro_mean ?? 0)}`;
+    })
+    .join("\n");
+}
+
 export default function HomePage() {
   // useSearchParams needs a Suspense boundary during prerender.
   return (
@@ -429,27 +450,48 @@ function SearchView() {
         ),
       },
       {
-        accessorKey: "apc_euro_latest",
+        accessorKey: "apc_low",
         header: () => (
           <SortHead
             columnId="apc"
             label="APC"
-            title="Latest APC reported to OpenAPC (highest single cost in the journal's newest reporting period). Click to sort, again to reverse, again to reset"
+            title="APC: the journal's list price (OpenAlex) where known, otherwise the range of APCs actually reported to OpenAPC over the newest two reporting periods. Click to sort, again to reverse, again to reset"
             state={sortRef.current}
           />
         ),
         cell: (info) => {
-          const row = info.row.original;
-          if (row.apc_euro_latest == null)
-            return <span className="text-[var(--muted-foreground)]">—</span>;
-          return (
-            <span
-              className="tabular-nums"
-              title={`Latest APC reported to OpenAPC (period ${row.apc_period ?? "unknown"}; highest single cost)`}
-            >
-              €{formatApc(row.apc_euro_latest)}
-            </span>
-          );
+          const row = info.row.original as JournalListItem;
+          if (row.apc_source === "openalex" && row.apc_price != null) {
+            return (
+              <span className="tabular-nums" title="List price (OpenAlex)">
+                {apcAmount(row.apc_currency, row.apc_price)}
+              </span>
+            );
+          }
+          if (row.apc_source === "openapc" && row.apc_low != null) {
+            const range =
+              row.apc_low !== row.apc_high
+                ? `${formatApc(row.apc_low)} to ${formatApc(row.apc_high ?? row.apc_low)}`
+                : formatApc(row.apc_low);
+            const detail = row.apc_stats ? apcStatsText(row.apc_stats) : "";
+            return (
+              <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                <span className="tabular-nums" title={detail || undefined}>
+                  €{range}
+                </span>
+                {detail && (
+                  <span
+                    className="cursor-help rounded-full border border-[var(--muted-foreground)]/50 px-[5px] text-[10px] leading-[14px] text-[var(--muted-foreground)]"
+                    title={`Reported to OpenAPC per year:\n${detail}`}
+                    aria-label="OpenAPC APC detail"
+                  >
+                    ?
+                  </span>
+                )}
+              </span>
+            );
+          }
+          return <span className="text-[var(--muted-foreground)]">—</span>;
         },
       },
       {
@@ -826,8 +868,12 @@ function SearchView() {
                     </div>
                     <div className="mt-1 text-xs tabular-nums text-[var(--muted-foreground)]">
                       {row.works.toLocaleString("en")} {site.short} works
-                      {row.apc_euro_latest != null &&
-                        ` · APC €${formatApc(row.apc_euro_latest)}`}
+                      {row.apc_source === "openalex" && row.apc_price != null &&
+                        ` · APC ${apcAmount(row.apc_currency, row.apc_price)}`}
+                      {row.apc_source === "openapc" && row.apc_low != null &&
+                        ` · APC €${row.apc_low !== row.apc_high
+                          ? `${formatApc(row.apc_low)} to ${formatApc(row.apc_high ?? row.apc_low)}`
+                          : formatApc(row.apc_low)}`}
                     </div>
                   </li>
                 ))}

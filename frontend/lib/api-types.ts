@@ -518,7 +518,6 @@ export interface components {
             /** Short Name */
             short_name?: string | null;
             /** Is Default */
-            is_default: boolean;
             /** Data Window Start */
             data_window_start: number;
             /** Data Window End */

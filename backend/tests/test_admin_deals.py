@@ -44,7 +44,7 @@ async def admin_api(db_engine, monkeypatch):
     async with maker() as session:
         session.add_all(
             [
-                Institution(name="University of Twente", code="ut", active=True, is_default=True),
+                Institution(name="University of Twente", code="ut", active=True),
                 Institution(name="RuG", code="rug", active=True),
                 Publisher(name="Emerald Publishing group"),
             ]
@@ -300,7 +300,7 @@ async def search_api(db_engine):
     async with maker() as session:
         session.add(
             Institution(
-                name="University of Twente", code="ut", active=True, is_default=True
+                name="University of Twente", code="ut", active=True
             )
         )
         await session.flush()
@@ -475,17 +475,6 @@ async def test_excluded_journal_hidden_from_public_deal_counts(admin_api, db_eng
     assert public.status_code == 200
     mine = [d for d in public.json() if d["id"] == deal_id]
     assert mine and mine[0]["journal_count"] == 1
-
-
-@requires_db
-async def test_is_default_is_exclusive(admin_api):
-    headers = await _login(admin_api)
-    r = await admin_api.put(
-        "/api/v1/admin/institutions/rug", headers=headers, json={"is_default": True}
-    )
-    assert r.status_code == 200 and r.json()["is_default"] is True
-    ut = (await admin_api.get("/api/v1/admin/institutions/ut", headers=headers)).json()
-    assert ut["is_default"] is False
 
 
 @requires_db

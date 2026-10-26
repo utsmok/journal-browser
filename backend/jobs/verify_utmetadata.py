@@ -143,9 +143,9 @@ async def main() -> None:
     engine = create_async_engine(get_settings().database_url)
     maker = async_sessionmaker(engine, expire_on_commit=False)
     async with maker() as session:
-        from journal_browser.harvest.common import ensure_default_institution
+        from journal_browser.harvest.common import ensure_home_institution
 
-        inst = await ensure_default_institution(session)
+        inst = await ensure_home_institution(session)
         ours_stats = await ours(session, inst.id)
         conn = await asyncpg.connect(dsn, timeout=10)
         try:

@@ -17,7 +17,7 @@ import { SourceNote } from "@/components/source-note";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useJournal, useJournalWorks, useSimilar } from "@/hooks/use-api";
-import { instHref, useInstitution } from "@/hooks/use-institution";
+import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import {
   errorMessage,
@@ -466,10 +466,12 @@ function PublicationsCard({
 /** href for "Back to search": the last search this tab ran, else this
  * university's search home (never the global landing). */
 function useLastSearchHref(): string {
-  const [href, setHref] = React.useState(instHref("/"));
+  const inst = useInstitution();
+  const fallback = `/${inst}/`;
+  const [href, setHref] = React.useState(fallback);
   React.useEffect(() => {
-    setHref(sessionStorage.getItem("jb-last-search") ?? instHref("/"));
-  }, []);
+    setHref(sessionStorage.getItem("jb-last-search") ?? fallback);
+  }, [fallback]);
   return href;
 }
 

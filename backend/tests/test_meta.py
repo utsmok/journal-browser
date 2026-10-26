@@ -26,7 +26,6 @@ async def meta_api(db_engine):
                 name="University of Twente",
                 code="ut",
                 active=True,
-                is_default=True,
                 short_name="UT",
                 ror="https://ror.org/006hf6230",
                 library_url="https://lib.example",

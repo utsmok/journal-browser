@@ -28,7 +28,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
-from journal_browser.harvest.common import ensure_default_institution
+from journal_browser.harvest.common import ensure_home_institution
 from journal_browser.models import Deal, DealInstitution, DealJournal
 
 CONTRACT_DEFAULT = Path(
@@ -209,7 +209,7 @@ async def main(session, contract_path: Path) -> None:
                 source="manual",
             )
         )
-    home = await ensure_default_institution(session)
+    home = await ensure_home_institution(session)
     # The contract parties for this SURF deal are Twente only; a JCT re-ingest
     # links the Elsevier sheet's institution set, so clear everything else.
     await session.execute(

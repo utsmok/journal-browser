@@ -169,7 +169,6 @@ export type InstitutionDirectoryEntry = {
   code: string;
   name: string;
   short_name: string | null;
-  is_default: boolean;
   data_window_start: number;
   data_window_end: number | null;
   library_url: string | null;
@@ -194,5 +193,8 @@ export function useFreshness(instOverride?: string) {
   return useQuery({
     queryKey: qk.freshness(inst),
     queryFn: () => apiGet<FreshnessResponse>(`/${inst}/meta/freshness`),
+    // Global pages (landing, /admin) have no institution segment; querying
+    // //meta/freshness would just 404.
+    enabled: inst !== "",
   });
 }

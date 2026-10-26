@@ -140,7 +140,6 @@ async def test_store_agreement_models_the_deal(db):
     ).all()
     assert len(inst_rows) == 1
     assert inst_rows[0].name == "University of Twente"
-    assert inst_rows[0].is_default is False
     links = (
         await db.scalars(select(DealInstitution).where(DealInstitution.deal_id == deal.id))
     ).all()

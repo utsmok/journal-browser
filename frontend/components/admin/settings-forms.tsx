@@ -18,7 +18,6 @@ const INST_FIELDS: SettingField[] = [
   { key: "name", section: "institution", type: "string", label: "Name" },
   { key: "short_name", section: "institution", type: "string", label: "Short name" },
   { key: "active", section: "institution", type: "bool", label: "Active" },
-  { key: "is_default", section: "institution", type: "bool", label: "Default institution" },
   { key: "ror", section: "institution", type: "string", label: "ROR" },
   { key: "openalex_id", section: "institution", type: "string", label: "OpenAlex ID" },
   {
@@ -32,12 +31,6 @@ const INST_FIELDS: SettingField[] = [
     section: "institution",
     type: "string",
     label: "OpenAIRE organisation ID",
-  },
-  {
-    key: "external_works_dsn",
-    section: "institution",
-    type: "secret",
-    label: "External works DSN",
   },
   {
     key: "data_window_start",

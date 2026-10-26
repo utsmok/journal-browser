@@ -30,7 +30,7 @@ from ..models import (
     Work,
     WorkIdentity,
 )
-from .common import get_active_institutions, get_default_institution
+from .common import get_active_institutions, get_home_institution
 
 logger = logging.getLogger(__name__)
 
@@ -115,9 +115,9 @@ async def _jct_deals(session: AsyncSession) -> list[Deal]:
     return list(rows.scalars().all())
 
 
-async def _default_institution_id(session: AsyncSession) -> int | None:
-    """Default-institution row id (the env-seeded bootstrap institution)."""
-    inst = await get_default_institution(session)
+async def _home_institution_id(session: AsyncSession) -> int | None:
+    """Home-institution row id (the env-seeded bootstrap institution)."""
+    inst = await get_home_institution(session)
     return inst.id if inst else None
 
 
@@ -306,7 +306,7 @@ async def reconcile_deals(session: AsyncSession) -> dict[str, int]:
     # Prefer agreements that carry the home institution; when UKB (Dutch
     # university libraries) or SURF joint deals don't enumerate members,
     # the Dutch-consortium suffix still outranks foreign consortia.
-    home_id = await _default_institution_id(session)
+    home_id = await _home_institution_id(session)
     twente_deal_ids: set[int] = set()
     if home_id is not None:
         twente_deal_ids = set(
@@ -648,7 +648,7 @@ async def render_curation_report(
             + "</ul>"
         )
     jct_only = [d for d in deals if d.esac_id and not d.openaccess_nl_url]
-    home_id = await _default_institution_id(session)
+    home_id = await _home_institution_id(session)
     if home_id is not None:
         twente_deal_ids = set(
             (

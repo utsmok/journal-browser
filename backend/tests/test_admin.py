@@ -33,7 +33,7 @@ async def admin_api(db_engine, monkeypatch, tmp_path):
 
     app.dependency_overrides[get_session] = _override
     async with maker() as session:
-        home = Institution(name="University of Twente", code="ut", active=True, is_default=True)
+        home = Institution(name="University of Twente", code="ut", active=True)
         session.add(home)
         await session.flush()
         pub = Publisher(name="Emerald Publishing group")
@@ -169,15 +169,13 @@ async def test_institutions_get_put(admin_api):
     body = r.json()
     assert body["code"] == "ut"
     assert body["name"] == "University of Twente"
-    assert body["external_works_dsn"] is None
     r = await admin_api.get("/api/v1/admin/institutions/zz", headers=headers)
     assert r.status_code == 404
-    dsn = "postgresql+asyncpg://u:p@localhost:5434/utmetadata"
     # Unknown/immutable key rejected before anything is applied.
     r = await admin_api.put(
         "/api/v1/admin/institutions/ut",
         headers=headers,
-        json={"external_works_dsn": dsn, "data_window_start": 2019, "code": "rug"},
+        json={"data_window_start": 2019, "code": "rug"},
     )
     assert r.status_code == 400
     r = await admin_api.get("/api/v1/admin/institutions/ut", headers=headers)
@@ -185,20 +183,12 @@ async def test_institutions_get_put(admin_api):
     r = await admin_api.put(
         "/api/v1/admin/institutions/ut",
         headers=headers,
-        json={"external_works_dsn": dsn, "data_window_start": 2019, "active": True},
+        json={"data_window_start": 2019, "active": True},
     )
     assert r.status_code == 200
     body = r.json()
-    assert body["external_works_dsn"] == "********"
     assert body["data_window_start"] == 2019
     assert body["active"] is True
-    # Empty (or masked) DSN = keep the existing one.
-    for keep in ("", "********"):
-        r = await admin_api.put(
-            "/api/v1/admin/institutions/ut", headers=headers, json={"external_works_dsn": keep}
-        )
-        assert r.status_code == 200
-        assert r.json()["external_works_dsn"] == "********"
     for bad in ({"data_window_start": "x"}, {"active": "yes"}):
         r = await admin_api.put("/api/v1/admin/institutions/ut", headers=headers, json=bad)
         assert r.status_code == 400

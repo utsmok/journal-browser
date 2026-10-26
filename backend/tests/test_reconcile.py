@@ -74,7 +74,6 @@ async def test_merge_moves_journals_and_flags_unmatched(maker):
             ror="https://ror.org/006hf6230",
             code="ut",
             active=True,
-            is_default=True,
         )
         session.add(inst)
         await session.flush()
@@ -179,7 +178,6 @@ async def test_prefers_twente_bearing_agreement(maker):
             ror="https://ror.org/006hf6230",
             code="ut",
             active=True,
-            is_default=True,
         )
         session.add(inst)
         await session.flush()
@@ -304,7 +302,6 @@ async def test_duplicate_data_guard_purges_cross_publisher(maker):
             ror="https://ror.org/006hf6230",
             code="ut",
             active=True,
-            is_default=True,
         )
         session.add(inst)
         await session.flush()
@@ -368,7 +365,6 @@ async def test_derive_nl_deal_coverage_links_and_covers(maker):
             ror="https://ror.org/006hf6230",
             code="ut",
             active=True,
-            is_default=True,
         )
         session.add(inst)
         pub_acm = await _publisher(session, "ACM")

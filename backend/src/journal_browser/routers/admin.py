@@ -254,7 +254,6 @@ INSTITUTION_EDITABLE: dict[str, str] = {
     "openalex_id": "string",
     "pure_oai_base_url": "string",
     "openaire_org_id": "string",
-    "external_works_dsn": "secret",
     "data_window_start": "int",
     "data_window_end": "int",
     "library_url": "string",
@@ -263,7 +262,6 @@ INSTITUTION_EDITABLE: dict[str, str] = {
     "admin_contact": "string",
     "research_portal_url": "string",
     "active": "bool",
-    "is_default": "bool",
 }
 # String fields the DB allows to be NULL; explicit null clears the value.
 INSTITUTION_NULLABLE = set(INSTITUTION_EDITABLE) - {
@@ -271,7 +269,6 @@ INSTITUTION_NULLABLE = set(INSTITUTION_EDITABLE) - {
     "data_window_start",
     "data_window_end",
     "active",
-    "is_default",
 }
 
 
@@ -284,7 +281,6 @@ def _institution_payload(inst: Institution) -> dict[str, Any]:
         "openalex_id": inst.openalex_id,
         "pure_oai_base_url": inst.pure_oai_base_url,
         "openaire_org_id": inst.openaire_org_id,
-        "external_works_dsn": MASK if inst.external_works_dsn else None,
         "data_window_start": inst.data_window_start,
         "data_window_end": inst.data_window_end,
         "library_url": inst.library_url,
@@ -293,7 +289,6 @@ def _institution_payload(inst: Institution) -> dict[str, Any]:
         "admin_contact": inst.admin_contact,
         "research_portal_url": inst.research_portal_url,
         "active": inst.active,
-        "is_default": inst.is_default,
     }
 
 
@@ -336,19 +331,8 @@ async def update_institution(
         ):
             raise HTTPException(400, f"{key}: expected string")
     updates = dict(body)
-    # Empty or masked DSN = keep the existing one.
-    if updates.get("external_works_dsn") in ("", MASK):
-        updates.pop("external_works_dsn")
     for key, value in updates.items():
         setattr(inst, key, value)
-    if updates.get("is_default") is True:
-        # Only one default: demote everyone else in the same transaction,
-        # otherwise the root-path institution becomes nondeterministic.
-        await session.execute(
-            update(Institution)
-            .where(Institution.id != inst.id, Institution.is_default.is_(True))
-            .values(is_default=False)
-        )
     await session.commit()
     return _institution_payload(inst)
 

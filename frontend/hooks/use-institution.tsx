@@ -25,9 +25,3 @@ export function InstitutionProvider({
 export function useInstitution(): string {
   return React.useContext(InstitutionContext);
 }
-
-/** Prefix an internal path with the current institution segment. */
-export function instHref(path: string): string {
-  const inst = React.useContext(InstitutionContext);
-  return `/${inst}${path}`;
-}

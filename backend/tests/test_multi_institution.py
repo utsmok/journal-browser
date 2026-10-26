@@ -47,7 +47,7 @@ async def multi_api(db, institution_factory):
             yield session
 
     app.dependency_overrides[get_session] = _override
-    ut = await institution_factory(code="ut", is_default=True)
+    ut = await institution_factory(code="ut")
     rug = await institution_factory(
         code="rug", data_window_start=2025, data_window_end=2025
     )

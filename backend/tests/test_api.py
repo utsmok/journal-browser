@@ -51,7 +51,7 @@ async def api(db_engine):
         )
         await session.commit()
         home = Institution(
-            name="University of Twente", code="ut", active=True, is_default=True
+            name="University of Twente", code="ut", active=True
         )
         session.add(home)
         await session.flush()

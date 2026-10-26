@@ -137,6 +137,17 @@ async def api(db_engine):
                     summary_stats={"two_yr_mean_citedness": "2.5"},
                     search_text="Metric Gamma Journal",
                 ),
+                # OpenAlex list-price fixture (no OpenAPC aggregates): the
+                # list endpoint must prefer it, EUR over USD.
+                _journal(
+                    "1616-1616",
+                    title="Fee Listed Journal",
+                    apc_prices=[
+                        {"currency": "USD", "price": 3000},
+                        {"currency": "EUR", "price": 2700},
+                    ],
+                    search_text="Fee Listed Journal",
+                ),
             ]
         )
         session.add_all(
@@ -174,7 +185,7 @@ async def api(db_engine):
         # specifics; the corpus cutoff passes for everything except the
         # below-cutoff fixture.
         home = Institution(
-            name="University of Twente", code="ut", active=True, is_default=True
+            name="University of Twente", code="ut", active=True
         )
         session.add(home)
         await session.flush()
@@ -417,14 +428,40 @@ async def test_apc_fields_on_list_items(api):
     r = await api.get("/api/v1/ut/journals", params={"q": "priced"})
     assert r.status_code == 200
     (item,) = r.json()["items"]
-    # Latest known cost: highest single APC in the newest period with
-    # evidence (2024), not the period mean.
-    assert item["apc_period"] == "2024"
-    assert item["apc_euro_latest"] == 2500.0
+    # No OpenAlex list price on this fixture: OpenAPC fallback, observed
+    # range across the newest two evidence periods (2023-2024).
+    assert item["apc_source"] == "openapc"
+    assert item["apc_low"] == 2000.0
+    assert item["apc_high"] == 2500.0
+    assert item["apc_currency"] is None and item["apc_price"] is None
+    assert item["apc_stats"] == [
+        {
+            "period": 2024,
+            "article_count": 8,
+            "euro_min": None,
+            "euro_max": 2500.0,
+            "euro_mean": 2200.0,
+        },
+        {
+            "period": 2023,
+            "article_count": 5,
+            "euro_min": None,
+            "euro_max": 2000.0,
+            "euro_mean": 1800.0,
+        },
+    ]
+    # OpenAlex list price wins when known; EUR preferred over USD.
+    r = await api.get("/api/v1/ut/journals", params={"q": "fee listed"})
+    (item,) = r.json()["items"]
+    assert item["apc_source"] == "openalex"
+    assert item["apc_currency"] == "EUR"
+    assert item["apc_price"] == 2700.0
+    assert item["apc_low"] is None and item["apc_high"] is None
+    assert item["apc_stats"] == []
     r = await api.get("/api/v1/ut/journals", params={"q": "quantum studies"})
     (item,) = r.json()["items"]
-    assert item["apc_period"] is None
-    assert item["apc_euro_latest"] is None
+    assert item["apc_source"] is None
+    assert item["apc_price"] is None and item["apc_low"] is None
 
 
 @requires_db

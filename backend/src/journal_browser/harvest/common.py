@@ -179,17 +179,18 @@ async def upsert_issn_map(
         )
 
 
-async def get_default_institution(session: AsyncSession) -> Institution | None:
-    """The default (root-path) hosted institution, if any."""
-    return await session.scalar(select(Institution).where(Institution.is_default.is_(True)))
+async def get_home_institution(session: AsyncSession) -> Institution | None:
+    """The env-configured home institution, if present."""
+    ror = get_settings().institution_ror
+    return await session.scalar(select(Institution).where(Institution.ror == ror))
 
 
-async def ensure_default_institution(session: AsyncSession) -> Institution:
-    """The default hosted institution row, seeded from env on first call."""
+async def ensure_home_institution(session: AsyncSession) -> Institution:
+    """The home institution row, seeded from env on first call."""
     from sqlalchemy.dialects.postgresql import insert as pg_insert
 
     settings = get_settings()
-    existing = await get_default_institution(session)
+    existing = await get_home_institution(session)
     if existing is not None:
         return existing
     inst = await session.scalar(
@@ -211,7 +212,6 @@ async def ensure_default_institution(session: AsyncSession) -> Institution:
         inst.admin_contact = settings.admin_contact
         inst.research_portal_url = settings.research_portal_url
         inst.active = True
-        inst.is_default = True
         await session.flush()
         return inst
     code = settings.institution_code.strip().lower()
@@ -235,7 +235,6 @@ async def ensure_default_institution(session: AsyncSession) -> Institution:
             admin_contact=settings.admin_contact,
             research_portal_url=settings.research_portal_url,
             active=True,
-            is_default=True,
         )
         .on_conflict_do_nothing(index_elements=["ror"])
     )
@@ -248,11 +247,11 @@ async def ensure_default_institution(session: AsyncSession) -> Institution:
 
 
 async def get_active_institutions(session: AsyncSession) -> list[Institution]:
-    """Hosted institutions (code + active), default first."""
+    """Hosted institutions (code + active), by code."""
     rows = await session.execute(
         select(Institution)
         .where(Institution.active.is_(True), Institution.code.is_not(None))
-        .order_by(Institution.is_default.desc(), Institution.code)
+        .order_by(Institution.code)
     )
     return list(rows.scalars().all())
 
@@ -265,9 +264,9 @@ async def get_institution_by_code(session: AsyncSession, code: str) -> Instituti
 
 
 async def resolve_institution(session: AsyncSession, code: str | None) -> Institution:
-    """Institution for a job's --institution flag: by code, or the default."""
+    """Institution for a job's --institution flag: by code, or the env home."""
     if code is None:
-        return await ensure_default_institution(session)
+        return await ensure_home_institution(session)
     inst = await get_institution_by_code(session, code)
     if inst is None:
         raise SystemExit(f"unknown or inactive institution code: {code!r}")
