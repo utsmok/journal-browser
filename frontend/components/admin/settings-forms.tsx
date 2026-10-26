@@ -49,11 +49,20 @@ const INST_FIELDS: SettingField[] = [
     type: "string",
     label: "Research portal URL",
   },
+  {
+    key: "require_confirmed_affiliation",
+    section: "institution",
+    type: "bool",
+    label: "Only show confirmed affiliated authors",
+    help: "Hide authors whose affiliation is not confirmed in the source system. On by default.",
+    default: true,
+  },
 ];
 
 /** API value → editable draft: raw input text for text-ish fields, boolean for bools. */
 function toDraft(field: SettingField, value: unknown): string | boolean {
-  if (field.type === "bool") return value === true;
+  if (field.type === "bool")
+    return value == null ? field.default === true : value === true;
   if (field.type === "list") return Array.isArray(value) ? value.join("\n") : "";
   if (field.type === "secret") return ""; // typed new value only; masked stored value is never echoed
   return value == null ? "" : String(value);
@@ -72,7 +81,8 @@ function toBodyValue(field: SettingField, raw: string | boolean): string | numbe
 }
 
 function isChanged(field: SettingField, draft: string | boolean, initial: unknown): boolean {
-  if (field.type === "bool") return draft !== (initial === true);
+  if (field.type === "bool")
+    return draft !== (initial === true || (initial == null && field.default === true));
   if (field.type === "secret") return draft !== "";
   if (field.type === "number") {
     const text = String(draft).trim();

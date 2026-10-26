@@ -139,6 +139,8 @@ export type InstitutionSettings = {
   admin_contact: string | null;
   research_portal_url: string | null;
   active: boolean | null;
+  /** Author search hides unconfirmed affiliations when true (backend default true). */
+  require_confirmed_affiliation: boolean | null;
 };
 
 /** GET /admin/deals and the base of GET /admin/deals/{id}. */

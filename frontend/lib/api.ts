@@ -143,13 +143,60 @@ export type AuthorSearchItem = {
   research_group: string | null;
   n_works: number;
   orcid: string | null;
+  /** Affiliation confirmed in Pure; unconfirmed authors are hidden by default. */
+  confirmed: boolean;
+  last_pub_year: number | null;
+  primary_topic: string | null;
 };
+
+export type AuthorFacetBucket = { value: string; count: number };
+
+/** Facet counts for the author search; every list is sorted by count desc. */
+export type AuthorSearchFacets = {
+  faculty: AuthorFacetBucket[];
+  org: AuthorFacetBucket[];
+  works: AuthorFacetBucket[];
+  last_pub: AuthorFacetBucket[];
+  topic: AuthorFacetBucket[];
+};
+
+/** Author search ordering; the backend default is works_desc. */
+export type AuthorSearchSort =
+  | "works_desc"
+  | "name_asc"
+  | "name_desc"
+  | "last_pub_desc";
 
 export type AuthorSearchResponse = {
   /** False when this institution has no author data at all (e.g. /rug/author). */
   enabled: boolean;
+  /** Unpaginated filtered count. */
   total: number;
   items: AuthorSearchItem[];
+  facets?: AuthorSearchFacets;
+  /** Echoes the requested sort. */
+  sort?: AuthorSearchSort;
+  /** Echoes the requested page offset. */
+  offset?: number;
+};
+
+/** Sort and paging options for fetchAuthors. */
+export type AuthorFetchOptions = {
+  sort?: AuthorSearchSort;
+  offset?: number;
+  limit?: number;
+};
+
+/** Author search facet filters; arrays are comma-joined in the query string. */
+export type AuthorSearchFilters = {
+  faculty?: string[];
+  org?: string[];
+  has_orcid?: "yes" | "no";
+  /** Publication-count strata: "1-4" | "5-19" | "20-49" | "50+". */
+  works?: string[];
+  /** Recency buckets: "2025-2026" | "2022-2024" | "2020-2021" | "none". */
+  last_pub?: string[];
+  topic?: string[];
 };
 
 export type AuthorSimilarJournal = {
@@ -302,8 +349,21 @@ export async function apiGet<T>(
 export async function fetchAuthors(
   inst: string,
   q?: string,
+  filters: AuthorSearchFilters = {},
+  opts: AuthorFetchOptions = {},
 ): Promise<AuthorSearchResponse> {
-  return apiGet<AuthorSearchResponse>(`/${inst}/authors`, { q, limit: 50 });
+  return apiGet<AuthorSearchResponse>(`/${inst}/authors`, {
+    q,
+    limit: opts.limit,
+    faculty: filters.faculty?.join(","),
+    org: filters.org?.join(","),
+    has_orcid: filters.has_orcid,
+    works: filters.works?.join(","),
+    last_pub: filters.last_pub?.join(","),
+    topic: filters.topic?.join(","),
+    sort: opts.sort,
+    offset: opts.offset,
+  });
 }
 
 export async function fetchAuthor(

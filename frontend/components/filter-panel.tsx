@@ -11,7 +11,7 @@ const OA_TYPE_LABELS: Record<string, string> = {
   subscription: "Subscription (closed)",
 };
 
-type FacetValue = { value: string; count?: number; label?: string };
+export type FacetValue = { value: string; count?: number; label?: string };
 
 type FacetsData = Record<string, Record<string, number>>;
 
@@ -28,7 +28,7 @@ type FilterSelection = {
   oaTypes: string[];
 };
 
-type FacetGroupDef = {
+export type FacetGroupDef = {
   key: string;
   label: string;
   values: FacetValue[];
@@ -397,6 +397,30 @@ function FacetGroup({
   );
 }
 
+/** Render caller-built facet groups; FilterPanel supplies the journal's own. */
+export function FacetGroupList({
+  groups,
+  onToggle,
+  variant,
+}: {
+  groups: FacetGroupDef[];
+  onToggle: (key: string, value: string) => void;
+  variant: "chips" | "rows";
+}) {
+  return (
+    <div className="space-y-2.5">
+      {groups.map((group) => (
+        <FacetGroup
+          key={group.key}
+          group={group}
+          onToggle={onToggle}
+          variant={variant}
+        />
+      ))}
+    </div>
+  );
+}
+
 /**
  * Facet groups shared by the stacked filter card (chips) and the wide-screen
  * sidebar (rows). Single-select per group: the caller clears on re-click.
@@ -521,16 +545,5 @@ export function FilterPanel({
       : []),
   ];
 
-  return (
-    <div className="space-y-2.5">
-      {groups.map((group) => (
-        <FacetGroup
-          key={group.key}
-          group={group}
-          onToggle={onToggle}
-          variant={variant}
-        />
-      ))}
-    </div>
-  );
+  return <FacetGroupList groups={groups} onToggle={onToggle} variant={variant} />;
 }
