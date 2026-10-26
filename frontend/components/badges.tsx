@@ -27,15 +27,41 @@ const SHACKLE_TRANSFORM: Record<LockState, string | undefined> = {
   wide: "translate(0 1.3) rotate(-42 3 6.6)",
 };
 
-/** Icon-only access-type colors, shared with the facet filters. */
+/** Icon-only access-type colors, shared with the facet filters. Lightness
+ * and saturation climb with openness: closed (dull slate) → hybrid (muted
+ * blue) → gold (bright amber) → diamond (light, saturated cyan). */
 export const ACCESS_TEXT = {
-  gold: "text-amber-700 dark:text-amber-300",
-  diamond: "text-cyan-700 dark:text-cyan-300",
-  hybrid: "text-[#14274c] dark:text-[#8fb3e8]",
-  closed: "text-slate-500 dark:text-slate-300",
+  gold: "text-[#f4aa2a] dark:text-amber-400",
+  diamond: "text-[#4fe4f8] dark:text-cyan-300",
+  hybrid: "text-[#4d84c7] dark:text-[#82b1e4]",
+  closed: "text-slate-500 dark:text-slate-400",
   deal: "text-emerald-700 dark:text-emerald-300",
   brand: "text-[var(--primary-text)]",
 } as const;
+
+/** Four-point sparkle at (cx,cy), radius r, drawn through the center. */
+function sparklePath(cx: number, cy: number, r: number) {
+  return (
+    `M${cx} ${cy - r} Q${cx} ${cy} ${cx + r} ${cy} Q${cx} ${cy} ${cx} ${cy + r}` +
+    ` Q${cx} ${cy} ${cx - r} ${cy} Q${cx} ${cy} ${cx} ${cy - r}Z`
+  );
+}
+
+/** Sparkle count and size grow with openness. Positions sit right of the
+ * shackle swing (it rotates left) and stay inside the 14px icon box. */
+const SPARKLES: Record<LockState, [number, number, number][]> = {
+  closed: [],
+  ajar: [[12.6, 3.4, 1.1]],
+  open: [
+    [12.8, 2.2, 1.2],
+    [11.0, 4.6, 0.8],
+  ],
+  wide: [
+    [12.9, 1.8, 1.4],
+    [10.9, 3.4, 0.9],
+    [12.9, 5.6, 0.8],
+  ],
+};
 
 export function LockIcon({ state }: { state: LockState }) {
   return (
@@ -49,6 +75,9 @@ export function LockIcon({ state }: { state: LockState }) {
         strokeWidth={2}
         strokeLinecap="round"
       />
+      {SPARKLES[state].map(([cx, cy, r]) => (
+        <path key={`${cx},${cy}`} d={sparklePath(cx, cy, r)} fill="currentColor" />
+      ))}
     </>
   );
 }
