@@ -3,6 +3,7 @@
 import asyncio
 import base64
 import json
+import warnings
 from typing import Any
 
 from sqlalchemy import (
@@ -20,6 +21,7 @@ from sqlalchemy import (
     tuple_,
     type_coerce,
 )
+from sqlalchemy import exc as sa_exc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import IssnMap, Journal, JournalApcAggregate, JournalFlags
@@ -425,84 +427,178 @@ async def facet_counts(
     """Facet counts over the query-filtered set. Each facet's own filter is
     excluded so a chip shows what selecting it would yield; all other active
     filters apply. The corpus cutoff always applies, and deal counts always
-    reflect the scoped institution."""
+    reflect the scoped institution.
 
-    async def _one(subquery: Any, *counts: Any) -> tuple[int, list[int]]:
+    The filtered base runs as a CTE evaluated once per statement (the flags
+    join and topic explode are the expensive part): one aggregate answers the
+    total plus every facet whose own filter is inactive; only facets with an
+    active own filter cost a second variant pass."""
+    defaults = dict(
+        institution_id=institution_id,
+        q=q,
+        search_in=search_in,
+        deal=deal,
+        oa=oa,
+        doaj=doaj,
+        quartile=quartile,
+        topic=topic,
+        publisher=publisher,
+        has_apc=has_apc,
+        has_works=has_works,
+        oa_types=oa_types,
+    )
+
+    def base_cte(**override: Any) -> Any:
+        # Compact per-journal topic-name array: lets the topic facet explode
+        # the CTE itself (~0.1 KB/row) instead of re-joining journals for the
+        # full ~1-2 KB topics document.
+        return (
+            base_query(**{**defaults, **override})
+            .add_columns(
+                func.coalesce(
+                    func.jsonb_path_query_array(
+                        Journal.topics, text("'$[*].\"display_name\"'")
+                    ),
+                    text("'[]'::jsonb"),
+                ).label("topic_names")
+            )
+            .cte("facet_base")
+        )
+
+    def variant_cte(*drop: str) -> Any:
+        """The filtered base minus the dropped facet's own filter."""
+        restore: dict[str, Any] = {"deal": "any"}
+        return base_cte(**{k: restore.get(k) for k in drop})
+
+    async def _flag_counts(cte: Any, *conds: Any) -> tuple[int, list[int]]:
         row = (
             await session.execute(
-                select(func.count(), *[func.sum(case((c, 1), else_=0)) for c in counts])
+                select(
+                    func.count(),
+                    *[func.count().filter(c).label(f"c{i}") for i, c in enumerate(conds)],
+                ).select_from(cte)
             )
         ).one()
         return int(row[0] or 0), [int(v or 0) for v in row[1:]]
 
-    # One pass over the full filter set answers the total and every facet
-    # whose own filter is inactive; only active filters need a second pass.
-    base = base_query(
-        institution_id=institution_id,
-        q=q,
-        search_in=search_in,
-        deal=deal,
-        oa=oa,
-        doaj=doaj,
-        quartile=quartile,
-        topic=topic,
-        publisher=publisher,
-        has_apc=has_apc,
-        has_works=has_works,
-        oa_types=oa_types,
-    ).subquery()
-    total, (covered, oa_true, doaj_true, q1, q2, q3, q4) = await _one(
-        base,
-        base.c.deal_covered.is_(True),
-        base.c.is_oa.is_(True),
-        base.c.is_in_doaj.is_(True),
-        base.c.quartile == "Q1",
-        base.c.quartile == "Q2",
-        base.c.quartile == "Q3",
-        base.c.quartile == "Q4",
-    )
+    def _oa_type_counts(cte: Any) -> Any:
+        inner = (
+            select(cte.c.oa_type.label("k"), func.count().label("n"))
+            .select_from(cte)
+            .group_by(cte.c.oa_type)
+            .subquery()
+        )
+        return select(func.jsonb_object_agg(inner.c.k, inner.c.n)).scalar_subquery()
+
+    def _publisher_counts(cte: Any) -> Any:
+        inner = (
+            select(cte.c.publisher_name.label("k"), func.count().label("n"))
+            .select_from(cte)
+            .where(cte.c.publisher_name.is_not(None))
+            .group_by(cte.c.publisher_name)
+            .order_by(func.count().desc(), cte.c.publisher_name.asc())
+            .limit(15)
+            .subquery()
+        )
+        return select(
+            func.jsonb_agg(func.jsonb_build_array(inner.c.k, inner.c.n))
+        ).scalar_subquery()
+
+    def _topic_counts(cte: Any) -> Any:
+        # jsonb_array_elements_text(cte.topic_names) is an implicit LATERAL:
+        # valid PostgreSQL that SQLAlchemy's cartesian lint cannot model, so
+        # the caller filters that one warning. Counts are exact.
+        elems = func.jsonb_array_elements_text(cte.c.topic_names).table_valued("value", name="t")
+        inner = (
+            select(
+                elems.c.value.label("k"),
+                func.count().label("n"),
+            )
+            .select_from(cte, elems)
+            .group_by(text("1"))
+            .order_by(text("2 DESC"))
+            .limit(15)
+            .subquery()
+        )
+        return select(
+            func.jsonb_agg(func.jsonb_build_array(inner.c.k, inner.c.n))
+        ).scalar_subquery()
+
+    base = base_cte()
+    # The topic explode below is an implicit LATERAL: valid PostgreSQL that
+    # SQLAlchemy's linter cannot model and flags as cartesian. Suppress that
+    # one warning; the counts are exact.
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore", message=".*cartesian product.*", category=sa_exc.SAWarning
+        )
+        row = (
+            await session.execute(
+                select(
+                    func.count().label("total"),
+                    func.count().filter(base.c.deal_covered.is_(True)).label("covered"),
+                    func.count().filter(base.c.is_oa.is_(True)).label("oa_true"),
+                    func.count().filter(base.c.is_in_doaj.is_(True)).label("doaj_true"),
+                    func.count().filter(base.c.quartile == "Q1").label("q1"),
+                    func.count().filter(base.c.quartile == "Q2").label("q2"),
+                    func.count().filter(base.c.quartile == "Q3").label("q3"),
+                    func.count().filter(base.c.quartile == "Q4").label("q4"),
+                    func.count()
+                    .filter(exists(select(1).where(JournalApcAggregate.issn_l == base.c.issn_l)))
+                    .label("apc_true"),
+                    func.count().filter(base.c.works > 0).label("works_true"),
+                    _oa_type_counts(base).label("oa_type_counts"),
+                    _publisher_counts(base).label("publisher_counts"),
+                    _topic_counts(base).label("topic_counts"),
+                ).select_from(base)
+            )
+        ).one()
+    total = int(row.total or 0)
+
+    def split(n: Any) -> tuple[int, int]:
+        t = int(n or 0)
+        return t, total - t
+
+    covered, not_covered = split(row.covered)
+    oa_true, oa_false = split(row.oa_true)
+    doaj_true, doaj_false = split(row.doaj_true)
+    apc_true, apc_false = split(row.apc_true)
+    works_true, works_false = split(row.works_true)
     facets: dict[str, dict[str, int]] = {
-        "deal_coverage": {"covered": covered, "not_covered": total - covered},
-        "oa": {"true": oa_true, "false": total - oa_true},
-        "doaj": {"true": doaj_true, "false": total - doaj_true},
-        "quartile": {"Q1": q1, "Q2": q2, "Q3": q3, "Q4": q4},
+        "deal_coverage": {"covered": covered, "not_covered": not_covered},
+        "oa": {"true": oa_true, "false": oa_false},
+        "doaj": {"true": doaj_true, "false": doaj_false},
+        "quartile": {
+            "Q1": int(row.q1 or 0),
+            "Q2": int(row.q2 or 0),
+            "Q3": int(row.q3 or 0),
+            "Q4": int(row.q4 or 0),
+        },
+        "apc": {"true": apc_true, "false": apc_false},
+        "works": {"true": works_true, "false": works_false},
+        "oa_type": dict(row.oa_type_counts or {}),
+        "publisher": {k: int(n) for k, n in (row.publisher_counts or [])},
+        "topic": {k: int(n) for k, n in (row.topic_counts or [])},
     }
-    # Every variant drops exactly its own filter and keeps the rest, so each
-    # chip shows what selecting it would yield under the other filters.
-    all_filters = dict(
-        institution_id=institution_id,
-        q=q,
-        search_in=search_in,
-        deal=deal,
-        oa=oa,
-        doaj=doaj,
-        quartile=quartile,
-        topic=topic,
-        publisher=publisher,
-        has_apc=has_apc,
-        has_works=has_works,
-        oa_types=oa_types,
-    )
 
-    def variant_subq(*drop: str) -> Any:
-        kept = {k: v for k, v in all_filters.items() if k not in drop}
-        return base_query(**kept).subquery()
-
+    # Active own filters need a variant pass (chip shows what selecting it
+    # would yield under the remaining filters); inactive facets keep the
+    # base counts computed above.
     if deal != "any":
-        d = variant_subq("deal")
-        d_total, (d_covered,) = await _one(d, d.c.deal_covered.is_(True))
+        d = variant_cte("deal")
+        d_total, (d_covered,) = await _flag_counts(d, d.c.deal_covered.is_(True))
         facets["deal_coverage"] = {"covered": d_covered, "not_covered": d_total - d_covered}
     if oa is not None:
-        o = variant_subq("oa")
-        o_total, (o_true,) = await _one(o, o.c.is_oa.is_(True))
+        o = variant_cte("oa")
+        o_total, (o_true,) = await _flag_counts(o, o.c.is_oa.is_(True))
         facets["oa"] = {"true": o_true, "false": o_total - o_true}
     if doaj is not None:
-        dj = variant_subq("doaj")
-        dj_total, (dj_true,) = await _one(dj, dj.c.is_in_doaj.is_(True))
+        dj = variant_cte("doaj")
+        dj_total, (dj_true,) = await _flag_counts(dj, dj.c.is_in_doaj.is_(True))
         facets["doaj"] = {"true": dj_true, "false": dj_total - dj_true}
     if quartile in {"Q1", "Q2", "Q3", "Q4"}:
-        qt = variant_subq("quartile")
-        qt_total, (w1, w2, w3, w4) = await _one(
+        qt = variant_cte("quartile")
+        qt_total, (w1, w2, w3, w4) = await _flag_counts(
             qt,
             qt.c.quartile == "Q1",
             qt.c.quartile == "Q2",
@@ -510,75 +606,38 @@ async def facet_counts(
             qt.c.quartile == "Q4",
         )
         facets["quartile"] = {"Q1": w1, "Q2": w2, "Q3": w3, "Q4": w4}
-    # OA-type facet: counts per oa_type with the oa_type filter itself
-    # excluded, so every option stays visible while selected.
-    oa_type_subq = variant_subq("oa_types")
-    oa_type_rows = await session.execute(
-        select(oa_type_subq.c.oa_type, func.count().label("n")).group_by(oa_type_subq.c.oa_type)
-    )
-    facets["oa_type"] = {row.oa_type: int(row.n) for row in oa_type_rows}
-
-    elem = func.jsonb_array_elements(
-        func.coalesce(Journal.topics, text("'[]'::jsonb"))
-    ).table_valued("value", name="t")
-    topic_subq = variant_subq("topic")
-    topic_rows = await session.execute(
-        select(
-            elem.c.value.op("->>")("display_name").label("topic"),
-            func.count().label("n"),
+    if oa_types:
+        ot = variant_cte("oa_types")
+        facets["oa_type"] = dict(
+            (await session.execute(select(_oa_type_counts(ot)))).scalar_one() or {}
         )
-        .select_from(topic_subq, Journal, elem)
-        .where(Journal.issn_l == topic_subq.c.issn_l)
-        .group_by(text("1"))
-        .order_by(text("2 DESC"))
-        .limit(15)
-    )
-    facets["topic"] = {row.topic: int(row.n) for row in topic_rows}
+    if topic:
+        tp = variant_cte("topic")
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", message=".*cartesian product.*", category=sa_exc.SAWarning
+            )
+            topics = (await session.execute(select(_topic_counts(tp)))).scalar_one()
+        facets["topic"] = {k: int(n) for k, n in (topics or [])}
 
-    # Publisher facet: top publisher_name counts in the filtered set, own
-    # exact-match filter excluded.
-    pub_subq = variant_subq("publisher")
-    pub_rows = await session.execute(
-        select(pub_subq.c.publisher_name, func.count().label("n"))
-        .where(pub_subq.c.publisher_name.is_not(None))
-        .group_by(pub_subq.c.publisher_name)
-        .order_by(func.count().desc(), pub_subq.c.publisher_name.asc())
-        .limit(15)
-    )
-    facets["publisher"] = {row.publisher_name: int(row.n) for row in pub_rows}
-
-    # APC facet: journals with/without JournalApcAggregate evidence, own
-    # has_apc filter excluded so the chips always show both options.
-    if has_apc is None:
-        apc_base, apc_total = base, total
-    else:
-        apc_base = variant_subq("has_apc")
-        apc_total = await session.scalar(select(func.count()).select_from(apc_base)) or 0
-    apc_true = (
-        await session.scalar(
-            select(func.count())
-            .select_from(apc_base)
-            .where(exists(select(1).where(JournalApcAggregate.issn_l == apc_base.c.issn_l)))
+    if publisher:
+        pb = variant_cte("publisher")
+        facets["publisher"] = {
+            k: int(n)
+            for k, n in (
+                (await session.execute(select(_publisher_counts(pb)))).scalar_one() or []
+            )
+        }
+    if has_apc is not None:
+        apc = variant_cte("has_apc")
+        apc_total, (apc_true,) = await _flag_counts(
+            apc, exists(select(1).where(JournalApcAggregate.issn_l == apc.c.issn_l))
         )
-        or 0
-    )
-    facets["apc"] = {"true": int(apc_true), "false": int(apc_total) - int(apc_true)}
-
-    # Institution-works facet: journals with/without at least one known
-    # institution publication, own filter excluded so both options stay
-    # visible.
-    if has_works is None:
-        works_base, works_total = base, total
-    else:
-        works_base = variant_subq("has_works")
-        works_total = await session.scalar(select(func.count()).select_from(works_base)) or 0
-    works_true = (
-        await session.scalar(
-            select(func.count()).select_from(works_base).where(works_base.c.works > 0)
-        )
-        or 0
-    )
-    facets["works"] = {"true": int(works_true), "false": int(works_total) - int(works_true)}
+        facets["apc"] = {"true": apc_true, "false": apc_total - apc_true}
+    if has_works is not None:
+        wk = variant_cte("has_works")
+        wk_total, (wk_true,) = await _flag_counts(wk, wk.c.works > 0)
+        facets["works"] = {"true": wk_true, "false": wk_total - wk_true}
     return facets, total
 
 
