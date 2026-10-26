@@ -5,12 +5,14 @@ import { usePathname } from "next/navigation";
 
 import { NavLink } from "@/components/nav-link";
 
-/** Nav links scoped to the current institution segment ("" on global pages). */
+/** Nav links scoped to the current institution segment; global surfaces
+ * (landing chooser, admin) carry no segment, and the per-institution
+ * pages would 404 there, so only the brand link remains. */
 export function SiteNav() {
   const pathname = usePathname() ?? "/";
   const seg = pathname.split("/")[1] ?? "";
-  // Global surfaces (admin, landing) carry no institution segment.
   const prefix = seg && seg !== "admin" ? `/${seg}` : "";
+  if (!prefix) return null;
   return (
     <nav aria-label="Main" className="flex items-center gap-4 sm:gap-6 text-sm">
       <NavLink href={`${prefix}/`} label="Search" />
