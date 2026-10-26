@@ -370,7 +370,8 @@ async def test_fuzzy_fallback_sets_flag(api):
 async def test_publisher_and_apc_facets(api):
     body = (await api.get("/api/v1/ut/journals")).json()
     facets = body["facets"]
-    assert facets["apc"] == {"true": 2, "false": len(body["items"]) - 2}
+    # 3333 + 1515 have OpenAPC evidence, 1616 an OpenAlex list price.
+    assert facets["apc"] == {"true": 3, "false": len(body["items"]) - 3}
     # Cross-consistency: every non-publisher facet sums to the total.
     for group in ("deal_coverage", "oa", "doaj", "apc"):
         assert sum(facets[group].values()) == body["total"]
@@ -380,9 +381,9 @@ async def test_publisher_and_apc_facets(api):
     # unfiltered counts); publisher facet respects it.
     browse_facets = facets
     body = (await api.get("/api/v1/ut/journals", params={"has_apc": "true"})).json()
-    assert body["total"] == 2
+    assert body["total"] == 3
     assert body["facets"]["apc"] == browse_facets["apc"]
-    assert set(_issns(body)) == {"3333-3333", "1515-1515"}
+    assert set(_issns(body)) == {"3333-3333", "1515-1515", "1616-1616"}
 
     # Active publisher filter: publisher facet excludes its own filter; the
     # apc facet respects it (only 1515-1515 has apc evidence and its
@@ -420,6 +421,10 @@ async def test_has_apc_filter(api):
     body = r.json()
     assert "1515-1515" not in _issns(body)
     assert "3333-3333" not in _issns(body)
+    # 1616 has only an OpenAlex list price; any APC info counts.
+    assert "1616-1616" not in _issns(body)
+    r = await api.get("/api/v1/ut/journals", params={"has_apc": "true"})
+    assert "1616-1616" in _issns(r.json())
     assert body["total"] == len(body["items"])
 
 

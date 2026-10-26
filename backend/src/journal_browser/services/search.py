@@ -76,6 +76,21 @@ SIMILAR_ALL_LIMIT = 10
 
 APC_EXISTS = exists(select(1).where(JournalApcAggregate.issn_l == Journal.issn_l))
 
+#: Any displayable APC info: an OpenAlex list price in any currency, or
+#: OpenAPC rows with an observed cost. The has_apc filter matches this; the
+#: oa_type gold/diamond split deliberately stays on APC_EXISTS (OpenAPC
+#: evidence only, owner decision 2026-10-23).
+APC_COST_EXISTS = exists(
+    select(1).where(
+        JournalApcAggregate.issn_l == Journal.issn_l,
+        JournalApcAggregate.euro_max.is_not(None),
+    )
+)
+APC_SHOWN = or_(
+    func.coalesce(func.jsonb_array_length(Journal.apc_prices), 0) > 0,
+    APC_COST_EXISTS,
+)
+
 
 def _list_price(currency: str) -> Any:
     """OpenAlex list-price APC in one currency; None without an entry."""
@@ -194,6 +209,8 @@ def base_query(
             func.coalesce(
                 _list_price("EUR"), _list_price("USD"), J.latest_apc_euro
             ).label("apc_price"),
+            # Any-source APC presence; the facet pass filters on this.
+            APC_SHOWN.label("apc_any"),
         )
         .select_from(J)
         .join(flags, flags.c.issn_l == J.issn_l)
@@ -263,7 +280,7 @@ def base_query(
     if publisher:
         query = query.where(J.publisher_name == publisher)
     if has_apc is not None:
-        query = query.where(APC_EXISTS if has_apc else ~APC_EXISTS)
+        query = query.where(APC_SHOWN if has_apc else ~APC_SHOWN)
     if has_works is not None:
         query = query.where(
             flags.c.works_count > 0 if has_works else flags.c.works_count == 0
@@ -595,22 +612,12 @@ async def facet_counts(
         return {k: int(n) for k, n in (topics or [])}
 
     base = base_sub()
-    # APC evidence as a select-list column: inside a count FILTER the EXISTS
-    # correlates against the whole base per row (730ms); as a column the
-    # planner converts it to one hash semi-join (~40ms).
-    base = (
-        select(
-            base,
-            exists(select(1).where(JournalApcAggregate.issn_l == base.c.issn_l)).label(
-                "apc_evidence"
-            ),
-        )
-        .select_from(base)
-        .subquery()
-    )
     # One pass over the join: window counts turn the histograms into plain
     # aggregates, so the base is evaluated exactly once with no multi-reference
     # materialization (a shared CTE scanned per aggregate measured ~3x this).
+    # apc_any is a select-list column for the same reason the old apc_evidence
+    # exists-subquery was: inside a count FILTER it correlates per row (~730ms);
+    # as a column the planner uses one semi-join (~40ms).
     counted = (
         select(
             base,
@@ -631,7 +638,7 @@ async def facet_counts(
                 func.count().filter(counted.c.quartile == "Q2").label("q2"),
                 func.count().filter(counted.c.quartile == "Q3").label("q3"),
                 func.count().filter(counted.c.quartile == "Q4").label("q4"),
-                func.count().filter(counted.c.apc_evidence).label("apc_true"),
+                func.count().filter(counted.c.apc_any).label("apc_true"),
                 func.count().filter(counted.c.works > 0).label("works_true"),
                 func.jsonb_object_agg(counted.c.oa_type, counted.c.oa_n).label(
                     "oa_type_counts"
@@ -736,18 +743,7 @@ async def facet_counts(
         )
     if has_apc is not None:
         apc = base_sub(has_apc=None)
-        # Same semi-join hoist as the main statement.
-        apc = (
-            select(
-                apc,
-                exists(select(1).where(JournalApcAggregate.issn_l == apc.c.issn_l)).label(
-                    "apc_evidence"
-                ),
-            )
-            .select_from(apc)
-            .subquery()
-        )
-        apc_total, (apc_true,) = await _flag_counts(apc, apc.c.apc_evidence)
+        apc_total, (apc_true,) = await _flag_counts(apc, apc.c.apc_any)
         facets["apc"] = {"true": apc_true, "false": apc_total - apc_true}
     if has_works is not None:
         wk = variant_sub("has_works")

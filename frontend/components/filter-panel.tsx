@@ -221,7 +221,7 @@ const GROUP_HINTS: Record<string, string> = {
   oa_type: "How the journal makes content open access. You can combine several types; click a selected type to remove it.",
   doaj: "Is the journal listed in DOAJ, the quality-controlled open access directory? One choice; click it again to clear.",
   quartile: "SCImago impact quartile of the journal in its subject category. One choice; click it again to clear.",
-  has_apc: "Has OpenAPC recorded article processing charges for this journal? One choice; click it again to clear.",
+  has_apc: "Is any APC known for this journal — a list price (OpenAlex) or costs reported to OpenAPC? One choice; click it again to clear.",
   topic: "OpenAlex topic of the journal's works. One choice; click it again to clear.",
   publisher: "The journal's publisher. One choice; click it again to clear.",
 };
@@ -240,8 +240,8 @@ const FACET_TITLES: Record<string, string> = {
   "quartile:Q2": "Second quarter (25-50%) of its SCImago subject category.",
   "quartile:Q3": "Third quarter (50-75%) of its SCImago subject category.",
   "quartile:Q4": "Last quarter (75%) of its SCImago subject category by citation metrics.",
-  "has_apc:true": "OpenAPC has recorded APCs paid for articles in this journal.",
-  "has_apc:false": "No APC records for this journal in OpenAPC.",
+  "has_apc:true": "APCs are known for this journal: a list price (OpenAlex) or costs reported to OpenAPC.",
+  "has_apc:false": "No APC is known for this journal from either source.",
 };
 
 /** Hints that name the institution or window, resolved per render. */
