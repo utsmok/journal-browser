@@ -12,12 +12,19 @@ const WORDMARK_FONT = "var(--font-montserrat), var(--font-inter), ui-sans-serif,
 
 type LockState = "closed" | "ajar" | "open" | "wide";
 
-/** Shackle transforms: the lock opens progressively from closed to wide. */
+/**
+ * Shackle transforms: the lock opens progressively from closed to wide.
+ * The shackle path is M3 6.6 V4.2 a3 3 0 0 1 6 0 V6.6 — legs on x=3/9,
+ * centered on the body (rect x 1..11, center 6). Open states hinge the
+ * whole shackle on the LEFT leg base (3 6.6), so that leg stays seated in
+ * the body while the right leg lifts; the downward translate re-seats the
+ * hinge and keeps the swung shackle inside the 14px icon box.
+ */
 const SHACKLE_TRANSFORM: Record<LockState, string | undefined> = {
   closed: undefined,
-  ajar: "translate(-0.4 -2.4) rotate(-6 7 3)",
-  open: "translate(-1 -3) rotate(-20 4 6)",
-  wide: "translate(-2 -3.4) rotate(-38 4 6)",
+  ajar: "translate(0 0.4) rotate(-12 3 6.6)",
+  open: "translate(0 0.7) rotate(-25 3 6.6)",
+  wide: "translate(0 1.3) rotate(-42 3 6.6)",
 };
 
 /** Icon-only access-type colors, shared with the facet filters. */
@@ -35,7 +42,7 @@ export function LockIcon({ state }: { state: LockState }) {
     <>
       <rect x={1} y={7} width={10} height={7} rx={1.8} fill="currentColor" />
       <path
-        d="M4 6.6 V4.2 a3 3 0 0 1 6 0 V6.6"
+        d="M3 6.6 V4.2 a3 3 0 0 1 6 0 V6.6"
         transform={SHACKLE_TRANSFORM[state]}
         fill="none"
         stroke="currentColor"
