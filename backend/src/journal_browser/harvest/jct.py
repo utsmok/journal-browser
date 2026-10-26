@@ -341,19 +341,19 @@ async def main(session: AsyncSession, limit: int | None = None) -> dict[str, Any
             stats["skipped_no_issn"] += skipped
             await ingest.commit()
 
-        twente_ror = get_settings().institution_ror
-        twente_esac_ids = list(
+        default_ror = get_settings().institution_ror
+        default_esac_ids = list(
             (
                 await session.execute(
                     select(Deal.esac_id)
                     .join(DealInstitution, DealInstitution.deal_id == Deal.id)
                     .join(Institution, Institution.id == DealInstitution.institution_id)
-                    .where(Institution.ror == twente_ror)
+                    .where(Institution.ror == default_ror)
                 )
             ).scalars()
         )
-        stats["twente_deals"] = len(twente_esac_ids)
-        stats["twente_esac_ids"] = twente_esac_ids
+        stats["default_deals"] = len(default_esac_ids)
+        stats["default_esac_ids"] = default_esac_ids
         return stats
 
     stats = await run_harvest(
@@ -364,9 +364,9 @@ async def main(session: AsyncSession, limit: int | None = None) -> dict[str, Any
         f"agreements={stats.get('agreements')} failed={stats.get('agreements_failed')} "
         f"journals={stats.get('journals')} institutions={stats.get('institutions')} "
         f"skipped_no_issn={stats.get('skipped_no_issn')} "
-        f"twente_deals={stats.get('twente_deals')}"
+        f"default_deals={stats.get('default_deals')}"
     )
-    print(f"jct twente esac_ids: {stats.get('twente_esac_ids')}")
+    print(f"jct default-institution esac_ids: {stats.get('default_esac_ids')}")
     for failure in stats.get("failed_downloads", []):
         print(f"jct failed download: {failure}")
     return stats
