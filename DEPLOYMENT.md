@@ -192,6 +192,13 @@ institution; every other institution reads its config from its row.
   and rewrites the curation report.
 - **Updating Scimago quartiles:** drop the new year's CSV into
   `backend/data/` and rerun `jobs/ingest_scimagojr.py`.
+- **Importing the ut-metadata corpus (Twente):** with `JB_UT_METADATA_DSN`
+  set, `jobs/import_utmetadata_works.py` copies every canonical work that
+  maps to a Pure uuid into `works` — the full year range without a
+  re-harvest — refreshes the stats and journal flags, and widens the
+  institution's data window to the oldest stored work. Idempotent; canonical
+  works without a Pure uuid stay out (they still surface on journal pages
+  through the live merge).
 - **Upgrading the stack:** `git pull && docker compose up -d --build`. The
   bootstrap service applies pending migrations before harvesting. Migration
   0020 (semantic-search index) builds an HNSW graph and needs a few minutes
