@@ -64,7 +64,7 @@ in citation links on journal pages. Set it in `.env` before the first
 | `JB_ADMIN_PASSWORD` | Admin panel password (`/admin`); empty disables the panel | empty |
 | `JB_BOOTSTRAP` | `auto` (only on an empty DB), `always`, or `off` | `auto` |
 | `JB_LANDING_DIR` | Raw landing zone for downloaded files. Compose pins the bind mount to `./backend/landing`; the variable applies to non-compose runs | `backend/landing` |
-| `JB_UT_METADATA_DSN` | Twente-only: read-only ut-metadata Postgres for canonical works. Leave empty elsewhere; the works endpoints degrade to stats-only | empty |
+| `JB_UT_METADATA_DSN` | Twente-only: read-only ut-metadata Postgres for canonical works + the author roster (`authors` bootstrap step; skips cleanly when empty). Leave empty elsewhere; the works endpoints degrade to stats-only and `/authors` reports `enabled: false` | empty |
 
 ## First boot
 
@@ -94,8 +94,8 @@ Useful variants (run inside the backend image, e.g.
 - `--from <step>` re-runs one step and everything after it, serially, in the
   listed order — the repair path.
 - `--institution <code>` re-runs only that institution's layer (repository
-  harvest, enrichment, OpenAIRE, stats, participation, flags). Global steps
-  are skipped — the shared layer is already in place.
+  harvest, enrichment, OpenAIRE, stats, participation, flags, authors).
+  Global steps are skipped — the shared layer is already in place.
 
 ## What the harvests build
 
@@ -113,6 +113,7 @@ Useful variants (run inside the backend image, e.g.
 | `harvest_openaire` | OpenAIRE Graph | Institution works matched by DOI |
 | `harvest_stats` | all of the above | Per-journal, per-year statistics |
 | `backfill_flags` | register + stats | Curation flags, browse visibility |
+| `ingest_authors` | external canonical-works DB (`JB_UT_METADATA_DSN` / `external_works_dsn`) | Per-institution author roster: identity, faculty/research group/org derivation, work edges (skips cleanly without a DSN) |
 | `embed_journals` | stats-built text | Journal embeddings for similar-journals |
 
 ### The deal register

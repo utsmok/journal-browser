@@ -94,6 +94,9 @@ services:
     user: root
     environment:
       JB_DATABASE_URL: postgresql+asyncpg://journal:journal@db:5432/journalbrowser
+      # Author ingest (jobs/ingest_authors.py) reads the same read-only
+      # ut-metadata DSN the backend serves from; unset keeps the job skipping.
+      JB_UT_METADATA_DSN: ${JB_UT_METADATA_DSN:-}
       JB_INSTITUTION_NAME: ${JB_INSTITUTION_NAME:-University of Twente}
       JB_INSTITUTION_SHORT: ${JB_INSTITUTION_SHORT:-Twente}
       JB_INSTITUTION_ROR: ${JB_INSTITUTION_ROR:-https://ror.org/006hf6230}
