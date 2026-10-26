@@ -122,10 +122,10 @@ per `docs/multi-institute-agent-prompt.md`.
 
 ### Deployment / migration
 
-- Single compose stack; `compose.groningen.yml` is retired after Groningen is
-  imported as an institutions row + per-institution harvest (its existing DB
-  is the backfill source or it simply re-harvests Pure/OpenAIRE/stats —
-  implementer's choice; re-harvest is simpler and validated).
+- Single compose stack; the temporary second stack (`compose.multi.yml`,
+  retired 2026-10-26) existed only to build the Groningen dataset before
+  onboarding it on the live stack as an institutions row + per-institution
+  harvest (re-harvest was chosen and validated).
 - Existing single-institution deployments: migration synthesizes the default
   institution row from current env/config and stamps existing rows.
 
