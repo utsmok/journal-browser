@@ -148,6 +148,14 @@ async def api(db_engine):
                     ],
                     search_text="Fee Listed Journal",
                 ),
+                # USD-only list price: the display path must convert to EUR
+                # (or keep USD when no rate is available).
+                _journal(
+                    "2121-2121",
+                    title="Dollar Listed Journal",
+                    apc_prices=[{"currency": "USD", "price": 1000}],
+                    search_text="Dollar Listed Journal",
+                ),
             ]
         )
         session.add_all(
@@ -370,8 +378,8 @@ async def test_fuzzy_fallback_sets_flag(api):
 async def test_publisher_and_apc_facets(api):
     body = (await api.get("/api/v1/ut/journals")).json()
     facets = body["facets"]
-    # 3333 + 1515 have OpenAPC evidence, 1616 an OpenAlex list price.
-    assert facets["apc"] == {"true": 3, "false": len(body["items"]) - 3}
+    # 3333 + 1515 have OpenAPC evidence, 1616 + 2121 an OpenAlex list price.
+    assert facets["apc"] == {"true": 4, "false": len(body["items"]) - 4}
     # Cross-consistency: every non-publisher facet sums to the total.
     for group in ("deal_coverage", "oa", "doaj", "apc"):
         assert sum(facets[group].values()) == body["total"]
@@ -381,9 +389,9 @@ async def test_publisher_and_apc_facets(api):
     # unfiltered counts); publisher facet respects it.
     browse_facets = facets
     body = (await api.get("/api/v1/ut/journals", params={"has_apc": "true"})).json()
-    assert body["total"] == 3
+    assert body["total"] == 4
     assert body["facets"]["apc"] == browse_facets["apc"]
-    assert set(_issns(body)) == {"3333-3333", "1515-1515", "1616-1616"}
+    assert set(_issns(body)) == {"3333-3333", "1515-1515", "1616-1616", "2121-2121"}
 
     # Active publisher filter: publisher facet excludes its own filter; the
     # apc facet respects it (only 1515-1515 has apc evidence and its
@@ -467,6 +475,27 @@ async def test_apc_fields_on_list_items(api):
     (item,) = r.json()["items"]
     assert item["apc_source"] is None
     assert item["apc_price"] is None and item["apc_low"] is None
+
+
+@requires_db
+async def test_non_eur_list_price_converts_to_eur(api, monkeypatch):
+    """USD-only list prices display in EUR at the monkeypatched Jan 1 rate;
+    when no rate is available the source currency is kept."""
+    from journal_browser.services import search
+
+    r = await api.get("/api/v1/ut/journals", params={"q": "dollar listed"})
+    (item,) = r.json()["items"]
+    assert item["apc_source"] == "openalex"
+
+    monkeypatch.setattr(search, "_year_rate", lambda currency: 0.9)
+    r = await api.get("/api/v1/ut/journals", params={"q": "dollar listed"})
+    (item,) = r.json()["items"]
+    assert (item["apc_currency"], item["apc_price"]) == ("EUR", 900.0)
+
+    monkeypatch.setattr(search, "_year_rate", lambda currency: None)
+    r = await api.get("/api/v1/ut/journals", params={"q": "dollar listed"})
+    (item,) = r.json()["items"]
+    assert (item["apc_currency"], item["apc_price"]) == ("USD", 1000.0)
 
 
 @requires_db

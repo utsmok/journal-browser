@@ -336,6 +336,15 @@ wheels = [
 ]
 
 [[package]]
+name = "currencyconverter"
+version = "0.18.22"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/4b/4c/d93fb07d7b26ade0daba85a04a7d43b240e60161313770ef85c96a6bf3e6/currencyconverter-0.18.22.tar.gz", hash = "sha256:df8fa9845d079a7d389061894b8a246dd0c350ca2419cedf2399910565d5296e", size = 3848137, upload-time = "2026-09-15T09:32:41.903Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7d/42/d75cdd1a2a9aa03ec3461cf4fb333e6e780fefb482df0c4e5f4800664094/currencyconverter-0.18.22-py3-none-any.whl", hash = "sha256:acce36c3868fe863924aa6eb30563b429504056ee8ea1f6a03ce4f2fe33e9a0d", size = 653429, upload-time = "2026-09-15T09:32:40.086Z" },
+]
+
+[[package]]
 name = "et-xmlfile"
 version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -671,6 +680,7 @@ dependencies = [
     { name = "asyncpg" },
     { name = "beautifulsoup4" },
     { name = "bibliofabric" },
+    { name = "currencyconverter" },
     { name = "fastapi" },
     { name = "fastembed" },
     { name = "httpx" },
@@ -699,6 +709,7 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.30" },
     { name = "beautifulsoup4", specifier = ">=4.15.0" },
     { name = "bibliofabric", specifier = ">=0.5" },
+    { name = "currencyconverter", specifier = ">=0.18.22" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "fastembed", specifier = ">=0.9.0" },
     { name = "httpx", specifier = ">=0.28.1" },

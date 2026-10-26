@@ -5,6 +5,7 @@ import base64
 import json
 import time
 import warnings
+from datetime import date
 from typing import Any
 
 from sqlalchemy import (
@@ -25,8 +26,51 @@ from sqlalchemy import (
 from sqlalchemy import exc as sa_exc
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from currency_converter import CurrencyConverter
+
 from ..config import get_settings
 from ..models import IssnMap, Journal, JournalApcAggregate, JournalFlags
+
+_converter: CurrencyConverter | None = None
+_converter_year: int | None = None
+
+
+def _year_rate(currency: str) -> float | None:
+    """EUR units per 1 `currency` at Jan 1 of the current year.
+
+    The ECB publishes no fixing on Jan 1 (holiday), so missing-rate linear
+    interpolation supplies the Jan 1 rate; fallback_on_wrong_date handles
+    dates outside a currency's quoted range. Bundled ECB data refreshes with
+    the package; None means "cannot convert" and callers keep the source
+    currency.
+    """
+    global _converter, _converter_year
+    year = date.today().year
+    if _converter is None or _converter_year != year:
+        try:
+            _converter = CurrencyConverter(
+                fallback_on_missing_rate=True, fallback_on_wrong_date=True
+            )
+            _converter_year = year
+        except Exception:
+            return None
+    try:
+        return float(_converter.convert(1, currency, "EUR", date=date(year, 1, 1)))
+    except Exception:
+        return None
+
+
+def _to_eur(price: float, currency: str) -> tuple[str, float]:
+    """Standardize a list price to EUR; keep the source currency on failure.
+
+    Returns (currency, price), matching the list_price tuple convention.
+    """
+    if currency == "EUR":
+        return currency, price
+    rate = _year_rate(currency)
+    if rate is None or rate <= 0:
+        return currency, price
+    return "EUR", round(price * rate, 2)
 
 # institution_id -> (monotonic time, facets, total); unfiltered browse facets only
 _FACET_CACHE: dict[tuple, tuple[float, dict[str, dict[str, int]], int]] = {}
@@ -310,9 +354,11 @@ def _order(sort: SortKey, subq: Any) -> tuple[Any, str]:
 async def attach_apc_display(session: AsyncSession, items: list[dict[str, Any]]) -> None:
     """Stamp display APC fields onto each item dict in place (page-sized).
 
-    OpenAlex list price wins (EUR, then USD, else first entry); without one,
-    the OpenAPC observed range over the newest two evidence periods, plus
-    per-period stats for the tooltip. One keyed query per source table.
+    OpenAlex list price wins (EUR, then USD, else first entry), standardized
+    to EUR at the Jan 1 rate of the current year (non-EUR sources keep their
+    currency only when no rate is available); without one, the OpenAPC
+    observed range over the newest two evidence periods, plus per-period
+    stats for the tooltip. One keyed query per source table.
     """
     issns = [i["issn_l"] for i in items]
     list_price: dict[str, tuple[str, float]] = {}
@@ -327,9 +373,11 @@ async def attach_apc_display(session: AsyncSession, items: list[dict[str, Any]])
         by_currency = {p.get("currency"): p["price"] for p in entries}
         matched = next((c for c in ("EUR", "USD") if c in by_currency), None)
         if matched:
-            list_price[issn_l] = (matched, float(by_currency[matched]))
+            list_price[issn_l] = _to_eur(float(by_currency[matched]), matched)
         elif entries:
-            list_price[issn_l] = (str(entries[0].get("currency") or ""), float(entries[0]["price"]))
+            list_price[issn_l] = _to_eur(
+                float(entries[0]["price"]), str(entries[0].get("currency") or "")
+            )
 
     aggs: dict[str, list[Any]] = {}
     for row in (
