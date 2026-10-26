@@ -3,6 +3,7 @@
 import asyncio
 import base64
 import json
+import time
 import warnings
 from typing import Any
 
@@ -25,6 +26,9 @@ from sqlalchemy import exc as sa_exc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import IssnMap, Journal, JournalApcAggregate, JournalFlags
+
+# institution_id -> (monotonic time, facets, total); unfiltered browse facets only
+_FACET_CACHE: dict[tuple, tuple[float, dict[str, dict[str, int]], int]] = {}
 
 # Sort keys: relevance | title | publisher | institution_works | quartile |
 # topic | apc | 2yr_mean_citedness
@@ -434,6 +438,16 @@ async def facet_counts(
     the base twice, and the topic explode keeps its own statement because
     expanding ~130k topic arrays costs more than every other facet combined.
     Only facets with an active own filter cost a second variant pass."""
+    # Unfiltered browse facets are identical for every visitor until the next
+    # harvest, so cache them briefly; ~0.6s of aggregates per landing view was
+    # the hot path. Bounded staleness (5 min) after a harvest is acceptable.
+    cacheable = not any([q, oa, doaj, quartile, topic, publisher, has_apc is not None,
+                         has_works is not None, oa_types, deal != "any", search_in != "all"])
+    cache_key = ("facets", institution_id)
+    if cacheable:
+        hit = _FACET_CACHE.get(cache_key)
+        if hit and time.monotonic() - hit[0] < 300:
+            return hit[1], hit[2]
     defaults = dict(
         institution_id=institution_id,
         q=q,
@@ -659,6 +673,8 @@ async def facet_counts(
         wk = variant_sub("has_works")
         wk_total, (wk_true,) = await _flag_counts(wk, wk.c.works > 0)
         facets["works"] = {"true": wk_true, "false": wk_total - wk_true}
+    if cacheable:
+        _FACET_CACHE[cache_key] = (time.monotonic(), facets, total)
     return facets, total
 
 
