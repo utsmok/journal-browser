@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..db import get_session
+from ..harvest.common import get_default_institution
 from ..models import (
     ApcEvidence,
     Deal,
@@ -62,17 +63,18 @@ async def freshness(session: SessionDep) -> FreshnessResponse:
         "scimagojr_metrics": await table_ts(select(func.max(ScimagojrMetric.year))),
         "apc_evidence": await table_ts(select(func.max(ApcEvidence.period))),
     }
+    inst = await get_default_institution(session)
     return FreshnessResponse(
-        institution=settings.institution_name,
-        institution_short=settings.institution_short,
-        ror=settings.institution_ror,
-        library_url=settings.library_url,
-        oa_guide_url=settings.oa_guide_url,
-        support_email=settings.support_email,
-        admin_contact=settings.admin_contact,
-        research_portal_url=settings.research_portal_url,
-        data_window_start=settings.data_window_start,
-        data_window_end=settings.data_window_end,
+        institution=inst.name if inst else settings.institution_name,
+        institution_short=inst.short_name if inst else settings.institution_short,
+        ror=inst.ror if inst else settings.institution_ror,
+        library_url=inst.library_url if inst else settings.library_url,
+        oa_guide_url=inst.oa_guide_url if inst else settings.oa_guide_url,
+        support_email=inst.support_email if inst else settings.support_email,
+        admin_contact=inst.admin_contact if inst else settings.admin_contact,
+        research_portal_url=inst.research_portal_url if inst else settings.research_portal_url,
+        data_window_start=inst.data_window_start if inst else settings.data_window_start,
+        data_window_end=inst.data_window_end if inst else settings.data_window_end,
         harvests=[
             FreshnessEntry(
                 source=state.source,

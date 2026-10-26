@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from aletheca import AlethecaClient
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,35 +33,24 @@ def openalex_id_to_pk(openalex_id: str | None) -> str:
     return (openalex_id or "").rsplit("/", 1)[-1]
 
 
-async def resolve_home_institution_id(client: AlethecaClient, session: AsyncSession) -> str:
-    """OpenAlex I-id for the configured home institution (keyless lookup)."""
-    settings = get_settings()
-    inst = await session.scalar(
-        select(Institution).where(Institution.ror == settings.institution_ror)
-    )
-    if inst and inst.openalex_id:
-        return openalex_id_to_pk(inst.openalex_id)
-    response = await client.institutions.search(
-        filters={"ror": settings.institution_ror}, page_size=1
-    )
+async def resolve_institution_openalex_id(
+    client: AlethecaClient, session: AsyncSession, institution: Institution
+) -> str:
+    """OpenAlex I-id for one hosted institution (keyless ROR lookup); the
+    resolved id is cached on the institution row."""
+    if institution.openalex_id:
+        return openalex_id_to_pk(institution.openalex_id)
+    ror = institution.ror
+    if not ror:
+        raise RuntimeError(f"institution {institution.code!r} has no ROR to resolve")
+    response = await client.institutions.search(filters={"ror": ror}, page_size=1)
     results = getattr(response, "results", None) or response.get("results", [])
     if not results:
-        raise RuntimeError(f"no OpenAlex institution for ROR {settings.institution_ror}")
+        raise RuntimeError(f"no OpenAlex institution for ROR {ror}")
     i_id = openalex_id_to_pk(results[0].id)
-    if inst is None:
-        # Changed JB_INSTITUTION_ROR: keep exactly one is_home row (HOME_INST
-        # scalar subqueries raise on duplicates); see get_home_institution.
-        await session.execute(
-            update(Institution).where(Institution.is_home.is_(True)).values(is_home=False)
-        )
-        inst = Institution(
-            name=settings.institution_name, ror=settings.institution_ror, is_home=True
-        )
-        session.add(inst)
-        await session.flush()
-    inst.openalex_id = f"https://openalex.org/{i_id}"
+    institution.openalex_id = f"https://openalex.org/{i_id}"
     await session.flush()
-    logger.info("Resolved %s to OpenAlex %s", settings.institution_ror, i_id)
+    logger.info("Resolved %s to OpenAlex %s", ror, i_id)
     return i_id
 
 
@@ -276,8 +265,9 @@ async def harvest_journals(
     if api_key:
         client_kwargs["api_key"] = api_key
     async with AlethecaClient(**client_kwargs) as client:
-        await resolve_home_institution_id(client, session)
-        await session.commit()
+        # Institution OpenAlex ids resolve lazily in each institution's
+        # stats harvest (resolve_institution_openalex_id); the journals
+        # sweep itself is institution-neutral.
         seed_stats = await seed_deal_journals(client, session)
         await session.commit()
         sweep_stats = {} if seed_only else await sweep_all_sources(client, session, limit)

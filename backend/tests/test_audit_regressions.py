@@ -12,7 +12,7 @@ from sqlalchemy import select
 from journal_browser.harvest.openapc import build_aggregates
 from journal_browser.harvest.pure import _consume_oai_pages, harvest_pure_years, retire_absent
 from journal_browser.ingest import IngestSession
-from journal_browser.models import HarvestRun, Journal, UtWork
+from journal_browser.models import HarvestRun, Institution, Journal, Work
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -24,27 +24,45 @@ def _load_job(name: str):
     return mod
 
 
+async def _institution(db) -> Institution:
+    inst = Institution(
+        name="University of Twente",
+        code="ut",
+        active=True,
+        is_default=True,
+        pure_oai_base_url="https://pure.example.com/oai",
+    )
+    db.add(inst)
+    await db.flush()
+    return inst
+
+
 async def test_full_sweep_with_partial_years_is_rejected(db):
     # Regression: --full-sweep used to run over whatever subset was passed and
     # then retire every work last seen in other years' runs.
+    inst = await _institution(db)
     with pytest.raises(ValueError, match="full_sweep requires"):
-        await harvest_pure_years(db, [2024], full_sweep=True)
+        await harvest_pure_years(db, inst, [2024], full_sweep=True)
 
 
 async def test_retire_absent_without_runs_is_a_noop(db):
     # `NOT IN ()` renders TRUE: an empty run list must retire nothing.
-    assert await retire_absent(db, []) == 0
+    inst = await _institution(db)
+    assert await retire_absent(db, [], inst.id) == 0
 
 
 async def test_headerless_oai_record_is_isolated(db):
     # Regression: one unparseable record used to abort the whole set.
+    inst = await _institution(db)
     ingest = IngestSession(db)
     await ingest.start_run("pure", "work", "publications:year2024", {})
     queue: asyncio.Queue = asyncio.Queue()
     await queue.put(([ET.fromstring("<record/>")], {}))
     await queue.put(None)
     stats = {"pages": 0, "new": 0, "duplicate": 0, "deleted": 0, "complete_list_size": None}
-    await _consume_oai_pages(ingest, queue, stats, year=2024, entity_type="work", limit=None)
+    await _consume_oai_pages(
+        ingest, queue, stats, institution_id=inst.id, year=2024, entity_type="work", limit=None
+    )
     assert ingest.parse_failures == 1
     assert stats["new"] == 0
     await ingest.finish_run("completed", dict(stats))
@@ -79,15 +97,17 @@ async def test_backfill_flags_resets_empty_counts_by_year(db):
 
 
 async def test_verify_ours_counts_active_2020_plus_only(db):
-    # Regression: the gate compared ALL ut_works (incl. retired, pre-2020)
+    # Regression: the gate compared ALL works (incl. retired, pre-2020)
     # against ut-metadata's filtered 2020+ corpus.
     verify = _load_job("verify_utmetadata")
+    inst = await _institution(db)
     run = HarvestRun(source="t", entity_type="t", config_fingerprint="t", stats={})
     db.add(run)
     await db.flush()
     db.add_all(
         [
-            UtWork(
+            Work(
+                institution_id=inst.id,
                 pure_uuid="a",
                 title="A",
                 norm_title="a",
@@ -95,7 +115,8 @@ async def test_verify_ours_counts_active_2020_plus_only(db):
                 first_seen_run=run.id,
                 last_seen_run=run.id,
             ),
-            UtWork(
+            Work(
+                institution_id=inst.id,
                 pure_uuid="b",
                 title="B",
                 norm_title="b",
@@ -104,7 +125,8 @@ async def test_verify_ours_counts_active_2020_plus_only(db):
                 last_seen_run=run.id,
                 retired_at=datetime.now(UTC),
             ),
-            UtWork(
+            Work(
+                institution_id=inst.id,
                 pure_uuid="c",
                 title="C",
                 norm_title="c",
@@ -115,7 +137,7 @@ async def test_verify_ours_counts_active_2020_plus_only(db):
         ]
     )
     await db.commit()
-    stats = await verify.ours(db)
+    stats = await verify.ours(db, inst.id)
     assert stats["total"] == 1
     assert stats["per_year"] == {2023: 1}
 

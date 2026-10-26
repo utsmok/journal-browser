@@ -24,8 +24,12 @@ class Settings(BaseSettings):
     )
     cors_origins: list[str] = ["http://localhost:3000"]
 
-    # The browser's home institution. Another university sets these values
-    # and nothing else; display strings in the frontend come from /meta.
+    # The browser's home institution (first-boot seed for the default
+    # institutions row; afterwards the table is authoritative). Another
+    # university sets these values and nothing else; display strings in the
+    # frontend come from /meta. institution_code is the URL path segment
+    # ([a-z0-9-]+), e.g. ut or rug.
+    institution_code: str = "ut"
     institution_name: str = "University of Twente"
     institution_short: str = "Twente"
     institution_ror: str = "https://ror.org/006hf6230"

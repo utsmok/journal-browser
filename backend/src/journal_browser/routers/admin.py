@@ -86,6 +86,7 @@ async def list_runs(
             "id": r.id,
             "source": r.source,
             "entity_type": r.entity_type,
+            "institution_id": r.institution_id,
             "status": r.status,
             "started_at": r.started_at,
             "finished_at": r.finished_at,

@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..harvest.common import canonical_oa_status, normalize_issn, resolve_issn_l
 from ..ingest import IngestSession
-from ..models import Journal, UtWork, WorkIdentity
+from ..models import Journal, Work, WorkIdentity
 
 logger = logging.getLogger(__name__)
 
@@ -60,24 +60,26 @@ async def _resolve_journal(session: AsyncSession, issns: list[Any]) -> str | Non
 async def _confirm_identity(
     session: AsyncSession,
     *,
+    institution_id: int,
     source: str,
     source_pk: str,
-    ut_work_id: str,
+    work_id: str,
     matched_by: str = "doi",
     confidence: float = 1.0,
 ) -> None:
-    """Insert one confirmed work identity (idempotent)."""
+    """Insert one confirmed work identity (idempotent per institution)."""
     stmt = (
         pg_insert(WorkIdentity)
         .values(
+            institution_id=institution_id,
             source=source,
             source_pk=source_pk,
-            ut_work_id=ut_work_id,
+            work_id=work_id,
             matched_by=matched_by,
             confidence=confidence,
             status="confirmed",
         )
-        .on_conflict_do_nothing(constraint="uq_work_identity_source")
+        .on_conflict_do_nothing(constraint="uq_work_identity_inst_source")
     )
     await session.execute(stmt)
 
@@ -99,8 +101,11 @@ def _openalex_work_fields(work: Any) -> dict[str, Any]:
     return fields
 
 
-async def _works_needing_journal(session: AsyncSession, limit: int | None) -> list[UtWork]:
-    """DOI works still lacking a journal, excluding recorded OpenAlex misses.
+async def _works_needing_journal(
+    session: AsyncSession, institution_id: int, limit: int | None
+) -> list[Work]:
+    """One institution's DOI works still lacking a journal, excluding
+    recorded OpenAlex misses.
 
     Re-fetches matched works whose journal stayed unresolved; runs are rare
     and the batch is bounded, so the redundant lookups are accepted.
@@ -108,17 +113,19 @@ async def _works_needing_journal(session: AsyncSession, limit: int | None) -> li
     recorded_miss = exists(
         select(WorkIdentity.id)
         .where(
-            WorkIdentity.ut_work_id == UtWork.pure_uuid,
+            WorkIdentity.institution_id == institution_id,
+            WorkIdentity.work_id == Work.pure_uuid,
             WorkIdentity.source == "openalex",
             WorkIdentity.source_pk.like("doi:%"),
         )
-        .correlate(UtWork)
+        .correlate(Work)
     )
     query = (
-        select(UtWork)
+        select(Work)
         .where(
-            UtWork.doi_normalized.is_not(None),
-            UtWork.journal_issn_l.is_(None),
+            Work.institution_id == institution_id,
+            Work.doi_normalized.is_not(None),
+            Work.journal_issn_l.is_(None),
             ~recorded_miss,
         )
         .limit(limit)
@@ -143,11 +150,13 @@ def _location_issns(work: Any) -> list[str]:
     return out
 
 
-async def enrich_openalex(session: AsyncSession, limit: int | None = None) -> dict[str, int]:
+async def enrich_openalex(
+    session: AsyncSession, institution_id: int, limit: int | None = None
+) -> dict[str, int]:
     """Batch DOI lookup; confirm identities + resolve journals from OpenAlex."""
     from aletheca import AlethecaClient
 
-    works = await _works_needing_journal(session, limit)
+    works = await _works_needing_journal(session, institution_id, limit)
     stats = {"works": len(works), "matched": 0, "journal_resolved": 0}
     if not works:
         return stats
@@ -158,7 +167,11 @@ async def enrich_openalex(session: AsyncSession, limit: int | None = None) -> di
     by_doi = {w.doi_normalized: w for w in works}
     ingest = IngestSession(session)
     await ingest.start_run(
-        "openalex", "work", "enrichment", {"via": "batch_get_by_doi", "batch": BATCH_SIZE}
+        "openalex",
+        "work",
+        "enrichment",
+        {"via": "batch_get_by_doi", "batch": BATCH_SIZE},
+        institution_id=institution_id,
     )
     async with AlethecaClient(**client_kwargs) as client:
         for chunk in _chunk(list(by_doi), BATCH_SIZE):
@@ -192,9 +205,10 @@ async def enrich_openalex(session: AsyncSession, limit: int | None = None) -> di
                 )
                 await _confirm_identity(
                     session,
+                    institution_id=institution_id,
                     source="openalex",
                     source_pk=str(getattr(work, "id", "") or ""),
-                    ut_work_id=ut.pure_uuid,
+                    work_id=ut.pure_uuid,
                 )
                 stats["matched"] += 1
                 if fields.get("journal_issn_l"):
@@ -210,14 +224,15 @@ async def enrich_openalex(session: AsyncSession, limit: int | None = None) -> di
                     stmt = (
                         pg_insert(WorkIdentity)
                         .values(
+                            institution_id=institution_id,
                             source="openalex",
                             source_pk=f"doi:{doi}",
-                            ut_work_id=by_doi[doi].pure_uuid,
+                            work_id=by_doi[doi].pure_uuid,
                             matched_by="doi",
                             confidence=0.0,
                             status="missing",
                         )
-                        .on_conflict_do_nothing(constraint="uq_work_identity_source")
+                        .on_conflict_do_nothing(constraint="uq_work_identity_inst_source")
                     )
                     await session.execute(stmt)
             await ingest.commit()
@@ -234,7 +249,9 @@ def _settings() -> Any:
     return get_settings()
 
 
-async def _works_for_crossref(session: AsyncSession, limit: int | None) -> list[UtWork]:
+async def _works_for_crossref(
+    session: AsyncSession, institution_id: int, limit: int | None
+) -> list[Work]:
     """Works with a DOI, no crossref identity, and no successful OpenAlex match.
 
     OpenAlex 'missing' rows carry source_pk='doi:<doi>' and are NOT counted
@@ -243,24 +260,27 @@ async def _works_for_crossref(session: AsyncSession, limit: int | None) -> list[
     no_openalex = ~exists(
         select(WorkIdentity.id)
         .where(
-            WorkIdentity.ut_work_id == UtWork.pure_uuid,
+            WorkIdentity.institution_id == institution_id,
+            WorkIdentity.work_id == Work.pure_uuid,
             WorkIdentity.source == "openalex",
             WorkIdentity.source_pk.not_like("doi:%"),
         )
-        .correlate(UtWork)
+        .correlate(Work)
     )
     query = (
-        select(UtWork)
+        select(Work)
         .where(
-            UtWork.doi_normalized.is_not(None),
+            Work.institution_id == institution_id,
+            Work.doi_normalized.is_not(None),
             no_openalex,
             ~exists(
                 select(WorkIdentity.id)
                 .where(
-                    WorkIdentity.ut_work_id == UtWork.pure_uuid,
+                    WorkIdentity.institution_id == institution_id,
+                    WorkIdentity.work_id == Work.pure_uuid,
                     WorkIdentity.source == "crossref",
                 )
-                .correlate(UtWork)
+                .correlate(Work)
             ),
         )
         .limit(limit)
@@ -268,18 +288,26 @@ async def _works_for_crossref(session: AsyncSession, limit: int | None) -> list[
     return list((await session.execute(query)).scalars().all())
 
 
-async def enrich_crossref(session: AsyncSession, limit: int | None = None) -> dict[str, int]:
+async def enrich_crossref(
+    session: AsyncSession, institution_id: int, limit: int | None = None
+) -> dict[str, int]:
     """Gap fill: DOIs OpenAlex missed -> stavrophora; journal via ISSN list."""
     from stavrophora import StavrophoraClient
 
-    works = await _works_for_crossref(session, limit)
+    works = await _works_for_crossref(session, institution_id, limit)
     stats = {"works": len(works), "matched": 0, "journal_resolved": 0}
     if not works:
         return stats
 
     by_doi = {w.doi_normalized: w for w in works}
     ingest = IngestSession(session)
-    await ingest.start_run("crossref", "work", "enrichment", {"via": "batch_get_by_doi"})
+    await ingest.start_run(
+        "crossref",
+        "work",
+        "enrichment",
+        {"via": "batch_get_by_doi"},
+        institution_id=institution_id,
+    )
     async with StavrophoraClient(mailto=_settings().contact_email) as client:
         for chunk in _chunk(list(by_doi), BATCH_SIZE):
             found = await client.works.batch_get_by_doi(chunk)
@@ -293,9 +321,10 @@ async def enrich_crossref(session: AsyncSession, limit: int | None = None) -> di
                 await ingest.ingest_record(f"doi:{ut.doi_normalized}", payload)
                 await _confirm_identity(
                     session,
+                    institution_id=institution_id,
                     source="crossref",
                     source_pk=f"doi:{ut.doi_normalized}",
-                    ut_work_id=ut.pure_uuid,
+                    work_id=ut.pure_uuid,
                 )
                 stats["matched"] += 1
                 issns = list(getattr(work, "issn", None) or [])
@@ -308,11 +337,17 @@ async def enrich_crossref(session: AsyncSession, limit: int | None = None) -> di
     return stats
 
 
-async def resolve_journals_cerif(session: AsyncSession, limit: int | None = None) -> dict[str, int]:
+async def resolve_journals_cerif(
+    session: AsyncSession, institution_id: int, limit: int | None = None
+) -> dict[str, int]:
     """Final ladder rung: Pure CERIF issn -> journal, for still-unresolved works."""
     query = (
-        select(UtWork)
-        .where(UtWork.journal_issn_l.is_(None), UtWork.cerif_issn.is_not(None))
+        select(Work)
+        .where(
+            Work.institution_id == institution_id,
+            Work.journal_issn_l.is_(None),
+            Work.cerif_issn.is_not(None),
+        )
         .limit(limit)
     )
     works = (await session.execute(query)).scalars().all()
@@ -331,13 +366,13 @@ async def enrichment_summary(session: AsyncSession) -> dict[str, Any]:
         await session.execute(
             select(
                 func.count(),
-                func.count(UtWork.doi_normalized),
-                func.count(UtWork.journal_issn_l),
+                func.count(Work.doi_normalized),
+                func.count(Work.journal_issn_l),
                 select(func.count())
-                .select_from(UtWork)
+                .select_from(Work)
                 .where(
-                    UtWork.doi_normalized.is_not(None),
-                    UtWork.journal_issn_l.is_not(None),
+                    Work.doi_normalized.is_not(None),
+                    Work.journal_issn_l.is_not(None),
                 )
                 .scalar_subquery(),
             )

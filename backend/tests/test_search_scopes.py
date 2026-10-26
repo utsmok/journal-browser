@@ -7,13 +7,14 @@ import json
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from conftest import requires_db
 from journal_browser.db import get_session
-from journal_browser.harvest.denorm import BROWSE_EXCLUDED_SQL
+from journal_browser.harvest.denorm import BROWSE_EXCLUDED_SQL, MATERIALIZE_SQL
 from journal_browser.main import app
-from journal_browser.models import IssnMap, Journal, JournalApcAggregate
+from journal_browser.models import Institution, IssnMap, Journal, JournalApcAggregate
 
 
 def _journal(issn_l: str, **kw) -> Journal:
@@ -70,7 +71,7 @@ async def api(db_engine):
                 # OA-type fixtures.
                 _journal("3333-3333", title="Gold Journal", is_in_doaj=True),
                 _journal("4444-4444", title="Diamond Journal", is_in_doaj=True),
-                _journal("5555-5555", title="Hybrid Journal", deal_covered_home=True),
+                _journal("5555-5555", title="Hybrid Journal"),
                 _journal("6666-6666", title="Subscription Journal"),
                 # Similar fixtures.
                 _journal(
@@ -105,13 +106,11 @@ async def api(db_engine):
                 _journal(
                     "1313-1313",
                     title="Conference Abstracts in Medicine",
-                    deal_covered_home=True,
                     search_text="Conference Abstracts in Medicine",
                 ),
                 _journal(
                     "1414-1414",
                     title="Annual Symposium Proceedings",
-                    home_works_count=7,
                     search_text="Annual Symposium Proceedings",
                 ),
                 # APC fixtures: two periods for the most-recent test.
@@ -169,9 +168,49 @@ async def api(db_engine):
             ]
         )
         await session.commit()
+
+        # Per-institution flags (journal_flags) replace the old journals
+        # columns. Materialize one row per journal, then set the fixture
+        # specifics; the corpus cutoff passes for everything except the
+        # below-cutoff fixture.
+        home = Institution(
+            name="University of Twente", code="ut", active=True, is_default=True
+        )
+        session.add(home)
+        await session.flush()
+        await session.execute(MATERIALIZE_SQL, {"iid": home.id})
+        await session.execute(
+            text(
+                "UPDATE journal_flags SET works_window_plus = 10"
+                " WHERE institution_id = :iid AND issn_l <> '1010-1010'"
+            ),
+            {"iid": home.id},
+        )
+        await session.execute(
+            text(
+                "UPDATE journal_flags SET works_window_plus = 2"
+                " WHERE institution_id = :iid AND issn_l = '1010-1010'"
+            ),
+            {"iid": home.id},
+        )
+        await session.execute(
+            text(
+                "UPDATE journal_flags SET deal_covered = true"
+                " WHERE institution_id = :iid AND issn_l IN ('5555-5555', '1313-1313')"
+            ),
+            {"iid": home.id},
+        )
+        await session.execute(
+            text(
+                "UPDATE journal_flags SET works_count = 7"
+                " WHERE institution_id = :iid AND issn_l = '1414-1414'"
+            ),
+            {"iid": home.id},
+        )
+        await session.commit()
         # The browse-excluded flag is denormalized (migration 0011 backfills
         # prod); recompute here so the proceedings fixtures get real values.
-        await session.execute(BROWSE_EXCLUDED_SQL)
+        await session.execute(BROWSE_EXCLUDED_SQL, {"iid": home.id})
         await session.commit()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
         yield client

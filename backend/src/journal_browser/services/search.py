@@ -22,7 +22,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import IssnMap, Journal, JournalApcAggregate
+from ..models import IssnMap, Journal, JournalApcAggregate, JournalFlags
 
 # Sort keys: relevance | title | publisher | institution_works | quartile |
 # topic | apc | 2yr_mean_citedness
@@ -52,17 +52,11 @@ def encode_cursor(value: Any, issn_l: str) -> str:
     return base64.urlsafe_b64encode(raw.encode()).decode()
 
 
-#: Corpus cutoff (owner decision 2026-10-23, superseding decision 12):
-#: journals with <= 3 works in the 2020+ window are presentation-excluded.
+#: Global corpus cutoff (owner decision 2026-10-23, superseding decision
+#: 12): journals with <= 3 works in the 2020+ window. Used by corpus counts
+#: and the embed job; serving reads the per-institution journal_flags row
+#: (works_window_plus), which applies the scoped institution's window.
 WORKS_CUTOFF = Journal.works_2020_plus > 3
-
-#: Paper-mill cleanup (owner-approved 2026-10-23): conference-like titles
-#: with no deal coverage and no UT works are presentation-excluded (data
-#: stays in the table). 943 journals on the dev DB. The flag is a
-#: denormalized column kept fresh by the denorm refreshes
-#: (harvest/denorm.py) — the live regex it replaces cost ~4x on every
-#: unscoped search.
-PROCEEDINGS_EXCLUSION = Journal.browse_excluded.is_not(True)
 
 #: Trigram similarity threshold for the fuzzy fallback; pg_trgm's built-in
 #: default, which the % operator uses via pg_trgm.similarity_threshold.
@@ -78,14 +72,15 @@ APC_EXISTS = exists(select(1).where(JournalApcAggregate.issn_l == Journal.issn_l
 #: Per-journal OA type (owner-approved 2026-10-23). DOAJ = fully-OA venue;
 #: OpenAPC evidence on a DOAJ journal splits gold vs diamond; a covered
 #: non-DOAJ journal is hybrid via the agreement; rest is subscription.
-#: Per-work UtWork oa_status is deliberately unused: it only covers Twente
-#: publications, not the venue.
-OA_TYPE = case(
-    (and_(Journal.is_in_doaj.is_(True), APC_EXISTS), "gold"),
-    (Journal.is_in_doaj.is_(True), "diamond"),
-    (Journal.deal_covered_home.is_(True), "hybrid"),
-    else_="subscription",
-).label("oa_type")
+#: Per-work Work oa_status is deliberately unused: it only covers the
+#: scoped institution's publications, not the venue.
+def _oa_type(deal_covered: Any) -> Any:
+    return case(
+        (and_(Journal.is_in_doaj.is_(True), APC_EXISTS), "gold"),
+        (Journal.is_in_doaj.is_(True), "diamond"),
+        (deal_covered.is_(True), "hybrid"),
+        else_="subscription",
+    ).label("oa_type")
 
 #: Journal OA-type vocabulary (the OA_TYPE values); the oa_type facet
 #: multi-selects these with OR semantics.
@@ -110,6 +105,7 @@ def _norm_issn(term: str) -> str:
 
 def base_query(
     *,
+    institution_id: int,
     q: str | None = None,
     search_in: str = "all",
     deal: str = "any",
@@ -125,11 +121,19 @@ def base_query(
 ):
     """Filtered select with computed columns; search + facet counts share it.
 
-    The corpus cutoff (works_2020_plus > 3) always applies."""
+    Scoped to one institution's journal_flags row: the per-institution
+    corpus cutoff (works_window_plus > 3) and proceedings exclusion always
+    apply."""
     J = Journal
+    F = JournalFlags
     # OpenAlex publishes this metric as "two_yr_mean_citedness".
     twoyr = cast(J.summary_stats.op("->>")("two_yr_mean_citedness"), Numeric).label("twoyr")
-    covered = J.deal_covered_home.label("deal_covered")
+    flags = (
+        select(F.issn_l, F.works_count, F.deal_covered, F.works_window_plus, F.browse_excluded)
+        .where(F.institution_id == institution_id)
+        .subquery()
+    )
+    covered = flags.c.deal_covered
     if q and not fuzzy:
         qstr = q.strip()
         # Relevance = title-prefix match tier + FTS rank + prominence nudge
@@ -145,26 +149,39 @@ def base_query(
         ).label("rank")
     else:
         rank = cast(text("0"), Numeric).label("rank")
-    query = select(
-        J.issn_l,
-        J.title,
-        J.publisher_name,
-        J.is_oa,
-        J.is_in_doaj,
-        J.in_scimago,
-        J.last_active_year,
-        covered,
-        func.coalesce(J.home_works_count, 0).label("twente_works"),
-        J.latest_quartile.label("quartile"),
-        twoyr,
-        OA_TYPE,
-        rank,
-        # OpenAlex lists topics primary-first; first entry = primary topic.
-        func.coalesce(J.topics.op("->")(0).op("->>")("display_name"), "").label("primary_topic"),
-        J.latest_apc_euro.label("latest_apc"),
-    ).where(WORKS_CUTOFF, J.type == "journal", J.issn_l.is_not(None), PROCEEDINGS_EXCLUSION)
+    oa_type = _oa_type(covered)
+    query = (
+        select(
+            J.issn_l,
+            J.title,
+            J.publisher_name,
+            J.is_oa,
+            J.is_in_doaj,
+            J.in_scimago,
+            J.last_active_year,
+            covered.label("deal_covered"),
+            flags.c.works_count.label("twente_works"),
+            J.latest_quartile.label("quartile"),
+            twoyr,
+            oa_type,
+            rank,
+            # OpenAlex lists topics primary-first; first entry = primary topic.
+            func.coalesce(J.topics.op("->")(0).op("->>")("display_name"), "").label(
+                "primary_topic"
+            ),
+            J.latest_apc_euro.label("latest_apc"),
+        )
+        .select_from(J)
+        .join(flags, flags.c.issn_l == J.issn_l)
+        .where(
+            J.type == "journal",
+            J.issn_l.is_not(None),
+            flags.c.works_window_plus > 3,
+            flags.c.browse_excluded.is_not(True),
+        )
+    )
     if oa_types:
-        query = query.where(OA_TYPE.in_(oa_types))
+        query = query.where(oa_type.in_(oa_types))
     if q:
         qstr = q.strip()
         if fuzzy:
@@ -207,9 +224,9 @@ def base_query(
                 conds.append(cast(J.topics, Text).ilike(f"%{_like(qstr)}%", escape="\\"))
             query = query.where(or_(*conds))
     if deal == "covered":
-        query = query.where(J.deal_covered_home.is_(True))
+        query = query.where(flags.c.deal_covered.is_(True))
     elif deal == "not_covered":
-        query = query.where(J.deal_covered_home.is_(False))
+        query = query.where(flags.c.deal_covered.is_(False))
     if oa is not None:
         query = query.where(J.is_oa.is_(oa))
     if doaj is not None:
@@ -223,8 +240,9 @@ def base_query(
     if has_apc is not None:
         query = query.where(APC_EXISTS if has_apc else ~APC_EXISTS)
     if has_ut_works is not None:
-        works = func.coalesce(J.home_works_count, 0)
-        query = query.where(works > 0 if has_ut_works else works == 0)
+        query = query.where(
+            flags.c.works_count > 0 if has_ut_works else flags.c.works_count == 0
+        )
     return query
 
 
@@ -277,6 +295,7 @@ async def attach_latest_apc(session: AsyncSession, items: list[dict[str, Any]]) 
 async def search_journals(
     session: AsyncSession,
     *,
+    institution_id: int,
     q: str | None = None,
     search_in: str = "all",
     deal: str = "any",
@@ -295,6 +314,7 @@ async def search_journals(
     include_facets: bool = True,
 ) -> dict[str, Any]:
     filters = dict(
+        institution_id=institution_id,
         q=q,
         search_in=search_in,
         deal=deal,
@@ -389,6 +409,7 @@ async def search_journals(
 async def facet_counts(
     session: AsyncSession,
     *,
+    institution_id: int,
     q: str | None,
     search_in: str = "all",
     deal: str = "any",
@@ -404,7 +425,7 @@ async def facet_counts(
     """Facet counts over the query-filtered set. Each facet's own filter is
     excluded so a chip shows what selecting it would yield; all other active
     filters apply. The corpus cutoff always applies, and deal counts always
-    reflect the home institution."""
+    reflect the scoped institution."""
 
     async def _one(subquery: Any, *counts: Any) -> tuple[int, list[int]]:
         row = (
@@ -417,6 +438,7 @@ async def facet_counts(
     # One pass over the full filter set answers the total and every facet
     # whose own filter is inactive; only active filters need a second pass.
     base = base_query(
+        institution_id=institution_id,
         q=q,
         search_in=search_in,
         deal=deal,
@@ -448,6 +470,7 @@ async def facet_counts(
     # Every variant drops exactly its own filter and keeps the rest, so each
     # chip shows what selecting it would yield under the other filters.
     all_filters = dict(
+        institution_id=institution_id,
         q=q,
         search_in=search_in,
         deal=deal,
@@ -558,11 +581,13 @@ async def facet_counts(
     return facets, total
 
 
-async def similar_journals(session: AsyncSession, issn_l: str) -> dict[str, Any] | None:
+async def similar_journals(
+    session: AsyncSession, issn_l: str, institution_id: int
+) -> dict[str, Any] | None:
     """Three cutoff-passing similar-journal lists, nearest first in embedding
     space (cosine; jobs/embed_journals.py backfills the vectors):
 
-    - "twente": journals with at least one known UT publication
+    - "twente": journals with at least one known institution publication
     - "deals": journals covered by a publication deal
     - "all": unfiltered apart from the base cutoffs
 
@@ -580,29 +605,27 @@ async def similar_journals(session: AsyncSession, issn_l: str) -> dict[str, Any]
     if self_row is None:
         return None
 
+    # Scope filters apply to the flags columns exposed by base_query's
+    # subquery (works_count / deal_covered are per-institution now).
     scopes = {
-        # (extra Journal-level filter or None, list length)
-        "twente": (func.coalesce(Journal.home_works_count, 0) > 0, SIMILAR_FILTERED_LIMIT),
-        "deals": (Journal.deal_covered_home.is_(True), SIMILAR_FILTERED_LIMIT),
+        "twente": (lambda s: s.c.twente_works > 0, SIMILAR_FILTERED_LIMIT),
+        "deals": (lambda s: s.c.deal_covered.is_(True), SIMILAR_FILTERED_LIMIT),
         "all": (None, SIMILAR_ALL_LIMIT),
     }
     out: dict[str, list[dict[str, Any]]] = {}
     if self_row.embedding is not None:
         distance = Journal.embedding.cosine_distance(self_row.embedding).label("dist")
-        for key, (extra, limit) in scopes.items():
-            query = (
-                base_query()
+        for key, (cond, limit) in scopes.items():
+            subq = (
+                base_query(institution_id=institution_id)
                 .add_columns(distance)
                 .where(Journal.issn_l != self_row.issn_l, Journal.embedding.is_not(None))
+                .subquery()
             )
-            if extra is not None:
-                query = query.where(extra)
-            subq = query.subquery()
-            rows = (
-                await session.execute(
-                    select(subq).order_by(subq.c.dist.asc(), subq.c.issn_l.asc()).limit(limit)
-                )
-            ).all()
+            outer = select(subq).order_by(subq.c.dist.asc(), subq.c.issn_l.asc())
+            if cond is not None:
+                outer = outer.where(cond(subq))
+            rows = (await session.execute(outer.limit(limit))).all()
             out[key] = [_similar_item(row, embedding=True) for row in rows]
         return out
 
@@ -617,24 +640,21 @@ async def similar_journals(session: AsyncSession, issn_l: str) -> dict[str, Any]
         .scalar_subquery()
         .label("shared_topics")
     )
-    for key, (extra, limit) in scopes.items():
-        query = (
-            base_query().add_columns(shared).where(Journal.issn_l != self_row.issn_l, shared > 0)
+    for key, (cond, limit) in scopes.items():
+        subq = (
+            base_query(institution_id=institution_id)
+            .add_columns(shared)
+            .where(Journal.issn_l != self_row.issn_l, shared > 0)
+            .subquery()
         )
-        if extra is not None:
-            query = query.where(extra)
-        subq = query.subquery()
-        rows = (
-            await session.execute(
-                select(subq)
-                .order_by(
-                    subq.c.shared_topics.desc(),
-                    func.coalesce(subq.c.twoyr, 0).desc(),
-                    subq.c.issn_l.asc(),
-                )
-                .limit(limit)
-            )
-        ).all()
+        outer = select(subq).order_by(
+            subq.c.shared_topics.desc(),
+            func.coalesce(subq.c.twoyr, 0).desc(),
+            subq.c.issn_l.asc(),
+        )
+        if cond is not None:
+            outer = outer.where(cond(subq))
+        rows = (await session.execute(outer.limit(limit))).all()
         out[key] = [_similar_item(row, embedding=False) for row in rows]
     return out
 
@@ -652,7 +672,11 @@ def _similar_item(row: Any, *, embedding: bool) -> dict[str, Any]:
 
 
 async def semantic_search(
-    session: AsyncSession, q: str, limit: int = 40, cursor: str | None = None
+    session: AsyncSession,
+    q: str,
+    institution_id: int,
+    limit: int = 40,
+    cursor: str | None = None,
 ) -> dict[str, Any]:
     """Free-text "find journals like this description": encode the query with
     the embedding model (fastembed ONNX, CPU) and rank by cosine distance.
@@ -676,7 +700,12 @@ async def semantic_search(
     # loop for every other request; run it in a worker thread.
     query_vec = await asyncio.to_thread(encode_query, q)
     distance = Journal.embedding.cosine_distance(query_vec).label("dist")
-    subq = base_query().add_columns(distance).where(Journal.embedding.is_not(None)).subquery()
+    subq = (
+        base_query(institution_id=institution_id)
+        .add_columns(distance)
+        .where(Journal.embedding.is_not(None))
+        .subquery()
+    )
     # Exact ranking: the HNSW index yields at most hnsw.ef_search tuples
     # (default 40), which silently caps any LIMIT above that and corrupts
     # offset paging. Planner flags scope to this request's transaction; the

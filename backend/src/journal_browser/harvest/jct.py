@@ -14,7 +14,7 @@ import re
 from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -161,7 +161,7 @@ async def _upsert_publisher(session: AsyncSession, code: str) -> int:
 
 async def _upsert_institution(session: AsyncSession, ror: str, name: str) -> int:
     """Insert the institution if its ROR is new; existing rows are left alone so
-    reconciled names and is_home survive re-ingestion. institutions.name is
+    reconciled names and configuration survive re-ingestion. institutions.name is
     unique across different RORs (e.g. two 'Open University's), so a colliding
     name gets the ROR id as a suffix."""
     institution_id = await session.scalar(select(Institution.id).where(Institution.ror == ror))
@@ -240,6 +240,7 @@ async def _store_agreement(
             )
             .on_conflict_do_update(
                 index_elements=["deal_id", "issn"],
+                index_where=text("institution_id IS NULL"),
                 set_={"journal_name": name, "first_seen": first_seen, "last_seen": last_seen},
             )
         )

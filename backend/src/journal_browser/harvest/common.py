@@ -9,7 +9,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
@@ -49,7 +49,7 @@ def issn_checksum_ok(issn: str | None) -> bool:
     return core[7] == ("X" if check == 10 else str(check))
 
 
-# Closed OA-status vocabulary for ut_works.oa_status: OpenAlex's set, per the
+# Closed OA-status vocabulary for works.oa_status: OpenAlex's set, per the
 # limitations registry row "openalex-oa-status". Every writer maps onto this.
 OA_STATUSES = frozenset({"gold", "hybrid", "green", "bronze", "diamond", "closed"})
 
@@ -179,26 +179,98 @@ async def upsert_issn_map(
         )
 
 
-async def get_home_institution(session: AsyncSession) -> Institution:
-    """The configured home institution row (created on first call)."""
+async def get_default_institution(session: AsyncSession) -> Institution | None:
+    """The default (root-path) hosted institution, if any."""
+    return await session.scalar(select(Institution).where(Institution.is_default.is_(True)))
+
+
+async def ensure_default_institution(session: AsyncSession) -> Institution:
+    """The default hosted institution row, seeded from env on first call."""
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
     settings = get_settings()
+    existing = await get_default_institution(session)
+    if existing is not None:
+        return existing
     inst = await session.scalar(
         select(Institution).where(Institution.ror == settings.institution_ror)
     )
-    if inst is None:
-        # A changed JB_INSTITUTION_ROR on an existing database must leave
-        # exactly one is_home row: HOME_INST scalar subqueries and the
-        # denorm SQL raise on duplicates.
-        await session.execute(
-            update(Institution).where(Institution.is_home.is_(True)).values(is_home=False)
-        )
-        inst = Institution(
-            name=settings.institution_name,
-            ror=settings.institution_ror,
-            is_home=True,
-        )
-        session.add(inst)
+    if inst is not None:
+        # Env-seed onto an existing participation-only row (e.g. created by
+        # a JCT ingest that listed this institution in some deal sheet).
+        inst.code = settings.institution_code
+        inst.short_name = settings.institution_short
+        inst.pure_oai_base_url = settings.pure_oai_base_url
+        inst.openaire_org_id = settings.openaire_org_id
+        inst.external_works_dsn = settings.ut_metadata_dsn or None
+        inst.data_window_start = settings.data_window_start
+        inst.data_window_end = settings.data_window_end
+        inst.library_url = settings.library_url
+        inst.oa_guide_url = settings.oa_guide_url
+        inst.support_email = settings.support_email
+        inst.admin_contact = settings.admin_contact
+        inst.research_portal_url = settings.research_portal_url
+        inst.active = True
+        inst.is_default = True
         await session.flush()
+        return inst
+    code = settings.institution_code.strip().lower()
+    if not code or not code.replace("-", "").isalnum():
+        raise ValueError(f"invalid JB_INSTITUTION_CODE {code!r}: [a-z0-9-]+ expected")
+    await session.execute(
+        pg_insert(Institution)
+        .values(
+            code=code,
+            name=settings.institution_name,
+            short_name=settings.institution_short,
+            ror=settings.institution_ror,
+            pure_oai_base_url=settings.pure_oai_base_url,
+            openaire_org_id=settings.openaire_org_id,
+            external_works_dsn=settings.ut_metadata_dsn or None,
+            data_window_start=settings.data_window_start,
+            data_window_end=settings.data_window_end,
+            library_url=settings.library_url,
+            oa_guide_url=settings.oa_guide_url,
+            support_email=settings.support_email,
+            admin_contact=settings.admin_contact,
+            research_portal_url=settings.research_portal_url,
+            active=True,
+            is_default=True,
+        )
+        .on_conflict_do_nothing(index_elements=["ror"])
+    )
+    inst = await session.scalar(
+        select(Institution).where(Institution.ror == settings.institution_ror)
+    )
+    assert inst is not None
+    await session.flush()
+    return inst
+
+
+async def get_active_institutions(session: AsyncSession) -> list[Institution]:
+    """Hosted institutions (code + active), default first."""
+    rows = await session.execute(
+        select(Institution)
+        .where(Institution.active.is_(True), Institution.code.is_not(None))
+        .order_by(Institution.is_default.desc(), Institution.code)
+    )
+    return list(rows.scalars().all())
+
+
+async def get_institution_by_code(session: AsyncSession, code: str) -> Institution | None:
+    """One hosted institution by its path code."""
+    return await session.scalar(
+        select(Institution).where(Institution.code == code, Institution.active.is_(True))
+    )
+
+
+async def resolve_institution(session: AsyncSession, code: str | None) -> Institution:
+    """Institution for a job's --institution flag: by code, or the default."""
+    if code is None:
+        return await ensure_default_institution(session)
+    inst = await get_institution_by_code(session, code)
+    if inst is None:
+        raise SystemExit(f"unknown or inactive institution code: {code!r}")
     return inst
 
 
@@ -209,6 +281,7 @@ async def run_harvest(
     config: dict[str, Any],
     body: Callable[[IngestSession], Awaitable[dict[str, Any] | None]],
     session: AsyncSession,
+    institution_id: int | None = None,
 ) -> dict[str, Any]:
     """Standard run wrapper: start run, execute body, commit, close run.
 
@@ -217,7 +290,7 @@ async def run_harvest(
     landed (per-page commits make that safe).
     """
     ingest = IngestSession(session)
-    await ingest.start_run(source, entity_type, filter_set, config)
+    await ingest.start_run(source, entity_type, filter_set, config, institution_id)
     try:
         stats = await body(ingest) or {}
         final = await ingest.finish_run("completed", stats)

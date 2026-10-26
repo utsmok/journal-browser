@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from conftest import requires_db
 from journal_browser.db import get_session
 from journal_browser.main import app
-from journal_browser.models import HarvestRun, Journal, SourceRecord
+from journal_browser.models import HarvestRun, Institution, Journal, SourceRecord
 from journal_browser.services import ut_metadata
 
 # ── Pure logic (no database) ───────────────────────────────────────────────
@@ -193,7 +193,14 @@ async def api(db_engine, monkeypatch):
 
     app.dependency_overrides[get_session] = _override
     async with maker() as session:
-        run = HarvestRun(source="openalex", entity_type="test", config_fingerprint="t")
+        home = Institution(name="Test U", code="tu", active=True, is_default=True)
+        session.add(home)
+        await session.flush()
+        # works_stats records resolve their institution through the run.
+        run = HarvestRun(
+            source="openalex", entity_type="test", config_fingerprint="t",
+            institution_id=home.id,
+        )
         session.add(run)
         session.add(_journal("1234-5678"))
         await session.flush()

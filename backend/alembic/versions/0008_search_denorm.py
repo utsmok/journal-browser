@@ -7,13 +7,51 @@ Create Date: 2026-10-23
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy import text
 
-from journal_browser.harvest.denorm import (
-    DEAL_FLAGS_SQL,
-    HOME_WORKS_SQL,
-    QUARTILES_SQL,
-    RESET_HOME_WORKS_SQL,
-    RESET_QUARTILES_SQL,
+# Frozen copies of the denorm SQL as of this revision (the live module moved
+# to per-institution journal_flags in 0019; migrations must not drift).
+RESET_HOME_WORKS_SQL = text("UPDATE journals SET home_works_count = NULL")
+HOME_WORKS_SQL = text(
+    """
+    UPDATE journals j SET home_works_count = s.n
+    FROM (
+        SELECT issn_l, sum(works_count) AS n
+        FROM (
+            SELECT DISTINCT ON (issn_l, year) issn_l, year, works_count
+            FROM institution_works_stats
+            WHERE institution_id = (SELECT id FROM institutions WHERE is_home)
+            ORDER BY issn_l, year, (source = 'pure_canon') DESC
+        ) per_year
+        GROUP BY issn_l
+    ) s
+    WHERE j.issn_l = s.issn_l
+    """
+)
+RESET_QUARTILES_SQL = text("UPDATE journals SET latest_quartile = NULL")
+QUARTILES_SQL = text(
+    """
+    UPDATE journals j SET latest_quartile = q.best
+    FROM (
+        SELECT DISTINCT ON (issn_l) issn_l, best_quartile AS best
+        FROM scimagojr_metrics
+        WHERE best_quartile IS NOT NULL
+        ORDER BY issn_l, year DESC
+    ) q
+    WHERE j.issn_l = q.issn_l
+    """
+)
+DEAL_FLAGS_SQL = text(
+    """
+    UPDATE journals j SET deal_covered_home = EXISTS (
+        SELECT 1
+        FROM deal_journals dj
+        JOIN deals d ON d.id = dj.deal_id
+        JOIN deal_institutions di ON di.deal_id = d.id
+        JOIN institutions i ON i.id = di.institution_id AND i.is_home
+        WHERE dj.issn_l = j.issn_l AND d.status = 'current'
+    )
+    """
 )
 
 revision = "0008_search_denorm"

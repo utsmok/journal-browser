@@ -3,7 +3,7 @@
 Compares journal-browser's canonical corpus and pure_canon stats against
 ut-metadata's verbatim Pure harvest:
 
-- ut_works 2020+ total vs ut-metadata year-set records (2% tolerance),
+- works 2020+ total vs ut-metadata year-set records (2% tolerance),
 - per-year counts,
 - top-20 journal 2023 counts (pure_canon vs ut-metadata equivalent).
 
@@ -27,19 +27,23 @@ from journal_browser.models import InstitutionWorksStats
 TOP_JOURNAL_YEAR = 2023
 
 
-async def ours(session) -> dict:
+async def ours(session, institution_id: int) -> dict:
     from sqlalchemy import func, select
 
-    from journal_browser.models import UtWork
+    from journal_browser.models import Work
 
     # Same corpus the docstring promises and theirs() counts: active works,
     # 2020+ window. Unfiltered counts made every verdict permanently red.
     per_year = dict(
         (
             await session.execute(
-                select(UtWork.year, func.count())
-                .where(UtWork.retired_at.is_(None), UtWork.year >= 2020)
-                .group_by(UtWork.year)
+                select(Work.year, func.count())
+                .where(
+                    Work.institution_id == institution_id,
+                    Work.retired_at.is_(None),
+                    Work.year >= 2020,
+                )
+                .group_by(Work.year)
             )
         ).all()
     )
@@ -139,7 +143,10 @@ async def main() -> None:
     engine = create_async_engine(get_settings().database_url)
     maker = async_sessionmaker(engine, expire_on_commit=False)
     async with maker() as session:
-        ours_stats = await ours(session)
+        from journal_browser.harvest.common import ensure_default_institution
+
+        inst = await ensure_default_institution(session)
+        ours_stats = await ours(session, inst.id)
         conn = await asyncpg.connect(dsn, timeout=10)
         try:
             their_stats = await theirs(conn)

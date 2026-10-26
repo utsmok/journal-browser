@@ -15,13 +15,12 @@ from sqlalchemy import delete, insert, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..config import get_settings
 from ..harvest.denorm import refresh_apcs
 from ..ingest import IngestSession, sha256_bytes
 from ..models import ApcEvidence, JournalApcAggregate, RawFile, SourceRecord
 from .common import (
     download_to_landing,
-    get_home_institution,
+    ensure_default_institution,
     issn_checksum_ok,
     lookup_issn_l,
     normalize_issn,
@@ -186,7 +185,6 @@ async def build_evidence(
 
 async def _body(ingest: IngestSession, limit: int | None) -> dict[str, Any]:
     session = ingest.session
-    settings = get_settings()
     stats: dict[str, Any] = {"files_new": 0, "files_known": 0}
 
     # 1. Land every file; record paths from raw_files so normalization always
@@ -246,10 +244,9 @@ async def _body(ingest: IngestSession, limit: int | None) -> dict[str, Any]:
     await ingest.commit()
 
     # 4. Per-article evidence for the home institution (full replace).
-    home = await get_home_institution(session)
-    evidence, filled = await build_evidence(
-        rows_for("ta"), settings.institution_name, resolve, contracts_map
-    )
+    home = await ensure_default_institution(session)
+    inst_name = home.name
+    evidence, filled = await build_evidence(rows_for("ta"), inst_name, resolve, contracts_map)
     stats["twente_rows"] = len(evidence)
     stats["contracts_agreement_fills"] = filled
     stats["evidence_unresolved_issn"] = sum(1 for e in evidence if e["fields"]["issn_l"] is None)

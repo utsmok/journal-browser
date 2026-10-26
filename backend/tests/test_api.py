@@ -2,12 +2,14 @@
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from conftest import requires_db
 from journal_browser.db import get_session
+from journal_browser.harvest.denorm import MATERIALIZE_SQL
 from journal_browser.main import app
-from journal_browser.models import Journal
+from journal_browser.models import Institution, Journal
 
 
 def _journal(issn_l: str, **kw) -> Journal:
@@ -46,6 +48,22 @@ async def api(db_engine):
                 # Dropped regardless of works: not a journal type.
                 _journal("5555-5555", type="repository", works_2020_plus=50),
             ]
+        )
+        await session.commit()
+        home = Institution(
+            name="University of Twente", code="ut", active=True, is_default=True
+        )
+        session.add(home)
+        await session.flush()
+        # The cutoff lives on journal_flags.works_window_plus per institution.
+        await session.execute(MATERIALIZE_SQL, {"iid": home.id})
+        await session.execute(
+            text(
+                "UPDATE journal_flags f SET works_window_plus = j.works_2020_plus"
+                " FROM journals j WHERE j.issn_l = f.issn_l"
+                " AND f.institution_id = :iid"
+            ),
+            {"iid": home.id},
         )
         await session.commit()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:

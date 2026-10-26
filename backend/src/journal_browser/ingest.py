@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import func, insert, select, tuple_
+from sqlalchemy import func, insert, select, text, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,20 +57,28 @@ class IngestSession:
         self.source: str | None = None
         self.entity_type: str | None = None
         self.filter_set: str | None = None
+        self.institution_id: int | None = None
         self.records_seen: int = 0
         self.parse_failures: int = 0
         self._pending: list[dict[str, Any]] = []
         self._seen_keys: set[tuple[str, str, str, str]] = set()
 
     async def start_run(
-        self, source: str, entity_type: str, filter_set: str, config: dict[str, Any]
+        self,
+        source: str,
+        entity_type: str,
+        filter_set: str,
+        config: dict[str, Any],
+        institution_id: int | None = None,
     ) -> int:
         self.source = source
         self.entity_type = entity_type
         self.filter_set = filter_set
+        self.institution_id = institution_id
         run = HarvestRun(
             source=source,
             entity_type=entity_type,
+            institution_id=institution_id,
             status="running",
             config_fingerprint=content_hash(config),
             stats={},
@@ -192,13 +200,31 @@ class IngestSession:
                 source=self.source,
                 entity_type=self.entity_type,
                 filter_set=self.filter_set,
+                institution_id=self.institution_id,
                 status=status,
                 stats=final,
                 last_run_id=self.run_id,
                 updated_at=func.now(),
             )
             .on_conflict_do_update(
-                index_elements=["source", "entity_type", "filter_set"],
+                # The two partial unique indexes have different column sets:
+                # the global one has no institution_id column to name.
+                **(
+                    dict(
+                        index_elements=[
+                            "source",
+                            "entity_type",
+                            "filter_set",
+                            "institution_id",
+                        ],
+                        index_where=text("institution_id IS NOT NULL"),
+                    )
+                    if self.institution_id is not None
+                    else dict(
+                        index_elements=["source", "entity_type", "filter_set"],
+                        index_where=text("institution_id IS NULL"),
+                    )
+                ),
                 set_={
                     "status": status,
                     "stats": final,

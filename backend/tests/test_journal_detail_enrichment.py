@@ -16,7 +16,7 @@ from journal_browser.models import (
     InstitutionWorksStats,
     Journal,
     SourceRecord,
-    UtWork,
+    Work,
     WorkIdentity,
 )
 
@@ -123,7 +123,14 @@ async def api(db_engine):
     app.dependency_overrides[get_session] = _override
     async with maker() as session:
         session.add_all([_journal(MAIN_ISSN), _journal(OTHER_ISSN)])
-        run = HarvestRun(source="openalex", entity_type="test", config_fingerprint="t")
+        home = Institution(name="Test U", code="tu", active=True, is_default=True)
+        session.add(home)
+        await session.flush()
+        # works_stats records are institution-scoped via their harvest run.
+        run = HarvestRun(
+            source="openalex", entity_type="test", config_fingerprint="t",
+            institution_id=home.id,
+        )
         oa_run = HarvestRun(source="openaire", entity_type="test", config_fingerprint="t")
         session.add_all([run, oa_run])
         await session.flush()
@@ -166,11 +173,12 @@ async def api(db_engine):
             )
         )
 
-        # OpenAIRE: u1 matched twice (distinct ut_works must dedupe), u2 once;
+        # OpenAIRE: u1 matched twice (distinct works must dedupe), u2 once;
         # u3 belongs to the other journal.
         for uuid, issn in (("u1", MAIN_ISSN), ("u2", MAIN_ISSN), ("u3", OTHER_ISSN)):
             session.add(
-                UtWork(
+                Work(
+                    institution_id=home.id,
                     pure_uuid=uuid,
                     title=f"T {uuid}",
                     norm_title=f"t {uuid}",
@@ -182,16 +190,37 @@ async def api(db_engine):
             )
         session.add_all(
             [
-                WorkIdentity(source="openaire", source_pk="W1", ut_work_id="u1", matched_by="doi"),
-                WorkIdentity(source="openaire", source_pk="W9", ut_work_id="u1", matched_by="doi"),
-                WorkIdentity(source="openaire", source_pk="W2", ut_work_id="u2", matched_by="doi"),
-                WorkIdentity(source="openaire", source_pk="W4", ut_work_id="u3", matched_by="doi"),
+                WorkIdentity(
+                    institution_id=home.id,
+                    source="openaire",
+                    source_pk="W1",
+                    work_id="u1",
+                    matched_by="doi",
+                ),
+                WorkIdentity(
+                    institution_id=home.id,
+                    source="openaire",
+                    source_pk="W9",
+                    work_id="u1",
+                    matched_by="doi",
+                ),
+                WorkIdentity(
+                    institution_id=home.id,
+                    source="openaire",
+                    source_pk="W2",
+                    work_id="u2",
+                    matched_by="doi",
+                ),
+                WorkIdentity(
+                    institution_id=home.id,
+                    source="openaire",
+                    source_pk="W4",
+                    work_id="u3",
+                    matched_by="doi",
+                ),
             ]
         )
 
-        home = Institution(name="Test U", is_home=True)
-        session.add(home)
-        await session.flush()
         session.add_all(
             [
                 InstitutionWorksStats(

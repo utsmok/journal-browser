@@ -4,7 +4,7 @@ Port of ut-metadata's pure.py (transport + parsing logic kept 1:1 where the
 protocol demands it), trimmed to journal-browser's collect-only publications
 corpus:
 
-- ``publications:year{YYYY}`` sets over ``oai_dc`` build canonical ``ut_works``
+- ``publications:year{YYYY}`` sets over ``oai_dc`` build canonical ``works``
   (per-year restart granularity: a crash re-runs one year).
 - The ``openaire_cris_publications`` set over ``oai_cerif_openaire`` enriches
   ``cerif_issn`` / ``publisher`` / ``doi`` (targeted field extraction; the raw
@@ -34,7 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..ingest import IngestSession
-from ..models import UtWork
+from ..models import Work
 
 logger = logging.getLogger(__name__)
 
@@ -263,7 +263,7 @@ def pure_uuid_for(oai_identifier: str) -> str:
 
 
 def _cerif_publication_fields(metadata_el: ET.Element | None) -> dict[str, Any]:
-    """Targeted CERIF Publication extraction: the fields ut_works needs.
+    """Targeted CERIF Publication extraction: the fields works needs.
 
     The full generic CERIF mapper stays in ut-metadata; everything else in
     the record remains available verbatim via payload["metadata_xml"].
@@ -347,7 +347,7 @@ def _normalize_access(raw: str | None) -> str | None:
     return raw
 
 
-# Pure/Eprints/COAR access literals -> the closed ut_works.oa_status set
+# Pure/Eprints/COAR access literals -> the closed works.oa_status set
 # (harvest.common.OA_STATUSES). Pure openAccess means the fulltext is public
 # in the institutional repository, i.e. green; anything not publicly readable
 # now maps to closed; unknown literals drop to None (raw stays in payloads).
@@ -388,14 +388,15 @@ def year_for_set(set_spec: str) -> int | None:
     return None
 
 
-async def upsert_ut_work(
+async def upsert_work(
     session: AsyncSession,
     payload: dict[str, Any],
     *,
+    institution_id: int,
     year: int,
     run_id: int,
 ) -> None:
-    """Upsert one canonical ut_work from a harvested oai_dc payload."""
+    """Upsert one canonical work of one institution from a harvested oai_dc payload."""
     dc = payload.get("dc", {})
     title = _dc_first(dc.get("title"))
     if not title:
@@ -408,7 +409,11 @@ async def upsert_ut_work(
         # (e.g. article + chapter views); doi_normalized is UNIQUE, so the
         # twin keeps the DOI and this row stays NULL-doi (fuzzy-matchable).
         owner = await session.scalar(
-            select(UtWork.pure_uuid).where(UtWork.doi_normalized == doi, UtWork.pure_uuid != uuid)
+            select(Work.pure_uuid).where(
+                Work.institution_id == institution_id,
+                Work.doi_normalized == doi,
+                Work.pure_uuid != uuid,
+            )
         )
         if owner:
             logger.warning(
@@ -421,8 +426,9 @@ async def upsert_ut_work(
             doi = None
     oa_status = canonical_access(_dc_first(cerif.get("oa_status")) or _dc_first(dc.get("rights")))
     stmt = (
-        pg_insert(UtWork)
+        pg_insert(Work)
         .values(
+            institution_id=institution_id,
             pure_uuid=uuid,
             doi_normalized=doi,
             title=title,
@@ -436,7 +442,7 @@ async def upsert_ut_work(
             last_seen_run=run_id,
         )
         .on_conflict_do_update(
-            index_elements=[UtWork.pure_uuid],
+            index_elements=[Work.institution_id, Work.pure_uuid],
             set_={
                 "doi_normalized": doi,
                 "title": title,
@@ -455,8 +461,10 @@ async def upsert_ut_work(
     await session.execute(stmt)
 
 
-async def backfill_cerif(session: AsyncSession, uuid: str, cerif: dict[str, Any]) -> None:
-    """Backfill cerif-derived fields onto an existing ut_work; never nulls.
+async def backfill_cerif(
+    session: AsyncSession, uuid: str, cerif: dict[str, Any], *, institution_id: int
+) -> None:
+    """Backfill cerif-derived fields onto an existing work; never nulls.
 
     doi_normalized is UNIQUE across works and cerif records can repeat a
     DOI another uuid already claimed, so the DOI is only set when free.
@@ -470,7 +478,11 @@ async def backfill_cerif(session: AsyncSession, uuid: str, cerif: dict[str, Any]
         values["oa_status"] = oa
     if doi := extract_doi(cerif.get("doi") or ""):
         owner = await session.scalar(
-            select(UtWork.pure_uuid).where(UtWork.doi_normalized == doi, UtWork.pure_uuid != uuid)
+            select(Work.pure_uuid).where(
+                Work.institution_id == institution_id,
+                Work.doi_normalized == doi,
+                Work.pure_uuid != uuid,
+            )
         )
         if owner is None:
             values["doi_normalized"] = doi
@@ -478,13 +490,18 @@ async def backfill_cerif(session: AsyncSession, uuid: str, cerif: dict[str, Any]
         return
     from sqlalchemy import update
 
-    await session.execute(update(UtWork).where(UtWork.pure_uuid == uuid).values(**values))
+    await session.execute(
+        update(Work)
+        .where(Work.institution_id == institution_id, Work.pure_uuid == uuid)
+        .values(**values)
+    )
 
 
 async def _ingest_oai_record(
     ingest: IngestSession,
     record: ET.Element,
     *,
+    institution_id: int,
     year: int,
     run_id: int,
     entity_type: str,
@@ -509,9 +526,16 @@ async def _ingest_oai_record(
             payload["cerif"] = cerif
     kind, _ = await ingest.ingest_record(oai_identifier, payload)
     if entity_type == "work":
-        await upsert_ut_work(ingest.session, payload, year=year, run_id=run_id)
+        await upsert_work(
+            ingest.session, payload, institution_id=institution_id, year=year, run_id=run_id
+        )
     elif entity_type == "work_cerif" and payload.get("cerif"):
-        await backfill_cerif(ingest.session, pure_uuid_for(oai_identifier), payload["cerif"])
+        await backfill_cerif(
+            ingest.session,
+            pure_uuid_for(oai_identifier),
+            payload["cerif"],
+            institution_id=institution_id,
+        )
     return kind
 
 
@@ -559,6 +583,7 @@ async def _consume_oai_pages(
     queue: asyncio.Queue[PageItem],
     stats: dict[str, Any],
     *,
+    institution_id: int,
     year: int,
     entity_type: str,
     limit: int | None,
@@ -576,7 +601,12 @@ async def _consume_oai_pages(
         for record in page:
             try:
                 kind = await _ingest_oai_record(
-                    ingest, record, year=year, run_id=ingest.run_id, entity_type=entity_type
+                    ingest,
+                    record,
+                    institution_id=institution_id,
+                    year=year,
+                    run_id=ingest.run_id,
+                    entity_type=entity_type,
                 )
             except (PureOaiError, ET.ParseError) as exc:
                 # Record-level parse problems leave the session healthy;
@@ -600,6 +630,8 @@ async def _harvest_set(
     set_spec: str,
     metadata_prefix: str,
     *,
+    base_url: str,
+    institution_id: int,
     from_date: str | None = None,
     until_date: str | None = None,
     limit: int | None = None,
@@ -607,7 +639,6 @@ async def _harvest_set(
 ) -> dict[str, Any]:
     """ListRecords over one set with resumption; restart on badResumptionToken."""
     settings = get_settings()
-    base_url = settings.pure_oai_base_url
     pacer = pacer or Pacer(settings.pure_oai_min_spacing)
     base_params = {"metadataPrefix": metadata_prefix, "set": set_spec}
     if from_date:
@@ -633,6 +664,7 @@ async def _harvest_set(
             ingest,
             queue,
             stats,
+            institution_id=institution_id,
             year=year,
             entity_type=ingest.entity_type or "work",
             limit=limit,
@@ -655,8 +687,8 @@ async def _harvest_set(
 # ── Retirement (full re-baseline; Pure reports no deletes) ──────────────────
 
 
-async def retire_absent(session: AsyncSession, run_ids: list[int]) -> int:
-    """Mark ut_works not seen in any of these sweep runs as retired.
+async def retire_absent(session: AsyncSession, run_ids: list[int], institution_id: int) -> int:
+    """Mark the institution's works not seen in any of these sweep runs as retired.
 
     Never deletes. A no-run call is a no-op: `NOT IN ()` would retire
     every row.
@@ -666,10 +698,11 @@ async def retire_absent(session: AsyncSession, run_ids: list[int]) -> int:
     from sqlalchemy import update
 
     result = await session.execute(
-        update(UtWork)
+        update(Work)
         .where(
-            UtWork.last_seen_run.not_in(run_ids),
-            UtWork.retired_at.is_(None),
+            Work.institution_id == institution_id,
+            Work.last_seen_run.not_in(run_ids),
+            Work.retired_at.is_(None),
         )
         .values(retired_at=datetime.now(UTC))
     )
@@ -681,20 +714,25 @@ async def retire_absent(session: AsyncSession, run_ids: list[int]) -> int:
 
 async def harvest_pure_years(
     session: AsyncSession,
+    institution,
     years: list[int],
     *,
     limit: int | None = None,
     full_sweep: bool = False,
 ) -> dict[str, Any]:
-    """Harvest publications:year{Y} sets (oai_dc) into source_records + ut_works.
+    """Harvest one institution's publications:year{Y} sets (oai_dc) into
+    source_records + works.
 
-    One harvest_run per year set. full_sweep=True covers every configured
-    window year in one go and retires works absent from the sweep afterwards
-    — so `years` MUST span the whole window, or retirement would stamp works
-    that were simply not part of this (partial) run.
+    One harvest_run per year set. full_sweep=True covers every window year
+    of the institution in one go and retires works absent from the sweep
+    afterwards — so `years` MUST span the whole window, or retirement would
+    stamp works that were simply not part of this (partial) run.
     """
+    base_url = institution.pure_oai_base_url
+    if not base_url:
+        raise ValueError(f"institution {institution.code!r} has no pure_oai_base_url")
     if full_sweep:
-        expected = set(get_settings().window_years)
+        expected = set(institution.window_years)
         if set(years) != expected:
             raise ValueError(
                 f"full_sweep requires every window year {sorted(expected)}, got {sorted(years)}"
@@ -706,14 +744,21 @@ async def harvest_pure_years(
         set_spec = DEFAULT_YEAR_SET.format(year=year)
         ingest = IngestSession(session)
         config = {
-            "base_url": get_settings().pure_oai_base_url,
+            "base_url": base_url,
             "metadata_prefix": PREFIX_DC,
             "full_sweep": full_sweep,
         }
-        await ingest.start_run(SOURCE, "work", set_spec, config)
+        await ingest.start_run(SOURCE, "work", set_spec, config, institution_id=institution.id)
         run_ids.append(ingest.run_id)
         try:
-            set_stats = await _harvest_set(ingest, set_spec, PREFIX_DC, limit=limit)
+            set_stats = await _harvest_set(
+                ingest,
+                set_spec,
+                PREFIX_DC,
+                base_url=base_url,
+                institution_id=institution.id,
+                limit=limit,
+            )
         except Exception as exc:
             # Commit the failed-run marker: finish_run only flushes, and the
             # re-raise would otherwise roll the run row back into nothing.
@@ -729,7 +774,9 @@ async def harvest_pure_years(
     # Retirement is only sound against the runs of THIS sweep: per-year sets
     # each get their own harvest_run, so retiring against only the last run
     # would retire every other year.
-    stats["retired"] = await retire_absent(session, run_ids) if full_sweep else 0
+    stats["retired"] = (
+        await retire_absent(session, run_ids, institution.id) if full_sweep else 0
+    )
     await session.commit()
     stats.update(totals)
     return stats
@@ -737,19 +784,32 @@ async def harvest_pure_years(
 
 async def harvest_pure_cerif(
     session: AsyncSession,
+    institution,
     *,
     limit: int | None = None,
 ) -> dict[str, Any]:
     """Enrichment pass: openaire_cris_publications over oai_cerif_openaire.
 
     Stores records verbatim (entity_type=work_cerif) and backfills
-    cerif_issn/publisher/doi/oa_status onto matching ut_works rows.
+    cerif_issn/publisher/doi/oa_status onto matching works rows.
     """
+    base_url = institution.pure_oai_base_url
+    if not base_url:
+        raise ValueError(f"institution {institution.code!r} has no pure_oai_base_url")
     ingest = IngestSession(session)
-    config = {"base_url": get_settings().pure_oai_base_url, "metadata_prefix": PREFIX_CERIF}
-    await ingest.start_run(SOURCE, "work_cerif", CRIS_PUBLICATIONS_SET, config)
+    config = {"base_url": base_url, "metadata_prefix": PREFIX_CERIF}
+    await ingest.start_run(
+        SOURCE, "work_cerif", CRIS_PUBLICATIONS_SET, config, institution_id=institution.id
+    )
     try:
-        set_stats = await _harvest_set(ingest, CRIS_PUBLICATIONS_SET, PREFIX_CERIF, limit=limit)
+        set_stats = await _harvest_set(
+            ingest,
+            CRIS_PUBLICATIONS_SET,
+            PREFIX_CERIF,
+            base_url=base_url,
+            institution_id=institution.id,
+            limit=limit,
+        )
     except Exception as exc:
         await ingest.finish_run("failed", {"error": f"{type(exc).__name__}: {exc}"[:200]})
         with contextlib.suppress(Exception):

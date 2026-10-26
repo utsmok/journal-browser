@@ -75,3 +75,42 @@ async def db(db_engine):
     async with maker() as session:
         yield session
         await session.rollback()
+
+
+@pytest.fixture
+def institution_factory(db):
+    """Hosted institution rows for multi-institution tests.
+
+    Usage: `inst = await institution_factory(code="ut")`. Codes default to
+    unique per call; pass is_default=True for the env-seeded one.
+    """
+    from journal_browser.models import Institution
+
+    counter = {"n": 0}
+
+    async def _make(
+        *,
+        code: str | None = None,
+        name: str | None = None,
+        is_default: bool = False,
+        data_window_start: int = 2020,
+        data_window_end: int | None = None,
+        **kwargs,
+    ) -> Institution:
+        counter["n"] += 1
+        n = counter["n"]
+        inst = Institution(
+            code=code,
+            name=name or f"Test University {n}",
+            ror=kwargs.pop("ror", f"https://ror.org/test{n:04d}"),
+            active=code is not None,
+            is_default=is_default,
+            data_window_start=data_window_start,
+            data_window_end=data_window_end,
+            **kwargs,
+        )
+        db.add(inst)
+        await db.flush()
+        return inst
+
+    return _make

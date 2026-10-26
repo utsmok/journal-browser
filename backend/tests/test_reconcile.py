@@ -70,7 +70,11 @@ async def test_merge_moves_journals_and_flags_unmatched(maker):
         pub_o = await _publisher(session, "Karger", slug="karger")
         pub_j = await _publisher(session, "KAR")
         inst = Institution(
-            name="University of Twente", ror="https://ror.org/006hf6230", is_home=True
+            name="University of Twente",
+            ror="https://ror.org/006hf6230",
+            code="ut",
+            active=True,
+            is_default=True,
         )
         session.add(inst)
         await session.flush()
@@ -171,7 +175,11 @@ async def test_prefers_twente_bearing_agreement(maker):
         pub_o = await _publisher(session, "Elsevier", slug="elsevier")
         pub_j = await _publisher(session, "ELS")
         inst = Institution(
-            name="University of Twente", ror="https://ror.org/006hf6230", is_home=True
+            name="University of Twente",
+            ror="https://ror.org/006hf6230",
+            code="ut",
+            active=True,
+            is_default=True,
         )
         session.add(inst)
         await session.flush()
@@ -292,7 +300,11 @@ async def test_duplicate_data_guard_purges_cross_publisher(maker):
         for d in (els, eme, els2):
             d.start_year, d.end_year = 2025, 2027
         inst = Institution(
-            name="University of Twente", ror="https://ror.org/006hf6230", is_home=True
+            name="University of Twente",
+            ror="https://ror.org/006hf6230",
+            code="ut",
+            active=True,
+            is_default=True,
         )
         session.add(inst)
         await session.flush()
@@ -352,7 +364,11 @@ async def test_derive_nl_deal_coverage_links_and_covers(maker):
 
     async with maker() as session:
         inst = Institution(
-            name="University of Twente", ror="https://ror.org/006hf6230", is_home=True
+            name="University of Twente",
+            ror="https://ror.org/006hf6230",
+            code="ut",
+            active=True,
+            is_default=True,
         )
         session.add(inst)
         pub_acm = await _publisher(session, "ACM")
@@ -362,12 +378,16 @@ async def test_derive_nl_deal_coverage_links_and_covers(maker):
         acm = await _deal(
             session, pub_acm.id,
             openaccess_nl_url="https://www.openaccess.nl/en/publisherdeal/acm-2021-2030",
-            conditions_text="License and conditions: ... University of Twente ... (duration 2026-2028)",
+            conditions_text=(
+                "License and conditions: ... University of Twente ... (duration 2026-2028)"
+            ),
         )
         dgb = await _deal(
             session, pub_dgb.id,
             openaccess_nl_url="https://www.openaccess.nl/en/publisherdeal/de-gruyter-brill-2026-2028",
-            conditions_text="Eligible institutions are: University of Amsterdam, VU University Amsterdam",
+            conditions_text=(
+                "Eligible institutions are: University of Amsterdam, VU University Amsterdam"
+            ),
         )
         ign = await _deal(
             session, pub_ign.id,

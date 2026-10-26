@@ -19,6 +19,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
@@ -49,6 +50,11 @@ class HarvestRun(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     source: Mapped[str] = mapped_column(Text, nullable=False)
     entity_type: Mapped[str] = mapped_column(Text, nullable=False)
+    # NULL = global job (journals, deals, OpenAPC, ...); institution-scoped
+    # jobs (pure, enrich, openaire, works stats) carry the institution id.
+    institution_id: Mapped[int | None] = mapped_column(
+        ForeignKey("institutions.id"), nullable=True
+    )
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="running")
     started_at: Mapped[datetime] = _tstamp()
     finished_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
@@ -62,21 +68,48 @@ class HarvestRun(Base):
             "status IN ('running', 'completed', 'failed')",
             name="ck_harvest_runs_status",
         ),
+        Index("ix_harvest_runs_institution", "institution_id", "id"),
     )
 
 
 class HarvestState(Base):
     __tablename__ = "harvest_state"
 
-    source: Mapped[str] = mapped_column(Text, primary_key=True)
-    entity_type: Mapped[str] = mapped_column(Text, primary_key=True)
-    filter_set: Mapped[str] = mapped_column(Text, primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    source: Mapped[str] = mapped_column(Text, nullable=False)
+    entity_type: Mapped[str] = mapped_column(Text, nullable=False)
+    filter_set: Mapped[str] = mapped_column(Text, nullable=False)
+    institution_id: Mapped[int | None] = mapped_column(
+        ForeignKey("institutions.id"), nullable=True
+    )
     status: Mapped[str | None] = mapped_column(Text, nullable=True)
     stats: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     last_run_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("harvest_runs.id"), nullable=True
     )
     updated_at: Mapped[datetime] = _tstamp()
+
+    __table_args__ = (
+        # Partial uniques keep one state row per key for global (NULL) and
+        # institution-scoped rows separately; same pattern as deal_journals.
+        Index(
+            "uq_harvest_state_global",
+            "source",
+            "entity_type",
+            "filter_set",
+            unique=True,
+            postgresql_where=text("institution_id IS NULL"),
+        ),
+        Index(
+            "uq_harvest_state_scoped",
+            "source",
+            "entity_type",
+            "filter_set",
+            "institution_id",
+            unique=True,
+            postgresql_where=text("institution_id IS NOT NULL"),
+        ),
+    )
 
 
 class SourceRecord(Base):
@@ -152,13 +185,52 @@ class Publisher(Base):
 
 
 class Institution(Base):
+    """Institution configuration carrier.
+
+    Every row is a real-world institution (JCT sheets populate participation
+    rows without a code); only hosted institutions carry `code` + `active`.
+    Env vars seed the default row once; afterwards the table is
+    authoritative.
+    """
+
     __tablename__ = "institutions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str | None] = mapped_column(Text, nullable=True, unique=True)
     name: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    short_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     ror: Mapped[str | None] = mapped_column(Text, nullable=True, unique=True)
     openalex_id: Mapped[str | None] = mapped_column(Text, nullable=True)
-    is_home: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    # Per-institution harvest sources.
+    pure_oai_base_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    openaire_org_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Optional external canonical-works Postgres (ut-metadata style),
+    # read-only. Empty = the enrichment degrades to works_stats-only.
+    external_works_dsn: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Publication-year data window (inclusive); end 0 = open (to now).
+    data_window_start: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("2020")
+    )
+    data_window_end: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    # Display fields served to the frontend via /meta/freshness.
+    library_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    oa_guide_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    support_email: Mapped[str | None] = mapped_column(Text, nullable=True)
+    admin_contact: Mapped[str | None] = mapped_column(Text, nullable=True)
+    research_portal_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Hosted + served at /{code}/...; is_default marks the root redirect.
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+
+    @property
+    def window_years(self) -> list[int]:
+        """Inclusive publication-year window, capped at the current year."""
+        import datetime as dt
+
+        last = self.data_window_end or dt.date.today().year
+        return list(range(self.data_window_start, min(last, dt.date.today().year) + 1))
 
 
 class IssnMap(Base):
@@ -214,15 +286,20 @@ class Deal(Base):
 
 
 class DealJournal(Base):
+    """Deal journal coverage. Rows with institution_id NULL are the shared
+    sheet coverage (ESAC/JCT/openaccess.nl); institution-scoped rows are
+    per-institution overrides that replace the shared list for institutions
+    whose deal_institutions.journal_override is set."""
+
     __tablename__ = "deal_journals"
 
-    deal_id: Mapped[int] = mapped_column(
-        ForeignKey("deals.id", ondelete="CASCADE"), primary_key=True
-    )
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    deal_id: Mapped[int] = mapped_column(ForeignKey("deals.id", ondelete="CASCADE"), nullable=False)
+    institution_id: Mapped[int | None] = mapped_column(ForeignKey("institutions.id"), nullable=True)
     # Normalized source ISSN (print or online, as the deal list publishes).
     # issn_l stays NULL until the issn_map sweep resolves it; then
     # needs_curation marks anything that never resolved.
-    issn: Mapped[str] = mapped_column(String(9), primary_key=True)
+    issn: Mapped[str] = mapped_column(String(9), nullable=False)
     issn_l: Mapped[str | None] = mapped_column(String(9), nullable=True, index=True)
     journal_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     first_seen: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -237,16 +314,45 @@ class DealJournal(Base):
             "source IN ('jct', 'manual', 'publisher-pattern')",
             name="ck_deal_journals_source",
         ),
+        # Partial uniques instead of one NULLS NOT DISTINCT key: ON CONFLICT
+        # can target each partial index explicitly.
+        Index(
+            "uq_deal_journals_shared",
+            "deal_id",
+            "issn",
+            unique=True,
+            postgresql_where=text("institution_id IS NULL"),
+        ),
+        Index(
+            "uq_deal_journals_scoped",
+            "deal_id",
+            "issn",
+            "institution_id",
+            unique=True,
+            postgresql_where=text("institution_id IS NOT NULL"),
+        ),
     )
 
 
 class DealInstitution(Base):
+    """Deal ↔ institution partnership relation. A missing row means
+    non-participation; a shared deal is never deleted for it."""
+
     __tablename__ = "deal_institutions"
 
     deal_id: Mapped[int] = mapped_column(
         ForeignKey("deals.id", ondelete="CASCADE"), primary_key=True
     )
     institution_id: Mapped[int] = mapped_column(ForeignKey("institutions.id"), primary_key=True)
+    # 'named' (institution listed in the deal text) or 'consortium'
+    # (national deal, no member enumeration); NULL = unassessed.
+    participation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    participation_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # When true, this institution's coverage is the institution-scoped
+    # deal_journals rows instead of the shared sheet list.
+    journal_override: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     first_seen: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_seen: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -283,9 +389,8 @@ class Journal(Base):
     last_active_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     works_2020_plus: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     in_scimago: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
-    # Denormalized for search and facets; refreshed by harvest.denorm at the
-    # end of the stats, scimago, and deal-register jobs.
-    home_works_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Global denormalized search columns (institution-neutral), refreshed by
+    # harvest.denorm; the per-institution state lives in journal_flags.
     latest_quartile: Mapped[str | None] = mapped_column(String(4), nullable=True)
     # Denormalized most recent known OpenAPC cost: the highest single
     # reported APC in the journal's newest period with cost evidence (not a
@@ -293,15 +398,6 @@ class Journal(Base):
     # correlated subquery per row (same pattern as latest_quartile);
     # refreshed by harvest.denorm.refresh_apcs.
     latest_apc_euro: Mapped[float | None] = mapped_column(Numeric, nullable=True)
-    deal_covered_home: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("false")
-    )
-    #: Presentation-excluded from browse/facets (proceedings-like title, no
-    #: deal, no UT works); maintained by the denorm refreshes, see
-    #: harvest/denorm.py and decision 16 in docs/decisions.md.
-    browse_excluded: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("false")
-    )
     crossref_meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     openaire_meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     harvested_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
@@ -413,16 +509,55 @@ class InstitutionTrend(Base):
     updated_at: Mapped[datetime] = _tstamp()
 
 
-# ── Limitations registry + manual overrides ────────────────────────────────
+# ── Per-institution journal state + works corpus ────────────────────────────
 
 
-class UtWork(Base):
-    """Canonical UT work harvested from Pure (ris.utwente.nl) via OAI-PMH."""
+class JournalFlags(Base):
+    """Per-institution denormalized journal state for search and facets.
 
-    __tablename__ = "ut_works"
+    Fully materialized (one row per journal per hosted institution) so the
+    search path stays a simple indexed join. Refreshed wholesale by
+    harvest.denorm after stats / deal-register changes.
+    """
 
+    __tablename__ = "journal_flags"
+
+    institution_id: Mapped[int] = mapped_column(
+        ForeignKey("institutions.id", ondelete="CASCADE"), primary_key=True
+    )
+    issn_l: Mapped[str] = mapped_column(
+        String(9), ForeignKey("journals.issn_l", ondelete="CASCADE"), primary_key=True
+    )
+    # The institution's works in this journal (pure_canon primary), the
+    # sort key for institution_works and the has_works facet.
+    works_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    # Effective deal coverage for this institution (override-aware).
+    deal_covered: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    # Journal's own works inside THIS institution's data window; the >3
+    # corpus cutoff reads it (owner decision 2026-10-23).
+    works_window_plus: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    # Presentation-excluded for this institution (proceedings-like title,
+    # no deal coverage, no institution works); decision 16 in
+    # docs/decisions.md.
+    browse_excluded: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+
+
+class Work(Base):
+    """Canonical institution work harvested from its Pure via OAI-PMH."""
+
+    __tablename__ = "works"
+
+    institution_id: Mapped[int] = mapped_column(
+        ForeignKey("institutions.id"), primary_key=True
+    )
     pure_uuid: Mapped[str] = mapped_column(Text, primary_key=True)
-    doi_normalized: Mapped[str | None] = mapped_column(Text, nullable=True, unique=True)
+    doi_normalized: Mapped[str | None] = mapped_column(Text, nullable=True)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     norm_title: Mapped[str] = mapped_column(Text, nullable=False)
     year: Mapped[int] = mapped_column(SmallInteger, nullable=False)
@@ -438,9 +573,27 @@ class UtWork(Base):
     retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = _tstamp()
 
+    __table_args__ = (
+        # Pure occasionally carries one publication under two uuids; the
+        # twin keeps the DOI and the other row stays NULL-doi.
+        Index(
+            "uq_works_inst_doi",
+            "institution_id",
+            "doi_normalized",
+            unique=True,
+            postgresql_where=text("doi_normalized IS NOT NULL"),
+        ),
+        Index(
+            "ix_works_inst_journal",
+            "institution_id",
+            "journal_issn_l",
+            postgresql_where=text("journal_issn_l IS NOT NULL"),
+        ),
+    )
+
 
 class WorkIdentity(Base):
-    """Cross-source identity link between an external record and a UT work.
+    """Cross-source identity link between an external record and a work.
 
     matched_by: 'doi' (auto-confirm), 'trgm:<threshold>[+v][+a]' (fuzzy,
     curation candidates), or 'verbatim' (shared source string).
@@ -449,11 +602,12 @@ class WorkIdentity(Base):
     __tablename__ = "work_identity"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    institution_id: Mapped[int] = mapped_column(
+        ForeignKey("institutions.id"), nullable=False
+    )
     source: Mapped[str] = mapped_column(Text, nullable=False)
     source_pk: Mapped[str] = mapped_column(Text, nullable=False)
-    ut_work_id: Mapped[str] = mapped_column(
-        Text, ForeignKey("ut_works.pure_uuid", ondelete="CASCADE"), nullable=False
-    )
+    work_id: Mapped[str] = mapped_column(Text, nullable=False)
     matched_by: Mapped[str] = mapped_column(Text, nullable=False)
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="candidate")
@@ -461,7 +615,17 @@ class WorkIdentity(Base):
     created_at: Mapped[datetime] = _tstamp()
     updated_at: Mapped[datetime] = _tstamp()
 
-    __table_args__ = (UniqueConstraint("source", "source_pk", name="uq_work_identity_source"),)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["institution_id", "work_id"],
+            ["works.institution_id", "works.pure_uuid"],
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint(
+            "institution_id", "source", "source_pk", name="uq_work_identity_source"
+        ),
+        Index("ix_work_identity_inst_work", "institution_id", "work_id"),
+    )
 
 
 class Limitation(Base):

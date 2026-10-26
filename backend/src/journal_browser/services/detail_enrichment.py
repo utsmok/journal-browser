@@ -13,20 +13,25 @@ from sqlalchemy import Float, Integer, case, cast, func, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import SourceRecord, UtWork, WorkIdentity
+from ..models import HarvestRun, SourceRecord, Work, WorkIdentity
 from . import ut_metadata
 
 OPENALEX_URL = "https://openalex.org"
 
 
-def _journal_works(issn_l: str):
-    """Subquery: latest version of each OpenAlex work row for the journal."""
+def _journal_works(issn_l: str, institution_id: int):
+    """Subquery: latest version of each of the institution's OpenAlex work
+    rows for the journal (works_stats runs are institution-scoped; an
+    OpenAlex work id can appear in several institutions' harvests)."""
     return (
         select(SourceRecord.payload)
         .ext(distinct_on(SourceRecord.source_pk))
         .where(
             SourceRecord.source == "openalex",
             SourceRecord.entity_type == "works_stats",
+            SourceRecord.harvest_run_id.in_(
+                select(HarvestRun.id).where(HarvestRun.institution_id == institution_id)
+            ),
             # Explicit -> operators (not payload[...][...] subscripts): the
             # subscript form plans as a seq scan and cannot use
             # ix_source_records_works_issn_l.
@@ -61,6 +66,7 @@ def _work_item(payload: dict[str, Any]) -> dict[str, Any]:
 async def list_works(
     session: AsyncSession,
     issn_l: str,
+    institution_id: int,
     page: int,
     page_size: int,
     ut_rows: list[dict[str, Any]] | None = None,
@@ -68,7 +74,7 @@ async def list_works(
     """Paginated works: ut-metadata union when available, works_stats only
     otherwise. publication_year desc nulls last, cited_by_count desc, title
     asc; slicing happens in Python (bounded per journal)."""
-    rows = _journal_works(issn_l)
+    rows = _journal_works(issn_l, institution_id)
     payloads = (await session.execute(select(rows.c.payload))).scalars().all()
     items = [_work_item(p) for p in payloads]
     for item in items:
@@ -87,11 +93,12 @@ async def list_works(
 async def twente_metrics(
     session: AsyncSession,
     issn_l: str,
+    institution_id: int,
     ut_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Aggregates over the journal's stored OpenAlex works (SQL, one pass),
     plus ut-metadata-grounded totals when the canonical store is reachable."""
-    rows = _journal_works(issn_l)
+    rows = _journal_works(issn_l, institution_id)
     fwci = cast(rows.c.payload["fwci"].astext, Float)
     total, fwci_avg, fwci_n, retracted, cited_total = (
         await session.execute(
@@ -153,12 +160,20 @@ async def openalex_info(session: AsyncSession, issn_l: str) -> dict[str, Any] | 
     }
 
 
-async def openaire_matched(session: AsyncSession, issn_l: str) -> int:
-    """Distinct UT works matched in OpenAIRE for the journal."""
+async def openaire_matched(session: AsyncSession, issn_l: str, institution_id: int) -> int:
+    """Distinct works of the institution matched in OpenAIRE for the journal."""
     return (
         await session.scalar(
-            select(func.count(func.distinct(WorkIdentity.ut_work_id)))
-            .join(UtWork, UtWork.pure_uuid == WorkIdentity.ut_work_id)
-            .where(WorkIdentity.source == "openaire", UtWork.journal_issn_l == issn_l)
+            select(func.count(func.distinct(WorkIdentity.work_id)))
+            .join(
+                Work,
+                (Work.institution_id == WorkIdentity.institution_id)
+                & (Work.pure_uuid == WorkIdentity.work_id),
+            )
+            .where(
+                WorkIdentity.institution_id == institution_id,
+                WorkIdentity.source == "openaire",
+                Work.journal_issn_l == issn_l,
+            )
         )
     ) or 0

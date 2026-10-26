@@ -2,7 +2,7 @@
 
 Full sweep of the Graph's research products linked to the home institution
 (relOrganizationId filter), stored verbatim in source_records; DOI matches
-against ut_works become confirmed work_identity rows.
+against works become confirmed work_identity rows.
 """
 
 import logging
@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..ingest import IngestSession
-from ..models import UtWork, WorkIdentity
+from ..models import Work, WorkIdentity
 
 logger = logging.getLogger(__name__)
 
@@ -29,14 +29,14 @@ except ImportError:  # pragma: no cover
     AireloomClient = None
 
 
-def _org_id() -> str | None:
-    """OpenAIRE organization id for the institution harvest.
+def _org_id(institution) -> str | None:
+    """OpenAIRE organization id for one institution's harvest.
 
     The OpenAIRE id is NOT derivable from the ROR — it is a lookup, not a
-    transformation. Unset means the harvest is off (find yours at
-    api.openaire.eu/graph/v1/organizations?legalName=<name>).
+    transformation. Unset means the harvest is off for this institution
+    (find yours at api.openaire.eu/graph/v1/organizations?legalName=<name>).
     """
-    return _settings().openaire_org_id or None
+    return institution.openaire_org_id or None
 
 
 def _settings() -> Any:
@@ -75,30 +75,34 @@ def _extract_doi(product: Any) -> str | None:
 
 async def harvest_openaire_products(
     session: AsyncSession,
+    institution,
     *,
     limit: int | None = None,
 ) -> dict[str, Any]:
-    """Sweep OpenAIRE research products for the institution; store verbatim.
+    """Sweep OpenAIRE research products for one institution; store verbatim.
 
     DOI matches become confirmed work_identity rows (source='openaire').
     """
     if AireloomClient is None:  # pragma: no cover
         raise RuntimeError("aireloom is not installed")
-    org_id = _org_id()
+    org_id = _org_id(institution)
     if org_id is None:
-        return {"skipped": "JB_OPENAIRE_ORG_ID is not set"}
+        return {"skipped": f"institution {institution.code!r} has no openaire_org_id"}
     filter_set = f"relOrganizationId={org_id}"
     ingest = IngestSession(session)
     config = {"filter_set": filter_set, "page_size": PAGE_SIZE}
-    await ingest.start_run(SOURCE, "work", filter_set, config)
+    await ingest.start_run(
+        SOURCE, "work", filter_set, config, institution_id=institution.id
+    )
 
     doi_to_work = {
         doi: uuid
         for doi, uuid in (
             await session.execute(
-                select(UtWork.doi_normalized, UtWork.pure_uuid).where(
-                    UtWork.doi_normalized.is_not(None),
-                    UtWork.retired_at.is_(None),
+                select(Work.doi_normalized, Work.pure_uuid).where(
+                    Work.institution_id == institution.id,
+                    Work.doi_normalized.is_not(None),
+                    Work.retired_at.is_(None),
                 )
             )
         ).all()
@@ -120,7 +124,12 @@ async def harvest_openaire_products(
             kind, _ = await ingest.ingest_record(item.id, payload)
             doi = _extract_doi(item)
             if doi and (uuid := doi_to_work.get(doi)):
-                await _confirm(session, source_pk=item.id, ut_work_id=uuid)
+                await _confirm(
+                    session,
+                    institution_id=institution.id,
+                    source_pk=item.id,
+                    work_id=uuid,
+                )
                 stats["matched_doi"] += 1
             elif not doi:
                 stats["no_doi"] += 1
@@ -131,18 +140,21 @@ async def harvest_openaire_products(
     return final
 
 
-async def _confirm(session: AsyncSession, *, source_pk: str, ut_work_id: str) -> None:
+async def _confirm(
+    session: AsyncSession, *, institution_id: int, source_pk: str, work_id: str
+) -> None:
     stmt = (
         pg_insert(WorkIdentity)
         .values(
+            institution_id=institution_id,
             source=SOURCE,
             source_pk=source_pk,
-            ut_work_id=ut_work_id,
+            work_id=work_id,
             matched_by="doi",
             confidence=1.0,
             status="confirmed",
         )
-        .on_conflict_do_nothing(constraint="uq_work_identity_source")
+        .on_conflict_do_nothing(constraint="uq_work_identity_inst_source")
     )
     await session.execute(stmt)
 
@@ -158,7 +170,8 @@ WITH openaire AS (
       AND sr.payload->>'mainTitle' IS NOT NULL
       AND NOT EXISTS (
           SELECT 1 FROM work_identity wi
-          WHERE wi.source = 'openaire' AND wi.source_pk = sr.source_pk
+          WHERE wi.institution_id = :institution_id
+            AND wi.source = 'openaire' AND wi.source_pk = sr.source_pk
       )
     LIMIT :limit
 )
@@ -166,20 +179,23 @@ SELECT o.source_pk, o.title, w.pure_uuid,
        similarity(lower(regexp_replace(o.title, '[^0-9a-zA-Z]+', ' ', 'g')),
                   w.norm_title) AS sim
 FROM openaire o
-JOIN ut_works w
-  ON w.norm_title % (lower(regexp_replace(o.title, '[^0-9a-zA-Z]+', ' ', 'g')))
+JOIN works w
+  ON w.institution_id = :institution_id
+ AND w.norm_title % (lower(regexp_replace(o.title, '[^0-9a-zA-Z]+', ' ', 'g')))
 ORDER BY o.source_pk, sim DESC
 """
 
 
-async def match_openaire_titles(session: AsyncSession, limit: int | None = None) -> dict[str, Any]:
-    """Trigram title matching: OpenAIRE works -> ut_works candidates.
+async def match_openaire_titles(
+    session: AsyncSession, institution_id: int, limit: int | None = None
+) -> dict[str, Any]:
+    """Trigram title matching: OpenAIRE works -> one institution's works.
 
     The Graph API serves no DOIs on list endpoints, so OpenAIRE records
     match by normalized title only. Only the best-scoring work per record
     lands, always as status='candidate' (never auto-confirmed) for the
     curation report. The join uses the pg_trgm ``%`` operator so the GIN
-    trigram index on ut_works.norm_title applies; similarity(...) >= const
+    trigram index on works.norm_title applies; similarity(...) >= const
     would plan as a 470M-row nested loop.
     """
     from sqlalchemy import text
@@ -191,7 +207,11 @@ async def match_openaire_titles(session: AsyncSession, limit: int | None = None)
         text("SELECT set_config('pg_trgm.similarity_threshold', :thr, true)"),
         {"thr": str(TRGM_THRESHOLD)},
     )
-    rows = (await session.execute(text(_MATCH_SQL), {"limit": limit or 100000})).all()
+    rows = (
+        await session.execute(
+            text(_MATCH_SQL), {"limit": limit or 100000, "institution_id": institution_id}
+        )
+    ).all()
     seen: set[str] = set()
     for r in rows:
         if r.source_pk in seen:
@@ -200,15 +220,16 @@ async def match_openaire_titles(session: AsyncSession, limit: int | None = None)
         stmt = (
             pg_insert(WorkIdentity)
             .values(
+                institution_id=institution_id,
                 source=SOURCE,
                 source_pk=r.source_pk,
-                ut_work_id=r.pure_uuid,
+                work_id=r.pure_uuid,
                 matched_by=f"trgm:{TRGM_THRESHOLD}",
                 confidence=float(r.sim),
                 status="candidate",
                 note=f"openaire title: {r.title[:160]}",
             )
-            .on_conflict_do_nothing(constraint="uq_work_identity_source")
+            .on_conflict_do_nothing(constraint="uq_work_identity_inst_source")
         )
         await session.execute(stmt)
     await session.commit()

@@ -27,17 +27,19 @@ def parse_years(spec: str) -> list[int]:
     return [int(spec)]
 
 
-async def main(session, limit: int | None, years=None, cerif=False, full_sweep=False):
+async def main(session, institution, limit: int | None, years=None, cerif=False, full_sweep=False):
     if cerif:
-        stats = await harvest_pure_cerif(session, limit=limit)
+        stats = await harvest_pure_cerif(session, institution, limit=limit)
     else:
         if full_sweep:
             # Retirement is only sound against a complete baseline: every
-            # configured window year, not whatever subset --years named.
-            years = get_settings().window_years
+            # window year of the institution, not whatever subset --years named.
+            years = institution.window_years
         elif years is None:
             years = [dt.date.today().year]
-        stats = await harvest_pure_years(session, years, limit=limit, full_sweep=full_sweep)
+        stats = await harvest_pure_years(
+            session, institution, years, limit=limit, full_sweep=full_sweep
+        )
     print(stats)
     return stats
 
@@ -53,15 +55,19 @@ if __name__ == "__main__":
         action="store_true",
         help="treat this run as a full re-baseline (retires absent works)",
     )
+    parser.add_argument("--institution", default=None, help="institution code (default: env)")
     parser.add_argument("--limit", type=int, default=None)
     args = parser.parse_args()
 
     async def run() -> None:
+        from journal_browser.harvest.common import resolve_institution
+
         engine = create_async_engine(get_settings().database_url)
         maker = async_sessionmaker(engine, expire_on_commit=False)
         async with maker() as session:
             await main(
                 session,
+                await resolve_institution(session, args.institution),
                 args.limit,
                 years=args.years,
                 cerif=args.cerif,

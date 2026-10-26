@@ -19,9 +19,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..ingest import IngestSession
-from ..models import InstitutionTrend, InstitutionWorksStats, Journal, UtWork
-from .common import OA_STATUSES, get_home_institution
-from .openalex_journals import resolve_home_institution_id
+from ..models import InstitutionTrend, InstitutionWorksStats, Journal, Work
+from .common import OA_STATUSES
+from .openalex_journals import resolve_institution_openalex_id
 
 logger = logging.getLogger(__name__)
 
@@ -46,25 +46,26 @@ async def _source_issn_map(session: AsyncSession) -> dict[str, str]:
 
 
 async def harvest_institution_stats(
-    session: AsyncSession, limit: int | None = None
+    session: AsyncSession, institution, limit: int | None = None
 ) -> dict[str, Any]:
+    """One hosted institution's per-journal/year stats + trends from the
+    OpenAlex works filter; window and ids come from the institution row."""
     settings = get_settings()
-    home = await get_home_institution(session)
     client_kwargs: dict[str, Any] = {}
     if settings.openalex_api_key:
         client_kwargs["api_key"] = settings.openalex_api_key
 
     async with AlethecaClient(**client_kwargs) as client:
-        inst_id = settings.institution_openalex_id or await resolve_home_institution_id(
-            client, session
-        )
+        inst_id = await resolve_institution_openalex_id(client, session, institution)
         filter_set = f"institutions.id={inst_id}"
         await session.commit()
 
-        window_from = f"{settings.data_window_start}-01-01"
+        window_from = f"{institution.data_window_start}-01-01"
         ingest = IngestSession(session)
         config = {"filter": filter_set, "from": window_from}
-        await ingest.start_run(SOURCE, ENTITY_TYPE, filter_set, config)
+        await ingest.start_run(
+            SOURCE, ENTITY_TYPE, filter_set, config, institution_id=institution.id
+        )
 
         async def commit_page(_page: int, _cursor: str | None) -> None:
             await ingest.commit()
@@ -76,15 +77,17 @@ async def harvest_institution_stats(
         current_year = datetime.now(UTC).year
 
         # aletheca's iterate does not support field selection; the full
-        # work payload lands verbatim in source_records.
+        # work payload lands verbatim in source_records (shared verbatim
+        # store: an identical payload re-harvested for another institution
+        # dedupes here).
         async for item in client.works.iterate(
             page_size=PER_PAGE,
             filters={
                 "institutions.id": inst_id,
                 "from_publication_date": window_from,
                 **(
-                    {"to_publication_date": f"{settings.data_window_end}-12-31"}
-                    if settings.data_window_end
+                    {"to_publication_date": f"{institution.data_window_end}-12-31"}
+                    if institution.data_window_end
                     else {}
                 ),
             },
@@ -103,8 +106,8 @@ async def harvest_institution_stats(
             await ingest.ingest_record(openalex_id_to_pk(payload.get("id")), payload)
 
             year = payload.get("publication_year")
-            if isinstance(year, int) and settings.data_window_start <= year <= (
-                settings.data_window_end or current_year
+            if isinstance(year, int) and institution.data_window_start <= year <= (
+                institution.data_window_end or current_year
             ):
                 status = _oa_status(payload)
                 per_year[(year, status)] += 1
@@ -122,9 +125,9 @@ async def harvest_institution_stats(
 
         stats = await ingest.finish_run("completed", {"works_unlinked_to_journal": unlinked})
 
-        await _write_journal_stats(session, home.id, per_journal_year)
-        corresponding = await _corresponding_counts(client, inst_id)
-        await _write_trends(session, home.id, per_year, corresponding)
+        await _write_journal_stats(session, institution.id, per_journal_year)
+        corresponding = await _corresponding_counts(client, inst_id, institution)
+        await _write_trends(session, institution.id, per_year, corresponding)
         await session.commit()
     return stats
 
@@ -164,7 +167,7 @@ async def _write_journal_stats(
 
 
 async def write_pure_canon_stats(session: AsyncSession, institution_id: int) -> int:
-    """Per-journal/year work counts straight from canonical ut_works.
+    """Per-journal/year work counts straight from that institution's works.
 
     Cross-check dimension for the verify job: the OA split is left at zero
     because Pure's access states (eprints/COAR) are not OpenAlex-compatible;
@@ -173,15 +176,16 @@ async def write_pure_canon_stats(session: AsyncSession, institution_id: int) -> 
     rows = (
         await session.execute(
             select(
-                UtWork.journal_issn_l,
-                UtWork.year,
+                Work.journal_issn_l,
+                Work.year,
                 func.count(),
             )
             .where(
-                UtWork.retired_at.is_(None),
-                UtWork.journal_issn_l.is_not(None),
+                Work.institution_id == institution_id,
+                Work.retired_at.is_(None),
+                Work.journal_issn_l.is_not(None),
             )
-            .group_by(UtWork.journal_issn_l, UtWork.year)
+            .group_by(Work.journal_issn_l, Work.year)
         )
     ).all()
     payload = [
@@ -206,10 +210,12 @@ async def write_pure_canon_stats(session: AsyncSession, institution_id: int) -> 
     return len(payload)
 
 
-async def _corresponding_counts(client: AlethecaClient, inst_id: str) -> dict[int, int]:
+async def _corresponding_counts(
+    client: AlethecaClient, inst_id: str, institution
+) -> dict[int, int]:
     """Native per-year corresponding-author counts (known approximation)."""
     counts: dict[int, int] = {}
-    for year in get_settings().window_years:
+    for year in institution.window_years:
         try:
             counts[year] = await client.works.count(
                 filters={

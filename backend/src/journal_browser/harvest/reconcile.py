@@ -23,15 +23,14 @@ from ..models import (
     Deal,
     DealInstitution,
     DealJournal,
-    Institution,
     IssnMap,
     Journal,
     ManualOverride,
     Publisher,
-    UtWork,
+    Work,
     WorkIdentity,
 )
-from .common import get_home_institution
+from .common import get_default_institution
 
 logger = logging.getLogger(__name__)
 
@@ -116,9 +115,10 @@ async def _jct_deals(session: AsyncSession) -> list[Deal]:
     return list(rows.scalars().all())
 
 
-async def _home_institution_id(session: AsyncSession) -> int | None:
-    """Home-institution row id (single is_home row; config-not-constants rule)."""
-    return await session.scalar(select(Institution.id).where(Institution.is_home.is_(True)))
+async def _default_institution_id(session: AsyncSession) -> int | None:
+    """Default-institution row id (the env-seeded bootstrap institution)."""
+    inst = await get_default_institution(session)
+    return inst.id if inst else None
 
 
 async def _publisher_names(session: AsyncSession) -> dict[int, str]:
@@ -183,7 +183,7 @@ async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
     institution stay unlinked (the purge drops them); publishers with no
     corpus match keep their needs_curation flag.
     """
-    home = await get_home_institution(session)
+    home = await get_default_institution(session)
     stats = {"nl_deals": 0, "linked": 0, "covered": 0, "pattern_journals": 0}
     if home is None:
         return stats
@@ -260,7 +260,10 @@ async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
                     for issn_l, title in journals
                 ]
             )
-            .on_conflict_do_nothing(index_elements=["deal_id", "issn"])
+            .on_conflict_do_nothing(
+                index_elements=["deal_id", "issn"],
+                index_where=text("institution_id IS NULL"),
+            )
         )
         deal.provenance = list(deal.provenance or []) + [
             {
@@ -294,13 +297,15 @@ async def reconcile_deals(session: AsyncSession) -> dict[str, int]:
     # Prefer agreements that carry the home institution; when UKB (Dutch
     # university libraries) or SURF joint deals don't enumerate members,
     # the Dutch-consortium suffix still outranks foreign consortia.
-    home_id = await _home_institution_id(session)
+    home_id = await _default_institution_id(session)
     twente_deal_ids: set[int] = set()
     if home_id is not None:
         twente_deal_ids = set(
             (
                 await session.execute(
-                    select(DealInstitution.deal_id).where(DealInstitution.institution_id == home_id)
+                    select(DealInstitution.deal_id).where(
+                        DealInstitution.institution_id == home_id
+                    )
                 )
             ).scalars()
         )
@@ -385,7 +390,9 @@ async def reconcile_deals(session: AsyncSession) -> dict[str, int]:
         twente_deal_ids = set(
             (
                 await session.execute(
-                    select(DealInstitution.deal_id).where(DealInstitution.institution_id == home_id)
+                    select(DealInstitution.deal_id).where(
+                        DealInstitution.institution_id == home_id
+                    )
                 )
             ).scalars()
         )
@@ -632,12 +639,14 @@ async def render_curation_report(
             + "</ul>"
         )
     jct_only = [d for d in deals if d.esac_id and not d.openaccess_nl_url]
-    home = await _home_institution_id(session)
-    if home is not None:
+    home_id = await _default_institution_id(session)
+    if home_id is not None:
         twente_deal_ids = set(
             (
                 await session.execute(
-                    select(DealInstitution.deal_id).where(DealInstitution.institution_id == home)
+                    select(DealInstitution.deal_id).where(
+                        DealInstitution.institution_id == home_id
+                    )
                 )
             ).scalars()
         )
@@ -673,9 +682,13 @@ async def render_curation_report(
                 WorkIdentity.matched_by,
                 WorkIdentity.confidence,
                 WorkIdentity.note,
-                UtWork.title,
+                Work.title,
             )
-            .join(UtWork, UtWork.pure_uuid == WorkIdentity.ut_work_id)
+            .join(
+                Work,
+                (Work.institution_id == WorkIdentity.institution_id)
+                & (Work.pure_uuid == WorkIdentity.work_id),
+            )
             .where(WorkIdentity.status == "candidate")
             .order_by(WorkIdentity.confidence.desc())
             .limit(500)
@@ -707,13 +720,14 @@ async def render_curation_report(
                            sr.payload->'primary_location'->'source'->>'display_name',
                            cr.payload->>'container-title'
                        ) AS container
-                FROM ut_works w
+                FROM works w
                 LEFT JOIN LATERAL (
                     SELECT sr.payload
                     FROM source_records sr
                     WHERE sr.source='openalex' AND sr.entity_type='work'
                       AND EXISTS (SELECT 1 FROM work_identity wi
-                                  WHERE wi.ut_work_id = w.pure_uuid
+                                  WHERE wi.institution_id = w.institution_id
+                                    AND wi.work_id = w.pure_uuid
                                     AND wi.source='openalex' AND wi.source_pk = sr.source_pk)
                     LIMIT 1
                 ) sr ON sr.payload IS NOT NULL
