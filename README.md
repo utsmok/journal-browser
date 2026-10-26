@@ -23,13 +23,17 @@ label follows the configured institution.
 4. `docker compose logs -f bootstrap` — the first boot takes 1.5–2 hours
    (fully automatic; the backend stays down until every step succeeds).
 5. Verify: `curl localhost:8000/api/v1/healthz`, then open
-   `http://localhost:3000` — the deal register should list your
-   institution's current NL deals with journal counts.
+   `http://localhost:3000` — with one institution configured it redirects
+   to its site (`/ut`); the deal register lists your institution's current
+   NL deals with journal counts.
 
-The site serves multiple universities at `/{code}` paths (for example
-`/ut`, `/rug`) with a landing chooser at `/`. The full guide —
-configuration reference, harvest internals, admin panel, adding a second
-institution, maintenance — is in [DEPLOYMENT.md](DEPLOYMENT.md).
+One deployment can serve several universities at `/{code}` paths (for
+example `/ut` and `/rug`) with a landing chooser at `/`; the shared layers
+(journal universe, NL deal register, APC evidence, quartiles, embeddings)
+are stored once. Onboarding a second university is one SQL `UPDATE` plus
+one harvest run — see "Adding a second institution" in
+[DEPLOYMENT.md](DEPLOYMENT.md). The full guide — configuration reference,
+harvest internals, admin panel, maintenance — lives there too.
 
 ## Stack
 
@@ -69,11 +73,13 @@ cd frontend && npm install && npm run build
 ```
 
 The bootstrap pipeline (`backend/jobs/bootstrap.py`) runs the harvest jobs as
-a dependency DAG — independent sources run concurrently, dependents start as
-soon as their inputs are in, and `--from <step>` is the serial repair path.
-Every job is idempotent; a failure names the step. See
-[DEPLOYMENT.md](DEPLOYMENT.md) for what each job builds and how the deal
-register is reconciled.
+a two-layer dependency DAG: shared global steps (journals, deal register,
+APC evidence, quartiles, embeddings) once, then per-institution steps
+(repository harvest, enrichment, OpenAIRE, statistics, participation) for
+every hosted university. `--from <step>` is the serial repair path;
+`--institution <code>` reruns one university's layer. Every job is
+idempotent; a failure names the step. See [DEPLOYMENT.md](DEPLOYMENT.md)
+for what each job builds and how the deal register is reconciled.
 
 ## License
 

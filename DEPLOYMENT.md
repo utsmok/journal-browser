@@ -16,9 +16,12 @@ root unless noted.
 
 ## Configuration
 
-Copy `.env.example` to `.env` and set the institution levers. The browser is
-per-institution by design: the register, the works data, and every UI label
-follow these values.
+Copy `.env.example` to `.env` and set the institution levers. These values
+configure the **default institution** — the one the first boot harvests and
+serves at its `/{code}` path. Additional universities are configured as
+`institutions` rows in the database (see "Adding a second institution");
+their display values, sources, and data windows come from their row, not
+from `.env`.
 
 ### Institution identity and display
 
@@ -50,7 +53,7 @@ in citation links on journal pages. Set it in `.env` before the first
 | `JB_OPENAIRE_ORG_ID` | OpenAIRE organization id (`openorgs____::...`). **Required**; unset = the OpenAIRE harvest is off. Not derivable from the ROR — look it up at `api.openaire.eu/graph/v1/organizations?legalName=<name>` | unset |
 | `OPENALEX_API_KEY` | Free OpenAlex key; needed for cursor-paged harvests only | unset |
 | `JB_CONTACT_EMAIL` | Polite-pool identification sent to OpenAlex | `s.f.abma@utwente.nl` |
-| `JB_DATA_WINDOW_START` / `JB_DATA_WINDOW_END` | Inclusive publication-year window for every harvest. `END=0` = open (to now). A smaller window makes a deployment lighter (Groningen runs 2025/2025) | `2020` / `0` |
+| `JB_DATA_WINDOW_START` / `JB_DATA_WINDOW_END` | Inclusive publication-year window for the default institution's harvests. `END=0` = open (to now). A smaller window makes a deployment lighter (Groningen runs 2025/2025; additional institutions carry their window on their row) | `2020` / `0` |
 
 ### Operations
 
@@ -137,10 +140,12 @@ the JCT/ESAC dump. Rules:
 
 Set `JB_ADMIN_PASSWORD` and restart the backend. `http://<host>/admin` then
 shows the harvest run history with stats, deals flagged for curation, and the
-effective non-secret settings (secrets appear as booleans only). Login
-exchanges the password for a 12-hour signed token; the panel is read-only by
-design — configuration changes belong in `.env` plus a restart, so the panel
-cannot drift from the deployment.
+effective non-secret settings (secrets appear as booleans only). Runs carry
+an institution column — shared/global steps are labeled "shared", and a
+dropdown filters the list to one institution. Login exchanges the password
+for a 12-hour signed token; the panel is read-only by design — configuration
+changes belong in `.env` (default institution) or the institutions rows,
+plus a restart, so the panel cannot drift from the deployment.
 
 ## Adding a second institution
 
@@ -184,9 +189,13 @@ institution; every other institution reads its config from its row.
   and rewrites the curation report.
 - **Updating Scimago quartiles:** drop the new year's CSV into
   `backend/data/` and rerun `jobs/ingest_scimagojr.py`.
-- **Upgrading the stack:** `git pull && docker compose up -d --build`. Check
-  this file's changelog-worthy notes before major version bumps; new settings
-  always default to the Twente values, so existing deployments keep working.
+- **Upgrading the stack:** `git pull && docker compose up -d --build`. The
+  bootstrap service applies pending migrations before harvesting. Migration
+  0020 (semantic-search index) builds an HNSW graph and needs a few minutes
+  plus about 100 MB of Postgres shared memory (compose sets
+  `db.shm_size: 512mb`; raise it for external databases). Check this file's
+  changelog-worthy notes before major version bumps; new settings always
+  default to the Twente values, so existing deployments keep working.
 
 ## Backbone export
 
@@ -203,7 +212,7 @@ restoring them before its first boot):
 | `apc_evidence`, `openapc` | APC evidence and OpenAPC prices |
 | `scimagojr_metrics` | Scimago quartiles |
 | `jct` | Journal Checker Tool data |
-| `journal_embeddings` | Semantic-search vectors (institution-neutral) |
+| `journals.embedding` (column) | Semantic-search vectors (institution-neutral; HNSW-indexed) |
 | `works_metadata_cache` | OpenAlex per-work enrichment cache |
 
 Export with `pg_dump -Fc -t journals -t issn_l_map ...` and restore into the
