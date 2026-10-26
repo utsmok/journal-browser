@@ -326,11 +326,13 @@ function FacetGroup({
           // list, so they render inert.
           const zero = !active && f.count === 0;
           const look = facetLook(key, f.value);
-          const className = active
-            ? `${layout} ${look.tint} border font-medium ${focus}`
-            : zero
-              ? zeroClasses
-              : idleClasses;
+          const className = `jb-chip-row ${
+            active
+              ? `${layout} ${look.tint} border font-medium ${focus}`
+              : zero
+                ? zeroClasses
+                : idleClasses
+          }`;
           const iconNode = look.icon ? (
             // The glyphs are bare SVG shapes; they need an svg context here
             // (inside badges they live inside the lockup's own svg).

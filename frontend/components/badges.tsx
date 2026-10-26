@@ -27,6 +27,16 @@ const SHACKLE_TRANSFORM: Record<LockState, string | undefined> = {
   wide: "translate(0 1.3) rotate(-42 3 6.6)",
 };
 
+/** Animation metadata per state: the shackle pose (as deltas the CSS
+ * keyframes cancel and overshoot around) and a stagger offset so the four
+ * badge types don't cycle in sync. Negative delays start mid-cycle. */
+const SHACKLE_POSE: Record<LockState, { rot: string; ty: string; d: string }> = {
+  closed: { rot: "0deg", ty: "0px", d: "0s" },
+  ajar: { rot: "-12deg", ty: "0.4px", d: "-1.4s" },
+  open: { rot: "-25deg", ty: "0.7px", d: "-2.8s" },
+  wide: { rot: "-42deg", ty: "1.3px", d: "-4.2s" },
+};
+
 /** Icon-only access-type colors, shared with the facet filters. Lightness
  * and saturation climb with openness: closed (dull slate) → hybrid (muted
  * blue) → gold (bright amber) → diamond (light, saturated cyan). */
@@ -64,19 +74,31 @@ const SPARKLES: Record<LockState, [number, number, number][]> = {
 };
 
 export function LockIcon({ state }: { state: LockState }) {
+  const pose = SHACKLE_POSE[state];
   return (
     <>
       <rect x={1} y={7} width={10} height={7} rx={1.8} fill="currentColor" />
-      <path
-        d="M3 6.6 V4.2 a3 3 0 0 1 6 0 V6.6"
-        transform={SHACKLE_TRANSFORM[state]}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={2}
-        strokeLinecap="round"
-      />
-      {SPARKLES[state].map(([cx, cy, r]) => (
-        <path key={`${cx},${cy}`} d={sparklePath(cx, cy, r)} fill="currentColor" />
+      <g
+        className={`jb-shackle${state === "closed" ? " jb-shackle-locked" : ""}`}
+        style={{ "--rot": pose.rot, "--ty": pose.ty, "--d": pose.d } as React.CSSProperties}
+      >
+        <path
+          d="M3 6.6 V4.2 a3 3 0 0 1 6 0 V6.6"
+          transform={SHACKLE_TRANSFORM[state]}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinecap="round"
+        />
+      </g>
+      {SPARKLES[state].map(([cx, cy, r], i) => (
+        <path
+          key={`${cx},${cy}`}
+          className="jb-sparkle"
+          style={{ "--d": pose.d, animationDelay: `calc(${pose.d} - ${i * 0.05}s)` } as React.CSSProperties}
+          d={sparklePath(cx, cy, r)}
+          fill="currentColor"
+        />
       ))}
     </>
   );
@@ -174,7 +196,7 @@ function Lockup({
   children: React.ReactNode;
 }) {
   return (
-    <span className={`inline-flex shrink-0 items-center ${className}`} title={title}>
+    <span className={`jb-badge inline-flex shrink-0 items-center ${className}`} title={title}>
       <svg
         viewBox={`0 0 ${width} 16`}
         className="h-4 w-auto overflow-visible"
