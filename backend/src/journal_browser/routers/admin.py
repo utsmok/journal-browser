@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..db import get_session
-from ..models import Deal, DealJournal, HarvestRun, Publisher
+from ..models import Deal, DealJournal, HarvestRun, Institution, Publisher
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -77,7 +77,12 @@ async def list_runs(
     institution: Annotated[str | None, Query(max_length=32)] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
 ) -> list[dict[str, Any]]:
-    query = select(HarvestRun).order_by(desc(HarvestRun.id)).limit(limit)
+    query = (
+        select(HarvestRun, Institution.code)
+        .outerjoin(Institution, Institution.id == HarvestRun.institution_id)
+        .order_by(desc(HarvestRun.id))
+        .limit(limit)
+    )
     if institution is not None:
         from ..harvest.common import get_institution_by_code
 
@@ -85,19 +90,20 @@ async def list_runs(
         if inst is None:
             raise HTTPException(status_code=400, detail=f"unknown institution: {institution}")
         query = query.where(HarvestRun.institution_id == inst.id)
-    rows = (await session.execute(query)).scalars().all()
+    rows = (await session.execute(query)).all()
     return [
         {
             "id": r.id,
             "source": r.source,
             "entity_type": r.entity_type,
             "institution_id": r.institution_id,
+            "institution_code": code,
             "status": r.status,
             "started_at": r.started_at,
             "finished_at": r.finished_at,
             "stats": r.stats,
         }
-        for r in rows
+        for r, code in rows
     ]
 
 

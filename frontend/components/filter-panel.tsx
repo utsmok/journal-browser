@@ -23,7 +23,7 @@ type FilterSelection = {
   topic: string;
   publisher: string;
   hasApc: string | null;
-  hasUtWorks: string | null;
+  hasWorks: string | null;
   /** Multi-select: values OR together (single-select groups do not). */
   oaTypes: string[];
 };
@@ -167,8 +167,8 @@ const FACET_ICON_TEXT: Record<string, string> = {
   "doaj:false": ACCESS_TEXT.closed,
   "has_apc:true": ACCESS_TEXT.brand,
   "has_apc:false": ACCESS_TEXT.closed,
-  "has_ut_works:true": ACCESS_TEXT.brand,
-  "has_ut_works:false": ACCESS_TEXT.closed,
+  "has_works:true": ACCESS_TEXT.brand,
+  "has_works:false": ACCESS_TEXT.closed,
   "quartile:Q1": ACCESS_TEXT.brand,
   "quartile:Q2": ACCESS_TEXT.closed,
   "quartile:Q3": ACCESS_TEXT.closed,
@@ -198,8 +198,8 @@ function facetLook(key: string, value: string): { icon: ReactNode; tint: string 
     case "has_apc:true":
     case "has_apc:false":
       return { icon: <ApcGlyph />, tint: value === "true" ? TINTS.brand : TINTS.slate };
-    case "has_ut_works:true":
-    case "has_ut_works:false":
+    case "has_works:true":
+    case "has_works:false":
       return { icon: <WorksGlyph />, tint: value === "true" ? TINTS.brand : TINTS.slate };
     default:
       // The deal facet's negative value is backend-defined; anything that is
@@ -248,7 +248,7 @@ const FACET_TITLES: Record<string, string> = {
 function groupHint(key: string, name: string, windowStart: number) {
   if (key === "deal")
     return `Does a ${name} open access deal cover APCs in this journal? One choice; click it again to clear.`;
-  if (key === "has_ut_works")
+  if (key === "has_works")
     return `Has ${name} published in this journal (${windowStart} onwards)? One choice; click it again to clear.`;
   return GROUP_HINTS[key];
 }
@@ -263,9 +263,9 @@ function facetTitle(
   const k = `${key}:${value}`;
   if (k === "deal:covered")
     return `APCs for corresponding ${short} authors are covered, fully or partly, by a deal.`;
-  if (k === "has_ut_works:true")
+  if (k === "has_works:true")
     return `${name} has at least one publication in this journal since ${windowStart}.`;
-  if (k === "has_ut_works:false")
+  if (k === "has_works:false")
     return `No known ${name} publications in this journal since ${windowStart}.`;
   return FACET_TITLES[k];
 }
@@ -485,15 +485,15 @@ export function FilterPanel({
       activeValues: selection.hasApc !== null ? [selection.hasApc] : [],
     },
     {
-      key: "has_ut_works",
+      key: "has_works",
       label: `${site.short} works`,
       defaultOpen: true,
-      values: Object.entries(facets.ut_works ?? {}).map(([value, count]) => ({
+      values: Object.entries(facets.works ?? {}).map(([value, count]) => ({
         value,
         count,
         label: value === "true" ? `Has ${site.short} works` : `No ${site.short} works`,
       })),
-      activeValues: selection.hasUtWorks !== null ? [selection.hasUtWorks] : [],
+      activeValues: selection.hasWorks !== null ? [selection.hasWorks] : [],
     },
     ...(topicValues.length > 0
       ? [

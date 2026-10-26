@@ -28,7 +28,7 @@ export type JournalDetailResponse = Schemas["JournalDetailResponse"] & {
   journal: JournalListItem;
   openalex?: OpenalexSource | null;
   openaire?: { matched_works: number } | null;
-  twente_metrics?: TwenteMetrics | null;
+  institution_metrics?: InstitutionMetrics | null;
 };
 
 export type JournalSearchResponse = Schemas["JournalSearchResponse"];
@@ -40,14 +40,14 @@ type SimilarJournal = {
   quartile?: string | null;
   is_oa?: boolean | null;
   deal_covered: boolean;
-  twente_works: number;
+  works: number;
   shared_topics: number;
   similarity?: number | null;
 };
 
-/** Three similar-journal cuts: UT-publishing venues, deal-covered venues, and the general list. */
+/** Three similar-journal cuts: institution-publishing venues, deal-covered venues, and the general list. */
 export type SimilarJournalsBundle = {
-  twente: SimilarJournal[];
+  institution: SimilarJournal[];
   deals: SimilarJournal[];
   all: SimilarJournal[];
 };
@@ -74,17 +74,17 @@ export type OpenalexSource = {
   topics?: OpenalexTopic[];
 };
 
-/** Twente-affiliated work metrics computed from OpenAlex works. */
-type TwenteMetrics = {
+/** Institution work metrics computed from OpenAlex works. */
+export type InstitutionMetrics = {
   openalex_matched: number;
   fwci_avg: number | null;
   fwci_n: number;
   retracted: number;
   cited_total: number;
-  // ut-metadata-grounded totals; null when the canonical store is unreachable.
-  ut_total?: number | null;
-  ut_retracted?: number | null;
-  ut_oa?: {
+  // Canonical-store-grounded totals; null when that store is unreachable.
+  canonical_total?: number | null;
+  canonical_retracted?: number | null;
+  canonical_oa?: {
     gold?: number;
     hybrid?: number;
     green?: number;
@@ -144,7 +144,7 @@ export type JournalSearchParams = {
   quartile?: string;
   publisher?: string;
   has_apc?: boolean;
-  has_ut_works?: boolean;
+  has_works?: boolean;
   topic?: string;
   /** Comma-separated multi-select, OR'd server-side. */
   oa_type?: string;

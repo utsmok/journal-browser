@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import { Inter, Montserrat } from "next/font/google";
-import Link from "next/link";
 import "./globals.css";
 
 import { SiteFooter } from "@/components/site-footer";
+import { BrandLink, SiteNav } from "@/components/site-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { NavLink } from "@/components/nav-link";
 import { Providers } from "./providers";
 
 const inter = Inter({
@@ -58,20 +57,8 @@ function SiteHeader() {
   return (
     <header className="bg-[var(--secondary)] text-[var(--secondary-foreground)]">
       <div className="mx-auto flex h-16 max-w-screen-2xl items-center justify-between gap-3 px-4">
-        <Link
-          href="/"
-          className="font-heading whitespace-nowrap text-base sm:text-lg font-bold tracking-tight"
-        >
-          Journal Browser
-        </Link>
-        <nav
-          aria-label="Main"
-          className="flex items-center gap-4 sm:gap-6 text-sm"
-        >
-          <NavLink href="/" label="Search" />
-          <NavLink href="/deals" label="Deals" />
-          <NavLink href="/about" label="About" />
-        </nav>
+        <BrandLink />
+        <SiteNav />
         <ThemeToggle />
       </div>
     </header>

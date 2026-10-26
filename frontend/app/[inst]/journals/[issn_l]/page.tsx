@@ -17,6 +17,7 @@ import { SourceNote } from "@/components/source-note";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useJournal, useJournalWorks, useSimilar } from "@/hooks/use-api";
+import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import {
   errorMessage,
@@ -104,13 +105,14 @@ function CopyButton({ text, label }: { text: string; label: string }) {
 }
 
 function CitationCard({ data }: { data: JournalDetailResponse }) {
+  const inst = useInstitution();
   const today = new Date().toLocaleDateString("en-GB", {
     day: "numeric",
     month: "long",
     year: "numeric",
   });
   const title = data.journal.title ?? data.journal.issn_l;
-  const citation = `${title}. ${data.journal.publisher_name ?? "Unknown publisher"}. ISSN-L ${data.journal.issn_l}. Available at: ${process.env.NEXT_PUBLIC_SITE_URL ?? "https://journalbrowser.samuelmok.cc"}/journals/${data.journal.issn_l} (accessed ${today})`;
+  const citation = `${title}. ${data.journal.publisher_name ?? "Unknown publisher"}. ISSN-L ${data.journal.issn_l}. Available at: ${process.env.NEXT_PUBLIC_SITE_URL ?? "https://journalbrowser.samuelmok.cc"}/${inst}/journals/${data.journal.issn_l} (accessed ${today})`;
   const issns = Array.from(new Set([`ISSN-L ${data.journal.issn_l}`, ...data.issns.map((i) => `ISSN ${i}`)]));
 
   return (
@@ -552,6 +554,7 @@ function SectionNav({ sections }: { sections: { id: string; label: string }[] })
 function JournalPageInner() {
   const site = useSiteMeta();
   const params = useParams<{ issn_l: string }>();
+  const inst = useInstitution();
   const issnL = params?.issn_l ? decodeURIComponent(params.issn_l) : undefined;
   const backHref = useLastSearchHref();
   const { data, isPending, isError, error } = useJournal(issnL);
@@ -560,7 +563,7 @@ function JournalPageInner() {
   const similar = similarQuery.data;
   const similarEmpty =
     !similar ||
-    (similar.all.length === 0 && similar.twente.length === 0 && similar.deals.length === 0);
+    (similar.all.length === 0 && similar.institution.length === 0 && similar.deals.length === 0);
 
   if (isPending)
     return (
@@ -586,7 +589,7 @@ function JournalPageInner() {
   const recent = stats.filter((s) => s.year >= 2020);
   const openalex = data.openalex ?? null;
   const openaire = data.openaire ?? null;
-  const twente = data.twente_metrics ?? null;
+  const metrics = data.institution_metrics ?? null;
 
   const ss = (summary_stats ?? {}) as Record<string, unknown>;
   const num = (key: string) =>
@@ -866,7 +869,7 @@ function JournalPageInner() {
                 {...(attribution.metrics ?? {})}
                 codes={attribution.metrics?.caveat_codes}
               />
-              {(openalex || twente || openaire) && (
+              {(openalex || metrics || openaire) && (
                 <div className="border-t border-[var(--border)] pt-4">
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     {openalex?.cited_by_count != null && (
@@ -895,18 +898,18 @@ function JournalPageInner() {
                         }
                       />
                     )}
-                    {twente && (
+                    {metrics && (
                       <Metric
                         label={`FWCI (${site.short} works)`}
                         hint={`Field-weighted citation impact of ${site.short} works: citations relative to the average for works of the same year, type, and field. 1.0 means average.`}
                         value={
-                          twente.fwci_avg != null && twente.fwci_n > 0
-                            ? twente.fwci_avg.toFixed(2)
+                          metrics.fwci_avg != null && metrics.fwci_n > 0
+                            ? metrics.fwci_avg.toFixed(2)
                             : "—"
                         }
                         note={
                           <>
-                            n = {twente.fwci_n} works{" "}
+                            n = {metrics.fwci_n} works{" "}
                             <SourceNote
                               {...(attribution.openalex ?? {})}
                               codes={attribution.openalex?.caveat_codes}
@@ -915,11 +918,11 @@ function JournalPageInner() {
                         }
                       />
                     )}
-                    {twente && twente.retracted > 0 && (
+                    {metrics && metrics.retracted > 0 && (
                       <Metric
                         label={`Retracted ${site.short} works`}
                         hint={`${site.short} works in this journal that OpenAlex marks as retracted.`}
-                        value={twente.retracted.toLocaleString("en")}
+                        value={metrics.retracted.toLocaleString("en")}
                         note={
                           <SourceNote
                             {...(attribution.openalex ?? {})}
@@ -1041,7 +1044,7 @@ function JournalPageInner() {
             {(
               [
                 {
-                  key: "twente",
+                  key: "institution",
                   heading: `${site.short} publishes here`,
                   note: `Nearest neighbors that carry at least one ${site.name} publication.`,
                 },
@@ -1073,7 +1076,7 @@ function JournalPageInner() {
                           className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-2 text-sm first:pt-0 last:pb-0"
                         >
                           <Link
-                            href={`/journals/${s.issn_l}`}
+                            href={`/${inst}/journals/${s.issn_l}`}
                             className="font-medium underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
                           >
                             {s.title ?? s.issn_l}
@@ -1083,13 +1086,13 @@ function JournalPageInner() {
                           </span>
                           <span className="ml-auto flex flex-wrap items-center gap-2">
                             <DealBadge covered={s.deal_covered} />
-                            {s.twente_works > 0 && (
+                            {s.works > 0 && (
                               <span
                                 className="text-xs text-[var(--muted-foreground)]"
                                 title={`Known ${site.name} publications in this journal`}
                               >
-                                {s.twente_works.toLocaleString("en")} {site.short}{" "}
-                                {s.twente_works === 1 ? "publication" : "publications"}
+                                {s.works.toLocaleString("en")} {site.short}{" "}
+                                {s.works === 1 ? "publication" : "publications"}
                               </span>
                             )}
                             <QuartileBadge quartile={s.quartile ?? null} />

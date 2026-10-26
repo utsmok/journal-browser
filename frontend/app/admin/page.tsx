@@ -18,6 +18,8 @@ type Run = {
   id: number;
   source: string;
   entity_type: string;
+  institution_id: number | null;
+  institution_code: string | null;
   status: string;
   started_at: string;
   finished_at: string | null;
@@ -35,6 +37,8 @@ type FlaggedDeal = {
 };
 
 type Settings = Record<string, string | number | boolean>;
+
+type Directory = { code: string; name: string; short_name: string | null };
 
 async function adminGet<T>(path: string, token: string): Promise<T> {
   const res = await fetch(`/api/v1/admin${path}`, {
@@ -56,6 +60,8 @@ export default function AdminPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [runs, setRuns] = useState<Run[]>([]);
+  const [directory, setDirectory] = useState<Directory[]>([]);
+  const [instFilter, setInstFilter] = useState<string>("all");
   const [flagged, setFlagged] = useState<FlaggedDeal[]>([]);
   const [settings, setSettings] = useState<Settings>({});
 
@@ -69,10 +75,18 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
+    fetch("/api/v1/institutions", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setDirectory)
+      .catch(() => setDirectory([]));
+  }, []);
+
+  useEffect(() => {
     if (!token) return;
     let cancelled = false;
+    const instQ = instFilter === "all" ? "" : `&institution=${encodeURIComponent(instFilter)}`;
     Promise.all([
-      adminGet<Run[]>("/runs?limit=100", token),
+      adminGet<Run[]>(`/runs?limit=100${instQ}`, token),
       adminGet<FlaggedDeal[]>("/flagged", token),
       adminGet<Settings>("/settings", token),
     ])
@@ -91,7 +105,7 @@ export default function AdminPage() {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, instFilter]);
 
   if (!token) {
     return (
@@ -147,10 +161,29 @@ export default function AdminPage() {
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Harvest runs (newest first)</h2>
+        <div className="flex items-center gap-2 text-sm">
+          <label htmlFor="inst-filter" className="text-muted-foreground">
+            Institution
+          </label>
+          <select
+            id="inst-filter"
+            className="rounded-[var(--radius)] border border-input bg-[var(--card)] px-2 py-1"
+            value={instFilter}
+            onChange={(e) => setInstFilter(e.target.value)}
+          >
+            <option value="all">All</option>
+            {directory.map((i) => (
+              <option key={i.code} value={i.code}>
+                {i.short_name ?? i.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>#</TableHead>
+              <TableHead>Institution</TableHead>
               <TableHead>Source</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Started</TableHead>
@@ -161,6 +194,12 @@ export default function AdminPage() {
             {runs.map((run) => (
               <TableRow key={run.id}>
                 <TableCell>{run.id}</TableCell>
+                <TableCell>
+                  {run.institution_code == null
+                    ? "shared"
+                    : directory.find((i) => i.code === run.institution_code)?.short_name ??
+                      run.institution_code}
+                </TableCell>
                 <TableCell>
                   {run.source}/{run.entity_type}
                 </TableCell>
