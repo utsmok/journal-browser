@@ -4,7 +4,7 @@ provenance links even when every TA row is an unchanged duplicate."""
 from sqlalchemy import func, select
 
 from conftest import requires_db
-from journal_browser.config import get_settings
+from journal_browser.config import reset_settings_cache
 from journal_browser.harvest.common import store_raw_file
 from journal_browser.harvest.openapc import _body
 from journal_browser.ingest import IngestSession
@@ -50,7 +50,7 @@ async def _fake_download(session, ingest, source, entity_type, url, suffix, sour
 @requires_db
 async def test_rerun_keeps_evidence_source_record_link(db, monkeypatch, tmp_path):
     monkeypatch.setenv("JB_LANDING_DIR", str(tmp_path))
-    get_settings.cache_clear()
+    reset_settings_cache()
     monkeypatch.setattr("journal_browser.harvest.openapc.download_to_landing", _fake_download)
     try:
         for _ in range(2):  # second run: identical files -> duplicate source_records
@@ -69,4 +69,4 @@ async def test_rerun_keeps_evidence_source_record_link(db, monkeypatch, tmp_path
         assert total > 0
         assert nulls == total, f"{nulls}/{total} evidence rows lost their source_records link"
     finally:
-        get_settings.cache_clear()
+        reset_settings_cache()

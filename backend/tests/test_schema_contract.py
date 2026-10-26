@@ -37,13 +37,13 @@ async def test_migrated_schema_has_conflict_constraints(db_engine) -> None:
     await conn.execute(f'CREATE DATABASE "{dbname}"')
     await conn.close()
 
-    # env.py reads JB_DATABASE_URL through cached get_settings; point both
-    # at the scratch database for the upgrade.
-    from journal_browser.config import get_settings
+    # env.py reads JB_DATABASE_URL through get_settings (mtime-cached);
+    # point both at the scratch database for the upgrade.
+    from journal_browser.config import reset_settings_cache
 
     old_url = os.environ.get("JB_DATABASE_URL")
     os.environ["JB_DATABASE_URL"] = scratch
-    get_settings.cache_clear()
+    reset_settings_cache()
     try:
         await asyncio.to_thread(lambda: command.upgrade(Config("alembic.ini"), "head"))
     finally:
@@ -51,7 +51,7 @@ async def test_migrated_schema_has_conflict_constraints(db_engine) -> None:
             os.environ.pop("JB_DATABASE_URL", None)
         else:
             os.environ["JB_DATABASE_URL"] = old_url
-        get_settings.cache_clear()
+        reset_settings_cache()
 
     try:
         from sqlalchemy.ext.asyncio import create_async_engine

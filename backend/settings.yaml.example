@@ -1,0 +1,80 @@
+# Journal Browser settings — copy to settings.yaml and edit.
+#
+# Every key overrides the matching JB_* environment variable (YAML wins)
+# and is picked up live: the admin panel's settings editor writes this file
+# and the backend reloads it without a restart. Missing keys fall back to
+# the environment / built-in defaults. Path override: JB_SETTINGS_YAML.
+#
+# Secrets ("secret" type) are masked in the admin API: unset = null, set =
+# "********". PUTting "" or "********" for a secret keeps the current value
+# — the panel never echoes it. Keep secrets out of any committed file.
+#
+# "Institution" fields seed the default institutions row on first boot;
+# afterwards that row is authoritative and is edited per university via
+# PUT /api/v1/admin/institutions/{code}.
+
+# ── Global ──────────────────────────────────────────────────────────────
+
+# Admin panel (/admin) password; empty disables the panel.
+admin_password:
+
+# OpenAlex API key (free tier) for cursor-paged harvests.
+openalex_api_key:
+
+# JISC API key (feature scaffold, currently off).
+jisc_api_key:
+
+# ut-metadata Postgres DSN (canonical Twente publications, read-only).
+# Empty = feature off; ut-works endpoints degrade to works_stats-only.
+ut_metadata_dsn:
+
+# Contact email sent to OpenAlex (polite-pool identification).
+contact_email: s.f.abma@utwente.nl
+
+# Browser origins allowed to call the API. Applied at startup: needs a
+# `docker compose up -d` to take effect, unlike everything below.
+cors_origins:
+- http://localhost:3000
+
+# ISSNs excluded from listings (admin scaffold; not applied anywhere yet).
+#ignored_issns: ["1234-5678"]
+
+# Raw landing zone for downloaded source artifacts (compose bind mount).
+landing_dir: landing
+
+# Curation report output path (reconcile job).
+curation_report_path: landing/reports/curation_report.html
+
+# Bootstrap job mode: auto (only on an empty DB), always, off.
+# Quote yes/no/on/off values: YAML would otherwise read them as booleans.
+bootstrap: auto
+
+# Pure OAI-PMH endpoint (anonymous) and minimum seconds between requests.
+pure_oai_base_url: https://ris.utwente.nl/ws/oai
+pure_oai_min_spacing: 1.0
+
+# Feature scaffolds; leave off until explicitly enabled.
+enable_journal_citations: false
+enable_jisc: false
+
+# ── Institution (seed for the default institutions row) ─────────────────
+
+# URL path segment ([a-z0-9-]+), e.g. ut.
+institution_code: ut
+institution_name: University of Twente
+institution_short: Twente
+institution_ror: https://ror.org/006hf6230
+# Resolved OpenAlex institution id (I...); empty resolves on first harvest.
+institution_openalex_id:
+# OpenAIRE organization id (openorgs____::...) for the product harvest.
+openaire_org_id:
+# Publication-year window (inclusive); end 0 = open (to now).
+data_window_start: 2020
+data_window_end: 0
+# Display links, served to the frontend via /meta.
+library_url: https://www.utwente.nl/library
+oa_guide_url: https://www.utwente.nl/en/service-portal/university-library/publication-archiving/open-access
+support_email: open-access@utwente.nl
+# Personal contact shown in the footer; empty = row hidden.
+admin_contact: s.mok@utwente.nl
+research_portal_url: https://research.utwente.nl

@@ -55,6 +55,8 @@ services:
     volumes:
       # Raw landing copies and job logs must survive container rebuilds.
       - ./backend/landing:/app/landing
+      # Admin-editable settings overlay (see backend/settings.yaml.example).
+      - ./backend/settings.yaml:/app/settings.yaml
     ports:
       - "127.0.0.1:8000:8000"
     healthcheck:
@@ -109,6 +111,7 @@ services:
       OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
     volumes:
       - ./backend/landing:/app/landing
+      - ./backend/settings.yaml:/app/settings.yaml
     command: >
       sh -c "uv run --no-dev alembic upgrade head &&
              uv run --no-dev python jobs/bootstrap.py"

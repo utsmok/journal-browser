@@ -2,7 +2,7 @@
 
 import pytest
 
-from journal_browser.config import get_settings
+from journal_browser.config import reset_settings_cache
 from journal_browser.harvest import journal_citations as jc
 
 
@@ -58,7 +58,7 @@ async def test_collect_work_ids_caps_at_max():
 
 async def test_cited_by_institution_refuses_when_disabled(monkeypatch):
     monkeypatch.setenv("JB_ENABLE_JOURNAL_CITATIONS", "false")
-    get_settings.cache_clear()
+    reset_settings_cache()
     with pytest.raises(RuntimeError, match="disabled"):
         await jc.cited_by_institution(None, "S123", "I94624287")
-    get_settings.cache_clear()
+    reset_settings_cache()

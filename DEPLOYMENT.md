@@ -21,7 +21,8 @@ configure the **default institution** — the one the first boot harvests and
 serves at its `/{code}` path. Additional universities are configured as
 `institutions` rows in the database (see "Adding a second institution");
 their display values, sources, and data windows come from their row, not
-from `.env`.
+from `.env`. The admin panel's settings overlay `backend/settings.yaml`
+overrides any of these keys and reloads live (see "Admin panel").
 
 ### Institution identity and display
 
@@ -139,13 +140,14 @@ the JCT/ESAC dump. Rules:
 ## Admin panel
 
 Set `JB_ADMIN_PASSWORD` and restart the backend. `http://<host>/admin` then
-shows the harvest run history with stats, deals flagged for curation, and the
-effective non-secret settings (secrets appear as booleans only). Runs carry
+shows the harvest run history with stats and deals flagged for curation,
+edits the settings (`backend/settings.yaml`, reloaded live — no restart;
+YAML values override `.env`), and edits per-institution configuration rows
+(institution fields, sources, data windows; secrets stay masked). Runs carry
 an institution column — shared/global steps are labeled "shared", and a
 dropdown filters the list to one institution. Login exchanges the password
-for a 12-hour signed token; the panel is read-only by design — configuration
-changes belong in `.env` (default institution) or the institutions rows,
-plus a restart, so the panel cannot drift from the deployment.
+for a 12-hour signed token; changing the password in the panel invalidates
+old tokens immediately.
 
 ## Adding a second institution
 

@@ -1,11 +1,18 @@
-from functools import lru_cache
+import os
+from pathlib import Path
+from typing import Any
 
+import yaml
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_prefix="JB_", extra="ignore")
+    # populate_by_name: the admin API revalidates a model_dump() (field
+    # names) through model_validate; alias-only lookup would reject those.
+    model_config = SettingsConfigDict(
+        env_file=".env", env_prefix="JB_", extra="ignore", populate_by_name=True
+    )
 
     database_url: str = "postgresql+asyncpg://journal:journal@localhost:5433/journalbrowser"
 
@@ -76,6 +83,10 @@ class Settings(BaseSettings):
     pure_oai_base_url: str = "https://ris.utwente.nl/ws/oai"
     pure_oai_min_spacing: float = 1.0
 
+    # Admin-curated ISSN ignore-list (registry scaffold; consumed by
+    # nothing yet).
+    ignored_issns: list[str] = []
+
     @property
     def window_years(self) -> list[int]:
         """Inclusive publication-year window, capped at the current year."""
@@ -89,6 +100,47 @@ class Settings(BaseSettings):
         return self.institution_ror.rstrip("/").rsplit("/", 1)[-1]
 
 
-@lru_cache
+# Settings overlay file: the admin panel's PUT writes here and every
+# get_settings() call picks up edits live (mtime check). Env stays the
+# fallback; YAML values win. Path override: JB_SETTINGS_YAML.
+SETTINGS_YAML_ENV = "JB_SETTINGS_YAML"
+
+_cache: dict[str, Any] = {}
+
+
+def settings_yaml_path() -> Path:
+    return Path(os.environ.get(SETTINGS_YAML_ENV, "settings.yaml"))
+
+
+def load_settings_yaml() -> dict[str, Any]:
+    """The overlay doc, {} when the file is missing or unreadable. YAML
+    syntax errors still raise: a typo'd file must be visible, not silently
+    dropped."""
+    try:
+        raw = settings_yaml_path().read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    data = yaml.safe_load(raw)
+    return data if isinstance(data, dict) else {}
+
+
 def get_settings() -> Settings:
-    return Settings()
+    """Env-built Settings with settings.yaml merged over it. Reloads when
+    the file's mtime changes, so admin edits land without a restart; with
+    no file this is exactly the env behavior."""
+    path = settings_yaml_path()
+    try:
+        mtime: float | None = path.stat().st_mtime
+    except OSError:
+        mtime = None
+    if _cache.get("mtime") != mtime or "settings" not in _cache:
+        base = Settings()
+        overlay = load_settings_yaml() if mtime is not None else {}
+        _cache["settings"] = Settings.model_validate({**base.model_dump(), **overlay})
+        _cache["mtime"] = mtime
+    return _cache["settings"]
+
+
+def reset_settings_cache() -> None:
+    """Drop the cached Settings (the admin PUT after writing YAML; tests)."""
+    _cache.clear()

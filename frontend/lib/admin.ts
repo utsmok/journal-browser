@@ -1,0 +1,136 @@
+import { useCallback, useEffect, useState } from "react";
+
+/**
+ * Shared admin plumbing: bearer-token storage, authenticated fetch helpers,
+ * and hand-written types for the admin payloads (api-types.ts only covers
+ * the older generated contract).
+ */
+const TOKEN_KEY = "jb-admin-token";
+
+/** Error with an HTTP status; message stays technical (console only). */
+export class AdminError extends Error {
+  status: number;
+  constructor(status: number, path: string) {
+    super(`${status} on ${path}`);
+    this.name = "AdminError";
+    this.status = status;
+  }
+}
+
+export function getStoredToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return sessionStorage.getItem(TOKEN_KEY);
+}
+
+export async function adminLogin(password: string): Promise<string> {
+  const res = await fetch("/api/v1/admin/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  if (!res.ok) throw new AdminError(res.status, "/login");
+  const { token } = (await res.json()) as { token: string };
+  return token;
+}
+
+async function adminFetch<T>(path: string, token: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(`/api/v1/admin${path}`, {
+    ...init,
+    cache: "no-store",
+    headers: { Authorization: `Bearer ${token}`, ...(init.headers ?? {}) },
+  });
+  if (!res.ok) throw new AdminError(res.status, path);
+  return (await res.json()) as T;
+}
+
+export function adminGet<T>(path: string, token: string): Promise<T> {
+  return adminFetch<T>(path, token);
+}
+
+export function adminPut<T>(path: string, token: string, body: unknown): Promise<T> {
+  return adminFetch<T>(path, token, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+/** Session-cached admin token plus a setter that persists/removes it. */
+export function useAdminToken(): [string | null, (token: string | null) => void] {
+  const [token, setToken] = useState<string | null>(null);
+  useEffect(() => {
+    setToken(getStoredToken());
+  }, []);
+  const update = useCallback((t: string | null) => {
+    if (t) sessionStorage.setItem(TOKEN_KEY, t);
+    else sessionStorage.removeItem(TOKEN_KEY);
+    setToken(t);
+  }, []);
+  return [token, update];
+}
+
+export type AdminRun = {
+  id: number;
+  source: string;
+  entity_type: string;
+  institution_id: number | null;
+  institution_code: string | null;
+  status: string;
+  started_at: string;
+  finished_at: string | null;
+  stats: Record<string, unknown>;
+};
+
+export type FlaggedDeal = {
+  id: number;
+  publisher: string;
+  esac_id: string | null;
+  status: string;
+  duration: string | null;
+  journals: number;
+  reason: string | null;
+};
+
+export type InstitutionDirectoryEntry = {
+  code: string;
+  name: string;
+  short_name: string | null;
+};
+
+export type SettingType = "string" | "number" | "bool" | "secret" | "list";
+
+export type SettingField = {
+  key: string;
+  section: "global" | "institution";
+  type: SettingType;
+  label: string;
+  help?: string | null;
+  default?: string | number | boolean | null;
+};
+
+/** GET /admin/settings: schema-driven global settings; secrets arrive masked. */
+export type SettingsResponse = {
+  schema: SettingField[];
+  values: Record<string, string | number | boolean | null>;
+};
+
+/** GET/PUT /admin/institutions/{code}; external_works_dsn masked like secrets. */
+export type InstitutionSettings = {
+  code: string;
+  name: string;
+  short_name: string | null;
+  ror: string | null;
+  openalex_id: string | null;
+  pure_oai_base_url: string | null;
+  openaire_org_id: string | null;
+  external_works_dsn: string | null;
+  data_window_start: number | null;
+  data_window_end: number | null;
+  library_url: string | null;
+  oa_guide_url: string | null;
+  support_email: string | null;
+  admin_contact: string | null;
+  research_portal_url: string | null;
+  active: boolean | null;
+  is_default: boolean | null;
+};

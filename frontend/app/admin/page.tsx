@@ -1,10 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
-import { Badge } from "@/components/ui/badge";
+import { LoginForm } from "@/components/admin/login-form";
+import { RunsTable, StatusBadge } from "@/components/admin/runs-table";
+import {
+  GlobalSettingsForm,
+  InstitutionSettingsForm,
+} from "@/components/admin/settings-forms";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -13,148 +17,66 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-
-type Run = {
-  id: number;
-  source: string;
-  entity_type: string;
-  institution_id: number | null;
-  institution_code: string | null;
-  status: string;
-  started_at: string;
-  finished_at: string | null;
-  stats: Record<string, unknown>;
-};
-
-type FlaggedDeal = {
-  id: number;
-  publisher: string;
-  esac_id: string | null;
-  status: string;
-  duration: string | null;
-  journals: number;
-  reason: string | null;
-};
-
-type Settings = Record<string, string | number | boolean>;
-
-type Directory = { code: string; name: string; short_name: string | null };
-
-async function adminGet<T>(path: string, token: string): Promise<T> {
-  const res = await fetch(`/api/v1/admin${path}`, {
-    cache: "no-store",
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error(`${res.status} on ${path}`);
-  return (await res.json()) as T;
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const variant =
-    status === "completed" ? "secondary" : status === "failed" ? "outline" : "muted";
-  return <Badge variant={variant}>{status}</Badge>;
-}
+import { useInstitutionsDirectory } from "@/hooks/use-api";
+import {
+  AdminError,
+  adminGet,
+  useAdminToken,
+  type AdminRun,
+  type FlaggedDeal,
+} from "@/lib/admin";
 
 export default function AdminPage() {
-  const [token, setToken] = useState<string | null>(null);
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [runs, setRuns] = useState<Run[]>([]);
-  const [directory, setDirectory] = useState<Directory[]>([]);
+  const [token, setToken] = useAdminToken();
   const [instFilter, setInstFilter] = useState<string>("all");
+  const [selectedUni, setSelectedUni] = useState<string>("");
+  const [runs, setRuns] = useState<AdminRun[]>([]);
   const [flagged, setFlagged] = useState<FlaggedDeal[]>([]);
-  const [settings, setSettings] = useState<Settings>({});
+  const [runsError, setRunsError] = useState<string | null>(null);
+  const directory = useInstitutionsDirectory();
+  const unis = directory.data ?? [];
 
+  // Keep the institution-settings switcher on a real university.
   useEffect(() => {
-    setToken(sessionStorage.getItem("jb-admin-token"));
-  }, []);
-
-  const logout = useCallback(() => {
-    sessionStorage.removeItem("jb-admin-token");
-    setToken(null);
-  }, []);
-
-  useEffect(() => {
-    fetch("/api/v1/institutions", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setDirectory)
-      .catch(() => setDirectory([]));
-  }, []);
+    const codes = (directory.data ?? []).map((i) => i.code);
+    if (codes.length > 0 && !codes.includes(selectedUni)) setSelectedUni(codes[0]);
+  }, [directory.data, selectedUni]);
 
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    const instQ = instFilter === "all" ? "" : `&institution=${encodeURIComponent(instFilter)}`;
+    const instQ =
+      instFilter === "all" ? "" : `&institution=${encodeURIComponent(instFilter)}`;
     Promise.all([
-      adminGet<Run[]>(`/runs?limit=100${instQ}`, token),
+      adminGet<AdminRun[]>(`/runs?limit=100${instQ}`, token),
       adminGet<FlaggedDeal[]>("/flagged", token),
-      adminGet<Settings>("/settings", token),
     ])
-      .then(([r, f, s]) => {
+      .then(([r, f]) => {
         if (cancelled) return;
         setRuns(r);
         setFlagged(f);
-        setSettings(s);
+        setRunsError(null);
       })
       .catch((err) => {
         if (cancelled) return;
-        sessionStorage.removeItem("jb-admin-token");
-        setToken(null);
-        setError(String(err.message ?? err));
+        if (err instanceof AdminError && err.status === 401) {
+          setToken(null);
+          return;
+        }
+        setRunsError(`Could not load admin data (${err instanceof Error ? err.message : err}).`);
       });
     return () => {
       cancelled = true;
     };
-  }, [token, instFilter]);
+  }, [token, instFilter, setToken]);
 
-  if (!token) {
-    return (
-      <div className="mx-auto mt-20 max-w-sm space-y-4">
-        <h1 className="text-xl font-semibold">Admin</h1>
-        <p className="text-sm text-muted-foreground">
-          Harvest runs, errors, and the effective configuration. Password via
-          JB_ADMIN_PASSWORD; the panel is disabled when it is unset.
-        </p>
-        <form
-          className="space-y-2"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setError(null);
-            const res = await fetch("/api/v1/admin/login", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ password }),
-            });
-            if (!res.ok) {
-              setError(res.status === 403 ? "Wrong password (or admin disabled)." : String(res.status));
-              return;
-            }
-            const { token: t } = (await res.json()) as { token: string };
-            sessionStorage.setItem("jb-admin-token", t);
-            setToken(t);
-          }}
-        >
-          <Input
-            type="password"
-            aria-label="Admin password"
-            placeholder="Admin password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          <Button type="submit" className="w-full">
-            Sign in
-          </Button>
-        </form>
-        {error && <p className="text-sm text-destructive">{error}</p>}
-      </div>
-    );
-  }
+  if (!token) return <LoginForm onToken={setToken} />;
 
   return (
     <div className="mx-auto max-w-5xl space-y-10">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Admin</h1>
-        <Button variant="outline" onClick={logout}>
+        <Button variant="outline" onClick={() => setToken(null)}>
           Sign out
         </Button>
       </div>
@@ -172,50 +94,15 @@ export default function AdminPage() {
             onChange={(e) => setInstFilter(e.target.value)}
           >
             <option value="all">All</option>
-            {directory.map((i) => (
+            {unis.map((i) => (
               <option key={i.code} value={i.code}>
                 {i.short_name ?? i.name}
               </option>
             ))}
           </select>
         </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>#</TableHead>
-              <TableHead>Institution</TableHead>
-              <TableHead>Source</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Started</TableHead>
-              <TableHead>Stats</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {runs.map((run) => (
-              <TableRow key={run.id}>
-                <TableCell>{run.id}</TableCell>
-                <TableCell>
-                  {run.institution_code == null
-                    ? "shared"
-                    : directory.find((i) => i.code === run.institution_code)?.short_name ??
-                      run.institution_code}
-                </TableCell>
-                <TableCell>
-                  {run.source}/{run.entity_type}
-                </TableCell>
-                <TableCell>
-                  <StatusBadge status={run.status} />
-                </TableCell>
-                <TableCell className="whitespace-nowrap text-muted-foreground">
-                  {run.started_at?.slice(0, 19).replace("T", " ")}
-                </TableCell>
-                <TableCell className="max-w-md truncate font-mono text-xs" title={JSON.stringify(run.stats)}>
-                  {JSON.stringify(run.stats)}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        {runsError && <p className="text-sm text-destructive">{runsError}</p>}
+        <RunsTable runs={runs} directory={unis} />
       </section>
 
       <section className="space-y-3">
@@ -241,7 +128,10 @@ export default function AdminPage() {
                   <StatusBadge status={deal.status} />
                 </TableCell>
                 <TableCell>{deal.journals}</TableCell>
-                <TableCell className="max-w-md truncate text-muted-foreground" title={deal.reason ?? ""}>
+                <TableCell
+                  className="max-w-md truncate text-muted-foreground"
+                  title={deal.reason ?? ""}
+                >
                   {deal.reason ?? "—"}
                 </TableCell>
               </TableRow>
@@ -251,24 +141,37 @@ export default function AdminPage() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Effective settings (read-only)</h2>
-        <p className="text-sm text-muted-foreground">
-          Environment changes belong in <code>.env</code> plus a compose
-          restart — never edited here, so the panel cannot drift from the
-          deployment.
-        </p>
-        <Table>
-          <TableBody>
-            {Object.entries(settings).map(([key, value]) => (
-              <TableRow key={key}>
-                <TableCell className="font-mono text-xs">{key}</TableCell>
-                <TableCell>
-                  {typeof value === "boolean" ? (value ? "set" : "—") : String(value)}
-                </TableCell>
-              </TableRow>
+        <h2 className="text-lg font-semibold">Institution settings</h2>
+        <div className="flex items-center gap-2 text-sm">
+          <label htmlFor="inst-picker" className="text-muted-foreground">
+            University
+          </label>
+          <select
+            id="inst-picker"
+            className="rounded-[var(--radius)] border border-input bg-[var(--card)] px-2 py-1"
+            value={selectedUni}
+            onChange={(e) => setSelectedUni(e.target.value)}
+          >
+            {unis.map((i) => (
+              <option key={i.code} value={i.code}>
+                {i.name}
+              </option>
             ))}
-          </TableBody>
-        </Table>
+          </select>
+        </div>
+        {selectedUni && (
+          <InstitutionSettingsForm
+            key={selectedUni}
+            token={token}
+            code={selectedUni}
+            onUnauthorized={setToken}
+          />
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Global settings</h2>
+        <GlobalSettingsForm token={token} onUnauthorized={setToken} />
       </section>
     </div>
   );
