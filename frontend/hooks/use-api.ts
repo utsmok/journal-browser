@@ -188,8 +188,9 @@ export function useInstitutionsDirectory() {
   });
 }
 
-export function useFreshness() {
-  const inst = useInstitution();
+export function useFreshness(instOverride?: string) {
+  const ctxInst = useInstitution();
+  const inst = instOverride ?? ctxInst;
   return useQuery({
     queryKey: qk.freshness(inst),
     queryFn: () => apiGet<FreshnessResponse>(`/${inst}/meta/freshness`),
