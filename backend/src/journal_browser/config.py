@@ -6,6 +6,27 @@ import yaml
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Works of these types are not journal output and stay out of every count,
+# list, and stat (author pages, works stats, trends): preprints and books
+# would inflate open-access numbers. Conference proceedings stay in.
+# Compared via normalize_work_type, so the bare and info:eu-repo/semantics/
+# spellings in works.work_type collapse onto one form.
+EXCLUDED_WORK_TYPES = frozenset(
+    {"preprint", "postedcontent", "workingpaper", "book", "bookchapter", "bookpart", "monograph"}
+)
+
+
+def normalize_work_type(value: str | None) -> str:
+    """Bare, lower-cased work type so source spellings collapse onto one
+    form: 'info:eu-repo/semantics/bookPart' and 'book-part' -> 'bookpart'."""
+    return (
+        (value or "").replace("info:eu-repo/semantics/", "").replace("-", "").strip().lower()
+    )
+
+
+def work_type_excluded(value: str | None) -> bool:
+    return normalize_work_type(value) in EXCLUDED_WORK_TYPES
+
 
 class Settings(BaseSettings):
     # populate_by_name: the admin API revalidates a model_dump() (field
@@ -83,8 +104,8 @@ class Settings(BaseSettings):
     pure_oai_base_url: str = "https://ris.utwente.nl/ws/oai"
     pure_oai_min_spacing: float = 1.0
 
-    # Admin-curated ISSN ignore-list (registry scaffold; consumed by
-    # nothing yet).
+    # Admin-curated ISSN ignore-list: treated as nonexistent on every
+    # journal surface (search, facets, similar, author venues; detail 404s).
     ignored_issns: list[str] = []
 
     @property

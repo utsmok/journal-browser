@@ -22,7 +22,8 @@ from typing import Any
 from sqlalchemy import delete, insert, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from ..models import Author, AuthorWork, Journal
+from ..config import work_type_excluded
+from ..models import Author, AuthorWork, Institution, Journal
 
 logger = logging.getLogger(__name__)
 
@@ -302,20 +303,29 @@ async def ingest_authors(
     authors upserts in place (identity fields + derived attributes);
     author_works is deleted and rebuilt, so works retired since the last
     run drop out of every count. n_works counts the stored edges.
-    last_pub_year / primary_topic derive from those same edges; confirmed
-    checks the person payload's affiliations against the institution ROR."""
+    last_pub_year / primary_topic derive from those same edges, bounded to
+    the institution's publication-year window; confirmed
+    checks the person payload's affiliations against the institution ROR.
+    Edges to preprint/book works (config.EXCLUDED_WORK_TYPES) are not
+    stored, so no author count, list, or topic sees them."""
     data = await fetch_source(engine)
+    # The institution row carries the publication-year window; edges to
+    # works outside it drop out of every derived count below.
+    institution = await session.get(Institution, institution_id)
+    year_start, year_end = institution.data_window_start, institution.data_window_end or 9999
     local_works = {
         row["pure_uuid"]: (row["year"], row["journal_issn_l"])
         for row in (
             await session.execute(
                 text(
-                    "SELECT pure_uuid, year, journal_issn_l FROM works "
-                    "WHERE institution_id = :iid AND retired_at IS NULL"
+                    "SELECT pure_uuid, year, journal_issn_l, work_type FROM works "
+                    "WHERE institution_id = :iid AND retired_at IS NULL "
+                    "AND year BETWEEN :ws AND :we"
                 ),
-                {"iid": institution_id},
+                {"iid": institution_id, "ws": year_start, "we": year_end},
             )
         ).mappings()
+        if not work_type_excluded(row["work_type"])
     }
     index = author_id_index(data.authors)
     edge_map = build_edge_map(data.edges, index, set(local_works))

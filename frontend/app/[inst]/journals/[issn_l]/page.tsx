@@ -331,7 +331,7 @@ function PublicationsCard({
       title={`Publications (${site.short})`}
       description={
         <p className="text-pretty text-sm text-[var(--muted-foreground)]">
-          University corpus (Pure), all years; citations and FWCI from OpenAlex
+          {site.short} corpus (Pure), {site.windowStart} onwards; citations and FWCI from OpenAlex
           where the title is matched there.
         </p>
       }
@@ -589,7 +589,7 @@ function JournalPageInner() {
     );
 
   const { journal, stats, deals, attribution, summary_stats, stats_totals: totals } = data;
-  const recent = stats.filter((s) => s.year >= 2020);
+  const recent = stats.filter((s) => s.year >= site.windowStart);
   const openalex = data.openalex ?? null;
   const openaire = data.openaire ?? null;
   const metrics = data.institution_metrics ?? null;

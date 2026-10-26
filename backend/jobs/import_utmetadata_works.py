@@ -95,7 +95,7 @@ async def main(code: str) -> None:
         if min_year is not None and min_year < institution.data_window_start:
             final["window_start"] = [institution.data_window_start, min_year]
             institution.data_window_start = min_year
-        final["pure_canon_rows"] = await write_pure_canon_stats(session, institution.id)
+        final["pure_canon_rows"] = await write_pure_canon_stats(session, institution)
         await refresh_institution_stats(session, institution)
         await session.commit()
     await engine.dispose()

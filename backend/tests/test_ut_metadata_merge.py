@@ -270,11 +270,11 @@ async def test_works_union_and_detail_ut_metrics(api, client, monkeypatch):
     r = await client.get("/api/v1/tu/journals/1234-5678/works")
     assert r.status_code == 200
     body = r.json()
-    # 1 merged (10.1/one) + 2 ut-only + 1 stats-only = 4; ut-3 has no year ->
-    # last despite citing more than the 2021 stats-only row.
-    assert body["total"] == 4
+    # 1 merged (10.1/one) + 2 ut-only + 1 stats-only = 3 in the window;
+    # ut-3 has no year and falls outside it.
+    assert body["total"] == 3
     items = body["items"]
-    assert [i["id"] for i in items] == ["W1", "ut-2", "W2", "ut-3"]
+    assert [i["id"] for i in items] == ["W1", "ut-2", "W2"]
     merged = items[0]
     assert merged["in_openalex"] is True
     assert merged["fwci"] == 1.5
@@ -287,11 +287,11 @@ async def test_works_union_and_detail_ut_metrics(api, client, monkeypatch):
 
     r = await client.get("/api/v1/tu/journals/1234-5678")
     metrics = r.json()["institution_metrics"]
-    assert metrics["canonical_total"] == 3
-    assert metrics["canonical_retracted"] == 3
+    assert metrics["canonical_total"] == 2
+    assert metrics["canonical_retracted"] == 2
     assert metrics["canonical_oa"] == {
         "gold": 1,
-        "hybrid": 1,
+        "hybrid": 0,
         "green": 0,
         "bronze": 0,
         "diamond": 0,

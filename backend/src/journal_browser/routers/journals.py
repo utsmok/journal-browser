@@ -45,6 +45,11 @@ router = APIRouter(prefix="/journals", tags=["journals"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
+
+def _is_ignored(issn_l: str) -> bool:
+    """Admin ignore-list: an ignored journal is treated as nonexistent."""
+    return issn_l.upper() in set(get_settings().ignored_issns)
+
 #: DealOut fields that map 1:1 onto Deal columns.
 DEAL_FIELDS = [
     "id",
@@ -213,6 +218,8 @@ async def semantic_search_journals(
 async def similar_journals(
     issn_l: str, session: SessionDep, institution: InstitutionDep
 ) -> SimilarJournalsBundle:
+    if _is_ignored(issn_l):
+        raise HTTPException(status_code=404, detail="journal not found")
     similar = await search_service.similar_journals(session, issn_l, institution.id)
     if similar is None:
         raise HTTPException(status_code=404, detail="journal not found")
@@ -230,12 +237,12 @@ async def journal_works(
     page_size: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> WorksPage:
     known = await session.scalar(select(Journal.issn_l).where(Journal.issn_l == issn_l.upper()))
-    if known is None:
+    if known is None or _is_ignored(known):
         raise HTTPException(status_code=404, detail="journal not found")
     ut_rows = await ut_metadata_service.ut_works_for_journal(known)
     return WorksPage(
         **await detail_enrichment.list_works(
-            session, known, institution.id, page, page_size, ut_rows=ut_rows
+            session, known, institution, page, page_size, ut_rows=ut_rows
         )
     )
 
@@ -245,7 +252,7 @@ async def journal_detail(
     issn_l: str, session: SessionDep, institution: InstitutionDep
 ) -> JournalDetailResponse:
     journal = await session.scalar(select(Journal).where(Journal.issn_l == issn_l.upper()))
-    if journal is None:
+    if journal is None or _is_ignored(journal.issn_l):
         raise HTTPException(status_code=404, detail="journal not found")
 
     # Effective coverage: a shared deal_journals row applies unless the
@@ -287,6 +294,9 @@ async def journal_detail(
                 .where(
                     InstitutionWorksStats.issn_l == journal.issn_l,
                     InstitutionWorksStats.institution_id == institution.id,
+                    # Institution data window (denorm.py convention).
+                    InstitutionWorksStats.year >= institution.data_window_start,
+                    InstitutionWorksStats.year <= (institution.data_window_end or 9999),
                 )
                 .order_by(InstitutionWorksStats.year)
             )
@@ -431,7 +441,7 @@ async def journal_detail(
         ),
         institution_metrics=InstitutionMetrics(
             **await detail_enrichment.institution_metrics(
-                session, journal.issn_l, institution.id, ut_rows
+                session, journal.issn_l, institution, ut_rows
             )
         ),
         attribution={

@@ -13,16 +13,17 @@ from sqlalchemy import Float, Integer, case, cast, func, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import HarvestRun, SourceRecord, Work, WorkIdentity
+from ..models import HarvestRun, Institution, SourceRecord, Work, WorkIdentity
 from . import ut_metadata
 
 OPENALEX_URL = "https://openalex.org"
 
 
-def _journal_works(issn_l: str, institution_id: int):
+def _journal_works(issn_l: str, institution_id: int, year_start: int, year_end: int):
     """Subquery: latest version of each of the institution's OpenAlex work
     rows for the journal (works_stats runs are institution-scoped; an
-    OpenAlex work id can appear in several institutions' harvests)."""
+    OpenAlex work id can appear in several institutions' harvests), inside
+    the institution's publication-year window (NULL years drop out)."""
     return (
         select(SourceRecord.payload)
         .ext(distinct_on(SourceRecord.source_pk))
@@ -37,6 +38,10 @@ def _journal_works(issn_l: str, institution_id: int):
             # ix_source_records_works_issn_l.
             SourceRecord.payload.op("->")("primary_location").op("->")("source").op("->>")("issn_l")
             == issn_l,
+            # Publication-year window (NULL years fall outside it).
+            cast(SourceRecord.payload["publication_year"].astext, Integer).between(
+                year_start, year_end
+            ),
         )
         .order_by(SourceRecord.source_pk, SourceRecord.harvested_at.desc())
         .subquery()
@@ -66,21 +71,27 @@ def _work_item(payload: dict[str, Any]) -> dict[str, Any]:
 async def list_works(
     session: AsyncSession,
     issn_l: str,
-    institution_id: int,
+    institution: Institution,
     page: int,
     page_size: int,
     ut_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Paginated works: ut-metadata union when available, works_stats only
     otherwise. publication_year desc nulls last, cited_by_count desc, title
-    asc; slicing happens in Python (bounded per journal)."""
-    rows = _journal_works(issn_l, institution_id)
+    asc; slicing happens in Python (bounded per journal). Both sides are
+    bounded to the institution's publication-year window."""
+    year_start, year_end = institution.data_window_start, institution.data_window_end or 9999
+    rows = _journal_works(issn_l, institution.id, year_start, year_end)
     payloads = (await session.execute(select(rows.c.payload))).scalars().all()
     items = [_work_item(p) for p in payloads]
     for item in items:
         item["work_type"] = None
         item["in_openalex"] = True
     if ut_rows is not None:
+        # Canonical rows carry their own year: same window applies.
+        ut_rows = [
+            r for r in ut_rows if r["year"] is not None and year_start <= r["year"] <= year_end
+        ]
         items = ut_metadata.merge_work_lists(ut_rows, items)
     return {
         "items": ut_metadata.sort_work_items(items)[(page - 1) * page_size : page * page_size],
@@ -93,12 +104,14 @@ async def list_works(
 async def institution_metrics(
     session: AsyncSession,
     issn_l: str,
-    institution_id: int,
+    institution: Institution,
     ut_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Aggregates over the journal's stored OpenAlex works (SQL, one pass),
-    plus canonical-store totals when the external works store is reachable."""
-    rows = _journal_works(issn_l, institution_id)
+    plus canonical-store totals when the external works store is reachable.
+    Both sides bounded to the institution's publication-year window."""
+    year_start, year_end = institution.data_window_start, institution.data_window_end or 9999
+    rows = _journal_works(issn_l, institution.id, year_start, year_end)
     fwci = cast(rows.c.payload["fwci"].astext, Float)
     total, fwci_avg, fwci_n, retracted, cited_total = (
         await session.execute(
@@ -122,6 +135,10 @@ async def institution_metrics(
         "canonical_oa": None,
     }
     if ut_rows is not None:
+        # Canonical rows carry their own year: same window applies.
+        ut_rows = [
+            r for r in ut_rows if r["year"] is not None and year_start <= r["year"] <= year_end
+        ]
         metrics["canonical_total"] = len(ut_rows)
         metrics["canonical_retracted"] = sum(1 for r in ut_rows if r["is_retracted"])
         metrics["canonical_oa"] = ut_metadata.oa_buckets(ut_rows)

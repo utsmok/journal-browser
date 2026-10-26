@@ -9,7 +9,8 @@ from typing import Any
 from sqlalchemy import and_, case, false, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import Author, AuthorWork, Journal, JournalFlags, Work
+from ..config import get_settings
+from ..models import Author, AuthorWork, Institution, Journal, JournalFlags, Work
 from .search import _like, _oa_type, base_query
 
 #: Search page + recommendation list sizes.
@@ -228,13 +229,17 @@ async def search_authors(
 
 
 async def _author_journals(
-    session: AsyncSession, institution_id: int, pure_uuid: str
+    session: AsyncSession, institution: Institution, pure_uuid: str
 ) -> list[Any]:
     """The author's distinct venues with work counts + effective oa_type,
-    works count desc (ties by issn for determinism)."""
+    works count desc (ties by issn for determinism), inside the
+    institution's publication-year window (topic weighting inherits it).
+    Admin-ignored ISSNs are not venues."""
+    iid = institution.id
+    ignored = get_settings().ignored_issns
     flags = (
         select(JournalFlags.issn_l, JournalFlags.deal_covered)
-        .where(JournalFlags.institution_id == institution_id)
+        .where(JournalFlags.institution_id == iid)
         .subquery()
     )
     return (
@@ -249,7 +254,7 @@ async def _author_journals(
             .join(
                 AuthorWork,
                 and_(
-                    AuthorWork.institution_id == institution_id,
+                    AuthorWork.institution_id == iid,
                     AuthorWork.work_pure_uuid == Work.pure_uuid,
                     AuthorWork.author_pure_uuid == pure_uuid,
                 ),
@@ -257,8 +262,11 @@ async def _author_journals(
             .join(Journal, Journal.issn_l == Work.journal_issn_l)
             .join(flags, flags.c.issn_l == Journal.issn_l)
             .where(
-                Work.institution_id == institution_id,
+                Work.institution_id == iid,
                 Work.retired_at.is_(None),
+                Work.year >= institution.data_window_start,
+                Work.year <= (institution.data_window_end or 9999),
+                *([Journal.issn_l.not_in(sorted(set(ignored)))] if ignored else []),
             )
             .group_by(
                 Work.journal_issn_l,
@@ -371,23 +379,29 @@ async def _similar_sections(
 
 
 async def author_profile(
-    session: AsyncSession, institution_id: int, pure_uuid: str
+    session: AsyncSession, institution: Institution, pure_uuid: str
 ) -> dict[str, Any] | None:
-    """Full profile bundle; None = unknown author (404 upstream)."""
+    """Full profile bundle; None = unknown author (404 upstream). All
+    per-author work views are bounded to the institution's data window."""
+    iid = institution.id
+    year_start, year_end = institution.data_window_start, institution.data_window_end or 9999
     author = await session.scalar(
-        select(Author).where(
-            Author.institution_id == institution_id, Author.pure_uuid == pure_uuid
-        )
+        select(Author).where(Author.institution_id == iid, Author.pure_uuid == pure_uuid)
     )
     if author is None:
         return None
 
     work_join = and_(
-        AuthorWork.institution_id == institution_id,
+        AuthorWork.institution_id == iid,
         AuthorWork.work_pure_uuid == Work.pure_uuid,
         AuthorWork.author_pure_uuid == pure_uuid,
     )
-    non_retired = (Work.institution_id == institution_id, Work.retired_at.is_(None))
+    in_window = (
+        Work.institution_id == iid,
+        Work.retired_at.is_(None),
+        Work.year >= year_start,
+        Work.year <= year_end,
+    )
     work_rows = (
         await session.execute(
             select(
@@ -401,7 +415,7 @@ async def author_profile(
             )
             .join(AuthorWork, work_join)
             .outerjoin(Journal, Journal.issn_l == Work.journal_issn_l)
-            .where(*non_retired)
+            .where(*in_window)
             .order_by(Work.year.desc(), func.lower(Work.title))
             .limit(WORKS_CAP)
         )
@@ -411,7 +425,7 @@ async def author_profile(
         await session.execute(
             select(Work.year, Work.oa_status, func.count().label("n"))
             .join(AuthorWork, work_join)
-            .where(*non_retired)
+            .where(*in_window)
             .group_by(Work.year, Work.oa_status)
         )
     ).all()
@@ -425,7 +439,7 @@ async def author_profile(
             bucket[row.oa_status] += row.n
     oa_by_year = [by_year[year] for year in sorted(by_year, reverse=True)]
 
-    journal_rows = await _author_journals(session, institution_id, pure_uuid)
+    journal_rows = await _author_journals(session, institution, pure_uuid)
     topics: dict[str, int] = {}
     if journal_rows:
         topic_rows = (
@@ -458,9 +472,7 @@ async def author_profile(
             )
         ).all()
         embeddings = {row.issn_l: row.embedding for row in emb_rows if row.embedding is not None}
-    similar, alternatives = await _similar_sections(
-        session, institution_id, journal_rows, embeddings
-    )
+    similar, alternatives = await _similar_sections(session, iid, journal_rows, embeddings)
 
     return {
         "author": {

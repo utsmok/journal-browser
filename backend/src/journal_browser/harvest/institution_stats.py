@@ -17,9 +17,9 @@ from aletheca import AlethecaClient
 from sqlalchemy import delete, func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..config import get_settings
+from ..config import EXCLUDED_WORK_TYPES, get_settings, work_type_excluded
 from ..ingest import IngestSession
-from ..models import InstitutionTrend, InstitutionWorksStats, Journal, Work
+from ..models import Institution, InstitutionTrend, InstitutionWorksStats, Journal, Work
 from .common import OA_STATUSES
 from .openalex_journals import resolve_institution_openalex_id
 
@@ -105,6 +105,11 @@ async def harvest_institution_stats(
                 continue
             await ingest.ingest_record(openalex_id_to_pk(payload.get("id")), payload)
 
+            # Preprints/books are not journal output: out of every stat and
+            # trend (the verbatim source record stays for provenance).
+            if work_type_excluded(payload.get("type")):
+                continue
+
             year = payload.get("publication_year")
             if isinstance(year, int) and institution.data_window_start <= year <= (
                 institution.data_window_end or current_year
@@ -166,12 +171,13 @@ async def _write_journal_stats(
     logger.info("institution_works_stats[%s] rows: %d", source, len(rows))
 
 
-async def write_pure_canon_stats(session: AsyncSession, institution_id: int) -> int:
+async def write_pure_canon_stats(session: AsyncSession, institution: Institution) -> int:
     """Per-journal/year work counts straight from that institution's works.
 
-    Cross-check dimension for the verify job: the OA split is left at zero
-    because Pure's access states (eprints/COAR) are not OpenAlex-compatible;
-    the OpenAlex dimension remains the OA-split source of truth.
+    Window-bounded (institution.data_window_*): journal_flags.works_count,
+    the has_works facet, and the detail-page totals describe the selected
+    year span. The OA split stays at zero: the OpenAlex dimension remains
+    the OA-split source of truth.
     """
     rows = (
         await session.execute(
@@ -181,16 +187,30 @@ async def write_pure_canon_stats(session: AsyncSession, institution_id: int) -> 
                 func.count(),
             )
             .where(
-                Work.institution_id == institution_id,
+                Work.institution_id == institution.id,
                 Work.retired_at.is_(None),
                 Work.journal_issn_l.is_not(None),
+                Work.year.between(
+                    institution.data_window_start, institution.data_window_end or 9999
+                ),
+                # Same exclusion as the OpenAlex stats pass; normalized
+                # inline because the comparison runs in SQL.
+                func.lower(
+                    func.replace(
+                        func.replace(
+                            func.coalesce(Work.work_type, ""), "info:eu-repo/semantics/", ""
+                        ),
+                        "-",
+                        "",
+                    )
+                ).not_in(sorted(EXCLUDED_WORK_TYPES)),
             )
             .group_by(Work.journal_issn_l, Work.year)
         )
     ).all()
     payload = [
         {
-            "institution_id": institution_id,
+            "institution_id": institution.id,
             "source": "pure_canon",
             "issn_l": issn_l,
             "year": year,
@@ -200,7 +220,7 @@ async def write_pure_canon_stats(session: AsyncSession, institution_id: int) -> 
     ]
     await session.execute(
         delete(InstitutionWorksStats).where(
-            InstitutionWorksStats.institution_id == institution_id,
+            InstitutionWorksStats.institution_id == institution.id,
             InstitutionWorksStats.source == "pure_canon",
         )
     )

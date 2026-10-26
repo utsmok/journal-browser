@@ -69,7 +69,7 @@ async def search_authors(
 async def author_profile(
     pure_uuid: str, session: SessionDep, institution: InstitutionDep
 ) -> AuthorProfileResponse:
-    profile = await authors_service.author_profile(session, institution.id, pure_uuid)
+    profile = await authors_service.author_profile(session, institution, pure_uuid)
     if profile is None:
         raise HTTPException(status_code=404, detail="author not found")
     return AuthorProfileResponse(

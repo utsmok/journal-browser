@@ -23,7 +23,7 @@ async def main(code: str | None = None, limit: int | None = None) -> None:
     async with maker() as session:
         institution = await resolve_institution(session, code)
         stats = await harvest_institution_stats(session, institution, limit=limit)
-        stats["pure_canon_rows"] = await write_pure_canon_stats(session, institution.id)
+        stats["pure_canon_rows"] = await write_pure_canon_stats(session, institution)
         await refresh_institution_stats(session, institution)
         await session.commit()
     await engine.dispose()

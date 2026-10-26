@@ -198,7 +198,12 @@ institution; every other institution reads its config from its row.
   re-harvest — refreshes the stats and journal flags, and widens the
   institution's data window to the oldest stored work. Idempotent; canonical
   works without a Pure uuid stay out (they still surface on journal pages
-  through the live merge).
+  through the live merge). `jobs/import_utmetadata_raw.py` then copies the
+  verbatim OpenAlex / OpenAIRE / Pure / Crossref work records behind that
+  corpus into `source_records`, reconfirms OpenAIRE DOI identities, and
+  rebuilds the OpenAlex per-journal/year OA stats window-bounded — so
+  year charts and FWCI/citation metrics cover the whole data window, not
+  just the years the live harvests ran.
 - **Upgrading the stack:** `git pull && docker compose up -d --build`. The
   bootstrap service applies pending migrations before harvesting. Migration
   0020 (semantic-search index) builds an HNSW graph and needs a few minutes

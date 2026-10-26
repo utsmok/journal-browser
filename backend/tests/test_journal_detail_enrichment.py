@@ -51,8 +51,8 @@ SOURCE_PAYLOAD = {
 }
 
 #: Works payloads: (2023, 9 cites, fwci null, retracted), (2021, 5, 1.5),
-#: (no year, 7, 2.5). Metrics must be matched=3, avg=2.0, n=2, retracted=1,
-#: cited=21; order W2, W1, W3 (year desc nulls last).
+#: (no year, 7, 2.5). Window (2020+) drops the year-less W3: metrics must
+#: be matched=2, avg=1.5, n=1, retracted=1, cited=14; order W2, W1.
 WORKS_PAYLOADS = {
     "W1": {
         "id": "W1",
@@ -265,18 +265,19 @@ async def test_works_pagination_and_sort(api):
     r = await api.get(f"/api/v1/tu/journals/{MAIN_ISSN}/works", params={"page_size": 2})
     assert r.status_code == 200
     body = r.json()
+    # W3 has no year and falls outside the data window.
     assert [i["id"] for i in body["items"]] == ["W2", "W1"]
-    assert body["total"] == 3
+    assert body["total"] == 2
     assert body["page"] == 1
     assert body["page_size"] == 2
 
     r = await api.get(f"/api/v1/tu/journals/{MAIN_ISSN}/works", params={"page": 2, "page_size": 2})
     body = r.json()
-    assert [i["id"] for i in body["items"]] == ["W3"]
+    assert [i["id"] for i in body["items"]] == []
 
     r = await api.get(f"/api/v1/tu/journals/{MAIN_ISSN}/works", params={"page": 4, "page_size": 2})
     assert r.json()["items"] == []
-    assert r.json()["total"] == 3
+    assert r.json()["total"] == 2
 
 
 @requires_db
@@ -341,11 +342,11 @@ async def test_detail_enrichment(api):
     assert body["openaire"] == {"matched_works": 2}
 
     assert body["institution_metrics"] == {
-        "openalex_matched": 3,
-        "fwci_avg": 2.0,
-        "fwci_n": 2,
+        "openalex_matched": 2,
+        "fwci_avg": 1.5,
+        "fwci_n": 1,
         "retracted": 1,
-        "cited_total": 21,
+        "cited_total": 14,
         "canonical_total": None,
         "canonical_retracted": None,
         "canonical_oa": None,
