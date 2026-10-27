@@ -13,7 +13,11 @@ export function SiteNav() {
   const prefix = seg && seg !== "admin" ? `/${seg}` : "";
   if (!prefix) return null;
   return (
-    <nav aria-label="Main" className="flex items-center gap-4 sm:gap-6 text-sm">
+    <nav
+      aria-label="Main"
+      className="order-last w-full whitespace-nowrap text-sm sm:order-none sm:w-auto"
+    >
+      <div className="flex items-center gap-4 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-6 sm:overflow-visible sm:pb-0">
       <NavLink href={`${prefix}/`} label="Search" />
       <NavLink href={`${prefix}/author`} label="Authors" />
       <NavLink href={`${prefix}/publisher`} label="Publishers" />
@@ -21,6 +25,7 @@ export function SiteNav() {
       <NavLink href={`${prefix}/deals`} label="Deals" />
       <NavLink href={`${prefix}/about`} label="About" />
       <NavLink href="/" label="All universities" />
+      </div>
     </nav>
   );
 }
