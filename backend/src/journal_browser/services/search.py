@@ -144,15 +144,22 @@ def _list_price(currency: str) -> Any:
         Numeric,
     )
 
-#: Per-journal OA type (owner-approved 2026-10-23). DOAJ = fully-OA venue;
-#: OpenAPC evidence on a DOAJ journal splits gold vs diamond; a covered
-#: non-DOAJ journal is hybrid via the agreement; rest is subscription.
-#: Per-work Work oa_status is deliberately unused: it only covers the
-#: scoped institution's publications, not the venue.
+#: OpenAlex "fully open access" venue flag, an OA-evidence source beside
+#: DOAJ membership (2026-10-27): OpenAlex misses DOAJ membership for real
+#: OA journals (e.g. MDPI Water), which used to fall through to
+#: "subscription". Known charges split gold from diamond.
+_OA_EVIDENCE = or_(Journal.is_in_doaj.is_(True), Journal.is_oa.is_(True))
+_CHARGED = or_(APC_EXISTS, Journal.latest_apc_euro.is_not(None))
+
+#: Per-journal OA type (owner-approved 2026-10-23; is_oa evidence added
+#: 2026-10-27). DOAJ or fully-OA = open venue; known charges split gold vs
+#: diamond; a covered non-OA journal is hybrid via the agreement; rest is
+#: subscription. Per-work Work oa_status is deliberately unused: it only
+#: covers the scoped institution's publications, not the venue.
 def _oa_type(deal_covered: Any) -> Any:
     return case(
-        (and_(Journal.is_in_doaj.is_(True), APC_EXISTS), "gold"),
-        (Journal.is_in_doaj.is_(True), "diamond"),
+        (and_(_OA_EVIDENCE, _CHARGED), "gold"),
+        (_OA_EVIDENCE, "diamond"),
         (deal_covered.is_(True), "hybrid"),
         else_="subscription",
     ).label("oa_type")
@@ -162,10 +169,12 @@ def _oa_type(deal_covered: Any) -> Any:
 OA_TYPES = ("gold", "diamond", "hybrid", "subscription")
 
 
-def oa_type_value(is_in_doaj: bool | None, has_apc: bool, deal_covered: bool) -> str:
+def oa_type_value(
+    is_in_doaj: bool | None, is_oa: bool | None, has_charges: bool, deal_covered: bool
+) -> str:
     """Python mirror of the OA_TYPE SQL case, for the detail endpoint."""
-    if is_in_doaj:
-        return "gold" if has_apc else "diamond"
+    if is_in_doaj or is_oa:
+        return "gold" if has_charges else "diamond"
     return "hybrid" if deal_covered else "subscription"
 
 

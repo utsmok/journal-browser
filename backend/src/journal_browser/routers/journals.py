@@ -384,7 +384,10 @@ async def journal_detail(
             quartile=sjr_rows[-1].best_quartile if sjr_rows else None,
             twoyr_mean_citedness=summary_stats.get("two_yr_mean_citedness"),
             oa_type=search_service.oa_type_value(
-                journal.is_in_doaj, bool(aggregates), bool(deals)
+                journal.is_in_doaj,
+                journal.is_oa,
+                bool(aggregates) or journal.latest_apc_euro is not None,
+                bool(deals),
             ),
         ),
         stats_totals=stats_totals,

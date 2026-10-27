@@ -73,6 +73,12 @@ async def api(db_engine):
                 _journal("4444-4444", title="Diamond Journal", is_in_doaj=True),
                 _journal("5555-5555", title="Hybrid Journal"),
                 _journal("6666-6666", title="Subscription Journal"),
+                # Fully-OA per OpenAlex but missing from DOAJ (the MDPI
+                # Water case): priced -> gold, unpriced -> diamond (even
+                # beside a deal, matching DOAJ-journal behavior).
+                _journal("2323-2323", title="Water Journal", is_oa=True, latest_apc_euro=2500),
+                _journal("2424-2424", title="Free OA Journal", is_oa=True),
+                _journal("2525-2525", title="Covered OA Journal", is_oa=True),
                 # Similar fixtures.
                 _journal(
                     "7777-7777",
@@ -215,7 +221,7 @@ async def api(db_engine):
         await session.execute(
             text(
                 "UPDATE journal_flags SET deal_covered = true"
-                " WHERE institution_id = :iid AND issn_l IN ('5555-5555', '1313-1313')"
+                " WHERE institution_id = :iid AND issn_l IN ('5555-5555', '1313-1313', '2525-2525')"
             ),
             {"iid": home.id},
         )
@@ -379,7 +385,7 @@ async def test_publisher_and_apc_facets(api):
     body = (await api.get("/api/v1/ut/journals")).json()
     facets = body["facets"]
     # 3333 + 1515 have OpenAPC evidence, 1616 + 2121 an OpenAlex list price.
-    assert facets["apc"] == {"true": 4, "false": len(body["items"]) - 4}
+    assert facets["apc"] == {"true": 4, "false": body["total"] - 4}
     # Cross-consistency: every non-publisher facet sums to the total.
     for group in ("deal_coverage", "oa", "doaj", "apc"):
         assert sum(facets[group].values()) == body["total"]
@@ -408,7 +414,7 @@ async def test_facet_variants_drop_own_filter(api):
     deal" chip with a zero count."""
     browse = (await api.get("/api/v1/ut/journals")).json()
     body = (await api.get("/api/v1/ut/journals", params={"deal": "covered"})).json()
-    assert body["total"] == 2  # 5555-5555 and 1313-1313 are deal-covered
+    assert body["total"] == 3  # 5555-5555, 1313-1313, 2525-2525 are deal-covered
     assert body["facets"]["deal_coverage"] == browse["facets"]["deal_coverage"]
 
     body = (await api.get("/api/v1/ut/journals", params={"oa": "true"})).json()
@@ -507,6 +513,9 @@ async def test_oa_type_mapping(api):
     assert by_issn["5555-5555"] == "hybrid"  # deal-covered, not doaj
     assert by_issn["6666-6666"] == "subscription"
     assert by_issn["1515-1515"] == "gold"
+    assert by_issn["2323-2323"] == "gold"  # fully-OA, priced (MDPI Water case)
+    assert by_issn["2424-2424"] == "diamond"  # fully-OA, no charges known
+    assert by_issn["2525-2525"] == "diamond"  # unpriced OA outranks the deal
     assert set(by_issn.values()) <= {"gold", "diamond", "hybrid", "subscription"}
 
 
@@ -516,18 +525,25 @@ async def test_oa_type_facet_filter(api):
     r = await api.get("/api/v1/ut/journals", params={"oa_type": "gold,diamond"})
     assert r.status_code == 200
     items = r.json()["items"]
-    assert {i["issn_l"] for i in items} == {"3333-3333", "1515-1515", "4444-4444"}
+    assert {i["issn_l"] for i in items} == {
+        "3333-3333",
+        "1515-1515",
+        "4444-4444",
+        "2323-2323",
+        "2424-2424",
+        "2525-2525",
+    }
 
     # Single value narrows to one fixture.
     r = await api.get("/api/v1/ut/journals", params={"oa_type": "diamond"})
     assert r.status_code == 200
-    assert _issns(r.json()) == {"4444-4444"}
+    assert _issns(r.json()) == {"4444-4444", "2424-2424", "2525-2525"}
 
     # The facet's own filter is excluded from its counts, so every option
     # stays visible (with the rest of the filter set applied).
     oa_facets = r.json()["facets"]["oa_type"]
-    assert oa_facets["gold"] == 2
-    assert oa_facets["diamond"] == 1
+    assert oa_facets["gold"] == 3
+    assert oa_facets["diamond"] == 3
     assert oa_facets["hybrid"] == 2
 
     # Unknown vocabulary is a 400, not a silent empty result.
