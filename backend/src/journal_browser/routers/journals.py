@@ -388,6 +388,7 @@ async def journal_detail(
                 journal.is_oa,
                 bool(aggregates) or journal.latest_apc_euro is not None,
                 bool(deals),
+                journal.oa_status_observed,
             ),
         ),
         stats_totals=stats_totals,

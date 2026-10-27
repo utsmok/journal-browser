@@ -150,16 +150,29 @@ def _list_price(currency: str) -> Any:
 #: "subscription". Known charges split gold from diamond.
 _OA_EVIDENCE = or_(Journal.is_in_doaj.is_(True), Journal.is_oa.is_(True))
 _CHARGED = or_(APC_EXISTS, Journal.latest_apc_euro.is_not(None))
+#: Venue color observed from recent works (harvest/journal_oa.py) when the
+#: only evidence is the bare is_oa flag; bronze/closed/green stay NULL
+#: (no OA color) so the case falls through to deal/subscription instead of
+#: an overeager diamond (owner decision 2026-10-27).
+_OBSERVED = case(
+    (
+        Journal.oa_status_observed.in_(("gold", "diamond", "hybrid")),
+        Journal.oa_status_observed,
+    ),
+    else_=None,
+)
 
 #: Per-journal OA type (owner-approved 2026-10-23; is_oa evidence added
-#: 2026-10-27). DOAJ or fully-OA = open venue; known charges split gold vs
-#: diamond; a covered non-OA journal is hybrid via the agreement; rest is
-#: subscription. Per-work Work oa_status is deliberately unused: it only
-#: covers the scoped institution's publications, not the venue.
+#: 2026-10-27, observed work colors same day). DOAJ or fully-OA = open
+#: venue; known charges split gold vs diamond; an unpriced is_oa venue
+#: takes its observed recent-works color; a covered journal without OA
+#: color is hybrid via the agreement; rest is subscription. Per-work
+#: oa_status outside the sample is deliberately unused.
 def _oa_type(deal_covered: Any) -> Any:
     return case(
         (and_(_OA_EVIDENCE, _CHARGED), "gold"),
-        (_OA_EVIDENCE, "diamond"),
+        (Journal.is_in_doaj.is_(True), "diamond"),
+        (_OBSERVED.is_not(None), _OBSERVED),
         (deal_covered.is_(True), "hybrid"),
         else_="subscription",
     ).label("oa_type")
@@ -170,11 +183,19 @@ OA_TYPES = ("gold", "diamond", "hybrid", "subscription")
 
 
 def oa_type_value(
-    is_in_doaj: bool | None, is_oa: bool | None, has_charges: bool, deal_covered: bool
+    is_in_doaj: bool | None,
+    is_oa: bool | None,
+    has_charges: bool,
+    deal_covered: bool,
+    observed: str | None = None,
 ) -> str:
     """Python mirror of the OA_TYPE SQL case, for the detail endpoint."""
-    if is_in_doaj or is_oa:
-        return "gold" if has_charges else "diamond"
+    if (is_in_doaj or is_oa) and has_charges:
+        return "gold"
+    if is_in_doaj:
+        return "diamond"
+    if observed in ("gold", "diamond", "hybrid"):
+        return observed
     return "hybrid" if deal_covered else "subscription"
 
 

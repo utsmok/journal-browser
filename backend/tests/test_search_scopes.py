@@ -74,11 +74,29 @@ async def api(db_engine):
                 _journal("5555-5555", title="Hybrid Journal"),
                 _journal("6666-6666", title="Subscription Journal"),
                 # Fully-OA per OpenAlex but missing from DOAJ (the MDPI
-                # Water case): priced -> gold, unpriced -> diamond (even
-                # beside a deal, matching DOAJ-journal behavior).
+                # Water case): priced -> gold; unpriced takes the color
+                # observed from recent works, falling back through the
+                # deal to subscription when nothing else says OA.
                 _journal("2323-2323", title="Water Journal", is_oa=True, latest_apc_euro=2500),
-                _journal("2424-2424", title="Free OA Journal", is_oa=True),
-                _journal("2525-2525", title="Covered OA Journal", is_oa=True),
+                _journal(
+                    "2424-2424",
+                    title="Free OA Journal",
+                    is_oa=True,
+                    oa_status_observed="diamond",
+                ),
+                _journal(
+                    "2626-2626",
+                    title="Observed Gold Journal",
+                    is_oa=True,
+                    oa_status_observed="gold",
+                ),
+                _journal(
+                    "2727-2727",
+                    title="Observed Closed Covered Journal",
+                    is_oa=True,
+                    oa_status_observed="closed",
+                ),
+                _journal("2828-2828", title="Unobserved OA Journal", is_oa=True),
                 # Similar fixtures.
                 _journal(
                     "7777-7777",
@@ -221,7 +239,7 @@ async def api(db_engine):
         await session.execute(
             text(
                 "UPDATE journal_flags SET deal_covered = true"
-                " WHERE institution_id = :iid AND issn_l IN ('5555-5555', '1313-1313', '2525-2525')"
+                " WHERE institution_id = :iid AND issn_l IN ('5555-5555', '1313-1313', '2727-2727')"
             ),
             {"iid": home.id},
         )
@@ -414,7 +432,7 @@ async def test_facet_variants_drop_own_filter(api):
     deal" chip with a zero count."""
     browse = (await api.get("/api/v1/ut/journals")).json()
     body = (await api.get("/api/v1/ut/journals", params={"deal": "covered"})).json()
-    assert body["total"] == 3  # 5555-5555, 1313-1313, 2525-2525 are deal-covered
+    assert body["total"] == 3  # 5555-5555, 1313-1313, 2727-2727 are deal-covered
     assert body["facets"]["deal_coverage"] == browse["facets"]["deal_coverage"]
 
     body = (await api.get("/api/v1/ut/journals", params={"oa": "true"})).json()
@@ -514,8 +532,10 @@ async def test_oa_type_mapping(api):
     assert by_issn["6666-6666"] == "subscription"
     assert by_issn["1515-1515"] == "gold"
     assert by_issn["2323-2323"] == "gold"  # fully-OA, priced (MDPI Water case)
-    assert by_issn["2424-2424"] == "diamond"  # fully-OA, no charges known
-    assert by_issn["2525-2525"] == "diamond"  # unpriced OA outranks the deal
+    assert by_issn["2424-2424"] == "diamond"  # observed diamond works
+    assert by_issn["2626-2626"] == "gold"  # observed gold works, no prices
+    assert by_issn["2727-2727"] == "hybrid"  # closed works, deal-covered
+    assert by_issn["2828-2828"] == "subscription"  # no observation, no deal
     assert set(by_issn.values()) <= {"gold", "diamond", "hybrid", "subscription"}
 
 
@@ -531,20 +551,20 @@ async def test_oa_type_facet_filter(api):
         "4444-4444",
         "2323-2323",
         "2424-2424",
-        "2525-2525",
+        "2626-2626",
     }
 
     # Single value narrows to one fixture.
     r = await api.get("/api/v1/ut/journals", params={"oa_type": "diamond"})
     assert r.status_code == 200
-    assert _issns(r.json()) == {"4444-4444", "2424-2424", "2525-2525"}
+    assert _issns(r.json()) == {"4444-4444", "2424-2424"}
 
     # The facet's own filter is excluded from its counts, so every option
     # stays visible (with the rest of the filter set applied).
     oa_facets = r.json()["facets"]["oa_type"]
-    assert oa_facets["gold"] == 3
-    assert oa_facets["diamond"] == 3
-    assert oa_facets["hybrid"] == 2
+    assert oa_facets["gold"] == 4
+    assert oa_facets["diamond"] == 2
+    assert oa_facets["hybrid"] == 3
 
     # Unknown vocabulary is a 400, not a silent empty result.
     r = await api.get("/api/v1/ut/journals", params={"oa_type": "gold,bogus"})
@@ -553,7 +573,7 @@ async def test_oa_type_facet_filter(api):
 
 @requires_db
 async def test_proceedings_exclusion(api):
-    body = (await api.get("/api/v1/ut/journals")).json()
+    body = (await api.get("/api/v1/ut/journals", params={"limit": 100})).json()
     issns = _issns(body)
     assert "1212-1212" not in issns  # pattern + no deal + no UT works
     assert "1313-1313" in issns  # deal-covered proceedings stay

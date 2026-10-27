@@ -427,6 +427,11 @@ class Journal(Base):
     # correlated subquery per row (same pattern as latest_quartile);
     # refreshed by harvest.denorm.refresh_apcs.
     latest_apc_euro: Mapped[float | None] = mapped_column(Numeric, nullable=True)
+    # Modal non-green Work oa_status across the journal's most recent works
+    # (harvest/journal_oa.py), sampled because OpenAlex marks the venue
+    # is_oa without saying which OA color. bronze/closed/green mean "no OA
+    # color observed"; oa_type falls back to deal/subscription for them.
+    oa_status_observed: Mapped[str | None] = mapped_column(String(16), nullable=True)
     crossref_meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     openaire_meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     harvested_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
