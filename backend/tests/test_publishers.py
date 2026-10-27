@@ -6,6 +6,7 @@ from urllib.parse import quote
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from conftest import requires_db
@@ -15,11 +16,14 @@ from journal_browser.models import (
     Deal,
     DealInstitution,
     DealJournal,
+    HarvestRun,
     InstitutionWorksStats,
     Journal,
     JournalApcAggregate,
     JournalFlags,
+    OpenalexPublisher,
     Publisher,
+    SourceRecord,
 )
 
 
@@ -46,6 +50,7 @@ async def publishers_api(db, institution_factory):
     Alpha/Beta Press (J9, slash name, no works). Excluded from grouping: a
     NULL publisher, a below-cutoff journal, a browse-excluded one. rug: only
     Elsevier BV is browsable, with different flag numbers."""
+
     async def _override():
         async with async_sessionmaker(db.bind, expire_on_commit=False)() as session:
             yield session
@@ -277,9 +282,7 @@ async def test_publisher_facets_drop_own_dimension(publishers_api):
     assert body["facets"]["deal"] == {"covered": 2, "none": 2}
     assert body["facets"]["quartile"] == {"Q1": 2, "Q2": 1, "Q3": 0, "Q4": 0}
 
-    body = (
-        await client.get("/api/v1/ut/publishers", params={"include_facets": False})
-    ).json()
+    body = (await client.get("/api/v1/ut/publishers", params={"include_facets": False})).json()
     assert body["facets"] == {}
 
 
@@ -362,3 +365,247 @@ async def test_publisher_institution_isolation(publishers_api):
         "topics": [{"name": "Physics", "n": 1.5}, {"name": "Materials Science", "n": 0.5}],
     }
     assert (await client.get("/api/v1/nonsense/publishers")).status_code == 404
+
+
+# ── Canonical grouping (journals.publisher_canonical, migration 0025) ──────
+
+
+@pytest.fixture
+async def canonical_api(publishers_api, db):
+    """Springer's two journals merge with a 'Nature Research' journal under
+    one canonical 'Springer Nature'; the journals keep their own
+    publisher_name for display."""
+    client, ids = publishers_api
+    session = db
+    session.add(
+        _journal(
+            "1010-1010",
+            publisher_name="Nature Research",
+            publisher_canonical="Springer Nature",
+            topics=[{"display_name": "Condensed Matter Physics", "count": 5}],
+        )
+    )
+    await session.flush()
+    session.add(
+        JournalFlags(
+            institution_id=ids["ut"], issn_l="1010-1010", works_count=1, works_window_plus=7
+        )
+    )
+    # Zero-count topics (rows stored before `count` was persisted): all
+    # works pile onto the first entry's label.
+    session.add(
+        _journal(
+            "1212-1212",
+            publisher_name="Legacy Press",
+            topics=[{"display_name": "Zoology"}],
+        )
+    )
+    await session.flush()
+    session.add(
+        JournalFlags(
+            institution_id=ids["ut"], issn_l="1212-1212", works_count=4, works_window_plus=9
+        )
+    )
+    await session.execute(
+        update(Journal)
+        .where(Journal.issn_l.in_(["3333-3331", "7777-7771"]))
+        .values(publisher_canonical="Springer Nature")
+    )
+    await session.commit()
+    return client, ids
+
+
+@requires_db
+async def test_publisher_canonical_merges_subbrands(canonical_api):
+    client, ids = canonical_api
+    body = (await client.get("/api/v1/ut/publishers")).json()
+    # Two publisher_names (Springer, Nature Research) collapse into one
+    # canonical group; uncanonicalized names keep their own groups.
+    assert body["total"] == 5
+    assert [i["name"] for i in body["items"]] == [
+        "Springer Nature",
+        "Elsevier BV",
+        "Legacy Press",
+        "Wiley",
+        "Alpha/Beta Press",
+    ]
+    merged = body["items"][0]
+    assert merged["n_journals"] == 3
+    assert merged["n_works"] == 13  # 10 + 2 + 1
+    assert merged["deal_journals"] == 1
+    assert merged["oa_types"] == {"gold": 0, "diamond": 0, "hybrid": 1, "subscription": 2}
+    assert merged["quartiles"] == {"q1": 1, "q2": 0, "q3": 0, "q4": 0, "none": 2}
+    assert merged["apc"] == {"n_journals": 1, "eur_min": 1500.0, "eur_max": 1500.0}
+    # J10's single work lands whole on its topic label.
+    assert merged["topics"] == [{"name": "Condensed Matter Physics", "n": 1.0}]
+    # Legacy Press: zero-count topics put all 4 works on the primary label.
+    assert body["items"][2]["n_works"] == 4
+    assert body["items"][2]["topics"] == [{"name": "Zoology", "n": 4.0}]
+
+
+@requires_db
+async def test_publisher_search_matches_member_names(canonical_api):
+    client, ids = canonical_api
+    # q reaches the canonical group through a sub-brand publisher_name,
+    # and a member-name prefix ranks the group as relevant.
+    body = (await client.get("/api/v1/ut/publishers", params={"q": "Nature"})).json()
+    names = [i["name"] for i in body["items"]]
+    assert "Springer Nature" in names
+    assert names[0] == "Springer Nature"  # member-name prefix match
+    body = (await client.get("/api/v1/ut/publishers", params={"q": "nature rese"})).json()
+    assert [i["name"] for i in body["items"]] == ["Springer Nature"]
+
+
+@requires_db
+async def test_publisher_detail_by_canonical_name(canonical_api):
+    client, ids = canonical_api
+    r = await client.get(f"/api/v1/ut/publishers/{quote('Springer Nature')}")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["publisher"]["n_journals"] == 3
+    # All sub-brand journals ride along under the canonical key, own
+    # publisher_name intact, institution_works desc.
+    assert [(j["issn_l"], j["publisher_name"]) for j in body["journals"]] == [
+        ("3333-3331", "Springer"),
+        ("7777-7771", "Springer"),
+        ("1010-1010", "Nature Research"),
+    ]
+    # The group lives under the canonical; its former name is gone.
+    assert (await client.get(f"/api/v1/ut/publishers/{quote('Springer')}")).status_code == 404
+
+
+@requires_db
+async def test_publisher_facets_on_merged_groups(canonical_api):
+    client, ids = canonical_api
+    body = (await client.get("/api/v1/ut/publishers")).json()
+    # Size buckets run over merged group sizes (3 journals -> "2-4").
+    assert body["facets"]["size"] == {"1": 3, "2-4": 2, "5-9": 0, "10+": 0}
+    # J10 shares Elsevier's topic label; the facet counts publishers, not
+    # journals.
+    assert body["facets"]["topic"] == {
+        "Condensed Matter Physics": 2,
+        "Nanotech": 1,
+        "Zoology": 1,
+    }
+    names = (
+        await client.get("/api/v1/ut/publishers", params={"topic": "condensed matter physics"})
+    ).json()
+    assert [i["name"] for i in names["items"]] == ["Springer Nature", "Elsevier BV"]
+
+
+@requires_db
+async def test_publisher_snapshot_per_institution(publishers_api):
+    client, ids = publishers_api
+    # rug first, ut second: each institution builds its own snapshot.
+    rug = (await client.get("/api/v1/rug/publishers")).json()
+    assert rug["total"] == 1
+    assert rug["items"][0]["n_works"] == 2
+    ut = (await client.get("/api/v1/ut/publishers")).json()
+    assert ut["total"] == 4
+    # Warm snapshot serves identical numbers.
+    assert (await client.get("/api/v1/ut/publishers")).json() == ut
+    # rug's cached snapshot still holds rug's own aggregates, not ut's 8.
+    assert (await client.get("/api/v1/rug/publishers")).json() == rug
+
+
+# ── harvest.publishers pure parts (no HTTP) ────────────────────────────────
+
+
+def test_lineage_resolution():
+    from journal_browser.harvest.publishers import (
+        _rows_for,
+        canonical_from_lineage,
+        host_pk,
+    )
+
+    assert host_pk("https://openalex.org/P4310319808") == "P4310319808"
+    assert host_pk(None) == ""
+    # lineage is [self, ..., root]; the root is the canonical publisher.
+    assert canonical_from_lineage(["P4310316002", "P4310319808"]) == "P4310319808"
+    assert canonical_from_lineage(["P4310319808"]) == "P4310319808"
+    assert canonical_from_lineage(None) is None
+    assert canonical_from_lineage([]) is None
+    # Failed fetches (None payload) store a NULL lineage; canonical_name
+    # resolves through the names map, root payloads included.
+    rows = _rows_for(
+        {
+            "P2": {"id": "P2", "display_name": "Comms Society", "lineage": ["P2", "P1"]},
+            "P3": None,
+        },
+        {"P1": "IEEE"},
+    )
+    assert [
+        (r["openalex_id"], r["lineage"], r["canonical_id"], r["canonical_name"]) for r in rows
+    ] == [
+        ("P2", ["P2", "P1"], "P1", "IEEE"),
+        ("P3", None, None, None),
+    ]
+    assert rows[0]["display_name"] == "Comms Society"
+    assert all(r["fetched_at"] is not None for r in rows)
+
+
+@requires_db
+async def test_harvest_backfill_canonical(db):
+    from journal_browser.harvest.publishers import backfill_canonical
+
+    session = db
+    run = HarvestRun(source="openalex", entity_type="sources", config_fingerprint="test")
+    session.add(run)
+    await session.flush()
+    session.add_all(
+        [
+            SourceRecord(
+                source="openalex",
+                entity_type="sources",
+                source_pk="S1",
+                payload={"host_organization": "https://openalex.org/P2"},
+                content_hash="h1",
+                harvest_run_id=run.id,
+            ),
+            SourceRecord(
+                source="openalex",
+                entity_type="sources",
+                source_pk="S2",
+                payload={"host_organization": "https://openalex.org/I123"},
+                content_hash="h2",
+                harvest_run_id=run.id,
+            ),
+            SourceRecord(
+                source="openalex",
+                entity_type="sources",
+                source_pk="S3",
+                payload={},
+                content_hash="h3",
+                harvest_run_id=run.id,
+            ),
+        ]
+    )
+    session.add_all(
+        [
+            _journal("1111-1111", openalex_id="S1", publisher_name="Comms Society"),
+            _journal("2222-2222", openalex_id="S2", publisher_name="Inst Journal"),
+            _journal("3333-3339", openalex_id="S3", publisher_name="No Host Journal"),
+        ]
+    )
+    session.add(
+        OpenalexPublisher(
+            openalex_id="P2",
+            display_name="Comms Society",
+            lineage=["P2", "P1"],
+            canonical_id="P1",
+            canonical_name="IEEE",
+        )
+    )
+    await session.commit()
+
+    # Only the publisher-hosted journal takes the lineage root's name.
+    assert await backfill_canonical(session) == 1
+    await session.commit()
+    rows = (await session.execute(select(Journal.issn_l, Journal.publisher_canonical))).all()
+    assert dict(rows) == {
+        "1111-1111": "IEEE",
+        "2222-2222": None,  # institution host: no cache row
+        "3333-3339": None,  # no host organization
+    }
+    # Re-run is a no-op (IS DISTINCT FROM guard).
+    assert await backfill_canonical(session) == 0
