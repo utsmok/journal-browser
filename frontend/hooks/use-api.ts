@@ -6,12 +6,19 @@ import * as React from "react";
 import { useInstitution } from "./use-institution";
 import {
   apiGet,
+  fetchOrgUnit,
+  fetchOrgUnits,
+  fetchPublisher,
+  fetchPublishers,
   type DealOut,
   type FreshnessResponse,
   type JournalDetailResponse,
   type JournalSearchParams,
   type JournalSearchResponse,
   type LimitationOut,
+  type OrgUnitLevel,
+  type OrgUnitSearchParams,
+  type PublisherSearchParams,
   type SimilarJournalsBundle,
   type WorksPage,
 } from "@/lib/api";
@@ -28,6 +35,10 @@ const qk = {
   deals: (i: string, status: "current" | "archive" | "all") => ["deals", i, status] as const,
   limitations: (i: string) => ["limitations", i] as const,
   freshness: (i: string) => ["freshness", i] as const,
+  publishers: (i: string, params: PublisherSearchParams) => ["publishers", i, params] as const,
+  publisher: (i: string, name: string) => ["publisher", i, name] as const,
+  orgunits: (i: string, params: OrgUnitSearchParams) => ["orgunits", i, params] as const,
+  orgunit: (i: string, level: OrgUnitLevel, name: string) => ["orgunit", i, level, name] as const,
 };
 
 /**
@@ -196,5 +207,46 @@ export function useFreshness(instOverride?: string) {
     // Global pages (landing, /admin) have no institution segment; querying
     // //meta/freshness would just 404.
     enabled: inst !== "",
+  });
+}
+
+/** Publisher browse list; facets are bundled in the response. */
+export function usePublishers(params: PublisherSearchParams) {
+  const inst = useInstitution();
+  return useQuery({
+    queryKey: qk.publishers(inst, params),
+    queryFn: () => fetchPublishers(inst, params),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function usePublisher(name: string | undefined) {
+  const inst = useInstitution();
+  return useQuery({
+    queryKey: qk.publisher(inst, name ?? ""),
+    queryFn: () => fetchPublisher(inst, name ?? ""),
+    enabled: Boolean(name),
+  });
+}
+
+/** Org-unit browse list (faculties or research groups). */
+export function useOrgUnits(params: OrgUnitSearchParams) {
+  const inst = useInstitution();
+  return useQuery({
+    queryKey: qk.orgunits(inst, params),
+    queryFn: () => fetchOrgUnits(inst, params),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useOrgUnit(
+  level: OrgUnitLevel | undefined,
+  name: string | undefined,
+) {
+  const inst = useInstitution();
+  return useQuery({
+    queryKey: qk.orgunit(inst, level ?? "faculty", name ?? ""),
+    queryFn: () => fetchOrgUnit(inst, level ?? "faculty", name ?? ""),
+    enabled: Boolean(level && name),
   });
 }

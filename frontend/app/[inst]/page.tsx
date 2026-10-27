@@ -35,7 +35,13 @@ import {
 import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { useFacets, useJournals } from "@/hooks/use-api";
-import { errorMessage, type JournalListItem, type SearchIn, type SortKey } from "@/lib/api";
+import {
+  encodeNamePath,
+  errorMessage,
+  type JournalListItem,
+  type SearchIn,
+  type SortKey,
+} from "@/lib/api";
 
 const SORTS: { value: SortKey; label: string }[] = [
   { value: "relevance", label: "Relevance" },
@@ -397,10 +403,15 @@ function SearchView() {
         ),
         cell: (info) => {
           const v = info.getValue<string | null>();
+          if (!v) return <span>—</span>;
           return (
-            <span className="block max-w-40 truncate" title={v ?? undefined}>
-              {v ?? "—"}
-            </span>
+            <Link
+              href={`/${inst}/publisher/${encodeNamePath(v)}`}
+              className="block max-w-40 truncate underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+              title={v}
+            >
+              {v}
+            </Link>
           );
         },
       },
@@ -515,7 +526,7 @@ function SearchView() {
         },
       },
     ],
-    [site],
+    [site, inst],
   );
 
   // Backend fields the generated types trail (see lib/api.ts).
@@ -858,7 +869,16 @@ function SearchView() {
                       {row.title ?? row.issn_l}
                     </Link>
                     <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-                      {row.publisher_name ?? "Unknown publisher"}
+                      {row.publisher_name ? (
+                        <Link
+                          href={`/${inst}/publisher/${encodeNamePath(row.publisher_name)}`}
+                          className="relative z-10 underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                        >
+                          {row.publisher_name}
+                        </Link>
+                      ) : (
+                        "Unknown publisher"
+                      )}
                       {row.primary_topic && ` · ${row.primary_topic}`}
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">

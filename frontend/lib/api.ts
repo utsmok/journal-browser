@@ -372,3 +372,203 @@ export async function fetchAuthor(
 ): Promise<AuthorProfile> {
   return apiGet<AuthorProfile>(`/${inst}/authors/${encodeURIComponent(pureUuid)}`);
 }
+
+// --- Publishers + org units (browse facets) ---
+
+export type OaTypeCounts = Partial<
+  Record<"gold" | "diamond" | "hybrid" | "subscription", number>
+>;
+
+export type PublisherListItem = {
+  name: string;
+  n_journals: number;
+  n_works: number;
+  /** Journals covered by an open access deal. */
+  deal_journals: number;
+  oa_types: OaTypeCounts;
+  quartiles: Partial<Record<"q1" | "q2" | "q3" | "q4" | "none", number>>;
+  apc: { n_journals: number; eur_min: number | null; eur_max: number | null };
+  topics: { name: string; n: number }[];
+};
+
+export type PublisherFacets = {
+  oa_type: Record<string, number>;
+  deal: Record<string, number>;
+  quartile: Record<string, number>;
+  has_apc: Record<string, number>;
+  size: Record<string, number>;
+  topic: Record<string, number>;
+};
+
+export type PublisherSearchResponse = {
+  total: number;
+  items: PublisherListItem[];
+  facets?: PublisherFacets;
+};
+
+export type PublisherDetailResponse = {
+  publisher: PublisherListItem;
+  journals: JournalListItem[];
+  deals: DealOut[];
+  works_by_year: StatsYear[];
+};
+
+export type PublisherSearchSort =
+  | "relevance"
+  | "name"
+  | "journals"
+  | "works"
+  | "deals"
+  | "apc";
+
+/** List params for the publisher surface; arrays are pipe-joined in the query. */
+export type PublisherSearchParams = {
+  q?: string;
+  oa_type?: string[];
+  deal?: "covered" | "none";
+  quartile?: string[];
+  topic?: string;
+  size?: string[];
+  has_apc?: boolean;
+  has_works?: boolean;
+  sort?: PublisherSearchSort;
+  dir?: "asc" | "desc";
+  offset?: number;
+  limit?: number;
+  include_facets?: boolean;
+};
+
+/** Org-unit hierarchy level; a unit is a faculty or a research group. */
+export type OrgUnitLevel = "faculty" | "group";
+
+export type OrgUnitItem = {
+  level: OrgUnitLevel;
+  name: string;
+  /** Parent faculty; set on group level only. */
+  faculty: string | null;
+  n_authors: number;
+  n_works: number;
+  /** Child research groups; faculty level only. */
+  n_groups: number | null;
+  deal_works: number;
+  apc_euro_total: number;
+  apc_n: number;
+  topics: { name: string; n: number }[];
+};
+
+export type OrgUnitSearchResponse = {
+  level: OrgUnitLevel;
+  total: number;
+  items: OrgUnitItem[];
+  facets?: {
+    faculty?: Record<string, number>;
+    size: Record<string, number>;
+    uses_deals: Record<string, number>;
+  };
+};
+
+export type OrgUnitDetailResponse = {
+  unit: OrgUnitItem;
+  groups: OrgUnitItem[] | null;
+  journals: {
+    issn_l: string;
+    title: string | null;
+    n_works: number;
+    deal_covered: boolean;
+    oa_type: "gold" | "diamond" | "hybrid" | "subscription";
+    quartile: string | null;
+  }[];
+  authors: {
+    pure_uuid: string;
+    name: string;
+    n_works: number;
+    orcid: string | null;
+    primary_topic: string | null;
+  }[];
+  works_by_year: StatsYear[];
+  deal_usage: { label: string; n_works: number; euro: number }[];
+};
+
+export type OrgUnitSearchSort =
+  | "relevance"
+  | "name"
+  | "authors"
+  | "works"
+  | "deal_works";
+
+export type OrgUnitSearchParams = {
+  level?: OrgUnitLevel;
+  q?: string;
+  faculty?: string[];
+  /** Works strata on n_works: "1-4" | "5-19" | "20-49" | "50+". */
+  works?: string[];
+  uses_deals?: boolean;
+  sort?: OrgUnitSearchSort;
+  offset?: number;
+  limit?: number;
+  include_facets?: boolean;
+};
+
+/** Unit names contain spaces, commas, "&" and "/": encode each segment,
+ * keep "/" so the backend {name:path} route still resolves. */
+export function encodeNamePath(name: string): string {
+  return name.split("/").map(encodeURIComponent).join("/");
+}
+
+export async function fetchPublishers(
+  inst: string,
+  params: PublisherSearchParams = {},
+): Promise<PublisherSearchResponse> {
+  return apiGet<PublisherSearchResponse>(`/${inst}/publishers`, {
+    q: params.q,
+    oa_type: params.oa_type?.join("|"),
+    deal: params.deal,
+    quartile: params.quartile?.join("|"),
+    topic: params.topic,
+    size: params.size?.join("|"),
+    // String(false) must survive: false is a meaningful filter value.
+    has_apc: params.has_apc === undefined ? undefined : String(params.has_apc),
+    has_works: params.has_works === undefined ? undefined : String(params.has_works),
+    sort: params.sort,
+    dir: params.dir,
+    offset: params.offset,
+    limit: params.limit,
+    include_facets: params.include_facets ? "true" : undefined,
+  });
+}
+
+export async function fetchPublisher(
+  inst: string,
+  name: string,
+): Promise<PublisherDetailResponse> {
+  return apiGet<PublisherDetailResponse>(
+    `/${inst}/publishers/${encodeNamePath(name)}`,
+  );
+}
+
+export async function fetchOrgUnits(
+  inst: string,
+  params: OrgUnitSearchParams = {},
+): Promise<OrgUnitSearchResponse> {
+  return apiGet<OrgUnitSearchResponse>(`/${inst}/orgunits`, {
+    level: params.level,
+    q: params.q,
+    faculty: params.faculty?.join("|"),
+    works: params.works?.join("|"),
+    uses_deals: params.uses_deals ? "true" : undefined,
+    sort: params.sort,
+    offset: params.offset,
+    limit: params.limit,
+    include_facets: params.include_facets ? "true" : undefined,
+  });
+}
+
+export async function fetchOrgUnit(
+  inst: string,
+  level: OrgUnitLevel,
+  name: string,
+): Promise<OrgUnitDetailResponse> {
+  return apiGet<OrgUnitDetailResponse>(
+    `/${inst}/orgunits/${level}/${encodeNamePath(name)}`,
+  );
+}
