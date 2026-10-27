@@ -392,7 +392,7 @@ function SearchView() {
         ),
       },
       {
-        accessorKey: "publisher_name",
+        id: "publisher",
         meta: { columnId: "publisher" },
         header: () => (
           <SortHead
@@ -402,7 +402,8 @@ function SearchView() {
           />
         ),
         cell: (info) => {
-          const v = info.getValue<string | null>();
+          const row = info.row.original;
+          const v = row.publisher_canonical ?? row.publisher_name;
           if (!v) return <span>—</span>;
           return (
             <Link
@@ -857,7 +858,9 @@ function SearchView() {
                 }
                 aria-label="Journal results"
               >
-                {rows.map((row) => (
+                {rows.map((row) => {
+                  const pub = row.publisher_canonical ?? row.publisher_name;
+                  return (
                   <li
                     key={row.issn_l}
                     className="relative border-b border-[var(--border)] py-3 first:pt-0 last:border-0 last:pb-0"
@@ -869,12 +872,12 @@ function SearchView() {
                       {row.title ?? row.issn_l}
                     </Link>
                     <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-                      {row.publisher_name ? (
+                      {pub ? (
                         <Link
-                          href={`/${inst}/publisher/${encodeNamePath(row.publisher_name)}`}
+                          href={`/${inst}/publisher/${encodeNamePath(pub)}`}
                           className="relative z-10 underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
                         >
-                          {row.publisher_name}
+                          {pub}
                         </Link>
                       ) : (
                         "Unknown publisher"
@@ -896,7 +899,8 @@ function SearchView() {
                           : formatApc(row.apc_low)}`}
                     </div>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
               <div className={isFetching ? "hidden opacity-60 md:block" : "hidden md:block"}>
                 <Table>

@@ -617,7 +617,15 @@ function JournalPageInner() {
           </p>
         )}
         <p className="mt-1.5 text-[var(--muted-foreground)]">
-          {journal.publisher_name ?? "Unknown publisher"}
+          {(journal.publisher_canonical ?? journal.publisher_name) ?? "Unknown publisher"}
+          {journal.publisher_canonical &&
+            journal.publisher_name &&
+            journal.publisher_canonical !== journal.publisher_name && (
+              <span className="text-sm">
+                {" "}
+                · imprint: {journal.publisher_name}
+              </span>
+            )}
           {data.type
             ? ` · ${data.type.charAt(0).toUpperCase()}${data.type.slice(1)}`
             : ""}{" "}

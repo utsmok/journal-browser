@@ -375,6 +375,7 @@ async def journal_detail(
             issn_l=journal.issn_l,
             title=journal.title,
             publisher_name=journal.publisher_name,
+            publisher_canonical=journal.publisher_canonical,
             is_oa=journal.is_oa,
             is_in_doaj=journal.is_in_doaj,
             in_scimago=journal.in_scimago,

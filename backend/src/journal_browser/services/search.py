@@ -263,6 +263,7 @@ def base_query(
             J.issn_l,
             J.title,
             J.publisher_name,
+            J.publisher_canonical,
             J.is_oa,
             J.is_in_doaj,
             J.in_scimago,

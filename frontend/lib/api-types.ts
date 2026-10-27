@@ -1103,6 +1103,8 @@ export interface components {
             title: string | null;
             /** Publisher Name */
             publisher_name: string | null;
+            /** Publisher Canonical */
+            publisher_canonical?: string | null;
             /** Is Oa */
             is_oa: boolean | null;
             /** Is In Doaj */

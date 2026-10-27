@@ -18,6 +18,9 @@ class JournalListItem(BaseModel):
     issn_l: str
     title: str | None
     publisher_name: str | None
+    # Top-level parent publisher (OpenAlex lineage root, e.g. Wolters
+    # Kluwer above the LWW imprint); the canonical browse/join key.
+    publisher_canonical: str | None = None
     is_oa: bool | None
     is_in_doaj: bool | None
     in_scimago: bool = False
