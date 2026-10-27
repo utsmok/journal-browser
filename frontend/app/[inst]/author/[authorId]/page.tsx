@@ -7,6 +7,7 @@ import { useParams } from "next/navigation";
 import * as React from "react";
 
 import { DealBadge, OaStatusChip, OaTypeBadge } from "@/components/badges";
+import { CardPager } from "@/components/card-pager";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { OaTrend } from "@/components/oa-trend";
 import { Badge } from "@/components/ui/badge";
@@ -200,6 +201,15 @@ export default function AuthorPage() {
     enabled: Boolean(authorId),
   });
 
+  // Per-card pagination; back to page 1 when another author is opened.
+  const PAGE_SIZE = 20;
+  const [journalPage, setJournalPage] = React.useState(1);
+  const [workPage, setWorkPage] = React.useState(1);
+  React.useEffect(() => {
+    setJournalPage(1);
+    setWorkPage(1);
+  }, [authorId]);
+
   if (isPending)
     return (
       <div className="mx-auto max-w-screen-2xl px-4 py-10">
@@ -222,6 +232,13 @@ export default function AuthorPage() {
 
   const { author, oa_by_year, journals, topics, similar, alternatives, works } =
     data;
+  const journalPages = Math.max(1, Math.ceil(journals.length / PAGE_SIZE));
+  const workPages = Math.max(1, Math.ceil(works.length / PAGE_SIZE));
+  const journalRows = journals.slice(
+    (journalPage - 1) * PAGE_SIZE,
+    journalPage * PAGE_SIZE,
+  );
+  const workRows = works.slice((workPage - 1) * PAGE_SIZE, workPage * PAGE_SIZE);
   const trendStats = toStatsYear(oa_by_year);
   const hasSimilar =
     similar.all.length > 0 ||
@@ -310,7 +327,7 @@ export default function AuthorPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {journals.map((j) => (
+                  {journalRows.map((j) => (
                     <TableRow key={j.issn_l}>
                       <TableCell className="font-medium">
                         <Link
@@ -330,6 +347,15 @@ export default function AuthorPage() {
                   ))}
                 </TableBody>
               </Table>
+              {journalPages > 1 && (
+                <CardPager
+                  page={journalPage}
+                  pages={journalPages}
+                  total={journals.length}
+                  onPage={setJournalPage}
+                  label="journals"
+                />
+              )}
             </CollapsibleCard>
           )}
 
@@ -437,7 +463,7 @@ export default function AuthorPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {works.map((w) => {
+                  {workRows.map((w) => {
                     const href = doiHref(w.doi);
                     return (
                       <TableRow key={w.pure_uuid}>
@@ -471,6 +497,15 @@ export default function AuthorPage() {
                   })}
                 </TableBody>
               </Table>
+              {workPages > 1 && (
+                <CardPager
+                  page={workPage}
+                  pages={workPages}
+                  total={works.length}
+                  onPage={setWorkPage}
+                  label="publications"
+                />
+              )}
               {works.length >= 200 && (
                 <p className="mt-3 text-xs text-[var(--muted-foreground)]">
                   Showing the 200 most recent publications.

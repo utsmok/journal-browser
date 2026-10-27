@@ -12,10 +12,10 @@ import {
   QuartileBadge,
 } from "@/components/badges";
 import { CollapsibleCard } from "@/components/collapsible-card";
+import { CardPager } from "@/components/card-pager";
 import { OaTrend } from "@/components/oa-trend";
 import { SourceNote } from "@/components/source-note";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { useJournal, useJournalWorks, useSimilar } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
@@ -272,19 +272,6 @@ function doiHref(doi: string | null): string | null {
   return /^https?:\/\//.test(doi) ? doi : `https://doi.org/${doi}`;
 }
 
-/** Compact numbered pagination window: first, last and current ± 1 with gaps. */
-function pageWindow(current: number, pages: number): (number | "…")[] {
-  const wanted = [...new Set([1, pages, current - 1, current, current + 1])]
-    .filter((p) => p >= 1 && p <= pages)
-    .sort((a, b) => a - b);
-  const out: (number | "…")[] = [];
-  for (const p of wanted) {
-    if (out.length && p - (out.at(-1) as number) > 1) out.push("…");
-    out.push(p);
-  }
-  return out;
-}
-
 /** Twente works in this journal, paginated from the /works endpoint. */
 function PublicationsCard({
   issnL,
@@ -401,48 +388,14 @@ function PublicationsCard({
           </ul>
         )}
         {pages > 1 && (
-          <nav
-            className="flex flex-wrap items-center gap-1 text-xs"
-            aria-label="Publications pages"
-          >
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page <= 1 || isFetching}
-              onClick={() => setPage(Math.max(1, page - 1))}
-            >
-              ‹ Prev
-            </Button>
-            {pageWindow(page, pages).map((p, i) =>
-              p === "…" ? (
-                <span key={`gap-${i}`} className="px-1 text-[var(--muted-foreground)]">
-                  …
-                </span>
-              ) : (
-                <Button
-                  key={p}
-                  variant={p === page ? "secondary" : "outline"}
-                  size="sm"
-                  disabled={isFetching}
-                  onClick={() => setPage(p)}
-                  aria-current={p === page ? "page" : undefined}
-                >
-                  {p}
-                </Button>
-              ),
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page >= pages || isFetching}
-              onClick={() => setPage(Math.min(pages, page + 1))}
-            >
-              Next ›
-            </Button>
-            <span className="ml-2 text-[var(--muted-foreground)]">
-              {total.toLocaleString("en")} publications
-            </span>
-          </nav>
+          <CardPager
+            page={page}
+            pages={pages}
+            total={total}
+            onPage={setPage}
+            isFetching={isFetching}
+            label="publications"
+          />
         )}
         <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-[var(--border)] pt-3">
           {openalex?.id && (
