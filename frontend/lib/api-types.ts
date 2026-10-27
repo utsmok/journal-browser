@@ -300,6 +300,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/{institution_code}/publishers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search Publishers */
+        get: operations["search_publishers_api_v1__institution_code__publishers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/{institution_code}/publishers/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Publisher Detail */
+        get: operations["publisher_detail_api_v1__institution_code__publishers__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/{institution_code}/orgunits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search Orgunits */
+        get: operations["search_orgunits_api_v1__institution_code__orgunits_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/{institution_code}/orgunits/faculty/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Faculty Detail */
+        get: operations["faculty_detail_api_v1__institution_code__orgunits_faculty__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/{institution_code}/orgunits/group/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Group Detail */
+        get: operations["group_detail_api_v1__institution_code__orgunits_group__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/{institution_code}/deals": {
         parameters: {
             query?: never;
@@ -667,6 +752,20 @@ export interface components {
             /** Corresponding Authors Only */
             corresponding_authors_only?: boolean | null;
         };
+        /**
+         * DealDiscrepancyRow
+         * @description A group journal covered by another publisher's deal: a publisher
+         *     flip or stale ESAC entry, flagged for follow-up rather than shown as
+         *     this publisher's agreement.
+         */
+        DealDiscrepancyRow: {
+            /** Title */
+            title: string | null;
+            /** Publisher Name */
+            publisher_name: string | null;
+            /** Deal Publisher */
+            deal_publisher: string | null;
+        };
         /** DealJournalAdd */
         DealJournalAdd: {
             /** Issn */
@@ -707,6 +806,8 @@ export interface components {
             esac_id: string | null;
             /** Publisher Name */
             publisher_name: string | null;
+            /** Covers In Group */
+            covers_in_group?: number | null;
             /** Status */
             status: string;
             /** Start Year */
@@ -765,6 +866,15 @@ export interface components {
              * @default []
              */
             remove: string[];
+        };
+        /** DealUsageRow */
+        DealUsageRow: {
+            /** Label */
+            label: string;
+            /** N Works */
+            n_works: number;
+            /** Euro */
+            euro: number;
         };
         /** FreshnessEntry */
         FreshnessEntry: {
@@ -1143,6 +1253,183 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /** OrgUnitAuthorRow */
+        OrgUnitAuthorRow: {
+            /** Pure Uuid */
+            pure_uuid: string;
+            /** Name */
+            name: string;
+            /** N Works */
+            n_works: number;
+            /** Orcid */
+            orcid: string | null;
+            /** Primary Topic */
+            primary_topic: string | null;
+        };
+        /** OrgUnitDetailResponse */
+        OrgUnitDetailResponse: {
+            unit: components["schemas"]["OrgUnitItem"];
+            /** Groups */
+            groups?: components["schemas"]["OrgUnitItem"][] | null;
+            /**
+             * Journals
+             * @default []
+             */
+            journals: components["schemas"]["OrgUnitJournalRow"][];
+            /**
+             * Authors
+             * @default []
+             */
+            authors: components["schemas"]["OrgUnitAuthorRow"][];
+            /**
+             * Works By Year
+             * @default []
+             */
+            works_by_year: components["schemas"]["StatsYear"][];
+            /**
+             * Deal Usage
+             * @default []
+             */
+            deal_usage: components["schemas"]["DealUsageRow"][];
+        };
+        /** OrgUnitItem */
+        OrgUnitItem: {
+            /**
+             * Level
+             * @enum {string}
+             */
+            level: "faculty" | "group";
+            /** Name */
+            name: string;
+            /** Faculty */
+            faculty?: string | null;
+            /** N Authors */
+            n_authors: number;
+            /** N Works */
+            n_works: number;
+            /** N Groups */
+            n_groups?: number | null;
+            /** Deal Works */
+            deal_works: number;
+            /** Apc Euro Total */
+            apc_euro_total: number;
+            /** Apc N */
+            apc_n: number;
+            /**
+             * Topics
+             * @default []
+             */
+            topics: components["schemas"]["TopicMassRow"][];
+        };
+        /** OrgUnitJournalRow */
+        OrgUnitJournalRow: {
+            /** Issn L */
+            issn_l: string;
+            /** Title */
+            title: string | null;
+            /** N Works */
+            n_works: number;
+            /** Deal Covered */
+            deal_covered: boolean;
+            /** Oa Type */
+            oa_type: string;
+            /** Quartile */
+            quartile: string | null;
+        };
+        /** OrgUnitSearchResponse */
+        OrgUnitSearchResponse: {
+            /** Level */
+            level: string;
+            /** Items */
+            items: components["schemas"]["OrgUnitItem"][];
+            /** Total */
+            total: number;
+            /**
+             * Facets
+             * @default {}
+             */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+        };
+        /** PublisherApcSummary */
+        PublisherApcSummary: {
+            /** N Journals */
+            n_journals: number;
+            /** Eur Min */
+            eur_min?: number | null;
+            /** Eur Max */
+            eur_max?: number | null;
+        };
+        /** PublisherDetailResponse */
+        PublisherDetailResponse: {
+            publisher: components["schemas"]["PublisherListItem"];
+            /** Journals */
+            journals: components["schemas"]["JournalListItem"][];
+            /**
+             * Deals
+             * @default []
+             */
+            deals: components["schemas"]["DealOut"][];
+            /**
+             * Deal Discrepancies
+             * @default []
+             */
+            deal_discrepancies: components["schemas"]["DealDiscrepancyRow"][];
+            /**
+             * N Discrepancies
+             * @default 0
+             */
+            n_discrepancies: number;
+            /**
+             * Works By Year
+             * @default []
+             */
+            works_by_year: components["schemas"]["StatsYear"][];
+        };
+        /** PublisherListItem */
+        PublisherListItem: {
+            /** Name */
+            name: string;
+            /** N Journals */
+            n_journals: number;
+            /** N Works */
+            n_works: number;
+            /** Deal Journals */
+            deal_journals: number;
+            /** Oa Types */
+            oa_types: {
+                [key: string]: number;
+            };
+            /** Quartiles */
+            quartiles: {
+                [key: string]: number;
+            };
+            apc: components["schemas"]["PublisherApcSummary"];
+            /**
+             * Topics
+             * @default []
+             */
+            topics: components["schemas"]["TopicMassRow"][];
+        };
+        /** PublisherSearchResponse */
+        PublisherSearchResponse: {
+            /** Items */
+            items: components["schemas"]["PublisherListItem"][];
+            /** Total */
+            total: number;
+            /**
+             * Facets
+             * @default {}
+             */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+        };
         /** ScimagojrOut */
         ScimagojrOut: {
             /** Year */
@@ -1218,6 +1505,13 @@ export interface components {
             oa_diamond: number;
             /** Oa Closed */
             oa_closed: number;
+        };
+        /** TopicMassRow */
+        TopicMassRow: {
+            /** Name */
+            name: string;
+            /** N */
+            n: number;
         };
         /** ValidationError */
         ValidationError: {
@@ -1968,6 +2262,188 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthorProfileResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_publishers_api_v1__institution_code__publishers_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                oa_type?: string | null;
+                deal?: string | null;
+                quartile?: string | null;
+                topic?: string | null;
+                size?: string | null;
+                has_apc?: boolean | null;
+                has_works?: boolean | null;
+                sort?: string | null;
+                dir?: string | null;
+                offset?: number;
+                limit?: number;
+                include_facets?: boolean;
+            };
+            header?: never;
+            path: {
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublisherSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publisher_detail_api_v1__institution_code__publishers__name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublisherDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_orgunits_api_v1__institution_code__orgunits_get: {
+        parameters: {
+            query?: {
+                level?: "faculty" | "group";
+                q?: string | null;
+                faculty?: string | null;
+                works?: string | null;
+                uses_deals?: boolean | null;
+                sort?: string | null;
+                offset?: number;
+                limit?: number;
+                include_facets?: boolean;
+            };
+            header?: never;
+            path: {
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgUnitSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    faculty_detail_api_v1__institution_code__orgunits_faculty__name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgUnitDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    group_detail_api_v1__institution_code__orgunits_group__name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgUnitDetailResponse"];
                 };
             };
             /** @description Validation Error */

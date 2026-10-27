@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_session
 from ..routers.institutions import InstitutionDep
 from ..schemas import (
+    DealDiscrepancyRow,
     DealOut,
     JournalListItem,
     PublisherDetailResponse,
@@ -92,8 +93,13 @@ async def publisher_detail(
             DealOut(
                 **{f: getattr(d, f) for f in DealOut.model_fields if hasattr(d, f)},
                 publisher_name=publisher_name,
+                covers_in_group=n_covered,
             )
-            for d, publisher_name in detail["deals"]
+            for d, publisher_name, n_covered in detail["deals"]
         ],
+        deal_discrepancies=[
+            DealDiscrepancyRow(**row) for row in detail["deal_discrepancies"]
+        ],
+        n_discrepancies=detail["n_discrepancies"],
         works_by_year=detail["works_by_year"],
     )

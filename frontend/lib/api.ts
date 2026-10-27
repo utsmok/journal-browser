@@ -406,10 +406,14 @@ export type PublisherSearchResponse = {
   facets?: PublisherFacets;
 };
 
+export type DealDiscrepancy = Schemas["DealDiscrepancyRow"];
+
 export type PublisherDetailResponse = {
   publisher: PublisherListItem;
   journals: JournalListItem[];
   deals: DealOut[];
+  deal_discrepancies: DealDiscrepancy[];
+  n_discrepancies: number;
   works_by_year: StatsYear[];
 };
 

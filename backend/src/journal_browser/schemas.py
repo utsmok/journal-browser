@@ -124,6 +124,9 @@ class DealOut(BaseModel):
     id: int
     esac_id: str | None
     publisher_name: str | None
+    # Group journals this deal covers (publisher detail only; None
+    # elsewhere, where coverage is per journal).
+    covers_in_group: int | None = None
     status: str
     start_year: int | None
     end_year: int | None
@@ -427,10 +430,22 @@ class PublisherSearchResponse(BaseModel):
     facets: dict[str, dict[str, int]] = {}
 
 
+class DealDiscrepancyRow(BaseModel):
+    """A group journal covered by another publisher's deal: a publisher
+    flip or stale ESAC entry, flagged for follow-up rather than shown as
+    this publisher's agreement."""
+
+    title: str | None
+    publisher_name: str | None
+    deal_publisher: str | None
+
+
 class PublisherDetailResponse(BaseModel):
     publisher: PublisherListItem
     journals: list[JournalListItem]
     deals: list[DealOut] = []
+    deal_discrepancies: list[DealDiscrepancyRow] = []
+    n_discrepancies: int = 0
     works_by_year: list[StatsYear] = []
 
 

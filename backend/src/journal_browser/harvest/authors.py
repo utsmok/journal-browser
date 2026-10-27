@@ -294,7 +294,7 @@ def topic_mass(
             name = entries[0].get("subfield") or entries[0]["display_name"]
             mass[name] = mass.get(name, 0.0) + n
             continue
-        for t, c in zip(entries, counts):
+        for t, c in zip(entries, counts, strict=False):
             name = t.get("subfield") or t["display_name"]
             mass[name] = mass.get(name, 0.0) + n * c / total
     return mass

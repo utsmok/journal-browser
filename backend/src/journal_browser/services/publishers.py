@@ -539,27 +539,101 @@ async def publisher_detail(
     dj_scope = DealJournal.institution_id.is_not_distinct_from(
         case((DealInstitution.journal_override.is_(True), iid), else_=None)
     )
-    deal_rows = (
+    # Latest-known deal attribution: a deal belongs to the canonical
+    # publisher dominating its coverage list. Flipped/stale journal
+    # attributions otherwise surface foreign deals on this page (Wolters
+    # Kluwer listing Elsevier's agreement); those become flagged
+    # discrepancies instead of deals.
+    # One construct instance: two calls would render two distinct bind
+    # params and Postgres could not match the GROUP BY expression.
+    grp_key = grouping_key()
+    attribution = (
+        select(
+            DealJournal.deal_id.label("deal_id"),
+            grp_key.label("grp"),
+            func.row_number()
+            .over(
+                partition_by=DealJournal.deal_id,
+                order_by=func.count().desc(),
+            )
+            .label("rn"),
+        )
+        .select_from(DealJournal)
+        .join(Journal, Journal.issn_l == DealJournal.issn_l)
+        .where(DealJournal.institution_id.is_(None), DealJournal.excluded.is_not(True))
+        .group_by(DealJournal.deal_id, grp_key)
+        .subquery()
+    )
+    # rn == 1 keeps the dominant publisher per deal (a handful of rows, so
+    # the outer join below stays a hash join).
+    top_attr = (
+        select(attribution.c.deal_id, attribution.c.grp)
+        .where(attribution.c.rn == 1)
+        .subquery()
+    )
+    # Every (group journal, covering deal) pair for this institution's
+    # current deals; the deals section and the discrepancy flags split on
+    # attribution. No SQL-side group filter: the coverage of a handful of
+    # deals is small, and filtering here avoids a multi-thousand-element
+    # IN list that forces a nested-loop plan.
+    pairs = (
         await session.execute(
-            select(Deal, Publisher.name)
-            .select_from(Deal)
+            select(
+                Journal.issn_l,
+                Journal.title,
+                Journal.publisher_name,
+                DealJournal.deal_id.label("deal_id"),
+                Publisher.name.label("deal_publisher"),
+                top_attr.c.grp,
+            )
+            .select_from(DealJournal)
+            .join(Deal, Deal.id == DealJournal.deal_id)
             .join(
                 DealInstitution,
                 (DealInstitution.deal_id == Deal.id) & (DealInstitution.institution_id == iid),
             )
-            .join(
-                DealJournal,
-                (DealJournal.deal_id == Deal.id)
-                & dj_scope
-                & DealJournal.excluded.is_not(True)
-                & DealJournal.issn_l.in_(issns),
-            )
+            .join(Journal, Journal.issn_l == DealJournal.issn_l)
             .outerjoin(Publisher, Publisher.id == Deal.publisher_id)
-            .where(Deal.status == "current")
-            .distinct()
-            .order_by(Deal.id)
+            .outerjoin(top_attr, top_attr.c.deal_id == Deal.id)
+            .where(Deal.status == "current", dj_scope)
         )
     ).all()
+    issn_set = set(issns)
+    pairs = [p for p in pairs if p.issn_l in issn_set]
+    matched: dict[int, dict[str, Any]] = {}
+    mismatches: list[Any] = []
+    for pair in pairs:
+        if pair.grp == name:
+            entry = matched.setdefault(
+                pair.deal_id, {"deal_id": pair.deal_id, "n": 0, "publisher": pair.deal_publisher}
+            )
+            entry["n"] += 1
+        else:
+            mismatches.append(pair)
+    deals = []
+    if matched:
+        deal_rows = (
+            (await session.execute(select(Deal).where(Deal.id.in_(matched)))).scalars().all()
+        )
+        deals = sorted(
+            (
+                {
+                    "deal": d,
+                    "publisher_name": matched[d.id]["publisher"],
+                    "n_covered": matched[d.id]["n"],
+                }
+                for d in deal_rows
+            ),
+            key=lambda row: row["deal"].id,
+        )
+    # One deal per journal: the latest contract (max id) wins, the rest are
+    # duplicates of the same flip.
+    latest: dict[str, Any] = {}
+    for pair in mismatches:
+        prev = latest.get(pair.issn_l)
+        if prev is None or pair.deal_id > prev.deal_id:
+            latest[pair.issn_l] = pair
+    discrepancies = sorted(latest.values(), key=lambda p: p.title or "")[:DEAL_DISCREPANCY_CAP]
 
     stats_rows = (
         (
@@ -609,6 +683,15 @@ async def publisher_detail(
     return {
         "publisher": _item(pub, pub.topics[:TOPICS_PER_DETAIL]),
         "journals": journals,
-        "deals": [(d, publisher_name) for d, publisher_name in deal_rows],
+        "deals": [(row["deal"], row["publisher_name"], row["n_covered"]) for row in deals],
+        "deal_discrepancies": [
+            {
+                "title": p.title,
+                "publisher_name": p.publisher_name,
+                "deal_publisher": p.deal_publisher,
+            }
+            for p in discrepancies
+        ],
+        "n_discrepancies": len(latest),
         "works_by_year": works_by_year,
     }

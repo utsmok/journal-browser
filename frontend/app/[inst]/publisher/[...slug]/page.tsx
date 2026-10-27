@@ -54,6 +54,12 @@ function DealRow({ deal }: { deal: DealOut }) {
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <DealBadge covered />
         <span className="font-medium">{deal.publisher_name ?? "Open access deal"}</span>
+        {deal.covers_in_group != null && (
+          <span className="text-xs text-[var(--muted-foreground)]">
+            covers {deal.covers_in_group}{" "}
+            {deal.covers_in_group === 1 ? "journal" : "journals"} in this group
+          </span>
+        )}
         {deal.duration_text && (
           <span className="text-xs text-[var(--muted-foreground)]">
             {deal.duration_text}
@@ -183,7 +189,8 @@ export default function PublisherPage() {
       </div>
     );
 
-  const { publisher, journals, deals, works_by_year } = data;
+  const { publisher, journals, deals, deal_discrepancies, n_discrepancies, works_by_year } =
+    data;
   const journalPages = Math.max(1, Math.ceil(journals.length / PAGE_SIZE));
   const journalRows = journals.slice(
     (journalPage - 1) * PAGE_SIZE,
@@ -225,17 +232,47 @@ export default function PublisherPage() {
       <AggregateCards publisher={publisher} />
 
       <div className="mt-6 space-y-6">
-        {deals.length > 0 && (
+        {(deals.length > 0 || n_discrepancies > 0) && (
           <CollapsibleCard
             id="deals"
             title="Open access deals"
             contentClassName="text-sm"
           >
-            <ul className="divide-y divide-[var(--border)]">
-              {deals.map((deal) => (
-                <DealRow key={deal.id} deal={deal} />
-              ))}
-            </ul>
+            {deals.length > 0 && (
+              <ul className="divide-y divide-[var(--border)]">
+                {deals.map((deal) => (
+                  <DealRow key={deal.id} deal={deal} />
+                ))}
+              </ul>
+            )}
+            {n_discrepancies > 0 && (
+              <p className="mt-3 border-t border-[var(--border)] pt-3 text-xs text-[var(--muted-foreground)]">
+                {n_discrepancies}{" "}
+                {n_discrepancies === 1 ? "journal" : "journals"} in this group{" "}
+                {n_discrepancies === 1 ? "is" : "are"} covered by another
+                publisher&apos;s deal — likely a publisher flip since the
+                contract was signed:
+                <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
+                  {deal_discrepancies.map((d) => (
+                    <li key={d.title ?? d.publisher_name}>
+                      {d.title}
+                      {d.publisher_name && (
+                        <span className="text-[var(--muted-foreground)]">
+                          {" "}
+                          ({d.publisher_name})
+                        </span>
+                      )}{" "}
+                      — covered by {d.deal_publisher ?? "another publisher"}
+                    </li>
+                  ))}
+                  {n_discrepancies > deal_discrepancies.length && (
+                    <li>
+                      and {n_discrepancies - deal_discrepancies.length} more
+                    </li>
+                  )}
+                </ul>
+              </p>
+            )}
           </CollapsibleCard>
         )}
 
