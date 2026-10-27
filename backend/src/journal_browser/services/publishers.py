@@ -28,6 +28,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
+from ..harvest.common import cache_epoch
 from ..models import (
     Deal,
     DealInstitution,
@@ -43,10 +44,11 @@ from .search import APC_SHOWN, OA_TYPES, _oa_type, _order, attach_apc_display, b
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 100
 JOURNAL_CAP = 200
+DEAL_DISCREPANCY_CAP = 10
 TOPIC_FACET_LIMIT = 10
 TOPICS_PER_ITEM = 3
 TOPICS_PER_DETAIL = 5
-SNAPSHOT_TTL = 300  # seconds; mirrors _FACET_CACHE in services/search.py
+SNAPSHOT_TTL = 86400  # seconds; a harvest bump invalidates sooner
 SNAPSHOT_WORK_MEM = "128MB"  # cold-build-only, see _snapshot
 
 QUARTILES = ("Q1", "Q2", "Q3", "Q4")
@@ -254,8 +256,13 @@ def _snapshot_query(institution_id: int) -> Any:
 
 
 async def _snapshot(session: AsyncSession, institution_id: int) -> dict[str, _Pub]:
-    """Publisher aggregation for one institution, cached ~5 min."""
-    cache_key = (institution_id, hash(tuple(sorted(get_settings().ignored_issns))))
+    """Publisher aggregation for one institution, cached until the next
+    harvest bump or 24h."""
+    cache_key = (
+        institution_id,
+        hash(tuple(sorted(get_settings().ignored_issns))),
+        await cache_epoch(session),
+    )
     hit = _SNAPSHOT_CACHE.get(cache_key)
     if hit and time.monotonic() - hit[0] < SNAPSHOT_TTL:
         return hit[1]

@@ -17,6 +17,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Institution
+from .common import bump_cache_epoch
 
 # Decision 16 (docs/decisions.md): proceedings-like titles with no deal and
 # no institution works are hidden from browse. Recomputed wholesale so deal
@@ -153,16 +154,19 @@ async def refresh_institution_stats(session: AsyncSession, institution: Institut
     )
     await session.execute(DEAL_FLAGS_SQL, {"iid": iid})
     await session.execute(BROWSE_EXCLUDED_SQL, {"iid": iid})
+    await bump_cache_epoch(session)
 
 
 async def refresh_quartiles(session: AsyncSession) -> None:
     await session.execute(RESET_QUARTILES_SQL)
     await session.execute(QUARTILES_SQL)
+    await bump_cache_epoch(session)
 
 
 async def refresh_apcs(session: AsyncSession) -> None:
     await session.execute(RESET_APC_SQL)
     await session.execute(APC_SQL)
+    await bump_cache_epoch(session)
 
 
 async def refresh_deal_flags(session: AsyncSession, institution_id: int) -> None:
@@ -170,3 +174,4 @@ async def refresh_deal_flags(session: AsyncSession, institution_id: int) -> None
     await session.execute(MATERIALIZE_SQL, {"iid": institution_id})
     await session.execute(DEAL_FLAGS_SQL, {"iid": institution_id})
     await session.execute(BROWSE_EXCLUDED_SQL, {"iid": institution_id})
+    await bump_cache_epoch(session)

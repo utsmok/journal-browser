@@ -541,6 +541,20 @@ class InstitutionTrend(Base):
 # ── Per-institution journal state + works corpus ────────────────────────────
 
 
+class CacheEpoch(Base):
+    """One-row harvest counter; in-process caches key on bumped_at so any
+    harvest step invalidates them across processes (services/search.py,
+    services/publishers.py). Bumped by run_harvest and the denorm
+    refreshes."""
+
+    __tablename__ = "cache_epoch"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    bumped_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()")
+    )
+
+
 class JournalFlags(Base):
     """Per-institution denormalized journal state for search and facets.
 

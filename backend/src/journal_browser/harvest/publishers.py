@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..models import OpenalexPublisher, SourceRecord
+from .common import bump_cache_epoch
 from .openalex_journals import _payload_dict
 
 logger = logging.getLogger(__name__)
@@ -179,5 +180,7 @@ async def harvest_publishers(session: AsyncSession) -> dict[str, int]:
         stats["failed"] = sum(1 for p in payloads.values() if not p)
     result = await session.execute(BACKFILL_SQL)
     stats["journals_updated"] = result.rowcount or 0
+    if stats["journals_updated"]:
+        await bump_cache_epoch(session)
     logger.info("harvest_publishers: %s", stats)
     return stats

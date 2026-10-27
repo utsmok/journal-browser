@@ -28,6 +28,7 @@ from sqlalchemy import exc as sa_exc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
+from ..harvest.common import cache_epoch
 from ..models import IssnMap, Journal, JournalApcAggregate, JournalFlags
 
 _converter: CurrencyConverter | None = None
@@ -585,12 +586,17 @@ async def facet_counts(
     # the hot path. Bounded staleness (5 min) after a harvest is acceptable.
     cacheable = not any([q, oa, doaj, quartile, topic, publisher, has_apc is not None,
                          has_works is not None, oa_types, deal != "any", search_in != "all"])
-    # The ignore-list shapes the counts; fold it in so an admin edit
-    # invalidates immediately instead of serving stale facets for 5 min.
-    cache_key = ("facets", institution_id, hash(tuple(sorted(get_settings().ignored_issns))))
+    # The ignore-list and the harvest epoch shape the counts; either change
+    # invalidates immediately instead of serving stale facets for 24h.
+    cache_key = (
+        "facets",
+        institution_id,
+        hash(tuple(sorted(get_settings().ignored_issns))),
+        await cache_epoch(session),
+    )
     if cacheable:
         hit = _FACET_CACHE.get(cache_key)
-        if hit and time.monotonic() - hit[0] < 300:
+        if hit and time.monotonic() - hit[0] < 86400:
             return hit[1], hit[2]
     defaults = dict(
         institution_id=institution_id,

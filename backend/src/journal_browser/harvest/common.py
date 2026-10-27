@@ -9,14 +9,28 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..ingest import IngestSession, store_raw_file
-from ..models import Institution, IssnMap
+from ..models import CacheEpoch, Institution, IssnMap
 
 logger = logging.getLogger(__name__)
+
+
+async def cache_epoch(session: AsyncSession) -> Any:
+    """Current harvest epoch; in-process caches key on this so a harvest in
+    another process invalidates them on the next request."""
+    return await session.scalar(select(CacheEpoch.bumped_at).where(CacheEpoch.id == 1))
+
+
+async def bump_cache_epoch(session: AsyncSession) -> None:
+    """Invalidate epoch-keyed caches; callers commit."""
+    await session.execute(
+        CacheEpoch.__table__.update().where(CacheEpoch.id == 1).values(bumped_at=func.now())
+    )
+
 
 ISSN_RE = re.compile(r"^\d{4}-?\d{3}[\dXx]$")
 
@@ -293,6 +307,7 @@ async def run_harvest(
     try:
         stats = await body(ingest) or {}
         final = await ingest.finish_run("completed", stats)
+        await bump_cache_epoch(session)
         await session.commit()
         return final
     except Exception:
