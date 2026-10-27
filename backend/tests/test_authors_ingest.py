@@ -132,10 +132,21 @@ def test_primary_topic_weighting_and_ties():
     topics = {"j1": [{"id": "T1", "display_name": "Physics"},
                      {"id": "T2", "display_name": "Chemistry"}],
               "j2": [{"id": "T2", "display_name": "Chemistry"}]}
-    # Each venue contributes its works count to every topic: Chemistry 4.
-    assert primary_topic_from_venues({"j1": 3, "j2": 1}, topics) == "Chemistry"
-    # Tie (both topics from one venue, 1:1) breaks alphabetically.
-    assert primary_topic_from_venues({"j1": 1}, topics) == "Chemistry"
+    # Without stored counts a venue contributes to its primary topic only:
+    # Physics 3 beats Chemistry 1.
+    assert primary_topic_from_venues({"j1": 3, "j2": 1}, topics) == "Physics"
+    # With counts, venue mass splits by the per-source topic share: j1
+    # spreads 3 works 1.5/1.5, j2 adds 1 -> Chemistry 2.5 beats Physics 1.5.
+    counted = {"j1": [{"id": "T1", "display_name": "Physics", "count": 1},
+                      {"id": "T2", "display_name": "Chemistry", "count": 1}],
+               "j2": [{"id": "T2", "display_name": "Chemistry", "count": 1}]}
+    assert primary_topic_from_venues({"j1": 3, "j2": 1}, counted) == "Chemistry"
+    # A 1:1 count split inside one venue ties; alphabetical wins.
+    assert primary_topic_from_venues({"j1": 1}, counted) == "Chemistry"
+    # Entries with a subfield are labelled by subfield, split by count.
+    sub = {"j1": [{"display_name": "T-a", "count": 3, "subfield": "Materials"},
+                  {"display_name": "T-b", "count": 1, "subfield": "Optics"}]}
+    assert primary_topic_from_venues({"j1": 4}, sub) == "Materials"
     both = {"j1": [{"id": "T1", "display_name": "Zeta"}],
             "j2": [{"id": "T1", "display_name": "Alpha"}]}
     assert primary_topic_from_venues({"j1": 1, "j2": 1}, both) == "Alpha"

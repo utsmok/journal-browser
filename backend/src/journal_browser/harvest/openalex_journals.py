@@ -81,8 +81,16 @@ def journal_values(payload: dict[str, Any]) -> dict[str, Any] | None:
         return None
     title = payload.get("display_name") or payload.get("title")
     alternate_titles = payload.get("alternate_titles") or []
+    # count = that source's works in the topic (OpenAlex source field); the
+    # author topic weighting spreads venue mass across the list by it and
+    # labels it by subfield (coarser and stabler than topic names).
     topics = [
-        {"id": t.get("id"), "display_name": t.get("display_name")}
+        {
+            "id": t.get("id"),
+            "display_name": t.get("display_name"),
+            "count": t.get("count"),
+            "subfield": (t.get("subfield") or {}).get("display_name"),
+        }
         for t in (payload.get("topics") or [])[:5]
     ]
     counts = payload.get("counts_by_year") or []

@@ -10,6 +10,7 @@ from sqlalchemy import and_, case, false, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
+from ..harvest.authors import topic_mass
 from ..models import Author, AuthorWork, Institution, Journal, JournalFlags, Work
 from .search import _like, _oa_type, base_query
 
@@ -440,7 +441,6 @@ async def author_profile(
     oa_by_year = [by_year[year] for year in sorted(by_year, reverse=True)]
 
     journal_rows = await _author_journals(session, institution, pure_uuid)
-    topics: dict[str, int] = {}
     if journal_rows:
         topic_rows = (
             await session.execute(
@@ -450,16 +450,14 @@ async def author_profile(
             )
         ).all()
         topics_by_issn = {row.issn_l: row.topics or [] for row in topic_rows}
-        # Topic weighting: each venue contributes its works count to every
-        # one of its OpenAlex topics.
-        for row in journal_rows:
-            for topic in topics_by_issn.get(row.issn_l, []):
-                name = topic.get("display_name") if isinstance(topic, dict) else None
-                if name:
-                    topics[name] = topics.get(name, 0) + row.n_works
+        # Same proportional spread as the ingest-time primary_topic (see
+        # harvest.authors.topic_mass).
+        mass = topic_mass({r.issn_l: r.n_works for r in journal_rows}, topics_by_issn)
+    else:
+        mass = {}
     top_topics = [
-        {"name": name, "n": n}
-        for name, n in sorted(topics.items(), key=lambda kv: (-kv[1], kv[0]))[:8]
+        {"name": name, "n": round(n)}
+        for name, n in sorted(mass.items(), key=lambda kv: (-kv[1], kv[0]))[:8]
     ]
 
     embeddings: dict[str, Any] = {}
