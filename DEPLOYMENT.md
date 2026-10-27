@@ -102,6 +102,7 @@ Useful variants (run inside the backend image, e.g.
 | Job | Source | Produces |
 |---|---|---|
 | `harvest_journals` | OpenAlex | The journal universe (~177k rows), ISSNs, topics, OA status |
+| `harvest_publishers` | OpenAlex | Publisher lineage: `journals.publisher_canonical` groups sub-brands (e.g. IEEE Communications Society) under their root publisher |
 | `scrape_openaccess_nl` | openaccess.nl | Deal pages: narrative, conditions, participation text |
 | `ingest_jct` | cOAlition S JCT public dump | ESAC agreements + journal lists |
 | `reconcile` | the two above | The deal register; participation per hosted institution (non-participation = no `deal_institutions` row; shared deals are never deleted) |

@@ -34,6 +34,7 @@ BACKEND_ROOT = Path(__file__).resolve().parent.parent
 # Topological order (also the --from resume order). DEPS gates concurrency.
 GLOBAL_STEPS: list[tuple[str, list[str]]] = [
     ("journals", ["jobs/harvest_journals.py"]),
+    ("publishers", ["jobs/harvest_publishers.py"]),
     ("deals-openaccess-nl", ["jobs/scrape_openaccess_nl.py"]),
     ("deals-jct", ["jobs/ingest_jct.py"]),
     ("openapc", ["jobs/ingest_openapc.py"]),
@@ -46,6 +47,7 @@ GLOBAL_STEPS: list[tuple[str, list[str]]] = [
 
 GLOBAL_DEPS: dict[str, list[str]] = {
     "journals": [],
+    "publishers": ["journals"],  # lineage resolves source_records host orgs
     "deals-openaccess-nl": [],
     "deals-jct": [],
     "openapc": [],  # aggregates are ISSN-keyed, no journals needed

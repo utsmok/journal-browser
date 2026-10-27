@@ -184,6 +184,24 @@ class Publisher(Base):
     aliases: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
 
 
+class OpenalexPublisher(Base):
+    """OpenAlex publisher lineage cache (jobs/harvest_publishers.py).
+
+    One row per publisher entity attempted; lineage is [self, ..., root]
+    and canonical is the root (last element). A NULL lineage marks a fetch
+    that failed (404 etc.), so re-runs skip it instead of retrying.
+    """
+
+    __tablename__ = "openalex_publishers"
+
+    openalex_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    display_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lineage: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
+    canonical_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    canonical_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fetched_at: Mapped[datetime] = _tstamp()
+
+
 class Institution(Base):
     """Institution configuration carrier.
 
@@ -377,6 +395,9 @@ class Journal(Base):
     openalex_id: Mapped[str | None] = mapped_column(Text, nullable=True, unique=True)
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
     publisher_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Canonical publisher display name (OpenAlex lineage root, resolved by
+    # jobs/harvest_publishers.py); NULL/empty groups by publisher_name.
+    publisher_canonical: Mapped[str | None] = mapped_column(Text, nullable=True)
     publisher_id: Mapped[int | None] = mapped_column(ForeignKey("publishers.id"), nullable=True)
     type: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_oa: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
