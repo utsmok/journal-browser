@@ -1,0 +1,364 @@
+"""Publisher browsing API: per-publisher journal aggregates, filters with
+pipe multi-select OR semantics, drop-own-dimension facets, institution
+scoping, detail bundle (deals/stats reuse), and slash-bearing names."""
+
+from urllib.parse import quote
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import async_sessionmaker
+
+from conftest import requires_db
+from journal_browser.db import get_session
+from journal_browser.main import app
+from journal_browser.models import (
+    Deal,
+    DealInstitution,
+    DealJournal,
+    InstitutionWorksStats,
+    Journal,
+    JournalApcAggregate,
+    JournalFlags,
+    Publisher,
+)
+
+
+def _journal(issn_l: str, **kw) -> Journal:
+    base = dict(
+        issn_l=issn_l,
+        title=f"Journal {issn_l}",
+        type="journal",
+        is_oa=False,
+        is_in_doaj=False,
+        in_scimago=False,
+        works_2020_plus=10,
+        search_text=f"Journal {issn_l}",
+    )
+    base.update(kw)
+    return Journal(**base)
+
+
+@pytest.fixture
+async def publishers_api(db, institution_factory):
+    """ut: Elsevier BV (J1 covered hybrid Q1 with OpenAPC evidence + topics,
+    J2 diamond Q2), Springer (J3 covered hybrid Q1 with an OpenAlex list
+    price, J7 subscription without quartile), Wiley (J8 subscription Q3) and
+    Alpha/Beta Press (J9, slash name, no works). Excluded from grouping: a
+    NULL publisher, a below-cutoff journal, a browse-excluded one. rug: only
+    Elsevier BV is browsable, with different flag numbers."""
+    async def _override():
+        async with async_sessionmaker(db.bind, expire_on_commit=False)() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = _override
+    ut = await institution_factory(code="ut")
+    rug = await institution_factory(code="rug")
+    session = db
+    session.add_all(
+        [
+            _journal(
+                "1234-5678",
+                publisher_name="Elsevier BV",
+                latest_quartile="Q1",
+                latest_apc_euro=2400,
+                topics=[
+                    {
+                        "display_name": "Condensed Matter Physics",
+                        "count": 30,
+                        "subfield": "Physics",
+                    },
+                    {"display_name": "Nanotech", "count": 10, "subfield": "Materials Science"},
+                ],
+            ),  # J1: covered hybrid
+            _journal(
+                "2222-2221", publisher_name="Elsevier BV", is_in_doaj=True, latest_quartile="Q2"
+            ),
+            _journal(
+                "3333-3331",
+                publisher_name="Springer",
+                latest_quartile="Q1",
+                apc_prices=[{"currency": "EUR", "price": 1500}],
+                latest_apc_euro=1500,
+            ),
+            _journal("4444-4441", publisher_name=None),  # NULL publisher: excluded
+            _journal("5555-5551", publisher_name="Springer"),  # below cutoff (flags)
+            _journal("6666-6661", publisher_name="Small Press"),  # browse-excluded
+            _journal("7777-7771", publisher_name="Springer"),
+            _journal("8888-8881", publisher_name="Wiley", latest_quartile="Q3"),
+            _journal("9999-9991", publisher_name="Alpha/Beta Press"),
+        ]
+    )
+    await session.flush()
+
+    def _flags(issn_l: str, **kw) -> JournalFlags:
+        return JournalFlags(institution_id=ut.id, issn_l=issn_l, **kw)
+
+    session.add_all(
+        [
+            _flags("1234-5678", works_count=5, works_window_plus=10, deal_covered=True),
+            _flags("2222-2221", works_count=3, works_window_plus=8),
+            _flags("3333-3331", works_count=10, works_window_plus=12, deal_covered=True),
+            _flags("5555-5551", works_count=2, works_window_plus=1),  # cutoff
+            _flags("6666-6661", works_count=2, works_window_plus=10, browse_excluded=True),
+            _flags("7777-7771", works_count=2, works_window_plus=5),
+            _flags("8888-8881", works_count=4, works_window_plus=6),
+            _flags("9999-9991", works_count=0, works_window_plus=4),
+        ]
+    )
+    # rug sees only Elsevier BV, with its own numbers and no deal coverage.
+    session.add_all(
+        [
+            JournalFlags(
+                institution_id=rug.id, issn_l="1234-5678", works_count=2, works_window_plus=6
+            )
+        ]
+    )
+    session.add(
+        JournalApcAggregate(
+            issn_l="1234-5678",
+            period=2024,
+            article_count=2,
+            euro_min=2000,
+            euro_max=2400,
+            euro_mean=2200,
+        )
+    )
+    deal_publisher = Publisher(name="Elsevier BV")
+    session.add(deal_publisher)
+    await session.flush()
+    deal = Deal(publisher_id=deal_publisher.id, esac_id="elsevier2024", status="current")
+    session.add(deal)
+    await session.flush()
+    session.add_all(
+        [
+            DealInstitution(deal_id=deal.id, institution_id=ut.id),
+            DealJournal(deal_id=deal.id, issn_l="1234-5678", issn="1234-5678", source="manual"),
+            # Window-bounded works stats for the ut detail bundle.
+            InstitutionWorksStats(
+                institution_id=ut.id,
+                source="pure_canon",
+                issn_l="1234-5678",
+                year=2023,
+                works_count=2,
+            ),
+            InstitutionWorksStats(
+                institution_id=ut.id,
+                source="openalex_institution_filter",
+                issn_l="1234-5678",
+                year=2023,
+                works_count=3,
+                oa_gold=1,
+                oa_green=1,
+            ),
+            InstitutionWorksStats(
+                institution_id=ut.id,
+                source="openalex_institution_filter",
+                issn_l="1234-5678",
+                year=2024,
+                works_count=2,
+                oa_hybrid=1,
+                oa_closed=1,
+            ),
+            # rug-window stats row must never leak into the ut detail.
+            InstitutionWorksStats(
+                institution_id=rug.id,
+                source="openalex_institution_filter",
+                issn_l="1234-5678",
+                year=2023,
+                works_count=99,
+            ),
+        ]
+    )
+    await session.commit()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
+        yield client, {"ut": ut.id, "rug": rug.id, "deal": deal.id}
+    app.dependency_overrides.clear()
+
+
+@requires_db
+async def test_publisher_list_aggregates(publishers_api):
+    client, ids = publishers_api
+    r = await client.get("/api/v1/ut/publishers")
+    assert r.status_code == 200
+    body = r.json()
+    # NULL publisher, below-cutoff and browse-excluded journals never group.
+    assert body["total"] == 4
+    assert [i["name"] for i in body["items"]] == [
+        "Springer",
+        "Elsevier BV",
+        "Wiley",
+        "Alpha/Beta Press",
+    ]
+    springer, elsevier = body["items"][0], body["items"][1]
+    assert springer == {
+        "name": "Springer",
+        "n_journals": 2,
+        "n_works": 12,  # 10 + 2 flags.works_count
+        "deal_journals": 1,
+        "oa_types": {"gold": 0, "diamond": 0, "hybrid": 1, "subscription": 1},
+        "quartiles": {"q1": 1, "q2": 0, "q3": 0, "q4": 0, "none": 1},
+        "apc": {"n_journals": 1, "eur_min": 1500.0, "eur_max": 1500.0},
+        "topics": [],
+    }
+    assert elsevier == {
+        "name": "Elsevier BV",
+        "n_journals": 2,
+        "n_works": 8,  # 5 + 3
+        "deal_journals": 1,
+        "oa_types": {"gold": 0, "diamond": 1, "hybrid": 1, "subscription": 0},
+        "quartiles": {"q1": 1, "q2": 1, "q3": 0, "q4": 0, "none": 0},
+        "apc": {"n_journals": 1, "eur_min": 2400.0, "eur_max": 2400.0},
+        # J1's 5 works spread over its topics by count (30/10).
+        "topics": [{"name": "Physics", "n": 3.75}, {"name": "Materials Science", "n": 1.25}],
+    }
+
+
+@requires_db
+async def test_publisher_filters_and_multiselect(publishers_api):
+    client, ids = publishers_api
+
+    async def names(params: dict) -> list[str]:
+        body = (await client.get("/api/v1/ut/publishers", params=params)).json()
+        return [i["name"] for i in body["items"]]
+
+    # Pipe multi-select ORs within the dimension.
+    assert await names({"oa_type": "diamond"}) == ["Elsevier BV"]
+    assert await names({"oa_type": "diamond|hybrid"}) == ["Springer", "Elsevier BV"]
+    assert await names({"oa_type": "gold"}) == []
+    assert await names({"deal": "none"}) == ["Wiley", "Alpha/Beta Press"]
+    assert await names({"quartile": "Q2"}) == ["Elsevier BV"]
+    assert await names({"quartile": "Q1|Q3"}) == ["Springer", "Elsevier BV", "Wiley"]
+    # Topic matches a topics display_name case-insensitively.
+    assert await names({"topic": "Condensed Matter Physics"}) == ["Elsevier BV"]
+    assert await names({"topic": "condensed matter physics"}) == ["Elsevier BV"]
+    assert await names({"topic": "Nanotech|Condensed Matter Physics"}) == ["Elsevier BV"]
+    assert await names({"has_apc": True}) == ["Springer", "Elsevier BV"]
+    assert await names({"has_works": False}) == ["Alpha/Beta Press"]
+    assert await names({"q": "spring"}) == ["Springer"]
+    # Size buckets: publisher journal counts (1 vs 2-4).
+    assert await names({"size": "1"}) == ["Wiley", "Alpha/Beta Press"]
+    assert await names({"size": "2-4|10+"}) == ["Springer", "Elsevier BV"]
+    # Size drops its own facet dimension: selecting "1" still counts the rest.
+    facet_body = (await client.get("/api/v1/ut/publishers", params={"size": "1"})).json()
+    assert facet_body["facets"]["size"]["2-4"] == 2
+    # Relevance defaults with q: the "e" prefix match outranks substrings.
+    assert (await names({"q": "e"}))[0] == "Elsevier BV"
+    # Offset/limit pages the sorted matches.
+    assert await names({"offset": 1, "limit": 2}) == ["Elsevier BV", "Wiley"]
+
+
+@requires_db
+async def test_publisher_facets_drop_own_dimension(publishers_api):
+    client, ids = publishers_api
+    body = (await client.get("/api/v1/ut/publishers")).json()
+    assert body["facets"] == {
+        "oa_type": {"gold": 0, "diamond": 1, "hybrid": 2, "subscription": 3},
+        "deal": {"covered": 2, "none": 2},
+        "quartile": {"Q1": 2, "Q2": 1, "Q3": 1, "Q4": 0},
+        "has_apc": {"yes": 2, "no": 2},
+        "size": {"1": 2, "2-4": 2, "5-9": 0, "10+": 0},
+        "topic": {"Condensed Matter Physics": 1, "Nanotech": 1},
+    }
+
+    # oa_type=gold matches no publisher, yet every OTHER facet value still
+    # counts the publishers that would gain it.
+    body = (await client.get("/api/v1/ut/publishers", params={"oa_type": "gold"})).json()
+    assert body["total"] == 0 and body["items"] == []
+    assert body["facets"]["oa_type"] == {
+        "gold": 0,
+        "diamond": 1,
+        "hybrid": 2,
+        "subscription": 3,
+    }
+
+    # A non-empty own filter: deal facet keeps its unfiltered distribution.
+    body = (await client.get("/api/v1/ut/publishers", params={"deal": "covered"})).json()
+    assert body["total"] == 2
+    assert body["facets"]["deal"] == {"covered": 2, "none": 2}
+    assert body["facets"]["quartile"] == {"Q1": 2, "Q2": 1, "Q3": 0, "Q4": 0}
+
+    body = (
+        await client.get("/api/v1/ut/publishers", params={"include_facets": False})
+    ).json()
+    assert body["facets"] == {}
+
+
+@requires_db
+async def test_publisher_detail(publishers_api):
+    client, ids = publishers_api
+    r = await client.get(f"/api/v1/ut/publishers/{quote('Elsevier BV')}")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["publisher"]["name"] == "Elsevier BV"
+    assert body["publisher"]["topics"] == [
+        {"name": "Physics", "n": 3.75},
+        {"name": "Materials Science", "n": 1.25},
+    ]
+    # Its two browsable journals, works desc.
+    assert [(j["issn_l"], j["works"]) for j in body["journals"]] == [
+        ("1234-5678", 5),
+        ("2222-2221", 3),
+    ]
+    j1 = body["journals"][0]
+    assert j1["oa_type"] == "hybrid" and j1["deal_covered"] is True
+    assert j1["apc_source"] == "openapc" and j1["apc_low"] == 2000.0 and j1["apc_high"] == 2400.0
+    # The deal covering J1, with register-publisher name attached.
+    assert [d["esac_id"] for d in body["deals"]] == ["elsevier2024"]
+    assert body["deals"][0]["publisher_name"] == "Elsevier BV"
+    # Window-bounded, summed over the publisher's issns; pure_canon wins the
+    # works total, OpenAlex always carries the OA split. Newest first.
+    assert body["works_by_year"] == [
+        {
+            "year": 2024,
+            "works_count": 2,
+            "works_count_source": "openalex_institution_filter",
+            "oa_gold": 0,
+            "oa_hybrid": 1,
+            "oa_green": 0,
+            "oa_bronze": 0,
+            "oa_diamond": 0,
+            "oa_closed": 1,
+        },
+        {
+            "year": 2023,
+            "works_count": 2,  # pure_canon primary, not OpenAlex's 3 (+rug's 99)
+            "works_count_source": "pure_canon",
+            "oa_gold": 1,
+            "oa_hybrid": 0,
+            "oa_green": 1,
+            "oa_bronze": 0,
+            "oa_diamond": 0,  # J2 has no stats rows seeded
+            "oa_closed": 0,
+        },
+    ]
+
+
+@requires_db
+async def test_publisher_detail_404_and_slash_name(publishers_api):
+    client, ids = publishers_api
+    assert (await client.get("/api/v1/ut/publishers/Nonexistent")).status_code == 404
+    r = await client.get(f"/api/v1/ut/publishers/{quote('Alpha/Beta Press')}")
+    assert r.status_code == 200
+    assert r.json()["publisher"]["name"] == "Alpha/Beta Press"
+    assert r.json()["publisher"]["n_works"] == 0
+
+
+@requires_db
+async def test_publisher_institution_isolation(publishers_api):
+    client, ids = publishers_api
+    body = (await client.get("/api/v1/rug/publishers")).json()
+    assert body["total"] == 1
+    item = body["items"][0]
+    assert item == {
+        "name": "Elsevier BV",
+        "n_journals": 1,
+        "n_works": 2,  # rug's own flags, not ut's 8
+        "deal_journals": 0,
+        "oa_types": {"gold": 0, "diamond": 0, "hybrid": 0, "subscription": 1},
+        "quartiles": {"q1": 1, "q2": 0, "q3": 0, "q4": 0, "none": 0},
+        "apc": {"n_journals": 1, "eur_min": 2400.0, "eur_max": 2400.0},
+        # Journal topics are institution-neutral; rug's 2 J1 works spread
+        # over them by count (30/10).
+        "topics": [{"name": "Physics", "n": 1.5}, {"name": "Materials Science", "n": 0.5}],
+    }
+    assert (await client.get("/api/v1/nonsense/publishers")).status_code == 404

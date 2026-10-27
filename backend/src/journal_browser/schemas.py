@@ -1,7 +1,7 @@
 """Pydantic response schemas for the API (openapi-typescript feeds on these)."""
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -393,3 +393,99 @@ class AuthorProfileResponse(BaseModel):
     similar: AuthorSimilarBundle
     alternatives: list[AuthorAlternative]
     works: list[AuthorWorkItem]
+
+
+# ── Publisher browsing (journals grouped per publisher_name) ───────────────
+
+
+class TopicMassRow(BaseModel):
+    name: str
+    n: float
+
+
+class PublisherApcSummary(BaseModel):
+    n_journals: int
+    eur_min: float | None = None
+    eur_max: float | None = None
+
+
+class PublisherListItem(BaseModel):
+    name: str
+    n_journals: int
+    n_works: int
+    deal_journals: int
+    # Journal counts per OA type (gold/diamond/hybrid/subscription).
+    oa_types: dict[str, int]
+    quartiles: dict[str, int]
+    apc: PublisherApcSummary
+    topics: list[TopicMassRow] = []
+
+
+class PublisherSearchResponse(BaseModel):
+    items: list[PublisherListItem]
+    total: int
+    facets: dict[str, dict[str, int]] = {}
+
+
+class PublisherDetailResponse(BaseModel):
+    publisher: PublisherListItem
+    journals: list[JournalListItem]
+    deals: list[DealOut] = []
+    works_by_year: list[StatsYear] = []
+
+
+# ── Org-unit browsing (faculties + research groups) ────────────────────────
+
+
+class OrgUnitItem(BaseModel):
+    level: Literal["faculty", "group"]
+    name: str
+    faculty: str | None = None
+    n_authors: int
+    n_works: int
+    # Faculty level only: distinct child research groups.
+    n_groups: int | None = None
+    deal_works: int
+    apc_euro_total: float
+    apc_n: int
+    topics: list[TopicMassRow] = []
+
+
+class OrgUnitSearchResponse(BaseModel):
+    level: str
+    items: list[OrgUnitItem]
+    total: int
+    facets: dict[str, dict[str, int]] = {}
+
+
+class OrgUnitJournalRow(BaseModel):
+    issn_l: str
+    title: str | None
+    n_works: int
+    deal_covered: bool
+    oa_type: str
+    quartile: str | None
+
+
+class OrgUnitAuthorRow(BaseModel):
+    pure_uuid: str
+    name: str
+    n_works: int
+    orcid: str | None
+    primary_topic: str | None
+
+
+class DealUsageRow(BaseModel):
+    label: str
+    n_works: int
+    euro: float
+
+
+class OrgUnitDetailResponse(BaseModel):
+    unit: OrgUnitItem
+    # Faculty level only: child groups, works desc.
+    groups: list[OrgUnitItem] | None = None
+    journals: list[OrgUnitJournalRow] = []
+    authors: list[OrgUnitAuthorRow] = []
+    works_by_year: list[StatsYear] = []
+    deal_usage: list[DealUsageRow] = []
