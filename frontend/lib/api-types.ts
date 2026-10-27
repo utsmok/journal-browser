@@ -1458,6 +1458,8 @@ export interface components {
             title: string | null;
             /** Publisher Name */
             publisher_name: string | null;
+            /** Publisher Canonical */
+            publisher_canonical?: string | null;
             /** Quartile */
             quartile: string | null;
             /** Is Oa */

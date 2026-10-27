@@ -1046,7 +1046,7 @@ function JournalPageInner() {
                             {s.title ?? s.issn_l}
                           </Link>
                           <span className="text-xs text-[var(--muted-foreground)]">
-                            {s.publisher_name ?? "Unknown publisher"}
+                            {s.publisher_canonical ?? s.publisher_name ?? "Unknown publisher"}
                           </span>
                           <span className="ml-auto flex flex-wrap items-center gap-2">
                             <DealBadge covered={s.deal_covered} />

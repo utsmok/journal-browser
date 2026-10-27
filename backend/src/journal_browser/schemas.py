@@ -57,6 +57,7 @@ class SimilarJournalItem(BaseModel):
     issn_l: str
     title: str | None
     publisher_name: str | None
+    publisher_canonical: str | None = None
     quartile: str | None
     is_oa: bool | None
     deal_covered: bool

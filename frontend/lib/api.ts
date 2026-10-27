@@ -48,6 +48,7 @@ type SimilarJournal = {
   issn_l: string;
   title: string | null;
   publisher_name: string | null;
+  publisher_canonical?: string | null;
   quartile?: string | null;
   is_oa?: boolean | null;
   deal_covered: boolean;
