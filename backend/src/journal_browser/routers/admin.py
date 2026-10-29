@@ -62,6 +62,7 @@ from ..schemas import (
     FeedbackPatchOut,
     FlaggedDealOut,
 )
+from ..services.source_health import record_degraded
 from ..settings_schema import SETTINGS_REGISTRY, value_for_response
 from ..vocab import DealStatus, FeedbackPriority, FeedbackStatus
 
@@ -497,6 +498,7 @@ async def _flags_refresh_loop() -> None:
             logging.getLogger("journal_browser.admin").exception(
                 "background deal-flags refresh failed"
             )
+            record_degraded("deal-flags", "background refresh failed")
             return
         if not _flags_rerun:
             return

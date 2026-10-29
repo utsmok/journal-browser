@@ -21,6 +21,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ..config import get_settings
+from .source_health import record_degraded
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +85,8 @@ async def ut_works_for_journal(issn_l: str, dsn: str | None = None) -> list[dict
         async with _get_engine(dsn).connect() as conn:
             rows = (await conn.execute(_WORKS_SQL, {"issn_l": issn_l})).mappings().all()
     except Exception:
-        logger.warning("ut-metadata unavailable for %s; serving works_stats-only", issn_l)
+        logger.exception("ut-metadata query failed for %s; serving works_stats-only", issn_l)
+        record_degraded("ut-metadata", "works query failed; serving stats-only")
         return None
     # DISTINCT dedupes venue-identity overlap; key by id for safety.
     return list({row["id"]: dict(row) for row in rows}.values())

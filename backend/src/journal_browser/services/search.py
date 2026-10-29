@@ -3,6 +3,7 @@
 import asyncio
 import base64
 import json
+import logging
 import time
 import warnings
 from datetime import date
@@ -31,6 +32,9 @@ from ..config import get_settings
 from ..harvest.common import cache_epoch
 from ..models import IssnMap, Journal, JournalApcAggregate, JournalFlags
 from ..vocab import OaType
+from .source_health import record_degraded
+
+logger = logging.getLogger(__name__)
 
 _converter: CurrencyConverter | None = None
 _converter_year: int | None = None
@@ -54,10 +58,14 @@ def _year_rate(currency: str) -> float | None:
             )
             _converter_year = year
         except Exception:
+            logger.warning("currency rate table init failed", exc_info=True)
+            record_degraded("currency-rates", "rate table init failed")
             return None
     try:
         return float(_converter.convert(1, currency, "EUR", date=date(year, 1, 1)))
     except Exception:
+        logger.warning("currency conversion failed for %s", currency, exc_info=True)
+        record_degraded("currency-rates", f"conversion failed for {currency}")
         return None
 
 
