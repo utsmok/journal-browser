@@ -2,133 +2,27 @@ import type { components } from "./api-types";
 
 type Schemas = components["schemas"];
 
-/**
- * The generated types trail the backend contract (api-types.ts is
- * auto-generated). Fields the updated backend adds are declared here so the
- * frontend can code against them while the old backend simply omits them.
- */
-export type JournalListItem = Schemas["JournalListItem"] & {
-  /** Display APC: OpenAlex list price when known, else the OpenAPC range. */
-  apc_source?: "openalex" | "openapc" | null;
-  apc_price?: number | null;
-  apc_currency?: string | null;
-  apc_low?: number | null;
-  apc_high?: number | null;
-  apc_stats?: {
-    period: number;
-    article_count: number;
-    euro_min: number | null;
-    euro_max: number | null;
-    euro_mean: number | null;
-  }[];
-  oa_type?: ("gold" | "diamond" | "hybrid" | "subscription") | null;
-  primary_topic?: string | null;
-};
+export type JournalListItem = Schemas["JournalListItem"];
 
-export type DealLink = {
-  url?: string | null;
-  text?: string | null;
-  category?: string | null;
-};
+export type DealLink = Schemas["DealLinkOut"];
 
-export type DealOut = Omit<Schemas["DealOut"], "links"> & {
-  links?: DealLink[] | null;
-};
+export type DealOut = Schemas["DealOut"];
 
-export type JournalDetailResponse = Schemas["JournalDetailResponse"] & {
-  journal: JournalListItem;
-  openalex?: OpenalexSource | null;
-  openaire?: { matched_works: number } | null;
-  institution_metrics?: InstitutionMetrics | null;
-};
+export type JournalDetailResponse = Schemas["JournalDetailResponse"];
 
 export type JournalSearchResponse = Schemas["JournalSearchResponse"];
 
-type SimilarJournal = {
-  issn_l: string;
-  title: string | null;
-  publisher_name: string | null;
-  publisher_canonical?: string | null;
-  quartile?: string | null;
-  is_oa?: boolean | null;
-  deal_covered: boolean;
-  works: number;
-  shared_topics: number;
-  similarity?: number | null;
-};
-
 /** Three similar-journal cuts: institution-publishing venues, deal-covered venues, and the general list. */
-export type SimilarJournalsBundle = {
-  institution: SimilarJournal[];
-  deals: SimilarJournal[];
-  all: SimilarJournal[];
-};
+export type SimilarJournalsBundle = Schemas["SimilarJournalsBundle"];
 
-/** OpenAlex source record for a journal (absent on old backends). */
-export type OpenalexTopic = {
-  id: string;
-  display_name: string;
-  count: number;
-  score?: number;
-  subfield?: { id?: string; display_name?: string } | null;
-  field?: { id?: string; display_name?: string } | null;
-  domain?: { id?: string; display_name?: string } | null;
-};
+export type OpenalexTopic = Schemas["OpenalexTopicOut"];
 
-export type OpenalexSource = {
-  id?: string | null;
-  url?: string | null;
-  cited_by_count?: number | null;
-  works_count?: number | null;
-  host_organization_name?: string | null;
-  first_publication_year?: number | null;
-  last_publication_year?: number | null;
-  topics?: OpenalexTopic[];
-};
+export type OpenalexSource = Schemas["OpenalexInfo"];
 
 /** Institution work metrics computed from OpenAlex works. */
-export type InstitutionMetrics = {
-  openalex_matched: number;
-  fwci_avg: number | null;
-  fwci_n: number;
-  retracted: number;
-  cited_total: number;
-  // Canonical-store-grounded totals; null when that store is unreachable.
-  canonical_total?: number | null;
-  canonical_retracted?: number | null;
-  canonical_oa?: {
-    gold?: number;
-    hybrid?: number;
-    green?: number;
-    bronze?: number;
-    diamond?: number;
-    closed?: number;
-    unknown?: number;
-  } | null;
-};
+export type InstitutionMetrics = Schemas["InstitutionMetrics"];
 
-type JournalWork = {
-  id: string;
-  url: string | null;
-  doi: string | null;
-  title: string | null;
-  year: number | null;
-  oa_status: string | null;
-  fwci: number | null;
-  cited_by_count: number;
-  is_retracted: boolean | null;
-  type: string | null;
-  // ut-metadata provenance: canonical work type + OpenAlex works_stats backing.
-  work_type?: string | null;
-  in_openalex?: boolean | null;
-};
-
-export type WorksPage = {
-  items: JournalWork[];
-  total: number;
-  page: number;
-  page_size: number;
-};
+export type WorksPage = Schemas["WorksPage"];
 
 export type LimitationOut = Schemas["LimitationOut"];
 export type FreshnessResponse = Schemas["FreshnessResponse"];
@@ -137,29 +31,9 @@ export type Attribution = Schemas["Attribution"];
 
 // --- Author profiles (Pure-based, per institution) ---
 
-export type AuthorSearchItem = {
-  pure_uuid: string;
-  name: string;
-  faculty: string | null;
-  research_group: string | null;
-  n_works: number;
-  orcid: string | null;
-  /** Affiliation confirmed in Pure; unconfirmed authors are hidden by default. */
-  confirmed: boolean;
-  last_pub_year: number | null;
-  primary_topic: string | null;
-};
+export type AuthorSearchItem = Schemas["AuthorItem"];
 
-export type AuthorFacetBucket = { value: string; count: number };
-
-/** Facet counts for the author search; every list is sorted by count desc. */
-export type AuthorSearchFacets = {
-  faculty: AuthorFacetBucket[];
-  org: AuthorFacetBucket[];
-  works: AuthorFacetBucket[];
-  last_pub: AuthorFacetBucket[];
-  topic: AuthorFacetBucket[];
-};
+export type AuthorFacetBucket = Schemas["AuthorFacet"];
 
 /** Author search ordering; the backend default is works_desc. */
 export type AuthorSearchSort =
@@ -168,18 +42,7 @@ export type AuthorSearchSort =
   | "name_desc"
   | "last_pub_desc";
 
-export type AuthorSearchResponse = {
-  /** False when this institution has no author data at all (e.g. /rug/author). */
-  enabled: boolean;
-  /** Unpaginated filtered count. */
-  total: number;
-  items: AuthorSearchItem[];
-  facets?: AuthorSearchFacets;
-  /** Echoes the requested sort. */
-  sort?: AuthorSearchSort;
-  /** Echoes the requested page offset. */
-  offset?: number;
-};
+export type AuthorSearchResponse = Schemas["AuthorSearchResponse"];
 
 /** Sort and paging options for fetchAuthors. */
 export type AuthorFetchOptions = {
@@ -200,68 +63,9 @@ export type AuthorSearchFilters = {
   topic?: string[];
 };
 
-export type AuthorSimilarJournal = {
-  issn_l: string;
-  title: string | null;
-  /** Similarity (1 - cosine distance); higher is more similar. */
-  score: number;
-  oa_type: "gold" | "diamond" | "hybrid" | "subscription";
-  deal_covered: boolean;
-};
+export type AuthorSimilarJournal = Schemas["AuthorSimilarJournal"];
 
-export type AuthorProfile = {
-  author: {
-    pure_uuid: string;
-    name: string;
-    orcid: string | null;
-    openalex_author_id: string | null;
-    openaire_person_id: string | null;
-    crossref_orcid: string | null;
-    faculty: string | null;
-    research_group: string | null;
-    orgs: string[];
-    n_works: number;
-  };
-  /** Per-year OA counts for the author's works, sorted year descending. */
-  oa_by_year: {
-    year: number;
-    total: number;
-    gold: number;
-    green: number;
-    hybrid: number;
-    bronze: number;
-    closed: number;
-  }[];
-  journals: {
-    issn_l: string;
-    title: string | null;
-    n_works: number;
-    oa_type: "gold" | "diamond" | "hybrid" | "subscription";
-  }[];
-  topics: { name: string; n: number }[];
-  similar: {
-    all: AuthorSimilarJournal[];
-    deals: AuthorSimilarJournal[];
-    diamond: AuthorSimilarJournal[];
-  };
-  /** The author's hybrid/subscription journals with diamond/deal alternatives. */
-  alternatives: {
-    issn_l: string;
-    title: string | null;
-    n_works: number;
-    options: AuthorSimilarJournal[];
-  }[];
-  /** Most recent works, year descending, capped at 200. */
-  works: {
-    pure_uuid: string;
-    title: string;
-    year: number;
-    doi: string | null;
-    oa_status: string | null;
-    journal_issn_l: string | null;
-    journal_title: string | null;
-  }[];
-};
+export type AuthorProfile = Schemas["AuthorProfileResponse"];
 
 export type SortKey =
   | "relevance"
@@ -380,43 +184,13 @@ export type OaTypeCounts = Partial<
   Record<"gold" | "diamond" | "generic" | "hybrid" | "subscription", number>
 >;
 
-export type PublisherListItem = {
-  name: string;
-  n_journals: number;
-  n_works: number;
-  /** Journals covered by an open access deal. */
-  deal_journals: number;
-  oa_types: OaTypeCounts;
-  quartiles: Partial<Record<"q1" | "q2" | "q3" | "q4" | "none", number>>;
-  apc: { n_journals: number; eur_min: number | null; eur_max: number | null };
-  topics: { name: string; n: number }[];
-};
+export type PublisherListItem = Schemas["PublisherListItem"];
 
-export type PublisherFacets = {
-  oa_type: Record<string, number>;
-  deal: Record<string, number>;
-  quartile: Record<string, number>;
-  has_apc: Record<string, number>;
-  size: Record<string, number>;
-  topic: Record<string, number>;
-};
-
-export type PublisherSearchResponse = {
-  total: number;
-  items: PublisherListItem[];
-  facets?: PublisherFacets;
-};
+export type PublisherSearchResponse = Schemas["PublisherSearchResponse"];
 
 export type DealDiscrepancy = Schemas["DealDiscrepancyRow"];
 
-export type PublisherDetailResponse = {
-  publisher: PublisherListItem;
-  journals: JournalListItem[];
-  deals: DealOut[];
-  deal_discrepancies: DealDiscrepancy[];
-  n_discrepancies: number;
-  works_by_year: StatsYear[];
-};
+export type PublisherDetailResponse = Schemas["PublisherDetailResponse"];
 
 export type PublisherSearchSort =
   | "relevance"
@@ -446,53 +220,11 @@ export type PublisherSearchParams = {
 /** Org-unit hierarchy level; a unit is a faculty or a research group. */
 export type OrgUnitLevel = "faculty" | "group";
 
-export type OrgUnitItem = {
-  level: OrgUnitLevel;
-  name: string;
-  /** Parent faculty; set on group level only. */
-  faculty: string | null;
-  n_authors: number;
-  n_works: number;
-  /** Child research groups; faculty level only. */
-  n_groups: number | null;
-  deal_works: number;
-  apc_euro_total: number;
-  apc_n: number;
-  topics: { name: string; n: number }[];
-};
+export type OrgUnitItem = Schemas["OrgUnitItem"];
 
-export type OrgUnitSearchResponse = {
-  level: OrgUnitLevel;
-  total: number;
-  items: OrgUnitItem[];
-  facets?: {
-    faculty?: Record<string, number>;
-    size: Record<string, number>;
-    uses_deals: Record<string, number>;
-  };
-};
+export type OrgUnitSearchResponse = Schemas["OrgUnitSearchResponse"];
 
-export type OrgUnitDetailResponse = {
-  unit: OrgUnitItem;
-  groups: OrgUnitItem[] | null;
-  journals: {
-    issn_l: string;
-    title: string | null;
-    n_works: number;
-    deal_covered: boolean;
-    oa_type: "gold" | "diamond" | "hybrid" | "subscription";
-    quartile: string | null;
-  }[];
-  authors: {
-    pure_uuid: string;
-    name: string;
-    n_works: number;
-    orcid: string | null;
-    primary_topic: string | null;
-  }[];
-  works_by_year: StatsYear[];
-  deal_usage: { label: string; n_works: number; euro: number }[];
-};
+export type OrgUnitDetailResponse = Schemas["OrgUnitDetailResponse"];
 
 export type OrgUnitSearchSort =
   | "relevance"

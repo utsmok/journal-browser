@@ -265,21 +265,20 @@ const OA_TYPE_META: Record<OaType, { label: string; title: string; lock: LockSta
 };
 
 /**
- * OA-type badge (gold / diamond / hybrid / subscription). The backend
- * computes oa_type; when it is absent (old backend) we fall back to
- * Subscription only for journals known not to be OA, and omit otherwise
- * rather than guess.
+ * OA-type badge (gold / diamond / generic / hybrid / subscription). The
+ * backend models oa_type as a plain string; unknown values render nothing
+ * rather than guessing.
  */
 export function OaTypeBadge({
   oaType,
   isOa,
 }: {
-  oaType?: OaType | null;
+  oaType?: string | null;
   isOa?: boolean | null;
 }) {
-  const type: OaType | null = oaType ?? (isOa === false ? "subscription" : null);
-  if (!type) return null;
-  const meta = OA_TYPE_META[type];
+  const type: string | null = oaType ?? (isOa === false ? "subscription" : null);
+  if (!type || !(type in OA_TYPE_META)) return null;
+  const meta = OA_TYPE_META[type as OaType];
   return (
     <Lockup label={meta.label} width={meta.width} title={meta.title} className={meta.className}>
       <LockIcon state={meta.lock} />

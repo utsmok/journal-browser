@@ -334,7 +334,7 @@ function PublicationsCard({
         ) : (
           <ul className="divide-y divide-[var(--border)]">
             {works.map((w) => {
-              const href = doiHref(w.doi) ?? w.url;
+              const href = doiHref(w.doi ?? null) ?? w.url;
               return (
               <li
                 key={w.id}
@@ -559,7 +559,8 @@ function JournalPageInner() {
     ),
   );
   const oaTopics = (openalex?.topics ?? []).filter(
-    (t): t is OpenalexTopic => Boolean(t?.display_name),
+    (t): t is OpenalexTopic & { display_name: string } =>
+      Boolean(t?.display_name),
   );
   const maxTopicCount = oaTopics[0]?.count ?? 1;
   const hasApc =
