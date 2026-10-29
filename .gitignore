@@ -7,7 +7,8 @@ __pycache__/
 dist/
 build/
 
-docs/
+# docs/ = doc content volume at repo root (frontend code dirs named docs stay tracked)
+/docs/
 
 # Node
 node_modules/

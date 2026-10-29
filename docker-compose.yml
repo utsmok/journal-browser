@@ -52,11 +52,14 @@ services:
       JB_JISC_API_KEY: ${JB_JISC_API_KEY:-}
       JB_ADMIN_PASSWORD: ${JB_ADMIN_PASSWORD:-}
       OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
+      JB_DOCS_DIR: /app/docs
     volumes:
       # Raw landing copies and job logs must survive container rebuilds.
       - ./backend/landing:/app/landing
       # Admin-editable settings overlay (see backend/settings.yaml.example).
       - ./backend/settings.yaml:/app/settings.yaml
+      # Markdown docs served via /api/v1/docs (read-only; edits live in DB).
+      - ./docs:/app/docs:ro
     ports:
       - "127.0.0.1:8000:8000"
     healthcheck:

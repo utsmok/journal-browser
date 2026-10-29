@@ -32,6 +32,7 @@ from ..config import (
     settings_yaml_path,
 )
 from ..db import get_session
+from ..docs import read_doc
 from ..harvest.common import (
     get_active_institutions,
     get_institution_by_code,
@@ -42,6 +43,7 @@ from ..models import (
     Deal,
     DealInstitution,
     DealJournal,
+    DocEdit,
     Feedback,
     HarvestRun,
     Institution,
@@ -852,4 +854,51 @@ async def delete_feedback(
     if row is None:
         raise HTTPException(404, "feedback not found")
     await session.delete(row)
+    await session.commit()
+
+
+# ── Doc block edits ─────────────────────────────────────────────────────────
+# Overrides for single blocks of the served markdown docs (docs/). Stored in
+# doc_edits, applied at read time by routers/docs.py; the source files stay
+# untouched. original_hash records what the editor saw, provenance only.
+
+class DocEditIn(BaseModel):
+    block_key: str
+    original_hash: str
+    replacement: str
+
+
+@router.put("/docs/{slug}/edits")
+async def put_doc_edit(
+    slug: str, body: DocEditIn, session: SessionDep, _: AdminDep
+) -> dict[str, Any]:
+    if read_doc(slug) is None:
+        raise HTTPException(404, f"unknown doc: {slug}")
+    slug = read_doc(slug)["slug"]  # canonical lower-case form
+    if not body.replacement.strip():
+        raise HTTPException(422, "replacement must not be empty")
+    row = await session.scalar(
+        select(DocEdit).where(
+            DocEdit.doc_slug == slug, DocEdit.block_key == body.block_key
+        )
+    )
+    if row is None:
+        row = DocEdit(doc_slug=slug, block_key=body.block_key)
+        session.add(row)
+    row.original_hash = body.original_hash
+    row.replacement = body.replacement
+    await session.commit()
+    return {"slug": slug, "block_key": body.block_key, "edited": True}
+
+
+@router.delete("/docs/{slug}/edits/{block_key}", status_code=204)
+async def delete_doc_edit(
+    slug: str, block_key: str, session: SessionDep, _: AdminDep
+) -> None:
+    slug = slug.lower()
+    await session.execute(
+        delete(DocEdit).where(
+            DocEdit.doc_slug == slug, DocEdit.block_key == block_key
+        )
+    )
     await session.commit()

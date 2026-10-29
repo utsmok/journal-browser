@@ -828,3 +828,26 @@ class Feedback(Base):
             name="ck_feedback_priority",
         ),
     )
+
+
+class DocEdit(Base):
+    """Admin replacement for one markdown block of a served doc (docs/).
+
+    Applied at read time by the /docs endpoints, so edits survive without
+    touching the source files (which stay host-owned). `original_hash` is
+    the sha256 of the block text the editor saw — provenance only, never
+    verified on write.
+    """
+
+    __tablename__ = "doc_edits"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    doc_slug: Mapped[str] = mapped_column(Text, nullable=False)
+    block_key: Mapped[str] = mapped_column(Text, nullable=False)
+    original_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    replacement: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = _tstamp()
+
+    __table_args__ = (
+        UniqueConstraint("doc_slug", "block_key", name="uq_doc_edits_block"),
+    )
