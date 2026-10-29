@@ -12,13 +12,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_session
 from ..docs import list_docs, parse_blocks, read_doc
 from ..models import DocEdit
+from ..schemas import DocDetailOut, DocMetaOut
 
 router = APIRouter(prefix="/docs", tags=["docs"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
-@router.get("")
+@router.get("", response_model=list[DocMetaOut])
 async def docs_index(session: SessionDep) -> list[dict[str, Any]]:
     edits = dict(
         (
@@ -28,7 +29,7 @@ async def docs_index(session: SessionDep) -> list[dict[str, Any]]:
     return [{**meta, "edits": edits.get(meta["slug"], 0)} for meta in list_docs()]
 
 
-@router.get("/{slug}")
+@router.get("/{slug}", response_model=DocDetailOut)
 async def doc_detail(slug: str, session: SessionDep) -> dict[str, Any]:
     meta = read_doc(slug)
     if meta is None:

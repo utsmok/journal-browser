@@ -52,6 +52,16 @@ from ..models import (
     ManualOverride,
     Publisher,
 )
+from ..schemas import (
+    AdminDealDetail,
+    AdminDealOut,
+    AdminInstitutionOut,
+    AdminRunOut,
+    DocEditOut,
+    FeedbackAdminOut,
+    FeedbackPatchOut,
+    FlaggedDealOut,
+)
 from ..settings_schema import SETTINGS_REGISTRY, value_for_response
 from ..vocab import DealStatus, FeedbackPriority, FeedbackStatus
 
@@ -105,7 +115,7 @@ async def login(body: LoginIn) -> dict[str, Any]:
     return {"token": _issue_token(), "expires_in": TOKEN_TTL}
 
 
-@router.get("/runs")
+@router.get("/runs", response_model=list[AdminRunOut])
 async def list_runs(
     session: SessionDep,
     _: AdminDep,
@@ -138,7 +148,7 @@ async def list_runs(
     ]
 
 
-@router.get("/flagged")
+@router.get("/flagged", response_model=list[FlaggedDealOut])
 async def flagged_deals(session: SessionDep, _: AdminDep) -> list[dict[str, Any]]:
     journal_count = (
         select(func.count())
@@ -308,14 +318,14 @@ async def _get_institution_or_404(session: AsyncSession, code: str) -> Instituti
     return inst
 
 
-@router.get("/institutions/{code}")
+@router.get("/institutions/{code}", response_model=AdminInstitutionOut)
 async def get_institution(
     code: str, session: SessionDep, _: AdminDep
 ) -> dict[str, Any]:
     return _institution_payload(await _get_institution_or_404(session, code))
 
 
-@router.put("/institutions/{code}")
+@router.put("/institutions/{code}", response_model=AdminInstitutionOut)
 async def update_institution(
     code: str, body: InstitutionUpdate, session: SessionDep, _: AdminDep
 ) -> dict[str, Any]:
@@ -499,7 +509,7 @@ async def _get_deal_or_404(session: AsyncSession, deal_id: int) -> Deal:
     return deal
 
 
-@router.get("/deals")
+@router.get("/deals", response_model=list[AdminDealOut])
 async def list_deals(session: SessionDep, _: AdminDep) -> list[dict[str, Any]]:
     counts = (
         select(DealJournal.deal_id, func.count().label("n"))
@@ -533,7 +543,7 @@ async def list_deals(session: SessionDep, _: AdminDep) -> list[dict[str, Any]]:
     ]
 
 
-@router.get("/deals/{deal_id}")
+@router.get("/deals/{deal_id}", response_model=AdminDealDetail)
 async def get_deal(deal_id: int, session: SessionDep, _: AdminDep) -> dict[str, Any]:
     await _get_deal_or_404(session, deal_id)
     return await _deal_detail(session, deal_id)
@@ -549,7 +559,7 @@ class DealCreate(BaseModel):
     corresponding_authors_only: bool | None = None
 
 
-@router.post("/deals", status_code=201)
+@router.post("/deals", status_code=201, response_model=AdminDealDetail)
 async def create_deal(body: DealCreate, session: SessionDep, _: AdminDep) -> dict[str, Any]:
     if body.publisher_id is None and not body.publisher_name:
         raise HTTPException(422, "publisher_id or publisher_name is required")
@@ -579,7 +589,7 @@ async def create_deal(body: DealCreate, session: SessionDep, _: AdminDep) -> dic
     return await _deal_detail(session, deal.id)
 
 
-@router.put("/deals/{deal_id}")
+@router.put("/deals/{deal_id}", response_model=AdminDealDetail)
 async def update_deal(
     deal_id: int, body: DealUpdate, session: SessionDep, _: AdminDep
 ) -> dict[str, Any]:
@@ -654,7 +664,7 @@ async def _resolve_issn_l(session: AsyncSession, issn: str) -> str | None:
     return issn_l
 
 
-@router.put("/deals/{deal_id}/journals")
+@router.put("/deals/{deal_id}/journals", response_model=AdminDealDetail)
 async def update_deal_journals(
     deal_id: int, body: DealJournalsBody, session: SessionDep, _: AdminDep
 ) -> dict[str, Any]:
@@ -697,7 +707,7 @@ async def update_deal_journals(
     return await _deal_detail(session, deal_id)
 
 
-@router.put("/deals/{deal_id}/participations")
+@router.put("/deals/{deal_id}/participations", response_model=AdminDealDetail)
 async def update_deal_participations(
     deal_id: int, body: DealParticipationsBody, session: SessionDep, _: AdminDep
 ) -> dict[str, Any]:
@@ -758,7 +768,7 @@ class FeedbackUpdateIn(BaseModel):
     resolution_notes: str | None = Field(default=None, max_length=8000)
 
 
-@router.get("/feedback")
+@router.get("/feedback", response_model=list[FeedbackAdminOut])
 async def list_feedback(
     session: SessionDep,
     _: AdminDep,
@@ -794,7 +804,7 @@ async def list_feedback(
     ]
 
 
-@router.patch("/feedback/{feedback_id}")
+@router.patch("/feedback/{feedback_id}", response_model=FeedbackPatchOut)
 async def update_feedback(
     feedback_id: int, body: FeedbackUpdateIn, session: SessionDep, _: AdminDep
 ) -> dict[str, Any]:
@@ -838,7 +848,7 @@ class DocEditIn(BaseModel):
     replacement: str
 
 
-@router.put("/docs/{slug}/edits")
+@router.put("/docs/{slug}/edits", response_model=DocEditOut)
 async def put_doc_edit(
     slug: str, body: DocEditIn, session: SessionDep, _: AdminDep
 ) -> dict[str, Any]:

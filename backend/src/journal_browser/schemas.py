@@ -5,7 +5,16 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from .vocab import DealStatus, OaType, WorksSource
+from .vocab import (
+    DealJournalSource,
+    DealStatus,
+    FeedbackCategory,
+    FeedbackPriority,
+    FeedbackStatus,
+    HarvestStatus,
+    OaType,
+    WorksSource,
+)
 
 
 class Attribution(BaseModel):
@@ -511,3 +520,132 @@ class OrgUnitDetailResponse(BaseModel):
     authors: list[OrgUnitAuthorRow] = []
     works_by_year: list[StatsYear] = []
     deal_usage: list[DealUsageRow] = []
+
+
+# ── Admin responses (dict payload shapes in routers/admin.py) ──────────────
+
+
+class AdminRunOut(BaseModel):
+    id: int
+    source: str
+    entity_type: str
+    institution_id: int | None
+    institution_code: str | None
+    status: HarvestStatus
+    started_at: datetime | None
+    finished_at: datetime | None
+    stats: dict[str, Any]
+
+
+class FlaggedDealOut(BaseModel):
+    id: int
+    publisher: str
+    esac_id: str | None
+    status: DealStatus
+    duration: str | None
+    journals: int
+    reason: str | None
+
+
+class AdminInstitutionOut(BaseModel):
+    code: str | None
+    name: str
+    short_name: str | None
+    ror: str | None
+    openalex_id: str | None
+    pure_oai_base_url: str | None
+    openaire_org_id: str | None
+    data_window_start: int
+    data_window_end: int
+    library_url: str | None
+    oa_guide_url: str | None
+    support_email: str | None
+    admin_contact: str | None
+    research_portal_url: str | None
+    active: bool
+    require_confirmed_affiliation: bool
+
+
+class AdminDealJournal(BaseModel):
+    issn: str
+    issn_l: str | None
+    journal_name: str | None
+    source: DealJournalSource
+    excluded: bool
+
+
+class AdminDealOut(BaseModel):
+    id: int
+    publisher_id: int | None
+    publisher: str | None
+    esac_id: str | None
+    status: DealStatus
+    start_year: int | None
+    end_year: int | None
+    corresponding_authors_only: bool | None
+    capped: bool
+    cap_numbers: dict[str, Any] | None
+    cap_text: str | None
+    summary: str | None
+    journal_count: int
+    participations: list[str]
+    needs_curation: bool
+    needs_curation_reason: str | None
+
+
+class AdminDealDetail(AdminDealOut):
+    journals: list[AdminDealJournal]
+
+
+class FeedbackAdminOut(BaseModel):
+    id: int
+    title: str
+    description: str
+    category: FeedbackCategory | None
+    status: FeedbackStatus
+    priority: FeedbackPriority
+    page_url: str | None
+    page_data: dict[str, Any]
+    resolution_notes: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class FeedbackPatchOut(BaseModel):
+    id: int
+    status: FeedbackStatus
+    priority: FeedbackPriority
+
+
+class DocEditOut(BaseModel):
+    slug: str
+    block_key: str
+    edited: bool
+
+
+# ── Docs responses (dict payload shapes in routers/docs.py) ────────────────
+
+
+class DocMetaOut(BaseModel):
+    slug: str
+    title: str
+    group: str
+    order: int
+    edits: int
+
+
+class DocBlock(BaseModel):
+    key: str
+    type: str
+    text: str
+    level: int | None = None
+    lang: str | None = None
+    edited: bool = False
+
+
+class DocDetailOut(BaseModel):
+    slug: str
+    title: str
+    group: str
+    order: int
+    blocks: list[DocBlock]
