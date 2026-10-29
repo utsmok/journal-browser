@@ -152,6 +152,22 @@ def parse_csv_rows(data: bytes, delimiter: str = ",") -> list[dict[str, str]]:
     return list(csv.DictReader(io.StringIO(text), delimiter=delimiter))
 
 
+class HarvestDataError(RuntimeError):
+    """Upstream payload shape broke; the harvest must fail, not produce empties."""
+
+
+def require_headers(
+    rows: list[dict[str, str]], required: set[str], source: str
+) -> None:
+    """Fail the run when upstream renamed/dropped a column we read, or sent
+    an empty payload — silent empty output would pass unnoticed otherwise."""
+    if not rows:
+        raise HarvestDataError(f"{source}: payload has no rows")
+    missing = required - rows[0].keys()
+    if missing:
+        raise HarvestDataError(f"{source}: missing columns {sorted(missing)}")
+
+
 async def resolve_issn_l(session: AsyncSession, issn: str | None) -> str | None:
     """ISSN → ISSN-L via the harvested issn_map; normalized input passthrough
     when no mapping exists (the input may already be the linking ISSN)."""

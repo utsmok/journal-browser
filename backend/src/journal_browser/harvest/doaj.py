@@ -21,10 +21,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Journal
 from .common import (
+    HarvestDataError,
     download_to_landing,
     issn_checksum_ok,
     normalize_issn,
     parse_csv_rows,
+    require_headers,
     run_harvest,
 )
 
@@ -154,9 +156,10 @@ async def harvest_doaj(session: AsyncSession) -> dict[str, Any]:
             session, ingest, SOURCE, ENTITY_TYPE, CSV_URL, ".csv", source_pk="journals"
         )
         rows = parse_csv_rows(data)
+        require_headers(rows, set(_C.values()), "doaj journals")
         fields_list = [f for row in rows if (f := journal_fields(row))]
         if not fields_list:
-            raise ValueError("DOAJ CSV parsed to zero ISSN-bearing rows")
+            raise HarvestDataError("DOAJ CSV parsed to zero ISSN-bearing rows")
         matched = await _apply_rows(session, fields_list)
         stamped = await _stamp_not_listed(session)
         return {

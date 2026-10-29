@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..ingest import IngestSession
 from ..models import Journal, ScimagojrMetric
-from .common import issn_checksum_ok, lookup_issn_l, normalize_issn
+from .common import issn_checksum_ok, lookup_issn_l, normalize_issn, require_headers
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,7 @@ def parse_export(data: bytes) -> list[dict[str, str]]:
         if len(values) < len(header):
             values += [""] * (len(header) - len(values))
         rows.append(dict(zip(header, values, strict=False)))
+    require_headers(rows, set(COLUMNS), "scimagojr export")
     return rows
 
 

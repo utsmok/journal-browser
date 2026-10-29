@@ -25,6 +25,7 @@ from .common import (
     lookup_issn_l,
     normalize_issn,
     parse_csv_rows,
+    require_headers,
     run_harvest,
 )
 
@@ -207,8 +208,16 @@ async def _body(ingest: IngestSession, limit: int | None) -> dict[str, Any]:
         stats["files_new" if is_new else "files_known"] += 1
     await ingest.commit()
 
+    _REQUIRED_HEADERS: dict[str, set[str]] = {
+        "apc": {"issn_l", "issn", "doi", "period", "euro"},
+        "ta": {"issn_l", "institution", "group_id", "doi", "agreement", "is_hybrid"},
+        "contracts": {"group_id", "contract_name"},
+    }
+
     def rows_for(entity_type: str) -> list[dict[str, str]]:
         rows = parse_csv_rows(paths[entity_type].read_bytes())
+        if entity_type in _REQUIRED_HEADERS:
+            require_headers(rows, _REQUIRED_HEADERS[entity_type], f"openapc {entity_type}")
         return rows[:limit] if limit else rows
 
     # In-memory caches: the TA file alone holds tens of thousands of ISSNs.

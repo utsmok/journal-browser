@@ -2,7 +2,12 @@
 
 import pytest
 
-from journal_browser.harvest.common import normalize_issn, parse_csv_rows
+from journal_browser.harvest.common import (
+    HarvestDataError,
+    normalize_issn,
+    parse_csv_rows,
+    require_headers,
+)
 
 
 @pytest.mark.parametrize(
@@ -27,3 +32,17 @@ def test_parse_csv_rows_handles_bom_and_semicolons():
     data = "\ufeffa;b\n1;two\n".encode("utf-8")
     rows = parse_csv_rows(data, delimiter=";")
     assert rows == [{"a": "1", "b": "two"}]
+
+
+def test_require_headers_missing_column_names_source():
+    with pytest.raises(HarvestDataError, match="doaj journals.*Journal URL"):
+        require_headers([{"Journal title": "x"}], {"Journal title", "Journal URL"}, "doaj journals")
+
+
+def test_require_headers_empty_rows():
+    with pytest.raises(HarvestDataError, match="no rows"):
+        require_headers([], {"a"}, "scimagojr export")
+
+
+def test_require_headers_passes_on_complete_headers():
+    require_headers([{"a": "1", "b": "2"}], {"a", "b"}, "openapc ta")

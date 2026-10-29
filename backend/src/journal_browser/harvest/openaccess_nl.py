@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..ingest import IngestSession, apply_overrides
 from ..models import Deal, Publisher
-from .common import download_to_landing, run_harvest
+from .common import HarvestDataError, download_to_landing, run_harvest
 
 logger = logging.getLogger(__name__)
 
@@ -363,7 +363,12 @@ def _body(limit: int | None):
         # Current pane first, then archive-only publishers (cheap: same crawl).
         # Slugs can appear in both panes — keep the first (current) entry.
         pubs: dict[str, dict[str, str]] = {}
-        for pub in parse_overview(data.decode("utf-8", errors="replace")):
+        parsed = parse_overview(data.decode("utf-8", errors="replace"))
+        if not parsed:
+            raise HarvestDataError(
+                "openaccess.nl overview parsed to zero publishers (format change?)"
+            )
+        for pub in parsed:
             pubs.setdefault(pub["slug"], pub)
         selected = list(pubs.values())
         if limit is not None:

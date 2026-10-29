@@ -1,10 +1,11 @@
 """Unit tests for the JCT dump parsers (fixtures inline, no network)."""
 
 import httpx
+import pytest
 from sqlalchemy import func, select
 
 from conftest import requires_db
-from journal_browser.harvest.common import parse_csv_rows
+from journal_browser.harvest.common import HarvestDataError, parse_csv_rows
 from journal_browser.harvest.jct import (
     INDEX_URL,
     _download_failure,
@@ -61,6 +62,11 @@ def test_parse_index():
     assert kar["last_reviewed"] == "2026-01-15"
     assert agreements[1]["ca_only"] == ""
     assert agreements[1]["raw"]["Relationship"] == "Consortium"
+
+
+def test_parse_index_fails_on_renamed_column():
+    with pytest.raises(HarvestDataError, match="missing columns"):
+        parse_index([{"ESAC ID": "x1", "Data URL": "u", "Unexpected": "y"}])
 
 
 def test_parse_agreement_dedupe_issn_skip():

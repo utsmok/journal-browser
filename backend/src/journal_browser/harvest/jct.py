@@ -21,7 +21,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import get_settings
 from ..ingest import IngestSession, apply_overrides
 from ..models import Deal, DealInstitution, DealJournal, Institution, ManualOverride, Publisher
-from .common import download_to_landing, normalize_issn, parse_csv_rows, run_harvest
+from .common import (
+    download_to_landing,
+    normalize_issn,
+    parse_csv_rows,
+    require_headers,
+    run_harvest,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +63,11 @@ def split_esac_id(esac_id: str) -> tuple[str | None, int | None, str | None]:
 
 def parse_index(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
     """Index sheet rows -> agreement dicts; rows without ESAC ID + Data URL skipped."""
+    require_headers(
+        rows,
+        {"ESAC ID", "Data URL", "End Date", "C/A Only", "Last Reviewed"},
+        "jct index",
+    )
     agreements = []
     seen: set[str] = set()
     for row in rows:
@@ -93,6 +104,21 @@ def parse_agreement(
     rows are unique by ROR; rows without a ROR are ignored.
     Rows are returned verbatim.
     """
+    require_headers(
+        rows,
+        {
+            "Journal Name",
+            "ISSN (Print)",
+            "ISSN (Online)",
+            "ROR ID",
+            "Institution Name",
+            "Institution First Seen",
+            "Institution Last Seen",
+            "Journal First Seen",
+            "Journal Last Seen",
+        },
+        "jct agreement",
+    )
     journals: list[dict[str, str]] = []
     institutions: list[dict[str, str]] = []
     seen_journals: set[tuple[str, str, str]] = set()
