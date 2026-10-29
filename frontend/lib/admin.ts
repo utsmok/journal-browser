@@ -1,9 +1,9 @@
+import type { components } from "./api-types";
 import { useCallback, useEffect, useState } from "react";
 
 /**
  * Shared admin plumbing: bearer-token storage, authenticated fetch helpers,
- * and hand-written types for the admin payloads (api-types.ts only covers
- * the older generated contract).
+ * and the admin payload types, derived from the generated contract.
  */
 const TOKEN_KEY = "jb-admin-token";
 
@@ -90,33 +90,13 @@ export function useAdminToken(): [string | null, (token: string | null) => void]
   return [token, update];
 }
 
-export type AdminRun = {
-  id: number;
-  source: string;
-  entity_type: string;
-  institution_id: number | null;
-  institution_code: string | null;
-  status: string;
-  started_at: string;
-  finished_at: string | null;
-  stats: Record<string, unknown>;
-};
+type Schemas = components["schemas"];
 
-export type FlaggedDeal = {
-  id: number;
-  publisher: string;
-  esac_id: string | null;
-  status: string;
-  duration: string | null;
-  journals: number;
-  reason: string | null;
-};
+export type AdminRun = Schemas["AdminRunOut"];
 
-export type InstitutionDirectoryEntry = {
-  code: string;
-  name: string;
-  short_name: string | null;
-};
+export type FlaggedDeal = Schemas["FlaggedDealOut"];
+
+export type InstitutionDirectoryEntry = Schemas["InstitutionOut"];
 
 export type SettingType = "string" | "number" | "bool" | "secret" | "list";
 
@@ -136,73 +116,15 @@ export type SettingsResponse = {
 };
 
 /** GET/PUT /admin/institutions/{code}. */
-export type InstitutionSettings = {
-  code: string;
-  name: string;
-  short_name: string | null;
-  ror: string | null;
-  openalex_id: string | null;
-  pure_oai_base_url: string | null;
-  openaire_org_id: string | null;
-  data_window_start: number | null;
-  data_window_end: number | null;
-  library_url: string | null;
-  oa_guide_url: string | null;
-  support_email: string | null;
-  admin_contact: string | null;
-  research_portal_url: string | null;
-  active: boolean | null;
-  /** Author search hides unconfirmed affiliations when true (backend default true). */
-  require_confirmed_affiliation: boolean | null;
-};
+export type InstitutionSettings = Schemas["AdminInstitutionOut"];
 
 /** GET /admin/deals and the base of GET /admin/deals/{id}. */
-export type AdminDeal = {
-  id: number;
-  publisher_id: number | null;
-  publisher: string | null;
-  esac_id: string | null;
-  status: "current" | "archive";
-  start_year: number | null;
-  end_year: number | null;
-  corresponding_authors_only: boolean;
-  capped: boolean;
-  cap_numbers: Record<string, number> | null;
-  cap_text: string | null;
-  summary: string | null;
-  journal_count: number;
-  participations: string[];
-  needs_curation: boolean;
-  needs_curation_reason: string | null;
-};
+export type AdminDeal = Schemas["AdminDealOut"];
 
-export type AdminDealJournal = {
-  issn: string;
-  issn_l: string | null;
-  journal_name: string | null;
-  source: "jct" | "manual" | "publisher-pattern";
-  excluded: boolean;
-};
+export type AdminDealJournal = Schemas["AdminDealJournal"];
 
 /** GET/PUT/POST /admin/deals…: a deal plus its journal membership list. */
-export type AdminDealDetail = AdminDeal & { journals: AdminDealJournal[] };
+export type AdminDealDetail = Schemas["AdminDealDetail"];
 
 /** GET /admin/feedback: one user report with its page-data dump. */
-export type FeedbackAdmin = {
-  id: number;
-  title: string;
-  description: string;
-  category: string | null;
-  status: "todo" | "in_progress" | "done" | "wontfix";
-  priority: "low" | "normal" | "high" | "critical";
-  page_url: string | null;
-  page_data: {
-    url?: string;
-    user_agent?: string;
-    viewport?: string;
-    queries?: { key: unknown[]; data: unknown }[];
-  } | null;
-  resolution_notes: string | null;
-  created_at: string;
-  updated_at: string;
-};
+export type FeedbackAdmin = Schemas["FeedbackAdminOut"];

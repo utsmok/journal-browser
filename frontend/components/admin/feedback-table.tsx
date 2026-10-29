@@ -35,6 +35,11 @@ function FeedbackDetail({
 }) {
   const [notes, setNotes] = useState(item.resolution_notes ?? "");
   const [error, setError] = useState<string | null>(null);
+  // page_data is the widget's own buildPageDump output; the contract types it
+  // as a free-form object, so the two read sites narrow it here.
+  const pageData = item.page_data as
+    | { url?: string; queries?: unknown[] }
+    | undefined;
 
   async function run(fn: () => Promise<unknown>) {
     try {
@@ -87,11 +92,11 @@ function FeedbackDetail({
             </Button>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
-          {item.page_data && (
+          {pageData && (
             <details>
               <summary className="cursor-pointer text-xs text-[var(--muted-foreground)]">
-                Page data ({item.page_data.queries?.length ?? 0} cached responses)
-                {item.page_data.url ? ` — ${item.page_data.url}` : ""}
+                Page data ({pageData.queries?.length ?? 0} cached responses)
+                {pageData.url ? ` — ${pageData.url}` : ""}
               </summary>
               <pre className="mt-2 max-h-72 overflow-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-2 text-xs">
                 {JSON.stringify(item.page_data, null, 2)}

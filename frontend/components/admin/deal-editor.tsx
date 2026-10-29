@@ -40,7 +40,7 @@ function yearsSpan(d: Pick<AdminDeal, "start_year" | "end_year">) {
   return `${d.start_year ?? "?"}–${d.end_year ?? ""}`;
 }
 
-function capToRows(cap: Record<string, number> | null): CapRow[] {
+function capToRows(cap: Record<string, unknown> | null): CapRow[] {
   return Object.entries(cap ?? {})
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([year, count]) => ({ year, count: String(count) }));
@@ -185,7 +185,7 @@ export function DealEditor({
       setStatus(d.status);
       setStartYear(d.start_year == null ? "" : String(d.start_year));
       setEndYear(d.end_year == null ? "" : String(d.end_year));
-      setCao(d.corresponding_authors_only);
+      setCao(d.corresponding_authors_only ?? false);
       setEsacId(d.esac_id ?? "");
       setSummary(d.summary ?? "");
       setCapText(d.cap_text ?? "");

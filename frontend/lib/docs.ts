@@ -1,4 +1,7 @@
+import type { components } from "./api-types";
 import { apiGet } from "./api";
+
+type Schemas = components["schemas"];
 
 /**
  * Docs surface (markdown served by the backend as parsed blocks).
@@ -10,44 +13,17 @@ export type DocGroup = "overview" | "pitch" | "sources";
 /** Reference-book reading order for the index and the prev/next pager. */
 export const DOC_GROUPS: DocGroup[] = ["overview", "pitch", "sources"];
 
-export const GROUP_LABEL: Record<DocGroup, string> = {
+export const GROUP_LABEL: Record<string, string> = {
   overview: "Overview",
   pitch: "Pitch",
   sources: "Sources",
 };
 
-export type DocsListItem = {
-  slug: string;
-  title: string;
-  group: DocGroup;
-  order: number;
-  edits: number;
-};
+export type DocsListItem = Schemas["DocMetaOut"];
 
-export type DocBlockType =
-  | "heading"
-  | "paragraph"
-  | "list"
-  | "table"
-  | "code"
-  | "quote"
-  | "hr";
+export type DocBlock = Schemas["DocBlock"];
 
-export type DocBlock = {
-  key: string;
-  type: DocBlockType;
-  level?: number;
-  lang?: string;
-  text: string;
-  edited: boolean;
-};
-
-export type DocDetail = {
-  slug: string;
-  title: string;
-  group: DocGroup;
-  blocks: DocBlock[];
-};
+export type DocDetail = Schemas["DocDetailOut"];
 
 export function fetchDocs(): Promise<DocsListItem[]> {
   return apiGet<DocsListItem[]>("/docs");
@@ -61,7 +37,8 @@ export function fetchDoc(slug: string): Promise<DocDetail> {
 export function sortDocs(docs: DocsListItem[]): DocsListItem[] {
   return [...docs].sort(
     (a, b) =>
-      DOC_GROUPS.indexOf(a.group) - DOC_GROUPS.indexOf(b.group) ||
+      DOC_GROUPS.findIndex((g) => g === a.group) -
+        DOC_GROUPS.findIndex((g) => g === b.group) ||
       a.order - b.order ||
       a.title.localeCompare(b.title),
   );

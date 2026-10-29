@@ -22,6 +22,7 @@ import {
   type SimilarJournalsBundle,
   type WorksPage,
 } from "@/lib/api";
+import type { InstitutionDirectoryEntry } from "@/lib/admin";
 
 /** TanStack Query key factory: one place owns every cache key shape.
  * Every key leads with the institution code — two hosted universities
@@ -175,19 +176,6 @@ export function useLimitations() {
     staleTime: 10 * 60_000,
   });
 }
-
-export type InstitutionDirectoryEntry = {
-  code: string;
-  name: string;
-  short_name: string | null;
-  data_window_start: number;
-  data_window_end: number | null;
-  library_url: string | null;
-  oa_guide_url: string | null;
-  support_email: string | null;
-  admin_contact: string | null;
-  research_portal_url: string | null;
-};
 
 /** Global directory of hosted institutions (unscoped endpoint). */
 export function useInstitutionsDirectory() {
