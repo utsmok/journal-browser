@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Works of these types are not journal output and stay out of every count,
@@ -29,6 +29,14 @@ def work_type_excluded(value: str | None) -> bool:
 
 
 class Settings(BaseSettings):
+    @field_validator("institution_code")
+    @classmethod
+    def _code_shape(cls, v: str) -> str:
+        code = v.strip().lower()
+        if not code or not code.replace("-", "").isalnum():
+            raise ValueError(f"invalid institution_code {code!r}: [a-z0-9-]+ expected")
+        return code
+
     # populate_by_name: the admin API revalidates a model_dump() (field
     # names) through model_validate; alias-only lookup would reject those.
     model_config = SettingsConfigDict(

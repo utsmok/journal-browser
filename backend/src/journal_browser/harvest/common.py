@@ -229,8 +229,6 @@ async def ensure_home_institution(session: AsyncSession) -> Institution:
         await session.flush()
         return inst
     code = settings.institution_code.strip().lower()
-    if not code or not code.replace("-", "").isalnum():
-        raise ValueError(f"invalid JB_INSTITUTION_CODE {code!r}: [a-z0-9-]+ expected")
     await session.execute(
         pg_insert(Institution)
         .values(
