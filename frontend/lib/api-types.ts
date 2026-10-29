@@ -1187,6 +1187,21 @@ export interface components {
             /** Euro */
             euro: number;
         };
+        /**
+         * DegradedSource
+         * @description A serving-time source currently answering in degraded mode.
+         */
+        DegradedSource: {
+            /** Source */
+            source: string;
+            /** Detail */
+            detail: string;
+            /**
+             * Since
+             * Format: date-time
+             */
+            since: string;
+        };
         /** DocBlock */
         DocBlock: {
             /** Key */
@@ -1402,6 +1417,11 @@ export interface components {
             tables: {
                 [key: string]: unknown;
             };
+            /**
+             * Degraded
+             * @default []
+             */
+            degraded: components["schemas"]["DegradedSource"][];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
