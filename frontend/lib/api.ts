@@ -116,7 +116,7 @@ class ApiError extends Error {
  */
 export function errorMessage(err: unknown): string {
   if (err instanceof ApiError) {
-    if (err.status === 400)
+    if (err.status === 400 || err.status === 422)
       return "The request was not valid. Adjust the filters and try again.";
     if (err.status === 404) return "We could not find that information.";
     if (err.status >= 500)
