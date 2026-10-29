@@ -53,6 +53,7 @@ from ..models import (
     Publisher,
 )
 from ..settings_schema import SETTINGS_REGISTRY, value_for_response
+from ..vocab import DealStatus, FeedbackPriority, FeedbackStatus
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -365,7 +366,7 @@ DEAL_EDITABLE = {
 
 def _validate_deal_field(key: str, value: Any) -> None:
     if key == "status":
-        if value not in ("current", "archive"):
+        if value not in (DealStatus.CURRENT, DealStatus.ARCHIVE):
             raise HTTPException(400, "status must be 'current' or 'archive'")
     elif key in ("start_year", "end_year", "publisher_id"):
         if not isinstance(value, int) or isinstance(value, bool):
@@ -778,8 +779,8 @@ async def update_deal_participations(
 
 # ── Feedback triage ────────────────────────────────────────────────────────
 
-FEEDBACK_STATUSES = ("todo", "in_progress", "done", "wontfix")
-FEEDBACK_PRIORITIES = ("low", "normal", "high", "critical")
+FEEDBACK_STATUSES = tuple(FeedbackStatus)
+FEEDBACK_PRIORITIES = tuple(FeedbackPriority)
 
 
 class FeedbackUpdateIn(BaseModel):

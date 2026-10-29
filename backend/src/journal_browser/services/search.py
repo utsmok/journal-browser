@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import get_settings
 from ..harvest.common import cache_epoch
 from ..models import IssnMap, Journal, JournalApcAggregate, JournalFlags
+from ..vocab import OaType
 
 _converter: CurrencyConverter | None = None
 _converter_year: int | None = None
@@ -170,7 +171,7 @@ _DOAJ_DIAMOND = and_(Journal.doaj_in_doaj.is_(True), Journal.doaj_has_apc.is_(Fa
 #: an overeager diamond (owner decision 2026-10-27).
 _OBSERVED = case(
     (
-        Journal.oa_status_observed.in_(("gold", "diamond", "hybrid")),
+        Journal.oa_status_observed.in_((OaType.GOLD, OaType.DIAMOND, OaType.HYBRID)),
         Journal.oa_status_observed,
     ),
     else_=None,
@@ -184,17 +185,17 @@ _OBSERVED = case(
 #: the sample is deliberately unused.
 def _oa_type(deal_covered: Any) -> Any:
     return case(
-        (and_(_OA_EVIDENCE, _CHARGED), "gold"),
-        (_DOAJ_DIAMOND, "diamond"),
+        (and_(_OA_EVIDENCE, _CHARGED), OaType.GOLD),
+        (_DOAJ_DIAMOND, OaType.DIAMOND),
         (_OBSERVED.is_not(None), _OBSERVED),
-        (deal_covered.is_(True), "hybrid"),
-        (_OA_EVIDENCE, "generic"),
-        else_="subscription",
+        (deal_covered.is_(True), OaType.HYBRID),
+        (_OA_EVIDENCE, OaType.GENERIC),
+        else_=OaType.SUBSCRIPTION,
     ).label("oa_type")
 
 #: Journal OA-type vocabulary (the OA_TYPE values); the oa_type facet
 #: multi-selects these with OR semantics.
-OA_TYPES = ("gold", "diamond", "generic", "hybrid", "subscription")
+OA_TYPES = tuple(OaType)
 
 
 def oa_type_value(
@@ -211,16 +212,16 @@ def oa_type_value(
     _CHARGED clause."""
     oa_evidence = bool(is_in_doaj) or bool(is_oa) or bool(doaj_in_doaj)
     if oa_evidence and (has_charges or doaj_has_apc is True):
-        return "gold"
+        return OaType.GOLD
     if doaj_in_doaj and doaj_has_apc is False:
-        return "diamond"
-    if observed in ("gold", "diamond", "hybrid"):
-        return observed
+        return OaType.DIAMOND
+    if observed in (OaType.GOLD, OaType.DIAMOND, OaType.HYBRID):
+        return OaType(observed)
     if deal_covered:
-        return "hybrid"
+        return OaType.HYBRID
     if oa_evidence:
-        return "generic"
-    return "subscription"
+        return OaType.GENERIC
+    return OaType.SUBSCRIPTION
 
 
 def _like(term: str) -> str:

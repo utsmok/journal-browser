@@ -5,6 +5,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from .vocab import DealStatus, OaType, WorksSource
+
 
 class Attribution(BaseModel):
     source: str
@@ -29,7 +31,7 @@ class JournalListItem(BaseModel):
     works: int = 0
     quartile: str | None = None
     twoyr_mean_citedness: float | None = None
-    oa_type: str = "subscription"
+    oa_type: OaType = OaType.SUBSCRIPTION
     # OpenAlex primary topic (first entry of the topics list); None when the
     # journal has no topics.
     primary_topic: str | None = None
@@ -105,7 +107,7 @@ class ScimagojrOut(BaseModel):
 class StatsYear(BaseModel):
     year: int
     works_count: int
-    works_count_source: str = "openalex_institution_filter"
+    works_count_source: WorksSource = WorksSource.OPENALEX_INSTITUTION_FILTER
     oa_gold: int
     oa_hybrid: int
     oa_green: int
@@ -131,7 +133,7 @@ class DealOut(BaseModel):
     # Group journals this deal covers (publisher detail only; None
     # elsewhere, where coverage is per journal).
     covers_in_group: int | None = None
-    status: str
+    status: DealStatus
     start_year: int | None
     end_year: int | None
     duration_text: str | None
