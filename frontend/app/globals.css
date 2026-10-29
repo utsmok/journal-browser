@@ -319,3 +319,53 @@
     opacity: 1;
   }
 }
+
+/*
+  Docs print/PDF: a clean A4 document. Overriding the token values (not
+  individual rules) forces the paper palette regardless of the active theme,
+  so dark mode cannot print near-black panels.
+*/
+@media print {
+  @page {
+    size: A4;
+    margin: 18mm;
+  }
+  /* Site chrome and floating widgets (feedback button, docs edit toolbar). */
+  body > header,
+  body > footer,
+  .z-50 {
+    display: none !important;
+  }
+  :root,
+  .dark {
+    --background: #ffffff;
+    --foreground: #12110c;
+    --card: #ffffff;
+    --card-foreground: #12110c;
+    --muted: #f2f4f7;
+    --muted-foreground: #515c65;
+    --border: #dee2e6;
+    --input: #dee2e6;
+    --primary-text: #b34f00;
+  }
+  .docs-page {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .docs-page-column {
+    max-width: none !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-top: 0 !important;
+  }
+  pre,
+  table,
+  li {
+    break-inside: avoid;
+  }
+  h2,
+  h3,
+  h4 {
+    break-after: avoid;
+  }
+}
