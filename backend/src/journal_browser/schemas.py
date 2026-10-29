@@ -288,6 +288,14 @@ class FreshnessEntry(BaseModel):
     stats: dict[str, Any] | None
 
 
+class DegradedSource(BaseModel):
+    """A serving-time source currently answering in degraded mode."""
+
+    source: str
+    detail: str
+    since: datetime
+
+
 class FreshnessResponse(BaseModel):
     """Config comes from the institution row; unset optional fields are
     None rather than global defaults."""
@@ -305,6 +313,7 @@ class FreshnessResponse(BaseModel):
     harvests: list[FreshnessEntry]
     # max timestamps (or year/period maxima for yearly tables)
     tables: dict[str, Any] = {}
+    degraded: list[DegradedSource] = []
 
 
 # ── Author browsing (ut-metadata ingest) ───────────────────────────────────

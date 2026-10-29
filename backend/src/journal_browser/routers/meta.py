@@ -1,6 +1,6 @@
 """/api/v1/meta: limitations registry + freshness metadata."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -19,7 +19,8 @@ from ..models import (
     ScimagojrMetric,
 )
 from ..routers.institutions import InstitutionDep
-from ..schemas import FreshnessEntry, FreshnessResponse, LimitationOut
+from ..schemas import DegradedSource, FreshnessEntry, FreshnessResponse, LimitationOut
+from ..services import source_health
 
 router = APIRouter(prefix="/meta", tags=["meta"])
 
@@ -91,4 +92,12 @@ async def freshness(session: SessionDep, institution: InstitutionDep) -> Freshne
             for state, finished_at in harvests
         ],
         tables={k: v for k, v in tables.items()},
+        degraded=[
+            DegradedSource(
+                source=entry["source"],
+                detail=entry["detail"],
+                since=datetime.fromtimestamp(entry["since"], tz=UTC),
+            )
+            for entry in source_health.snapshot()
+        ],
     )
