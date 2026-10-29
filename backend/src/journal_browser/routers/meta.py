@@ -59,6 +59,8 @@ async def freshness(session: SessionDep, institution: InstitutionDep) -> Freshne
 
     tables = {
         "journals": await table_ts(select(func.max(Journal.harvested_at))),
+        # DOAJ columns are written by their own harvester run.
+        "doaj": await table_ts(select(func.max(Journal.doaj_harvested_at))),
         "deals": await table_ts(select(func.max(Deal.updated_at))),
         "institution_works_stats": await table_ts(
             select(func.max(InstitutionWorksStats.updated_at))

@@ -242,6 +242,7 @@ class JournalDetailResponse(BaseModel):
     summary_stats: dict[str, Any] | None = None
     counts_by_year: list[Any] = []
     homepage_url: str | None = None
+    doaj_homepage_url: str | None = None
     type: str | None = None
     harvested_at: datetime | None = None
     deals: list[DealOut] = []

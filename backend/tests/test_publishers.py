@@ -76,7 +76,7 @@ async def publishers_api(db, institution_factory):
                 ],
             ),  # J1: covered hybrid
             _journal(
-                "2222-2221", publisher_name="Elsevier BV", is_in_doaj=True, latest_quartile="Q2"
+                "2222-2221", publisher_name="Elsevier BV", is_in_doaj=True, doaj_in_doaj=True, doaj_has_apc=False, latest_quartile="Q2"
             ),
             _journal(
                 "3333-3331",
@@ -200,7 +200,7 @@ async def test_publisher_list_aggregates(publishers_api):
         "n_journals": 2,
         "n_works": 12,  # 10 + 2 flags.works_count
         "deal_journals": 1,
-        "oa_types": {"gold": 0, "diamond": 0, "hybrid": 1, "subscription": 1},
+        "oa_types": {"gold": 0, "diamond": 0, "generic": 0, "hybrid": 1, "subscription": 1},
         "quartiles": {"q1": 1, "q2": 0, "q3": 0, "q4": 0, "none": 1},
         "apc": {"n_journals": 1, "eur_min": 1500.0, "eur_max": 1500.0},
         "topics": [],
@@ -210,7 +210,7 @@ async def test_publisher_list_aggregates(publishers_api):
         "n_journals": 2,
         "n_works": 8,  # 5 + 3
         "deal_journals": 1,
-        "oa_types": {"gold": 0, "diamond": 1, "hybrid": 1, "subscription": 0},
+        "oa_types": {"gold": 0, "diamond": 1, "generic": 0, "hybrid": 1, "subscription": 0},
         "quartiles": {"q1": 1, "q2": 1, "q3": 0, "q4": 0, "none": 0},
         "apc": {"n_journals": 1, "eur_min": 2400.0, "eur_max": 2400.0},
         # J1's 5 works spread over its topics by count (30/10).
@@ -257,7 +257,7 @@ async def test_publisher_facets_drop_own_dimension(publishers_api):
     client, ids = publishers_api
     body = (await client.get("/api/v1/ut/publishers")).json()
     assert body["facets"] == {
-        "oa_type": {"gold": 0, "diamond": 1, "hybrid": 2, "subscription": 3},
+        "oa_type": {"gold": 0, "diamond": 1, "generic": 0, "hybrid": 2, "subscription": 3},
         "deal": {"covered": 2, "none": 2},
         "quartile": {"Q1": 2, "Q2": 1, "Q3": 1, "Q4": 0},
         "has_apc": {"yes": 2, "no": 2},
@@ -272,6 +272,7 @@ async def test_publisher_facets_drop_own_dimension(publishers_api):
     assert body["facets"]["oa_type"] == {
         "gold": 0,
         "diamond": 1,
+        "generic": 0,
         "hybrid": 2,
         "subscription": 3,
     }
@@ -357,7 +358,7 @@ async def test_publisher_institution_isolation(publishers_api):
         "n_journals": 1,
         "n_works": 2,  # rug's own flags, not ut's 8
         "deal_journals": 0,
-        "oa_types": {"gold": 0, "diamond": 0, "hybrid": 0, "subscription": 1},
+        "oa_types": {"gold": 0, "diamond": 0, "generic": 0, "hybrid": 0, "subscription": 1},
         "quartiles": {"q1": 1, "q2": 0, "q3": 0, "q4": 0, "none": 0},
         "apc": {"n_journals": 1, "eur_min": 2400.0, "eur_max": 2400.0},
         # Journal topics are institution-neutral; rug's 2 J1 works spread
@@ -433,7 +434,7 @@ async def test_publisher_canonical_merges_subbrands(canonical_api):
     assert merged["n_journals"] == 3
     assert merged["n_works"] == 13  # 10 + 2 + 1
     assert merged["deal_journals"] == 1
-    assert merged["oa_types"] == {"gold": 0, "diamond": 0, "hybrid": 1, "subscription": 2}
+    assert merged["oa_types"] == {"gold": 0, "diamond": 0, "generic": 0, "hybrid": 1, "subscription": 2}
     assert merged["quartiles"] == {"q1": 1, "q2": 0, "q3": 0, "q4": 0, "none": 2}
     assert merged["apc"] == {"n_journals": 1, "eur_min": 1500.0, "eur_max": 1500.0}
     # J10's single work lands whole on its topic label.

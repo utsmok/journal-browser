@@ -377,7 +377,7 @@ export async function fetchAuthor(
 // --- Publishers + org units (browse facets) ---
 
 export type OaTypeCounts = Partial<
-  Record<"gold" | "diamond" | "hybrid" | "subscription", number>
+  Record<"gold" | "diamond" | "generic" | "hybrid" | "subscription", number>
 >;
 
 export type PublisherListItem = {

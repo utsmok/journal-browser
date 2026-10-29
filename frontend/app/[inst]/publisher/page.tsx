@@ -40,6 +40,7 @@ const PAGE_SIZES = [25, 50, 100];
 const OA_TYPE_LABELS: Record<string, string> = {
   gold: "Gold OA",
   diamond: "Diamond OA",
+  generic: "OA (model unknown)",
   hybrid: "Hybrid",
   subscription: "Subscription (closed)",
 };

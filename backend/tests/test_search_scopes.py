@@ -70,7 +70,21 @@ async def api(db_engine):
                 ),
                 # OA-type fixtures.
                 _journal("3333-3333", title="Gold Journal", is_in_doaj=True),
-                _journal("4444-4444", title="Diamond Journal", is_in_doaj=True),
+                _journal(
+                    "4444-4444",
+                    title="Diamond Journal",
+                    is_in_doaj=True,
+                    doaj_in_doaj=True,
+                    doaj_has_apc=False,
+                ),
+                # DOAJ canon gold: DOAJ itself declares an APC.
+                _journal(
+                    "3030-3030",
+                    title="Doaj Gold Journal",
+                    is_oa=True,
+                    doaj_in_doaj=True,
+                    doaj_has_apc=True,
+                ),
                 _journal("5555-5555", title="Hybrid Journal"),
                 _journal("6666-6666", title="Subscription Journal"),
                 # Fully-OA per OpenAlex but missing from DOAJ (the MDPI
@@ -527,7 +541,8 @@ async def test_oa_type_mapping(api):
     r = await api.get("/api/v1/ut/journals")
     by_issn = {i["issn_l"]: i["oa_type"] for i in r.json()["items"]}
     assert by_issn["3333-3333"] == "gold"  # doaj + apc evidence
-    assert by_issn["4444-4444"] == "diamond"  # doaj, no evidence
+    assert by_issn["4444-4444"] == "diamond"  # DOAJ canon: listed, no APC
+    assert by_issn["3030-3030"] == "gold"  # DOAJ canon: listed with APC
     assert by_issn["5555-5555"] == "hybrid"  # deal-covered, not doaj
     assert by_issn["6666-6666"] == "subscription"
     assert by_issn["1515-1515"] == "gold"
@@ -535,8 +550,8 @@ async def test_oa_type_mapping(api):
     assert by_issn["2424-2424"] == "diamond"  # observed diamond works
     assert by_issn["2626-2626"] == "gold"  # observed gold works, no prices
     assert by_issn["2727-2727"] == "hybrid"  # closed works, deal-covered
-    assert by_issn["2828-2828"] == "subscription"  # no observation, no deal
-    assert set(by_issn.values()) <= {"gold", "diamond", "hybrid", "subscription"}
+    assert by_issn["2828-2828"] == "generic"  # OA, model unknown
+    assert set(by_issn.values()) <= {"gold", "diamond", "generic", "hybrid", "subscription"}
 
 
 @requires_db
@@ -549,6 +564,7 @@ async def test_oa_type_facet_filter(api):
         "3333-3333",
         "1515-1515",
         "4444-4444",
+        "3030-3030",
         "2323-2323",
         "2424-2424",
         "2626-2626",
@@ -562,9 +578,10 @@ async def test_oa_type_facet_filter(api):
     # The facet's own filter is excluded from its counts, so every option
     # stays visible (with the rest of the filter set applied).
     oa_facets = r.json()["facets"]["oa_type"]
-    assert oa_facets["gold"] == 4
+    assert oa_facets["gold"] == 5
     assert oa_facets["diamond"] == 2
     assert oa_facets["hybrid"] == 3
+    assert oa_facets["generic"] == 1
 
     # Unknown vocabulary is a 400, not a silent empty result.
     r = await api.get("/api/v1/ut/journals", params={"oa_type": "gold,bogus"})

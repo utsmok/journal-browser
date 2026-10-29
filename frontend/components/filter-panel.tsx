@@ -7,6 +7,7 @@ import { useSiteMeta } from "@/hooks/use-site-meta";
 const OA_TYPE_LABELS: Record<string, string> = {
   gold: "Gold OA",
   diamond: "Diamond OA",
+  generic: "OA (model unknown)",
   hybrid: "Hybrid",
   subscription: "Subscription (closed)",
 };
@@ -190,6 +191,8 @@ function facetLook(key: string, value: string): { icon: ReactNode; tint: string 
       return { icon: <LockIcon state="wide" />, tint: TINTS.cyan };
     case "oa_type:hybrid":
       return { icon: <LockIcon state="ajar" />, tint: TINTS.blue };
+    case "oa_type:generic":
+      return { icon: <LockIcon state="ajar" />, tint: TINTS.slate };
     case "oa_type:subscription":
       return { icon: <LockIcon state="closed" />, tint: TINTS.slate };
     case "doaj:true":
@@ -233,6 +236,7 @@ const FACET_TITLES: Record<string, string> = {
   "oa_type:gold": "Every article is published open access on the journal's own site.",
   "oa_type:diamond": "Fully open access journal without fees for readers or authors.",
   "oa_type:hybrid": "Subscription journal where individual articles can be made open access.",
+  "oa_type:generic": "Open access journal whose business model could not be determined: it is open access, but no source shows whether it charges authors.",
   "oa_type:subscription": "No open access; reading the published version requires a subscription.",
   "doaj:true": "Listed in DOAJ, the Directory of Open Access Journals, a quality-controlled registry for open access journals.",
   "doaj:false": "Not listed in DOAJ; hybrid and subscription journals usually are not.",
@@ -469,7 +473,7 @@ export function FilterPanel({
       key: "oa_type",
       label: "OA type",
       defaultOpen: true,
-      values: ["gold", "diamond", "hybrid", "subscription"].map((v) => ({
+      values: ["gold", "diamond", "generic", "hybrid", "subscription"].map((v) => ({
         value: v,
         count: facets.oa_type?.[v] ?? 0,
         label: OA_TYPE_LABELS[v] ?? v,

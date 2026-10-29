@@ -85,7 +85,9 @@ ATTRIBUTION = {
         caveat_codes=["openalex-metrics"],
     ),
     "oa_status": Attribution(
-        source="openalex", caveat_codes=["openalex-oa-status", "openalex-coverage"]
+        source="doaj (canon) + openalex",
+        url="https://doaj.org",
+        caveat_codes=["doaj-canon", "openalex-oa-status", "openalex-coverage"],
     ),
     "stats": Attribution(
         source="pure (primary) + openalex (cross-check)",
@@ -99,9 +101,9 @@ ATTRIBUTION = {
         caveat_codes=["jct-coverage", "openaccess-nl-prose", "issn-mapping"],
     ),
     "apc_evidence": Attribution(
-        source="openapc",
+        source="openapc (observed) + doaj (declared)",
         url="https://github.com/OpenAPC/openapc-de",
-        caveat_codes=["openapc-coverage", "openapc-fallback"],
+        caveat_codes=["openapc-coverage", "openapc-fallback", "doaj-apc-declared"],
     ),
     "openalex": Attribution(source="openalex", url="https://openalex.org"),
     "openaire": Attribution(source="openaire", url="https://openaire.eu"),
@@ -387,9 +389,14 @@ async def journal_detail(
             oa_type=search_service.oa_type_value(
                 journal.is_in_doaj,
                 journal.is_oa,
-                bool(aggregates) or journal.latest_apc_euro is not None,
+                bool(aggregates)
+                or journal.latest_apc_euro is not None
+                or bool(journal.apc_prices)
+                or journal.doaj_has_apc is True,
                 bool(deals),
                 journal.oa_status_observed,
+                doaj_in_doaj=journal.doaj_in_doaj,
+                doaj_has_apc=journal.doaj_has_apc,
             ),
         ),
         stats_totals=stats_totals,
@@ -399,7 +406,9 @@ async def journal_detail(
         apc_prices=journal.apc_prices or [],
         summary_stats=summary_stats or None,
         counts_by_year=journal.counts_by_year or [],
-        homepage_url=journal.homepage_url,
+        # DOAJ is the canon homepage source; OpenAlex fills the gap.
+        homepage_url=journal.doaj_homepage_url or journal.homepage_url,
+        doaj_homepage_url=journal.doaj_homepage_url,
         type=journal.type,
         harvested_at=journal.harvested_at,
         deals=[

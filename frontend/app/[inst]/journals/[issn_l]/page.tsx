@@ -640,6 +640,13 @@ function JournalPageInner() {
             {data.homepage_url && (
               <External href={data.homepage_url}>Homepage</External>
             )}
+            {data.doaj_homepage_url && (
+              <SourceNote
+                source="via DOAJ"
+                url="https://doaj.org"
+                codes={["doaj-canon"]}
+              />
+            )}
             {openalex?.url && <External href={openalex.url}>OpenAlex</External>}
           </p>
         )}

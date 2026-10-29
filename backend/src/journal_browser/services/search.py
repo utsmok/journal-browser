@@ -122,8 +122,9 @@ APC_EXISTS = exists(select(1).where(JournalApcAggregate.issn_l == Journal.issn_l
 
 #: Any displayable APC info: an OpenAlex list price in any currency, or
 #: OpenAPC rows with an observed cost. The has_apc filter matches this; the
-#: oa_type gold/diamond split deliberately stays on APC_EXISTS (OpenAPC
-#: evidence only, owner decision 2026-10-23).
+#: oa_type gold/diamond split keys on DOAJ's own charge declaration plus
+#: observed prices (owner decision 2026-10-28, supersedes the OpenAPC-only
+#: split of 2026-10-23).
 APC_COST_EXISTS = exists(
     select(1).where(
         JournalApcAggregate.issn_l == Journal.issn_l,
@@ -147,9 +148,22 @@ def _list_price(currency: str) -> Any:
 #: OpenAlex "fully open access" venue flag, an OA-evidence source beside
 #: DOAJ membership (2026-10-27): OpenAlex misses DOAJ membership for real
 #: OA journals (e.g. MDPI Water), which used to fall through to
-#: "subscription". Known charges split gold from diamond.
-_OA_EVIDENCE = or_(Journal.is_in_doaj.is_(True), Journal.is_oa.is_(True))
-_CHARGED = or_(APC_EXISTS, Journal.latest_apc_euro.is_not(None))
+#: "subscription".
+_OA_EVIDENCE = or_(
+    Journal.is_in_doaj.is_(True),
+    Journal.is_oa.is_(True),
+    Journal.doaj_in_doaj.is_(True),
+)
+#: Charge evidence for the gold split: DOAJ's own has_apc declaration,
+#: OpenAPC rows, the denormalized OpenAPC cost, or an OpenAlex list price.
+_CHARGED = or_(
+    Journal.doaj_has_apc.is_(True),
+    APC_EXISTS,
+    Journal.latest_apc_euro.is_not(None),
+    func.coalesce(func.jsonb_array_length(Journal.apc_prices), 0) > 0,
+)
+#: DOAJ-listed with an explicit no-APC declaration: diamond, per DOAJ canon.
+_DOAJ_DIAMOND = and_(Journal.doaj_in_doaj.is_(True), Journal.doaj_has_apc.is_(False))
 #: Venue color observed from recent works (harvest/journal_oa.py) when the
 #: only evidence is the bare is_oa flag; bronze/closed/green stay NULL
 #: (no OA color) so the case falls through to deal/subscription instead of
@@ -162,24 +176,25 @@ _OBSERVED = case(
     else_=None,
 )
 
-#: Per-journal OA type (owner-approved 2026-10-23; is_oa evidence added
-#: 2026-10-27, observed work colors same day). DOAJ or fully-OA = open
-#: venue; known charges split gold vs diamond; an unpriced is_oa venue
-#: takes its observed recent-works color; a covered journal without OA
-#: color is hybrid via the agreement; rest is subscription. Per-work
-#: oa_status outside the sample is deliberately unused.
+#: Per-journal OA type (owner-approved 2026-10-28; supersedes 2026-10-23).
+#: DOAJ is the gold/diamond canon: its has_apc declaration (with observed
+#: prices as corroboration) splits gold from diamond; a DOAJ-listed venue
+#: without charges is diamond. An OA venue with no model evidence at all is
+#: "generic" instead of an overeager diamond. Per-work oa_status outside
+#: the sample is deliberately unused.
 def _oa_type(deal_covered: Any) -> Any:
     return case(
         (and_(_OA_EVIDENCE, _CHARGED), "gold"),
-        (Journal.is_in_doaj.is_(True), "diamond"),
+        (_DOAJ_DIAMOND, "diamond"),
         (_OBSERVED.is_not(None), _OBSERVED),
         (deal_covered.is_(True), "hybrid"),
+        (_OA_EVIDENCE, "generic"),
         else_="subscription",
     ).label("oa_type")
 
 #: Journal OA-type vocabulary (the OA_TYPE values); the oa_type facet
 #: multi-selects these with OR semantics.
-OA_TYPES = ("gold", "diamond", "hybrid", "subscription")
+OA_TYPES = ("gold", "diamond", "generic", "hybrid", "subscription")
 
 
 def oa_type_value(
@@ -188,15 +203,24 @@ def oa_type_value(
     has_charges: bool,
     deal_covered: bool,
     observed: str | None = None,
+    doaj_in_doaj: bool | None = None,
+    doaj_has_apc: bool | None = None,
 ) -> str:
-    """Python mirror of the OA_TYPE SQL case, for the detail endpoint."""
-    if (is_in_doaj or is_oa) and has_charges:
+    """Python mirror of the OA_TYPE SQL case, for the detail endpoint.
+    doaj_has_apc=True is charge evidence on its own, exactly like the SQL
+    _CHARGED clause."""
+    oa_evidence = bool(is_in_doaj) or bool(is_oa) or bool(doaj_in_doaj)
+    if oa_evidence and (has_charges or doaj_has_apc is True):
         return "gold"
-    if is_in_doaj:
+    if doaj_in_doaj and doaj_has_apc is False:
         return "diamond"
     if observed in ("gold", "diamond", "hybrid"):
         return observed
-    return "hybrid" if deal_covered else "subscription"
+    if deal_covered:
+        return "hybrid"
+    if oa_evidence:
+        return "generic"
+    return "subscription"
 
 
 def _like(term: str) -> str:

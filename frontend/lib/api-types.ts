@@ -1125,6 +1125,8 @@ export interface components {
             counts_by_year: unknown[];
             /** Homepage Url */
             homepage_url?: string | null;
+            /** Doaj Homepage Url */
+            doaj_homepage_url?: string | null;
             /** Type */
             type?: string | null;
             /** Harvested At */

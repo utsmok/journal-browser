@@ -5,6 +5,7 @@ import type { OaTypeCounts } from "@/lib/api";
 export const OA_TYPE_BARS: Record<string, { label: string; bar: string }> = {
   gold: { label: "Gold OA", bar: "bg-[#f4aa2a] dark:bg-amber-400" },
   diamond: { label: "Diamond OA", bar: "bg-[#4fe4f8] dark:bg-cyan-300" },
+  generic: { label: "OA (model unknown)", bar: "bg-[#8f7ae5] dark:bg-[#a99af0]" },
   hybrid: { label: "Hybrid", bar: "bg-[#4d84c7] dark:bg-[#82b1e4]" },
   subscription: {
     label: "Subscription (closed)",
@@ -12,7 +13,7 @@ export const OA_TYPE_BARS: Record<string, { label: string; bar: string }> = {
   },
 };
 
-const OA_TYPE_ORDER = ["gold", "diamond", "hybrid", "subscription"] as const;
+const OA_TYPE_ORDER = ["gold", "diamond", "generic", "hybrid", "subscription"] as const;
 
 /** Inline stacked journal OA composition. flexGrow splits segments exactly
  * proportionally (same trick as the OaTrend columns); zero segments drop out. */

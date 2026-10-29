@@ -45,6 +45,8 @@ GLOBAL_STEPS: list[tuple[str, list[str]]] = [
     ("flags", ["jobs/backfill_flags.py"]),
     # needs is_oa/apc_prices (journals) + latest_apc_euro (openapc denorm)
     ("oa-colors", ["jobs/harvest_oa_colors.py"]),
+    # DOAJ canon sweep: OA-model truth; stamps doaj_* on journals
+    ("doaj", ["jobs/harvest_doaj.py"]),
 ]
 
 GLOBAL_DEPS: dict[str, list[str]] = {
@@ -58,6 +60,8 @@ GLOBAL_DEPS: dict[str, list[str]] = {
     "scimagojr": ["journals"],  # resolves ISSNs against the journals universe
     "flags": ["journals"],  # works_2020_plus / last_active_year recompute
     "oa-colors": ["journals", "openapc"],
+    # the sweep stamps OA candidates, which journals ingest creates
+    "doaj": ["journals"],
 }
 
 #: Per-institution layer, in order. Every step takes --institution CODE.

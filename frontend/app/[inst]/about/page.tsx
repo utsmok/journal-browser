@@ -37,6 +37,12 @@ const SOURCES: SourceInfo[] = [
     table: "journals",
   },
   {
+    name: "DOAJ",
+    url: "https://doaj.org",
+    role: "The authoritative registry for gold and diamond open access: whether a journal charges an APC decides gold vs diamond, and its journal URL is the canon homepage. Harvested from DOAJ's full journal CSV.",
+    table: "doaj",
+  },
+  {
     name: "OpenAIRE",
     url: "https://openaire.eu",
     role: "Alternative records and open access links for individual institutional works.",
@@ -221,7 +227,8 @@ export default function AboutPage() {
                     </span>
                   </span>
                   <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
-                    Latest data: {fmt(stamp(info))}
+                    Latest data:{" "}
+                    {freshnessQuery.isPending ? "…" : fmt(stamp(info))}
                   </span>
                 </li>
               ))}

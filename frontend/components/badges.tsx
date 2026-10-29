@@ -39,10 +39,12 @@ const SHACKLE_POSE: Record<LockState, { rot: string; ty: string; d: string }> = 
 
 /** Icon-only access-type colors, shared with the facet filters. Lightness
  * and saturation climb with openness: closed (dull slate) → hybrid (muted
- * blue) → gold (bright amber) → diamond (light, saturated cyan). */
+ * blue) → generic (muted violet) → gold (bright amber) → diamond (light,
+ * saturated cyan). */
 export const ACCESS_TEXT = {
   gold: "text-[#f4aa2a] dark:text-amber-400",
   diamond: "text-[#4fe4f8] dark:text-cyan-300",
+  generic: "text-[#8f7ae5] dark:text-[#a99af0]",
   hybrid: "text-[#4d84c7] dark:text-[#82b1e4]",
   closed: "text-slate-500 dark:text-slate-400",
   deal: "text-emerald-700 dark:text-emerald-300",
@@ -221,7 +223,7 @@ function Lockup({
   );
 }
 
-type OaType = "gold" | "diamond" | "hybrid" | "subscription";
+type OaType = "gold" | "diamond" | "generic" | "hybrid" | "subscription";
 
 /** Access-type lockups: progressive shackle + integrated wordmark. */
 const OA_TYPE_META: Record<OaType, { label: string; title: string; lock: LockState; className: string; width: number }> = {
@@ -238,6 +240,13 @@ const OA_TYPE_META: Record<OaType, { label: string; title: string; lock: LockSta
     lock: "wide",
     className: ACCESS_TEXT.diamond,
     width: 76,
+  },
+  generic: {
+    label: "OA",
+    title: "Open access journal — the exact OA model (gold or diamond) could not be determined from the sources.",
+    lock: "wide",
+    className: ACCESS_TEXT.generic,
+    width: 34,
   },
   hybrid: {
     label: "HYBRID",

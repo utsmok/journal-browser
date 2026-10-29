@@ -966,12 +966,13 @@ function SearchView() {
                 : ""}
             </span>
             <SourceNote
-              source="OpenAlex · Scimago · JCT · openaccess.nl"
-              url="https://openalex.org"
+              source="OpenAlex · DOAJ · Scimago · JCT · openaccess.nl"
+              url="https://doaj.org"
               codes={[
                 "window-2020",
                 "openalex-coverage",
                 "institution-affiliation",
+                "doaj-canon",
                 "jct-coverage",
                 "issn-mapping",
               ]}

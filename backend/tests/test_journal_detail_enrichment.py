@@ -360,6 +360,26 @@ async def test_detail_enrichment(api):
 
 
 @requires_db
+async def test_detail_homepage_prefers_doaj(api, db):
+    """DOAJ is the canon homepage source; OpenAlex fills the gap."""
+    from sqlalchemy import select
+
+    result = await db.execute(select(Journal).where(Journal.issn_l == MAIN_ISSN))
+    row = result.scalar_one()
+    row.homepage_url = "https://openalex.example/journal"
+    row.doaj_homepage_url = "https://doaj.example/journal"
+    await db.commit()
+
+    r = await api.get(f"/api/v1/tu/journals/{MAIN_ISSN}")
+    assert r.json()["homepage_url"] == "https://doaj.example/journal"
+
+    row.doaj_homepage_url = None
+    await db.commit()
+    r = await api.get(f"/api/v1/tu/journals/{MAIN_ISSN}")
+    assert r.json()["homepage_url"] == "https://openalex.example/journal"
+
+
+@requires_db
 async def test_detail_enrichment_without_source_rows(api):
     r = await api.get(f"/api/v1/tu/journals/{OTHER_ISSN}")
     assert r.status_code == 200

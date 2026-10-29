@@ -432,6 +432,20 @@ class Journal(Base):
     # is_oa without saying which OA color. bronze/closed/green mean "no OA
     # color observed"; oa_type falls back to deal/subscription for them.
     oa_status_observed: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # DOAJ journal-record canon (harvest/doaj.py): the authoritative OA-model
+    # source. doaj_in_doaj is tri-state until a full DOAJ sweep stamps the
+    # OA candidates that did not match; classification treats NULL as
+    # "unknown", never as membership.
+    doaj_in_doaj: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # DOAJ apc.has_apc: the venue's own charge declaration. True = charges
+    # exist (gold evidence); False = diamond.
+    doaj_has_apc: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    doaj_apc_max: Mapped[float | None] = mapped_column(Numeric, nullable=True)
+    doaj_apc_currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    doaj_homepage_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    doaj_harvested_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
     crossref_meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     openaire_meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     harvested_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
