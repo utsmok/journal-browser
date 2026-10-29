@@ -280,9 +280,11 @@ def _issns(body: dict) -> set[str]:
 
 @requires_db
 async def test_malformed_cursor_is_400(api):
+    # "not-a-cursor" is pattern-legal ([A-Za-z0-9_-]), so it reaches
+    # parse_cursor and the app-level ValueError handler answers 400.
     r = await api.get("/api/v1/ut/journals", params={"cursor": "not-a-cursor"})
     assert r.status_code == 400
-    # Valid base64 but not JSON.
+    # Valid base64 but not JSON: same handler.
     junk = base64.urlsafe_b64encode(b"nonsense").decode()
     r = await api.get("/api/v1/ut/journals", params={"cursor": junk})
     assert r.status_code == 400
@@ -583,9 +585,9 @@ async def test_oa_type_facet_filter(api):
     assert oa_facets["hybrid"] == 3
     assert oa_facets["generic"] == 1
 
-    # Unknown vocabulary is a 400, not a silent empty result.
+    # Unknown vocabulary is a 422, not a silent empty result.
     r = await api.get("/api/v1/ut/journals", params={"oa_type": "gold,bogus"})
-    assert r.status_code == 400
+    assert r.status_code == 422
 
 
 @requires_db

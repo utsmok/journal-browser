@@ -16,10 +16,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
 from ..models import Feedback
+from ..vocab import FeedbackCategory
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
 
-CATEGORIES = {"bug", "data", "feature", "improvement", "other"}
 MAX_PAGE_DATA_BYTES = 1_000_000
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -28,7 +28,7 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 class CreateFeedbackIn(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     description: str = Field(min_length=1, max_length=8000)
-    category: str | None = None
+    category: FeedbackCategory | None = None
     page_url: str | None = Field(default=None, max_length=2048)
     page_data: dict[str, Any] = Field(default_factory=dict)
 
@@ -42,8 +42,6 @@ class FeedbackOut(BaseModel):
 
 @router.post("", status_code=201)
 async def create_feedback(body: CreateFeedbackIn, session: SessionDep) -> FeedbackOut:
-    if body.category is not None and body.category not in CATEGORIES:
-        raise HTTPException(422, f"category must be one of {sorted(CATEGORIES)}")
     if len(json.dumps(body.page_data)) > MAX_PAGE_DATA_BYTES:
         raise HTTPException(413, "page_data too large")
 

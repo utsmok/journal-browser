@@ -3,6 +3,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BeforeValidator
 from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,10 +41,28 @@ from ..schemas import (
 from ..services import detail_enrichment
 from ..services import search as search_service
 from ..services import ut_metadata as ut_metadata_service
+from ..vocab import OaType
 
 router = APIRouter(prefix="/journals", tags=["journals"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+
+def _split_csv(v: str | list | None) -> list[str] | None:
+    # FastAPI hands list-typed params the assembled list of query values;
+    # the frontend sends one comma-joined key, repeated keys also work.
+    if v is None:
+        return None
+    if isinstance(v, list):
+        v = ",".join(v)
+    parts = [s for s in v.split(",") if s]
+    return parts or None
+
+
+#: Comma-separated oa_type multi-select, validated against OaType (422).
+OaTypeFilter = Annotated[
+    list[OaType] | None, BeforeValidator(_split_csv), Query(max_length=60)
+]
 
 
 def _is_ignored(issn_l: str) -> bool:
@@ -146,7 +165,7 @@ async def search_journals(
     publisher: Annotated[str | None, Query(max_length=200)] = None,
     has_apc: bool | None = None,
     has_works: bool | None = None,
-    oa_type: Annotated[str | None, Query(max_length=60)] = None,
+    oa_type: OaTypeFilter = None,
     sort: Annotated[
         str,
         Query(
@@ -154,37 +173,32 @@ async def search_journals(
         ),
     ] = "relevance",
     dir: Annotated[str | None, Query(pattern="^(asc|desc)$")] = None,
-    cursor: str | None = None,
+    cursor: Annotated[str | None, Query(max_length=512, pattern=r"^[A-Za-z0-9_-]*={0,2}$")] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     include_facets: bool = True,
 ) -> JournalSearchResponse:
-    # oa_type is a comma-separated multi-select, OR'd together server-side.
-    oa_types = [v for v in (oa_type or "").split(",") if v]
-    if unknown := [v for v in oa_types if v not in search_service.OA_TYPES]:
-        raise HTTPException(status_code=400, detail=f"unknown oa_type: {unknown}")
-    try:
-        result = await search_service.search_journals(
-            session,
-            institution_id=institution.id,
-            q=q,
-            search_in=search_in,
-            deal=deal,
-            oa=oa,
-            doaj=doaj,
-            quartile=quartile,
-            topic=topic,
-            publisher=publisher,
-            has_apc=has_apc,
-            has_works=has_works,
-            oa_types=oa_types or None,
-            sort=sort,
-            dir=dir,
-            cursor=cursor,
-            limit=limit,
-            include_facets=include_facets,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # oa_type is a comma-separated multi-select, OR'd together server-side;
+    # values validate against OaType at the boundary (422).
+    result = await search_service.search_journals(
+        session,
+        institution_id=institution.id,
+        q=q,
+        search_in=search_in,
+        deal=deal,
+        oa=oa,
+        doaj=doaj,
+        quartile=quartile,
+        topic=topic,
+        publisher=publisher,
+        has_apc=has_apc,
+        has_works=has_works,
+        oa_types=list(oa_type) if oa_type else None,
+        sort=sort,
+        dir=dir,
+        cursor=cursor,
+        limit=limit,
+        include_facets=include_facets,
+    )
     return JournalSearchResponse(
         items=[_to_list_item(item) for item in result["items"]],
         total=result["total"],
@@ -200,15 +214,12 @@ async def semantic_search_journals(
     institution: InstitutionDep,
     q: Annotated[str, Query(min_length=2, max_length=512)],
     limit: Annotated[int, Query(ge=1, le=100)] = 40,
-    cursor: str | None = None,
+    cursor: Annotated[str | None, Query(max_length=512, pattern=r"^[A-Za-z0-9_-]*={0,2}$")] = None,
 ) -> JournalSearchResponse:
     """Free-text "journals like this description" search over embeddings."""
-    try:
-        result = await search_service.semantic_search(
-            session, q, institution.id, limit, cursor
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    result = await search_service.semantic_search(
+        session, q, institution.id, limit, cursor
+    )
     return JournalSearchResponse(
         items=[_to_list_item(item) for item in result["items"]],
         total=result["total"],

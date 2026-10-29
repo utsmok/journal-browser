@@ -29,7 +29,7 @@ async def search_authors(
     limit: int = Query(authors_service.DEFAULT_LIMIT, ge=1, le=authors_service.MAX_LIMIT),
     faculty: Annotated[str | None, Query(max_length=200)] = None,
     org: Annotated[str | None, Query(max_length=200)] = None,
-    has_orcid: Annotated[str | None, Query(max_length=20)] = None,
+    has_orcid: Annotated[Literal["yes", "no"] | None, Query()] = None,
     works: Annotated[str | None, Query(max_length=60)] = None,
     last_pub: Annotated[str | None, Query(max_length=60)] = None,
     topic: Annotated[str | None, Query(max_length=200)] = None,

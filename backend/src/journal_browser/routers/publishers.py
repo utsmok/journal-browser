@@ -1,8 +1,9 @@
 """/api/v1/{code}/publishers: browsable journals aggregated per publisher."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BeforeValidator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
@@ -15,17 +16,35 @@ from ..schemas import (
     PublisherSearchResponse,
 )
 from ..services import publishers as publishers_service
-from ..services import search as search_service
+from ..vocab import OaType
 
 router = APIRouter(prefix="/publishers", tags=["publishers"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
-def _split(raw: str | None) -> list[str] | None:
-    # "|" not ",": publisher/topic values contain commas and spaces
-    values = [v for v in (raw or "").split("|") if v]
+def _split(raw: str | list | None) -> list[str] | None:
+    # "|" not ",": publisher/topic values contain commas and spaces.
+    # FastAPI hands list-typed params the assembled list of query values;
+    # the frontend sends one pipe-joined key, repeated keys also work.
+    if raw is None:
+        return None
+    if isinstance(raw, list):
+        raw = "|".join(raw)
+    values = [v for v in raw.split("|") if v]
     return values or None
+
+
+#: Pipe-joined oa_type multi-select, validated against OaType (422).
+OaTypeFilter = Annotated[
+    list[OaType] | None, BeforeValidator(_split), Query(max_length=60)
+]
+#: Pipe-joined quartile multi-select (422 on unknown values).
+QuartileFilter = Annotated[
+    list[Literal["Q1", "Q2", "Q3", "Q4"]] | None,
+    BeforeValidator(_split),
+    Query(max_length=20),
+]
 
 
 @router.get("", response_model=PublisherSearchResponse)
@@ -33,9 +52,9 @@ async def search_publishers(
     session: SessionDep,
     institution: InstitutionDep,
     q: Annotated[str | None, Query(max_length=200)] = None,
-    oa_type: Annotated[str | None, Query(max_length=60)] = None,
+    oa_type: OaTypeFilter = None,
     deal: Annotated[str | None, Query(pattern="^(covered|none)$")] = None,
-    quartile: Annotated[str | None, Query(max_length=20)] = None,
+    quartile: QuartileFilter = None,
     topic: Annotated[str | None, Query(max_length=100)] = None,
     size: Annotated[str | None, Query(max_length=20)] = None,
     has_apc: bool | None = None,
@@ -49,13 +68,10 @@ async def search_publishers(
     include_facets: bool = True,
 ) -> PublisherSearchResponse:
     # Pipe-joined multi-selects, OR'd within a dimension, AND'd across
-    # dimensions. Unknown vocabulary → 400 (the journals convention).
-    oa_types = _split(oa_type)
-    if unknown := [v for v in oa_types or [] if v not in search_service.OA_TYPES]:
-        raise HTTPException(status_code=400, detail=f"unknown oa_type: {unknown}")
-    quartiles = _split(quartile)
-    if unknown := [v for v in quartiles or [] if v not in publishers_service.QUARTILES]:
-        raise HTTPException(status_code=400, detail=f"unknown quartile: {unknown}")
+    # dimensions. Values validate at the boundary (422); size stays a
+    # hand-checked bucket list.
+    oa_types = list(oa_type) if oa_type else None
+    quartiles = list(quartile) if quartile else None
     sizes = _split(size)
     if unknown := [v for v in sizes or [] if v not in publishers_service.SIZE_BUCKETS]:
         raise HTTPException(status_code=400, detail=f"unknown size: {unknown}")

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -68,6 +69,12 @@ def create_app() -> "FastAPI":  # noqa: F821
         allow_headers=["*"],
     )
     app.include_router(api_router)
+    # parse_cursor and friends raise ValueError for malformed input; map it
+    # to 400. FastAPI's own RequestValidationError (422) handles params it
+    # validates at the boundary.
+    @app.exception_handler(ValueError)
+    async def value_error_to_400(request, exc: ValueError):  # noqa: ANN202
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
     _warm_embedding_model()
     return app
 

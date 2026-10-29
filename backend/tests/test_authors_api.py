@@ -63,7 +63,10 @@ async def authors_api(db, institution_factory):
         [
             _journal("1234-5678", embedding=_vec(0)),  # J1: hybrid (covered)
             _journal("2222-2221", embedding=_vec(1)),  # J2: subscription
-            _journal("3333-3331", is_in_doaj=True, doaj_in_doaj=True, doaj_has_apc=False, embedding=_vec(2)),  # J3: diamond
+            _journal(
+                "3333-3331", is_in_doaj=True, doaj_in_doaj=True, doaj_has_apc=False,
+                embedding=_vec(2),
+            ),  # J3: diamond
             _journal("4444-4441", embedding=_vec(3)),  # J4: covered hybrid
             _journal("5555-5551", embedding=_vec(4)),  # below cutoff
             _journal("6666-6661", embedding=_vec(5)),  # browse-excluded
@@ -388,7 +391,7 @@ async def test_facets_and_filters(authors_api):
     assert facets["works"] == [{"value": "1-4", "count": 2}, {"value": "50+", "count": 1}]
     assert all(v == [] for k, v in facets.items() if k != "works")
     r = await authors_api.get("/api/v1/ut/authors", params={"has_orcid": "maybe"})
-    assert r.status_code == 200 and r.json()["total"] == 0
+    assert r.status_code == 422
     r = await authors_api.get("/api/v1/ut/authors", params={"last_pub": "stone-age"})
     assert r.status_code == 200 and r.json()["total"] == 0
 

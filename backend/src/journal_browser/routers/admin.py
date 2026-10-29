@@ -119,11 +119,7 @@ async def list_runs(
         .limit(limit)
     )
     if institution is not None:
-        from ..harvest.common import get_institution_by_code
-
-        inst = await get_institution_by_code(session, institution)
-        if inst is None:
-            raise HTTPException(status_code=400, detail=f"unknown institution: {institution}")
+        inst = await _get_institution_or_404(session, institution)
         query = query.where(HarvestRun.institution_id == inst.id)
     rows = (await session.execute(query)).all()
     return [
