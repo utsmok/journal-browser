@@ -213,6 +213,40 @@ export interface paths {
         patch: operations["update_feedback_api_v1_admin_feedback__feedback_id__patch"];
         trace?: never;
     };
+    "/api/v1/admin/docs/{slug}/edits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Put Doc Edit */
+        put: operations["put_doc_edit_api_v1_admin_docs__slug__edits_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/docs/{slug}/edits/{block_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Doc Edit */
+        delete: operations["delete_doc_edit_api_v1_admin_docs__slug__edits__block_key__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/feedback": {
         parameters: {
             query?: never;
@@ -224,6 +258,40 @@ export interface paths {
         put?: never;
         /** Create Feedback */
         post: operations["create_feedback_api_v1_feedback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/docs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Docs Index */
+        get: operations["docs_index_api_v1_docs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/docs/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Doc Detail */
+        get: operations["doc_detail_api_v1_docs__slug__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -526,6 +594,149 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AdminDealDetail */
+        AdminDealDetail: {
+            /** Id */
+            id: number;
+            /** Publisher Id */
+            publisher_id: number | null;
+            /** Publisher */
+            publisher: string | null;
+            /** Esac Id */
+            esac_id: string | null;
+            status: components["schemas"]["DealStatus"];
+            /** Start Year */
+            start_year: number | null;
+            /** End Year */
+            end_year: number | null;
+            /** Corresponding Authors Only */
+            corresponding_authors_only: boolean | null;
+            /** Capped */
+            capped: boolean;
+            /** Cap Numbers */
+            cap_numbers: {
+                [key: string]: unknown;
+            } | null;
+            /** Cap Text */
+            cap_text: string | null;
+            /** Summary */
+            summary: string | null;
+            /** Journal Count */
+            journal_count: number;
+            /** Participations */
+            participations: string[];
+            /** Needs Curation */
+            needs_curation: boolean;
+            /** Needs Curation Reason */
+            needs_curation_reason: string | null;
+            /** Journals */
+            journals: components["schemas"]["AdminDealJournal"][];
+        };
+        /** AdminDealJournal */
+        AdminDealJournal: {
+            /** Issn */
+            issn: string;
+            /** Issn L */
+            issn_l: string | null;
+            /** Journal Name */
+            journal_name: string | null;
+            source: components["schemas"]["DealJournalSource"];
+            /** Excluded */
+            excluded: boolean;
+        };
+        /** AdminDealOut */
+        AdminDealOut: {
+            /** Id */
+            id: number;
+            /** Publisher Id */
+            publisher_id: number | null;
+            /** Publisher */
+            publisher: string | null;
+            /** Esac Id */
+            esac_id: string | null;
+            status: components["schemas"]["DealStatus"];
+            /** Start Year */
+            start_year: number | null;
+            /** End Year */
+            end_year: number | null;
+            /** Corresponding Authors Only */
+            corresponding_authors_only: boolean | null;
+            /** Capped */
+            capped: boolean;
+            /** Cap Numbers */
+            cap_numbers: {
+                [key: string]: unknown;
+            } | null;
+            /** Cap Text */
+            cap_text: string | null;
+            /** Summary */
+            summary: string | null;
+            /** Journal Count */
+            journal_count: number;
+            /** Participations */
+            participations: string[];
+            /** Needs Curation */
+            needs_curation: boolean;
+            /** Needs Curation Reason */
+            needs_curation_reason: string | null;
+        };
+        /** AdminInstitutionOut */
+        AdminInstitutionOut: {
+            /** Code */
+            code: string | null;
+            /** Name */
+            name: string;
+            /** Short Name */
+            short_name: string | null;
+            /** Ror */
+            ror: string | null;
+            /** Openalex Id */
+            openalex_id: string | null;
+            /** Pure Oai Base Url */
+            pure_oai_base_url: string | null;
+            /** Openaire Org Id */
+            openaire_org_id: string | null;
+            /** Data Window Start */
+            data_window_start: number;
+            /** Data Window End */
+            data_window_end: number;
+            /** Library Url */
+            library_url: string | null;
+            /** Oa Guide Url */
+            oa_guide_url: string | null;
+            /** Support Email */
+            support_email: string | null;
+            /** Admin Contact */
+            admin_contact: string | null;
+            /** Research Portal Url */
+            research_portal_url: string | null;
+            /** Active */
+            active: boolean;
+            /** Require Confirmed Affiliation */
+            require_confirmed_affiliation: boolean;
+        };
+        /** AdminRunOut */
+        AdminRunOut: {
+            /** Id */
+            id: number;
+            /** Source */
+            source: string;
+            /** Entity Type */
+            entity_type: string;
+            /** Institution Id */
+            institution_id: number | null;
+            /** Institution Code */
+            institution_code: string | null;
+            status: components["schemas"]["HarvestStatus"];
+            /** Started At */
+            started_at: string | null;
+            /** Finished At */
+            finished_at: string | null;
+            /** Stats */
+            stats: {
+                [key: string]: unknown;
+            };
+        };
         /** ApcAggregateOut */
         ApcAggregateOut: {
             /** Period */
@@ -790,8 +1001,7 @@ export interface components {
             title: string;
             /** Description */
             description: string;
-            /** Category */
-            category?: string | null;
+            category?: components["schemas"]["FeedbackCategory"] | null;
             /** Page Url */
             page_url?: string | null;
             /** Page Data */
@@ -807,11 +1017,8 @@ export interface components {
             publisher_name?: string | null;
             /** Esac Id */
             esac_id?: string | null;
-            /**
-             * Status
-             * @default current
-             */
-            status: string;
+            /** @default current */
+            status: components["schemas"]["DealStatus"];
             /** Start Year */
             start_year?: number | null;
             /** End Year */
@@ -840,6 +1047,12 @@ export interface components {
             /** Journal Name */
             journal_name?: string | null;
         };
+        /**
+         * DealJournalSource
+         * @description deal_journals.source (provenance of the membership row).
+         * @enum {string}
+         */
+        DealJournalSource: "jct" | "manual" | "publisher-pattern";
         /** DealJournalsBody */
         DealJournalsBody: {
             /**
@@ -875,8 +1088,7 @@ export interface components {
             publisher_name: string | null;
             /** Covers In Group */
             covers_in_group?: number | null;
-            /** Status */
-            status: string;
+            status: components["schemas"]["DealStatus"];
             /** Start Year */
             start_year: number | null;
             /** End Year */
@@ -934,6 +1146,38 @@ export interface components {
              */
             remove: string[];
         };
+        /**
+         * DealStatus
+         * @description deals.status (ck_deals_status).
+         * @enum {string}
+         */
+        DealStatus: "current" | "archive";
+        /**
+         * DealUpdate
+         * @description PATCH-shaped PUT body: absent fields are untouched, explicit null
+         *     clears nullable columns, and non-nullable columns reject null.
+         */
+        DealUpdate: {
+            status?: components["schemas"]["DealStatus"] | null;
+            /** Start Year */
+            start_year?: number | null;
+            /** End Year */
+            end_year?: number | null;
+            /** Corresponding Authors Only */
+            corresponding_authors_only?: boolean | null;
+            /** Cap Numbers */
+            cap_numbers?: {
+                [key: string]: number;
+            } | null;
+            /** Cap Text */
+            cap_text?: string | null;
+            /** Summary */
+            summary?: string | null;
+            /** Esac Id */
+            esac_id?: string | null;
+            /** Publisher Id */
+            publisher_id?: number | null;
+        };
         /** DealUsageRow */
         DealUsageRow: {
             /** Label */
@@ -943,6 +1187,105 @@ export interface components {
             /** Euro */
             euro: number;
         };
+        /** DocBlock */
+        DocBlock: {
+            /** Key */
+            key: string;
+            /** Type */
+            type: string;
+            /** Text */
+            text: string;
+            /** Level */
+            level?: number | null;
+            /** Lang */
+            lang?: string | null;
+            /**
+             * Edited
+             * @default false
+             */
+            edited: boolean;
+        };
+        /** DocDetailOut */
+        DocDetailOut: {
+            /** Slug */
+            slug: string;
+            /** Title */
+            title: string;
+            /** Group */
+            group: string;
+            /** Order */
+            order: number;
+            /** Blocks */
+            blocks: components["schemas"]["DocBlock"][];
+        };
+        /** DocEditIn */
+        DocEditIn: {
+            /** Block Key */
+            block_key: string;
+            /** Original Hash */
+            original_hash: string;
+            /** Replacement */
+            replacement: string;
+        };
+        /** DocEditOut */
+        DocEditOut: {
+            /** Slug */
+            slug: string;
+            /** Block Key */
+            block_key: string;
+            /** Edited */
+            edited: boolean;
+        };
+        /** DocMetaOut */
+        DocMetaOut: {
+            /** Slug */
+            slug: string;
+            /** Title */
+            title: string;
+            /** Group */
+            group: string;
+            /** Order */
+            order: number;
+            /** Edits */
+            edits: number;
+        };
+        /** FeedbackAdminOut */
+        FeedbackAdminOut: {
+            /** Id */
+            id: number;
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            category: components["schemas"]["FeedbackCategory"] | null;
+            status: components["schemas"]["FeedbackStatus"];
+            priority: components["schemas"]["FeedbackPriority"];
+            /** Page Url */
+            page_url: string | null;
+            /** Page Data */
+            page_data: {
+                [key: string]: unknown;
+            };
+            /** Resolution Notes */
+            resolution_notes: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * FeedbackCategory
+         * @description feedback_items.category (the /feedback intake surface; the DB has no
+         *     CHECK yet — the API set is authoritative).
+         * @enum {string}
+         */
+        FeedbackCategory: "bug" | "data" | "feature" | "improvement" | "other";
         /** FeedbackOut */
         FeedbackOut: {
             /** Id */
@@ -957,6 +1300,25 @@ export interface components {
              */
             created_at: string;
         };
+        /** FeedbackPatchOut */
+        FeedbackPatchOut: {
+            /** Id */
+            id: number;
+            status: components["schemas"]["FeedbackStatus"];
+            priority: components["schemas"]["FeedbackPriority"];
+        };
+        /**
+         * FeedbackPriority
+         * @description feedback_items.priority (ck_feedback_priority).
+         * @enum {string}
+         */
+        FeedbackPriority: "low" | "normal" | "high" | "critical";
+        /**
+         * FeedbackStatus
+         * @description feedback_items.status (ck_feedback_status).
+         * @enum {string}
+         */
+        FeedbackStatus: "todo" | "in_progress" | "done" | "wontfix";
         /** FeedbackUpdateIn */
         FeedbackUpdateIn: {
             /** Status */
@@ -965,6 +1327,22 @@ export interface components {
             priority?: string | null;
             /** Resolution Notes */
             resolution_notes?: string | null;
+        };
+        /** FlaggedDealOut */
+        FlaggedDealOut: {
+            /** Id */
+            id: number;
+            /** Publisher */
+            publisher: string;
+            /** Esac Id */
+            esac_id: string | null;
+            status: components["schemas"]["DealStatus"];
+            /** Duration */
+            duration: string | null;
+            /** Journals */
+            journals: number;
+            /** Reason */
+            reason: string | null;
         };
         /** FreshnessEntry */
         FreshnessEntry: {
@@ -1031,6 +1409,12 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * HarvestStatus
+         * @description harvest_runs.status (ck_harvest_runs_status).
+         * @enum {string}
+         */
+        HarvestStatus: "running" | "completed" | "failed";
+        /**
          * InstitutionMetrics
          * @description OpenAlex view of this institution's publications in this journal,
          *     plus canonical-store totals when the external works store is reachable
@@ -1090,6 +1474,43 @@ export interface components {
             admin_contact?: string | null;
             /** Research Portal Url */
             research_portal_url?: string | null;
+        };
+        /**
+         * InstitutionUpdate
+         * @description PATCH-shaped PUT body: absent fields are untouched, explicit null
+         *     clears nullable columns, and the four non-nullable fields reject null.
+         */
+        InstitutionUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Short Name */
+            short_name?: string | null;
+            /** Ror */
+            ror?: string | null;
+            /** Openalex Id */
+            openalex_id?: string | null;
+            /** Pure Oai Base Url */
+            pure_oai_base_url?: string | null;
+            /** Openaire Org Id */
+            openaire_org_id?: string | null;
+            /** Data Window Start */
+            data_window_start?: number | null;
+            /** Data Window End */
+            data_window_end?: number | null;
+            /** Library Url */
+            library_url?: string | null;
+            /** Oa Guide Url */
+            oa_guide_url?: string | null;
+            /** Support Email */
+            support_email?: string | null;
+            /** Admin Contact */
+            admin_contact?: string | null;
+            /** Research Portal Url */
+            research_portal_url?: string | null;
+            /** Active */
+            active?: boolean | null;
+            /** Require Confirmed Affiliation */
+            require_confirmed_affiliation?: boolean | null;
         };
         /** JournalDetailResponse */
         JournalDetailResponse: {
@@ -1222,11 +1643,8 @@ export interface components {
             quartile?: string | null;
             /** Twoyr Mean Citedness */
             twoyr_mean_citedness?: number | null;
-            /**
-             * Oa Type
-             * @default subscription
-             */
-            oa_type: string;
+            /** @default subscription */
+            oa_type: components["schemas"]["OaType"];
             /** Primary Topic */
             primary_topic?: string | null;
             /** Apc Source */
@@ -1288,6 +1706,13 @@ export interface components {
             /** Password */
             password: string;
         };
+        /**
+         * OaType
+         * @description Journal-level OA classification (journals.oa_type; services/search.py
+         *     SQL case + Python mirror, search filter vocabulary).
+         * @enum {string}
+         */
+        OaType: "gold" | "diamond" | "generic" | "hybrid" | "subscription";
         /** OpenaireInfo */
         OpenaireInfo: {
             /**
@@ -1584,11 +2009,8 @@ export interface components {
             year: number;
             /** Works Count */
             works_count: number;
-            /**
-             * Works Count Source
-             * @default openalex_institution_filter
-             */
-            works_count_source: string;
+            /** @default openalex_institution_filter */
+            works_count_source: components["schemas"]["WorksSource"];
             /** Oa Gold */
             oa_gold: number;
             /** Oa Hybrid */
@@ -1663,6 +2085,13 @@ export interface components {
             /** Page Size */
             page_size: number;
         };
+        /**
+         * WorksSource
+         * @description institution_works_stats.works_count_source (which pipeline filled the
+         *     yearly counts).
+         * @enum {string}
+         */
+        WorksSource: "pure_canon" | "openalex_institution_filter";
     };
     responses: never;
     parameters: never;
@@ -1745,9 +2174,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": components["schemas"]["AdminRunOut"][];
                 };
             };
             /** @description Validation Error */
@@ -1776,9 +2203,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": components["schemas"]["FlaggedDealOut"][];
                 };
             };
         };
@@ -1857,9 +2282,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["AdminInstitutionOut"];
                 };
             };
             /** @description Validation Error */
@@ -1884,9 +2307,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": components["schemas"]["InstitutionUpdate"];
             };
         };
         responses: {
@@ -1896,9 +2317,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["AdminInstitutionOut"];
                 };
             };
             /** @description Validation Error */
@@ -1927,9 +2346,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": components["schemas"]["AdminDealOut"][];
                 };
             };
         };
@@ -1953,9 +2370,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["AdminDealDetail"];
                 };
             };
             /** @description Validation Error */
@@ -1986,9 +2401,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["AdminDealDetail"];
                 };
             };
             /** @description Validation Error */
@@ -2013,9 +2426,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": components["schemas"]["DealUpdate"];
             };
         };
         responses: {
@@ -2025,9 +2436,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["AdminDealDetail"];
                 };
             };
             /** @description Validation Error */
@@ -2062,9 +2471,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["AdminDealDetail"];
                 };
             };
             /** @description Validation Error */
@@ -2099,9 +2506,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["AdminDealDetail"];
                 };
             };
             /** @description Validation Error */
@@ -2133,9 +2538,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": components["schemas"]["FeedbackAdminOut"][];
                 };
             };
             /** @description Validation Error */
@@ -2199,10 +2602,73 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["FeedbackPatchOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_doc_edit_api_v1_admin_docs__slug__edits_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocEditIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocEditOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_doc_edit_api_v1_admin_docs__slug__edits__block_key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                block_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -2248,6 +2714,57 @@ export interface operations {
             };
         };
     };
+    docs_index_api_v1_docs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocMetaOut"][];
+                };
+            };
+        };
+    };
+    doc_detail_api_v1_docs__slug__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     search_journals_api_v1__institution_code__journals_get: {
         parameters: {
             query?: {
@@ -2261,7 +2778,7 @@ export interface operations {
                 publisher?: string | null;
                 has_apc?: boolean | null;
                 has_works?: boolean | null;
-                oa_type?: string | null;
+                oa_type?: components["schemas"]["OaType"][] | null;
                 sort?: string;
                 dir?: string | null;
                 cursor?: string | null;
@@ -2437,7 +2954,7 @@ export interface operations {
                 limit?: number;
                 faculty?: string | null;
                 org?: string | null;
-                has_orcid?: string | null;
+                has_orcid?: ("yes" | "no") | null;
                 works?: string | null;
                 last_pub?: string | null;
                 topic?: string | null;
@@ -2508,9 +3025,9 @@ export interface operations {
         parameters: {
             query?: {
                 q?: string | null;
-                oa_type?: string | null;
+                oa_type?: components["schemas"]["OaType"][] | null;
                 deal?: string | null;
-                quartile?: string | null;
+                quartile?: ("Q1" | "Q2" | "Q3" | "Q4")[] | null;
                 topic?: string | null;
                 size?: string | null;
                 has_apc?: boolean | null;
