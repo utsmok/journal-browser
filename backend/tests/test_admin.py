@@ -177,7 +177,7 @@ async def test_institutions_get_put(admin_api):
         headers=headers,
         json={"data_window_start": 2019, "code": "rug"},
     )
-    assert r.status_code == 400
+    assert r.status_code == 422
     r = await admin_api.get("/api/v1/admin/institutions/ut", headers=headers)
     assert r.json()["data_window_start"] == 2020
     r = await admin_api.put(
@@ -204,7 +204,7 @@ async def test_institutions_get_put(admin_api):
         {"require_confirmed_affiliation": 1},
     ):
         r = await admin_api.put("/api/v1/admin/institutions/ut", headers=headers, json=bad)
-        assert r.status_code == 400
+        assert r.status_code == 422
 
 
 def test_get_settings_live_yaml_merge(tmp_path, monkeypatch):
@@ -230,3 +230,19 @@ async def test_feedback_limit_rejects_nonpositive(admin_api):
     headers = await _login(admin_api)
     res = await admin_api.get("/api/v1/admin/feedback", params={"limit": -1}, headers=headers)
     assert res.status_code == 422
+
+
+@requires_db
+async def test_institution_put_rejects_null_nonnullable(admin_api):
+    headers = await _login(admin_api)
+    for key in ("name", "data_window_start", "data_window_end", "active"):
+        r = await admin_api.put(
+            "/api/v1/admin/institutions/ut", headers=headers, json={key: None}
+        )
+        assert r.status_code == 422, key
+    # A nullable field still clears on explicit null.
+    r = await admin_api.put(
+        "/api/v1/admin/institutions/ut", headers=headers, json={"admin_contact": None}
+    )
+    assert r.status_code == 200
+    assert r.json()["admin_contact"] is None

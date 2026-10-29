@@ -165,15 +165,15 @@ async def test_update_deal_records_overrides(admin_api, db_engine):
     r = await admin_api.put(
         f"/api/v1/admin/deals/{deal_id}", headers=headers, json={"status": "bogus"}
     )
-    assert r.status_code == 400
+    assert r.status_code == 422
     r = await admin_api.put(
         f"/api/v1/admin/deals/{deal_id}", headers=headers, json={"cap_numbers": {"20x4": 1}}
     )
-    assert r.status_code == 400
+    assert r.status_code == 422
     r = await admin_api.put(
         f"/api/v1/admin/deals/{deal_id}", headers=headers, json={"consortium": "nope"}
     )
-    assert r.status_code == 400
+    assert r.status_code == 422
     r = await admin_api.post(
         "/api/v1/admin/deals",
         headers=headers,
@@ -503,3 +503,14 @@ async def test_ignored_issns_normalized_and_validated(admin_api, tmp_path, monke
     )
     assert r.status_code == 200
     reset_settings_cache()
+
+
+@requires_db
+async def test_deal_put_rejects_null_nonnullable(admin_api):
+    headers = await _login(admin_api)
+    deal_id = (await admin_api.get("/api/v1/admin/deals", headers=headers)).json()[0]["id"]
+    for key in ("status", "start_year", "end_year", "corresponding_authors_only", "publisher_id"):
+        r = await admin_api.put(
+            f"/api/v1/admin/deals/{deal_id}", headers=headers, json={key: None}
+        )
+        assert r.status_code == 422, key

@@ -20,7 +20,7 @@ from typing import Annotated, Any
 
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, constr, model_validator
 from sqlalchemy import delete, desc, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -250,31 +250,36 @@ async def update_settings(body: SettingsUpdate, _: AdminDep) -> dict[str, Any]:
     return _settings_payload()
 
 
-# Editable institutions-table fields (never code/id) with their value kinds.
-INSTITUTION_EDITABLE: dict[str, str] = {
-    "name": "string",
-    "short_name": "string",
-    "ror": "string",
-    "openalex_id": "string",
-    "pure_oai_base_url": "string",
-    "openaire_org_id": "string",
-    "data_window_start": "int",
-    "data_window_end": "int",
-    "library_url": "string",
-    "oa_guide_url": "string",
-    "support_email": "string",
-    "admin_contact": "string",
-    "research_portal_url": "string",
-    "active": "bool",
-    "require_confirmed_affiliation": "bool",
-}
-# String fields the DB allows to be NULL; explicit null clears the value.
-INSTITUTION_NULLABLE = set(INSTITUTION_EDITABLE) - {
-    "name",
-    "data_window_start",
-    "data_window_end",
-    "active",
-}
+class InstitutionUpdate(BaseModel):
+    """PATCH-shaped PUT body: absent fields are untouched, explicit null
+    clears nullable columns, and the four non-nullable fields reject null."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1)
+    short_name: str | None = None
+    ror: str | None = None
+    openalex_id: str | None = None
+    pure_oai_base_url: str | None = None
+    openaire_org_id: str | None = None
+    data_window_start: int | None = None
+    data_window_end: int | None = None
+    library_url: str | None = None
+    oa_guide_url: str | None = None
+    support_email: str | None = None
+    admin_contact: str | None = None
+    research_portal_url: str | None = None
+    active: StrictBool | None = None
+    require_confirmed_affiliation: StrictBool | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_cleared_nonnullable(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            for key in ("name", "data_window_start", "data_window_end", "active"):
+                if key in data and data[key] is None:
+                    raise ValueError(f"{key} must not be null")
+        return data
 
 
 def _institution_payload(inst: Institution) -> dict[str, Any]:
@@ -316,29 +321,11 @@ async def get_institution(
 
 @router.put("/institutions/{code}")
 async def update_institution(
-    code: str, body: dict[str, Any], session: SessionDep, _: AdminDep
+    code: str, body: InstitutionUpdate, session: SessionDep, _: AdminDep
 ) -> dict[str, Any]:
     inst = await _get_institution_or_404(session, code)
-    for key, value in body.items():
-        kind = INSTITUTION_EDITABLE.get(key)
-        if kind is None:
-            raise HTTPException(400, f"unknown or immutable institution field: {key}")
-        if kind == "int":
-            if not isinstance(value, int) or isinstance(value, bool):
-                raise HTTPException(400, f"{key}: expected int")
-        elif kind == "bool":
-            if not isinstance(value, bool):
-                raise HTTPException(400, f"{key}: expected bool")
-        elif kind == "secret":
-            if not isinstance(value, str):
-                raise HTTPException(400, f"{key}: expected string")
-        elif (value is None and key not in INSTITUTION_NULLABLE) or (
-            value is not None and not isinstance(value, str)
-        ):
-            raise HTTPException(400, f"{key}: expected string")
-    updates = dict(body)
-    for key, value in updates.items():
-        setattr(inst, key, value)
+    for key in body.model_fields_set:
+        setattr(inst, key, getattr(body, key))
     await session.commit()
     return _institution_payload(inst)
 
@@ -350,46 +337,36 @@ async def update_institution(
 # journal sets excluded=true and keeps the row so the JCT upsert cannot
 # resurrect it.
 
-# Fields PUT /admin/deals/{id} accepts.
-DEAL_EDITABLE = {
-    "status",
-    "start_year",
-    "end_year",
-    "corresponding_authors_only",
-    "cap_numbers",
-    "cap_text",
-    "summary",
-    "esac_id",
-    "publisher_id",
-}
+class DealUpdate(BaseModel):
+    """PATCH-shaped PUT body: absent fields are untouched, explicit null
+    clears nullable columns, and non-nullable columns reject null."""
 
+    model_config = ConfigDict(extra="forbid")
 
-def _validate_deal_field(key: str, value: Any) -> None:
-    if key == "status":
-        if value not in (DealStatus.CURRENT, DealStatus.ARCHIVE):
-            raise HTTPException(400, "status must be 'current' or 'archive'")
-    elif key in ("start_year", "end_year", "publisher_id"):
-        if not isinstance(value, int) or isinstance(value, bool):
-            raise HTTPException(400, f"{key}: expected int")
-    elif key == "corresponding_authors_only":
-        if not isinstance(value, bool):
-            raise HTTPException(400, "corresponding_authors_only: expected bool")
-    elif key in ("cap_text", "summary", "esac_id"):
-        # Nullable columns: the editor sends null to clear the field.
-        if value is not None and not isinstance(value, str):
-            raise HTTPException(400, f"{key}: expected string or null")
-    elif key == "cap_numbers" and value is not None and (
-        not isinstance(value, dict)
-        or not all(
-            isinstance(k, str)
-            and len(k) == 4
-            and k.isdigit()
-            and isinstance(v, int)
-            and not isinstance(v, bool)
-            for k, v in value.items()
-        )
-    ):
-        raise HTTPException(400, "cap_numbers: expected {\"yyyy\": count} or null")
+    status: DealStatus | None = None
+    start_year: int | None = Field(default=None, ge=1900, le=2100)
+    end_year: int | None = Field(default=None, ge=1900, le=2100)
+    corresponding_authors_only: StrictBool | None = None
+    cap_numbers: dict[constr(pattern=r"^\d{4}$"), int] | None = None
+    cap_text: str | None = None
+    summary: str | None = None
+    esac_id: str | None = None
+    publisher_id: int | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_cleared_nonnullable(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            for key in (
+                "status",
+                "start_year",
+                "end_year",
+                "corresponding_authors_only",
+                "publisher_id",
+            ):
+                if key in data and data[key] is None:
+                    raise ValueError(f"{key} must not be null")
+        return data
 
 
 def _deal_payload(
@@ -570,7 +547,7 @@ class DealCreate(BaseModel):
     publisher_id: int | None = None
     publisher_name: str | None = None
     esac_id: str | None = None
-    status: str = "current"
+    status: DealStatus = DealStatus.CURRENT
     start_year: int | None = None
     end_year: int | None = None
     corresponding_authors_only: bool | None = None
@@ -578,7 +555,6 @@ class DealCreate(BaseModel):
 
 @router.post("/deals", status_code=201)
 async def create_deal(body: DealCreate, session: SessionDep, _: AdminDep) -> dict[str, Any]:
-    _validate_deal_field("status", body.status)
     if body.publisher_id is None and not body.publisher_name:
         raise HTTPException(422, "publisher_id or publisher_name is required")
     if body.esac_id is not None:
@@ -609,26 +585,23 @@ async def create_deal(body: DealCreate, session: SessionDep, _: AdminDep) -> dic
 
 @router.put("/deals/{deal_id}")
 async def update_deal(
-    deal_id: int, body: dict[str, Any], session: SessionDep, _: AdminDep
+    deal_id: int, body: DealUpdate, session: SessionDep, _: AdminDep
 ) -> dict[str, Any]:
     deal = await _get_deal_or_404(session, deal_id)
-    for key, value in body.items():
-        if key not in DEAL_EDITABLE:
-            raise HTTPException(400, f"unknown or immutable deal field: {key}")
-        _validate_deal_field(key, value)
-    if body.get("esac_id") not in (None, deal.esac_id):
+    updates = body.model_dump(exclude_unset=True)
+    if body.esac_id is not None and body.esac_id != deal.esac_id:
         clash = await session.scalar(
-            select(Deal.id).where(Deal.esac_id == body["esac_id"], Deal.id != deal_id)
+            select(Deal.id).where(Deal.esac_id == body.esac_id, Deal.id != deal_id)
         )
         if clash is not None:
             raise HTTPException(409, f"esac_id already in use by deal {clash}")
     if (
-        "publisher_id" in body
-        and body["publisher_id"] != deal.publisher_id
-        and await session.get(Publisher, body["publisher_id"]) is None
+        body.publisher_id is not None
+        and body.publisher_id != deal.publisher_id
+        and await session.get(Publisher, body.publisher_id) is None
     ):
-        raise HTTPException(404, f"unknown publisher: {body['publisher_id']}")
-    changed = {k: v for k, v in body.items() if getattr(deal, k) != v}
+        raise HTTPException(404, f"unknown publisher: {body.publisher_id}")
+    changed = {k: v for k, v in updates.items() if getattr(deal, k) != v}
     if not changed:
         return await _deal_detail(session, deal_id)
     for key, value in changed.items():
