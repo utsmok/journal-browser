@@ -1,14 +1,15 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
 import { DealBadge, OaTypeBadge, QuartileBadge } from "@/components/badges";
+import { BackLink } from "@/components/back-link";
 import { CardPager } from "@/components/card-pager";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { OaTrend } from "@/components/oa-trend";
+import { DetailSkeleton, ErrorPanel } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -30,17 +31,6 @@ import {
 import { formatEur } from "@/lib/format";
 
 const PAGE_SIZE = 20;
-
-function BackLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link
-      href={href}
-      className="inline-flex items-center gap-1 text-sm text-[var(--primary-text)] underline-offset-4 hover:underline"
-    >
-      <ArrowLeft aria-hidden className="size-4" /> {label}
-    </Link>
-  );
-}
 
 /** Unit headline stats: authors, works, deal-covered share, APC spend. */
 function UnitStats({ unit }: { unit: OrgUnitItem }) {
@@ -116,19 +106,15 @@ export default function OrgUnitPage() {
         </div>
       </div>
     );
-  if (isPending)
-    return (
-      <div className="mx-auto max-w-screen-2xl px-4 py-10">
-        <div className="h-8 w-2/3 animate-pulse rounded bg-[var(--muted)]" />
-        <div className="mt-4 h-40 animate-pulse rounded bg-[var(--muted)]" />
-      </div>
-    );
+  if (isPending) return <DetailSkeleton />;
   if (isError || !data)
     return (
-      <div className="mx-auto max-w-screen-2xl px-4 py-10">
-        <p className="text-[var(--destructive)]">{errorMessage(error)}</p>
-        <BackLink href={backHref} label="Back" />
-      </div>
+      <ErrorPanel
+        message={errorMessage(error)}
+        backHref={backHref}
+        backLabel="Back"
+        backClassName=""
+      />
     );
 
   // Keyed by unit so per-card pagination restarts on navigation.

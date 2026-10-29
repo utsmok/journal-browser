@@ -21,6 +21,7 @@ import * as React from "react";
 import { DealBadge, OaTypeBadge, QuartileBadge } from "@/components/badges";
 import { FilterPanel } from "@/components/filter-panel";
 import { SourceNote } from "@/components/source-note";
+import { ListSkeletonRows } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -42,6 +43,7 @@ import {
   type SearchIn,
   type SortKey,
 } from "@/lib/api";
+import { apcAmount, apcStatsText, formatApc } from "@/lib/format";
 
 const SORTS: { value: SortKey; label: string }[] = [
   { value: "relevance", label: "Relevance" },
@@ -117,33 +119,6 @@ const SEARCH_IN_OPTIONS: { value: SearchIn; label: string }[] = [
 ];
 
 const SEARCH_INPUT_ID = "journal-search";
-
-/** Round a displayed APC sensibly: nearest 10 euros at realistic prices. */
-function formatApc(euro: number) {
-  const rounded = Math.abs(euro) >= 100 ? Math.round(euro / 10) * 10 : Math.round(euro);
-  return rounded.toLocaleString("en");
-}
-
-/** Symbol for OpenAlex list-price currencies; ISO-code fallback for the rest. */
-const APC_SYMBOLS: Record<string, string> = { EUR: "€", USD: "$", GBP: "£" };
-
-function apcAmount(currency: string | null | undefined, price: number) {
-  return `${(currency && APC_SYMBOLS[currency]) || `${currency ?? ""} `}${formatApc(price)}`;
-}
-
-/** Per-period OpenAPC detail lines for the ? tooltip. */
-function apcStatsText(stats: NonNullable<JournalListItem["apc_stats"]>) {
-  return stats
-    .map((s) => {
-      const low = s.euro_min ?? s.euro_max;
-      const range =
-        low != null && low !== s.euro_max
-          ? `${formatApc(low)}–${formatApc(s.euro_max ?? 0)}`
-          : formatApc(s.euro_max ?? 0);
-      return `${s.period}: ${range} EUR · ${s.article_count} article${s.article_count === 1 ? "" : "s"} · mean ${formatApc(s.euro_mean ?? 0)}`;
-    })
-    .join("\n");
-}
 
 export default function HomePage() {
   // useSearchParams needs a Suspense boundary during prerender.
@@ -808,14 +783,7 @@ function SearchView() {
               )}
             </div>
           ) : isPending ? (
-            <div className="space-y-2 py-4">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="h-9 animate-pulse rounded bg-[var(--muted)]"
-                />
-              ))}
-            </div>
+            <ListSkeletonRows rows={8} />
           ) : rows.length === 0 ? (
             <div className="py-10 text-center text-[var(--muted-foreground)]">
               {spQ && !hasNonQueryFilters ? (

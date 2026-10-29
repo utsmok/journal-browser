@@ -10,6 +10,7 @@ import {
   type FacetGroupDef,
   type FacetValue,
 } from "@/components/filter-panel";
+import { ListSkeletonRows } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -465,14 +466,7 @@ function OrgUnitsView() {
                   </Button>
                 </div>
               ) : isPending ? (
-                <div className="space-y-2 py-4">
-                  {Array.from({ length: 8 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="h-9 animate-pulse rounded bg-[var(--muted)]"
-                    />
-                  ))}
-                </div>
+                <ListSkeletonRows rows={8} />
               ) : rows.length === 0 ? (
                 <div className="py-10 text-center text-[var(--muted-foreground)]">
                   {q && !anyFilter ? (

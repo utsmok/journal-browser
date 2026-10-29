@@ -15,6 +15,7 @@ import { CollapsibleCard } from "@/components/collapsible-card";
 import { CardPager } from "@/components/card-pager";
 import { OaTrend } from "@/components/oa-trend";
 import { SourceNote } from "@/components/source-note";
+import { DetailSkeleton, ErrorPanel } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import { useJournal, useJournalWorks, useSimilar } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
@@ -521,25 +522,9 @@ function JournalPageInner() {
     !similar ||
     (similar.all.length === 0 && similar.institution.length === 0 && similar.deals.length === 0);
 
-  if (isPending)
-    return (
-      <div className="mx-auto max-w-screen-2xl px-4 py-10">
-        <div className="h-8 w-2/3 animate-pulse rounded bg-[var(--muted)]" />
-        <div className="mt-4 h-40 animate-pulse rounded bg-[var(--muted)]" />
-      </div>
-    );
+  if (isPending) return <DetailSkeleton />;
   if (isError || !data)
-    return (
-      <div className="mx-auto max-w-screen-2xl px-4 py-10">
-        <p className="text-[var(--destructive)]">{errorMessage(error)}</p>
-        <Link
-          href={backHref}
-          className="mt-2 inline-flex items-center gap-1 text-sm text-[var(--primary-text)] underline-offset-4 hover:underline"
-        >
-          <ArrowLeft aria-hidden className="size-4" /> Back to search
-        </Link>
-      </div>
-    );
+    return <ErrorPanel message={errorMessage(error)} backHref={backHref} />;
 
   const { journal, stats, deals, attribution, summary_stats, stats_totals: totals } = data;
   const recent = stats.filter((s) => s.year >= site.windowStart);

@@ -19,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { DetailSkeleton, ErrorPanel } from "@/components/states";
 import { useInstitution } from "@/hooks/use-institution";
 import {
   errorMessage,
@@ -178,7 +179,7 @@ function toStatsYear(oa_by_year: AuthorProfile["oa_by_year"]): StatsYear[] {
     .map((y) => ({
       year: y.year,
       works_count: y.total,
-      works_count_source: "pure",
+      works_count_source: "pure_canon",
       oa_gold: y.gold,
       oa_hybrid: y.hybrid,
       oa_green: y.green,
@@ -210,25 +211,9 @@ export default function AuthorPage() {
     setWorkPage(1);
   }, [authorId]);
 
-  if (isPending)
-    return (
-      <div className="mx-auto max-w-screen-2xl px-4 py-10">
-        <div className="h-8 w-2/3 animate-pulse rounded bg-[var(--muted)]" />
-        <div className="mt-4 h-40 animate-pulse rounded bg-[var(--muted)]" />
-      </div>
-    );
+  if (isPending) return <DetailSkeleton />;
   if (isError || !data)
-    return (
-      <div className="mx-auto max-w-screen-2xl px-4 py-10">
-        <p className="text-[var(--destructive)]">{errorMessage(error)}</p>
-        <Link
-          href={backHref}
-          className="mt-2 inline-flex items-center gap-1 text-sm text-[var(--primary-text)] underline-offset-4 hover:underline"
-        >
-          <ArrowLeft aria-hidden className="size-4" /> Back to search
-        </Link>
-      </div>
-    );
+    return <ErrorPanel message={errorMessage(error)} backHref={backHref} />;
 
   const { author, oa_by_year, journals, topics, similar, alternatives, works } =
     data;

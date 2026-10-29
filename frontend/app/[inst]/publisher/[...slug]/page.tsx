@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import * as React from "react";
@@ -10,6 +10,8 @@ import { CardPager } from "@/components/card-pager";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { OaCompositionBar, OaCompositionLegend } from "@/components/oa-composition";
 import { OaTrend } from "@/components/oa-trend";
+import { BackLink } from "@/components/back-link";
+import { DetailSkeleton, ErrorPanel } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -24,22 +26,10 @@ import { useInstitution } from "@/hooks/use-institution";
 import {
   errorMessage,
   type DealOut,
-  type JournalListItem,
   type PublisherListItem,
 } from "@/lib/api";
-import { formatEur } from "@/lib/format";
+import { formatEur, journalApcText } from "@/lib/format";
 import { dealLinkLabel, orderedDealLinks } from "@/lib/deal-links";
-
-/** APC display for one journal: OpenAlex list price, else OpenAPC range. */
-function journalApcText(j: JournalListItem): string | null {
-  if (j.apc_source === "openalex" && j.apc_price != null)
-    return `${formatEur(j.apc_price)} €`;
-  if (j.apc_source === "openapc" && j.apc_low != null)
-    return j.apc_high != null && j.apc_high !== j.apc_low
-      ? `${formatEur(j.apc_low)}–${formatEur(j.apc_high)} €`
-      : `${formatEur(j.apc_low)} €`;
-  return null;
-}
 
 /** First curated link for a deal ("conditions" / contract document). */
 function dealConditionsUrl(deal: DealOut): string | null {
@@ -169,24 +159,14 @@ export default function PublisherPage() {
     setJournalPage(1);
   }, [name]);
 
-  if (isPending)
-    return (
-      <div className="mx-auto max-w-screen-2xl px-4 py-10">
-        <div className="h-8 w-2/3 animate-pulse rounded bg-[var(--muted)]" />
-        <div className="mt-4 h-40 animate-pulse rounded bg-[var(--muted)]" />
-      </div>
-    );
+  if (isPending) return <DetailSkeleton />;
   if (isError || !data)
     return (
-      <div className="mx-auto max-w-screen-2xl px-4 py-10">
-        <p className="text-[var(--destructive)]">{errorMessage(error)}</p>
-        <Link
-          href={backHref}
-          className="mt-2 inline-flex items-center gap-1 text-sm text-[var(--primary-text)] underline-offset-4 hover:underline"
-        >
-          <ArrowLeft aria-hidden className="size-4" /> Back to publishers
-        </Link>
-      </div>
+      <ErrorPanel
+        message={errorMessage(error)}
+        backHref={backHref}
+        backLabel="Back to publishers"
+      />
     );
 
   const { publisher, journals, deals, deal_discrepancies, n_discrepancies, works_by_year } =
@@ -199,12 +179,7 @@ export default function PublisherPage() {
 
   return (
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
-      <Link
-        href={backHref}
-        className="inline-flex items-center gap-1 text-sm text-[var(--primary-text)] underline-offset-4 hover:underline"
-      >
-        <ArrowLeft aria-hidden className="size-4" /> Back to publishers
-      </Link>
+      <BackLink href={backHref} label="Back to publishers" />
       <header className="mb-6 mt-4">
         <h1 className="text-3xl font-bold text-balance">{publisher.name}</h1>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-[var(--muted-foreground)]">
