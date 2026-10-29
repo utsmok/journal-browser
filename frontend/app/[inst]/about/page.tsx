@@ -4,12 +4,7 @@ import { ExternalLink, Github } from "lucide-react";
 
 import { SourceNote } from "@/components/source-note";
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useFreshness, useLimitations } from "@/hooks/use-api";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { errorMessage } from "@/lib/api";
@@ -138,11 +133,35 @@ export default function AboutPage() {
           : find where to publish, what a deal covers, and how much it costs.
         </p>
       </header>
+      {(freshness?.degraded?.length ?? 0) > 0 && (
+        <div
+          role="alert"
+          className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm"
+        >
+          <p className="font-semibold text-amber-600 dark:text-amber-400">
+            Some data sources are currently degraded
+          </p>
+          <ul className="mt-2 space-y-1 text-[var(--muted-foreground)]">
+            {(freshness?.degraded ?? []).map((d) => (
+              <li key={d.source}>
+                <strong>{d.source}</strong>: {d.detail} (since{" "}
+                {new Date(d.since).toLocaleString("en", {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
+                )
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {(freshnessQuery.isError || limitationsQuery.isError) && (
         <p aria-live="polite" className="text-sm text-[var(--destructive)]">
           {errorMessage(
-            freshnessQuery.isError ? freshnessQuery.error : limitationsQuery.error,
+            freshnessQuery.isError
+              ? freshnessQuery.error
+              : limitationsQuery.error,
           )}{" "}
           <button
             type="button"
@@ -195,9 +214,9 @@ export default function AboutPage() {
                 >
                   {site.adminContact}
                 </a>
-              )}
-              {" "}For open access policy questions, see the library links in
-              the footer.
+              )}{" "}
+              For open access policy questions, see the library links in the
+              footer.
             </p>
           </CardContent>
         </Card>
@@ -220,7 +239,8 @@ export default function AboutPage() {
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-0.5 font-semibold text-[var(--primary-text)] hover:underline"
                     >
-                      {info.name} <ExternalLink aria-hidden className="size-3" />
+                      {info.name}{" "}
+                      <ExternalLink aria-hidden className="size-3" />
                     </a>
                     <span className="block text-xs text-[var(--muted-foreground)]">
                       {info.role}
@@ -237,9 +257,9 @@ export default function AboutPage() {
               Harvest jobs run when the library refreshes the data, and per-run
               status is listed below. The deal register is maintained by hand,
               so a re-ingest can never overwrite reviewed deal information.
-              Publication statistics cover works published in{" "}
-              {site.windowStart} or later, and the search lists journals with
-              more than 3 publications in that window.
+              Publication statistics cover works published in {site.windowStart}{" "}
+              or later, and the search lists journals with more than 3
+              publications in that window.
             </p>
           </CardContent>
         </Card>
@@ -252,7 +272,8 @@ export default function AboutPage() {
             <CardContent className="overflow-x-auto pt-6">
               <table className="w-full text-xs">
                 <caption className="sr-only">
-                  Most recent harvest runs per source, entity, and filter set, with status and finish time
+                  Most recent harvest runs per source, entity, and filter set,
+                  with status and finish time
                 </caption>
                 <thead>
                   <tr className="text-left text-[var(--muted-foreground)]">
@@ -289,11 +310,17 @@ export default function AboutPage() {
                         </td>
                         <td className="py-1.5 pr-3">{h.entity_type}</td>
                         <td className="py-1.5 pr-3">
-                          <Badge variant={h.status === "completed" ? "muted" : "outline"}>
+                          <Badge
+                            variant={
+                              h.status === "completed" ? "muted" : "outline"
+                            }
+                          >
                             {h.status ?? "—"}
                           </Badge>
                         </td>
-                        <td className="py-1.5 tabular-nums">{fmt(h.finished_at)}</td>
+                        <td className="py-1.5 tabular-nums">
+                          {fmt(h.finished_at)}
+                        </td>
                       </tr>
                     );
                   })}
@@ -365,8 +392,8 @@ export default function AboutPage() {
         <Card>
           <CardContent className="pt-6 text-sm">
             <p className="mb-2 text-[var(--muted-foreground)]">
-              Questions about open access publishing at {site.name}? The
-              library can help.
+              Questions about open access publishing at {site.name}? The library
+              can help.
             </p>
             <ul className="flex flex-wrap gap-x-6 gap-y-1">
               <li>
