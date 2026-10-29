@@ -5,6 +5,7 @@ import "./globals.css";
 import { SiteFooter } from "@/components/site-footer";
 import { BrandLink, SiteNav } from "@/components/site-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { FeedbackWidget } from "@/components/feedback/feedback-widget";
 import { Providers } from "./providers";
 
 const inter = Inter({
@@ -86,6 +87,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <SiteHeader />
           <main id="main" className="flex-1">{children}</main>
           <SiteFooter />
+          <FeedbackWidget />
         </Providers>
       </body>
     </html>

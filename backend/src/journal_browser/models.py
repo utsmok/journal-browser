@@ -775,3 +775,42 @@ class ManualOverride(Base):
     __table_args__ = (
         UniqueConstraint("table_name", "row_key", "field", name="uq_manual_overrides"),
     )
+
+
+class Feedback(Base):
+    """User-reported issue from the in-app feedback widget.
+
+    `page_data` carries the frontend dump of every TanStack Query cache
+    entry live on the page at submit time, so most reports (data issues)
+    arrive with the exact API responses the reporter saw.
+    """
+
+    __tablename__ = "feedback_items"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    # bug | feature | improvement | other
+    category: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # todo | in_progress | done | wontfix
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="todo")
+    # low | normal | high | critical
+    priority: Mapped[str] = mapped_column(Text, nullable=False, server_default="normal")
+    page_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    page_data: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    resolution_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = _tstamp()
+    updated_at: Mapped[datetime] = _tstamp()
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('todo', 'in_progress', 'done', 'wontfix')",
+            name="ck_feedback_status",
+        ),
+        CheckConstraint(
+            "priority IN ('low', 'normal', 'high', 'critical')",
+            name="ck_feedback_priority",
+        ),
+    )

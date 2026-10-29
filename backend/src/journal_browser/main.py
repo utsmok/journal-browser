@@ -6,13 +6,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from . import __version__
 from .config import get_settings
 from .db import get_session
-from .routers import admin, authors, deals, institutions, journals, meta, orgunits, publishers
+from .routers import admin, authors, deals, feedback, institutions, journals, meta, orgunits, publishers
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(institutions.router)
 # Admin before the scoped router: /admin/deals must not be captured by
 # /{institution_code}/deals.
 api_router.include_router(admin.router)
+# Feedback intake before the scoped router, same reason as /admin.
+api_router.include_router(feedback.router)
 # Institution-scoped surface: /api/v1/{code}/journals|deals|meta/...
 scoped_router = APIRouter(prefix="/{institution_code}")
 scoped_router.include_router(journals.router)

@@ -40,6 +40,7 @@ async function adminFetch<T>(path: string, token: string, init: RequestInit = {}
     headers: { Authorization: `Bearer ${token}`, ...(init.headers ?? {}) },
   });
   if (!res.ok) throw new AdminError(res.status, path);
+  if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
 
@@ -61,6 +62,18 @@ export function adminPost<T>(path: string, token: string, body: unknown): Promis
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+export function adminPatch<T>(path: string, token: string, body: unknown): Promise<T> {
+  return adminFetch<T>(path, token, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function adminDelete(path: string, token: string): Promise<void> {
+  return adminFetch<void>(path, token, { method: "DELETE" });
 }
 
 /** Session-cached admin token plus a setter that persists/removes it. */
@@ -173,3 +186,23 @@ export type AdminDealJournal = {
 
 /** GET/PUT/POST /admin/deals…: a deal plus its journal membership list. */
 export type AdminDealDetail = AdminDeal & { journals: AdminDealJournal[] };
+
+/** GET /admin/feedback: one user report with its page-data dump. */
+export type FeedbackAdmin = {
+  id: number;
+  title: string;
+  description: string;
+  category: string | null;
+  status: "todo" | "in_progress" | "done" | "wontfix";
+  priority: "low" | "normal" | "high" | "critical";
+  page_url: string | null;
+  page_data: {
+    url?: string;
+    user_agent?: string;
+    viewport?: string;
+    queries?: { key: unknown[]; data: unknown }[];
+  } | null;
+  resolution_notes: string | null;
+  created_at: string;
+  updated_at: string;
+};

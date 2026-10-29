@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { LoginForm } from "@/components/admin/login-form";
 import { CreateDealForm, DealEditor, DealsTable } from "@/components/admin/deal-editor";
+import { FeedbackSection } from "@/components/admin/feedback-table";
 import { RunsTable, StatusBadge } from "@/components/admin/runs-table";
 import {
   GlobalSettingsForm,
@@ -133,6 +134,8 @@ export default function AdminPage() {
         {runsError && <p className="text-sm text-destructive">{runsError}</p>}
         <RunsTable runs={runs} directory={unis} />
       </section>
+
+      <FeedbackSection token={token} onUnauthorized={setToken} />
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
