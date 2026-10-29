@@ -223,3 +223,10 @@ def test_get_settings_live_yaml_merge(tmp_path, monkeypatch):
         assert get_settings().bootstrap == fallback
     finally:
         reset_settings_cache()
+
+
+@requires_db
+async def test_feedback_limit_rejects_nonpositive(admin_api):
+    headers = await _login(admin_api)
+    res = await admin_api.get("/api/v1/admin/feedback", params={"limit": -1}, headers=headers)
+    assert res.status_code == 422

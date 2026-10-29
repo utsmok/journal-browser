@@ -15,7 +15,7 @@ import hashlib
 import hmac
 import os
 import time
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Annotated, Any
 
 import yaml
@@ -793,7 +793,7 @@ async def list_feedback(
     session: SessionDep,
     _: AdminDep,
     status: str | None = Query(default=None),
-    limit: int = Query(default=200, le=500),
+    limit: int = Query(default=200, ge=1, le=500),
 ) -> list[dict[str, Any]]:
     if status is not None and status not in FEEDBACK_STATUSES:
         raise HTTPException(422, f"status must be one of {list(FEEDBACK_STATUSES)}")
@@ -841,7 +841,7 @@ async def update_feedback(
         row.priority = body.priority
     if body.resolution_notes is not None:
         row.resolution_notes = body.resolution_notes
-    row.updated_at = datetime.now(timezone.utc)
+    row.updated_at = datetime.now(UTC)
     await session.commit()
     return {"id": row.id, "status": row.status, "priority": row.priority}
 
