@@ -306,6 +306,28 @@ async def test_require_confirmed_affiliation_toggle(authors_api, db):
 
 
 @requires_db
+async def test_search_folds_diacritics(authors_api, db):
+    from sqlalchemy import select
+
+    from journal_browser.models import Author, Institution
+
+    ut_id = await db.scalar(select(Institution.id).where(Institution.code == "ut"))
+    db.add(Author(
+        institution_id=ut_id,
+        pure_uuid="julia-uuid",
+        name="Jülia Föllmer",
+        orgs=[],
+        n_works=0,
+        confirmed=True,
+    ))
+    await db.commit()
+    # Plain-ASCII query finds the umlauted name; the accented query still works.
+    for q in ("follmer", "Föllmer", "julia"):
+        body = (await authors_api.get("/api/v1/ut/authors", params={"q": q})).json()
+        assert [i["pure_uuid"] for i in body["items"]] == ["julia-uuid"], q
+
+
+@requires_db
 async def test_facets_and_filters(authors_api):
     body = (await authors_api.get("/api/v1/ut/authors")).json()
     facets = body["facets"]

@@ -31,6 +31,11 @@ ALTERNATIVE_JOURNALS = 5
 ALTERNATIVE_OPTIONS = 3
 WORKS_CAP = 200
 
+# European diacritics folded to plain ASCII on both sides of author-name
+# search, so umlaut-free queries match umlauted names ("follmer" -> "Föllmer").
+_FOLD_SRC = "áàâäãåéèêëíìîïóòôöõúùûüýÿñçšž"
+_FOLD_DST = "aaaaaaeeeeiiiioooooouuuuyyncsz"
+
 #: Response buckets of works.oa_status are shared (works_query.YEAR_BUCKETS);
 #: the contract's year split historically had no diamond column but now does.
 
@@ -118,7 +123,12 @@ async def search_authors(
     q_cond = None
     if q and q.strip():
         qstr = q.strip()
-        q_cond = Author.name.ilike(f"%{_like(qstr)}%", escape="\\")
+        # Diacritics fold so "Follmer" finds "Föllmer"; translate() keeps
+        # this extension-free, and the roster is small enough to scan.
+        q_cond = func.translate(func.lower(Author.name), _FOLD_SRC, _FOLD_DST).like(
+            func.translate(func.lower(f"%{_like(qstr)}%"), _FOLD_SRC, _FOLD_DST),
+            escape="\\",
+        )
     conds = _filter_conds(faculty, org, has_orcid, works, last_pub, topic)
     query = select(Author).where(*base, *conds.values())
     if q_cond is not None:
