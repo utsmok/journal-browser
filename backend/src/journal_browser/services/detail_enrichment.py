@@ -80,7 +80,8 @@ async def list_works(
     otherwise. publication_year desc nulls last, cited_by_count desc, title
     asc; slicing happens in Python (bounded per journal). Both sides are
     bounded to the institution's publication-year window."""
-    year_start, year_end = institution.data_window_start, institution.data_window_end or 9999
+    year_start = institution.data_window_start
+    year_end = institution.data_window_end if institution.data_window_end is not None else 9999
     rows = _journal_works(issn_l, institution.id, year_start, year_end)
     payloads = (await session.execute(select(rows.c.payload))).scalars().all()
     items = [_work_item(p) for p in payloads]
@@ -110,7 +111,8 @@ async def institution_metrics(
     """Aggregates over the journal's stored OpenAlex works (SQL, one pass),
     plus canonical-store totals when the external works store is reachable.
     Both sides bounded to the institution's publication-year window."""
-    year_start, year_end = institution.data_window_start, institution.data_window_end or 9999
+    year_start = institution.data_window_start
+    year_end = institution.data_window_end if institution.data_window_end is not None else 9999
     rows = _journal_works(issn_l, institution.id, year_start, year_end)
     fwci = cast(rows.c.payload["fwci"].astext, Float)
     total, fwci_avg, fwci_n, retracted, cited_total = (

@@ -45,7 +45,9 @@ def _settings() -> dict:
         "openaire_org_id": s.openaire_org_id or None,
         "external_works_dsn": s.ut_metadata_dsn or None,
         "data_window_start": s.data_window_start,
-        "data_window_end": s.data_window_end,
+        # 0 = open until 0032 converts the sentinel to NULL; the column is
+        # still NOT NULL at this point in the chain.
+        "data_window_end": s.data_window_end if s.data_window_end is not None else 0,
         "library_url": s.library_url,
         "oa_guide_url": s.oa_guide_url,
         "support_email": s.support_email,

@@ -232,7 +232,7 @@ async def test_per_institution_windows_in_freshness(multi_api):
     ut_meta = (await client.get("/api/v1/ut/meta/freshness")).json()
     assert (rug_meta["data_window_start"], rug_meta["data_window_end"]) == (2025, 2025)
     assert ut_meta["data_window_start"] == 2020
-    assert ut_meta["data_window_end"] == 0  # 0 = open
+    assert ut_meta["data_window_end"] is None  # NULL = open
 
 
 @requires_db

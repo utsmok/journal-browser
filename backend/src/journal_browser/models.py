@@ -225,13 +225,11 @@ class Institution(Base):
     # Optional external canonical-works Postgres (ut-metadata style),
     # read-only. Empty = the enrichment degrades to works_stats-only.
     external_works_dsn: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Publication-year data window (inclusive); end 0 = open (to now).
+    # Publication-year data window (inclusive); NULL end = open (to now).
     data_window_start: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("2020")
     )
-    data_window_end: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default=text("0")
-    )
+    data_window_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Display fields served to the frontend via /meta/freshness.
     library_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     oa_guide_url: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -252,7 +250,11 @@ class Institution(Base):
         """Inclusive publication-year window, capped at the current year."""
         import datetime as dt
 
-        last = self.data_window_end or dt.date.today().year
+        last = (
+            self.data_window_end
+            if self.data_window_end is not None
+            else dt.date.today().year
+        )
         return list(range(self.data_window_start, min(last, dt.date.today().year) + 1))
 
 

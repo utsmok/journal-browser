@@ -266,7 +266,8 @@ async def _author_journals(
                 Work.institution_id == iid,
                 Work.retired_at.is_(None),
                 Work.year >= institution.data_window_start,
-                Work.year <= (institution.data_window_end or 9999),
+                Work.year
+                <= (institution.data_window_end if institution.data_window_end is not None else 9999),
                 *([Journal.issn_l.not_in(sorted(set(ignored)))] if ignored else []),
             )
             .group_by(
@@ -385,7 +386,8 @@ async def author_profile(
     """Full profile bundle; None = unknown author (404 upstream). All
     per-author work views are bounded to the institution's data window."""
     iid = institution.id
-    year_start, year_end = institution.data_window_start, institution.data_window_end or 9999
+    year_start = institution.data_window_start
+    year_end = institution.data_window_end if institution.data_window_end is not None else 9999
     author = await session.scalar(
         select(Author).where(Author.institution_id == iid, Author.pure_uuid == pure_uuid)
     )

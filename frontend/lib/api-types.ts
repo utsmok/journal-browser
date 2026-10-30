@@ -699,7 +699,7 @@ export interface components {
             /** Data Window Start */
             data_window_start: number;
             /** Data Window End */
-            data_window_end: number;
+            data_window_end: number | null;
             /** Library Url */
             library_url: string | null;
             /** Oa Guide Url */
@@ -1403,11 +1403,8 @@ export interface components {
              * @default 2020
              */
             data_window_start: number;
-            /**
-             * Data Window End
-             * @default 0
-             */
-            data_window_end: number;
+            /** Data Window End */
+            data_window_end?: number | null;
             /** Harvests */
             harvests: components["schemas"]["FreshnessEntry"][];
             /**
@@ -1479,11 +1476,8 @@ export interface components {
             short_name?: string | null;
             /** Data Window Start */
             data_window_start: number;
-            /**
-             * Data Window End
-             * @default 0
-             */
-            data_window_end: number;
+            /** Data Window End */
+            data_window_end?: number | null;
             /** Library Url */
             library_url?: string | null;
             /** Oa Guide Url */

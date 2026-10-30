@@ -87,7 +87,7 @@ async def harvest_institution_stats(
                 "from_publication_date": window_from,
                 **(
                     {"to_publication_date": f"{institution.data_window_end}-12-31"}
-                    if institution.data_window_end
+                    if institution.data_window_end is not None
                     else {}
                 ),
             },
@@ -112,7 +112,7 @@ async def harvest_institution_stats(
 
             year = payload.get("publication_year")
             if isinstance(year, int) and institution.data_window_start <= year <= (
-                institution.data_window_end or current_year
+                institution.data_window_end if institution.data_window_end is not None else current_year
             ):
                 status = _oa_status(payload)
                 per_year[(year, status)] += 1
@@ -191,7 +191,10 @@ async def write_pure_canon_stats(session: AsyncSession, institution: Institution
                 Work.retired_at.is_(None),
                 Work.journal_issn_l.is_not(None),
                 Work.year.between(
-                    institution.data_window_start, institution.data_window_end or 9999
+                    institution.data_window_start,
+                    institution.data_window_end
+                    if institution.data_window_end is not None
+                    else 9999,
                 ),
                 # Same exclusion as the OpenAlex stats pass; normalized
                 # inline because the comparison runs in SQL.

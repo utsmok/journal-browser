@@ -309,7 +309,12 @@ async def journal_detail(
                     InstitutionWorksStats.institution_id == institution.id,
                     # Institution data window (denorm.py convention).
                     InstitutionWorksStats.year >= institution.data_window_start,
-                    InstitutionWorksStats.year <= (institution.data_window_end or 9999),
+                    InstitutionWorksStats.year
+                    <= (
+                        institution.data_window_end
+                        if institution.data_window_end is not None
+                        else 9999
+                    ),
                 )
                 .order_by(InstitutionWorksStats.year)
             )

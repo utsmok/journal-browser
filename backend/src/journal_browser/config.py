@@ -96,9 +96,9 @@ class Settings(BaseSettings):
     curation_report_path: str = "landing/reports/curation_report.html"
 
     # Publication-year data window (inclusive). JB_DATA_WINDOW_START shrinks
-    # a deployment's harvest (e.g. 2025); end 0 = open (to now).
+    # a deployment's harvest (e.g. 2025); NULL end = open (to now).
     data_window_start: int = 2020
-    data_window_end: int = 0
+    data_window_end: int | None = None
 
     # Bootstrap job mode: auto = only on an empty DB, always, off.
     bootstrap: str = "auto"
@@ -121,7 +121,11 @@ class Settings(BaseSettings):
         """Inclusive publication-year window, capped at the current year."""
         import datetime as dt
 
-        last = self.data_window_end or dt.date.today().year
+        last = (
+            self.data_window_end
+            if self.data_window_end is not None
+            else dt.date.today().year
+        )
         return list(range(self.data_window_start, min(last, dt.date.today().year) + 1))
 
     @property

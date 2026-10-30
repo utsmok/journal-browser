@@ -112,7 +112,7 @@ SETTINGS_REGISTRY: list[FieldDef] = [
     _f("data_window_start", "institution", "number", "Data window start",
        "First publication year harvested and shown (inclusive)."),
     _f("data_window_end", "institution", "number", "Data window end",
-       "Last publication year (inclusive); 0 = open (to now)."),
+       "Last publication year (inclusive); empty = open (to now)."),
     _f("library_url", "institution", "string", "Library URL",
        "Link to the university library."),
     _f("oa_guide_url", "institution", "string", "OA guide URL",

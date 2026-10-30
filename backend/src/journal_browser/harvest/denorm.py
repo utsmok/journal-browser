@@ -148,7 +148,9 @@ async def refresh_institution_stats(session: AsyncSession, institution: Institut
     await session.execute(MATERIALIZE_SQL, {"iid": iid})
     await session.execute(RESET_WORKS_COUNT_SQL, {"iid": iid})
     await session.execute(WORKS_COUNT_SQL, {"iid": iid})
-    window_end = institution.data_window_end or 9999
+    window_end = (
+        institution.data_window_end if institution.data_window_end is not None else 9999
+    )
     await session.execute(
         WORKS_WINDOW_SQL, {"iid": iid, "ws": institution.data_window_start, "we": window_end}
     )

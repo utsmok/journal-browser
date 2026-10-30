@@ -341,7 +341,8 @@ async def ingest_authors(
     # The institution row carries the publication-year window; edges to
     # works outside it drop out of every derived count below.
     institution = await session.get(Institution, institution_id)
-    year_start, year_end = institution.data_window_start, institution.data_window_end or 9999
+    year_start = institution.data_window_start
+    year_end = institution.data_window_end if institution.data_window_end is not None else 9999
     local_works = {
         row["pure_uuid"]: (row["year"], row["journal_issn_l"])
         for row in (

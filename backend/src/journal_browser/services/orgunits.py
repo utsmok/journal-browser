@@ -57,7 +57,8 @@ def _unit_rows(institution: Institution, level: str) -> Any:
     """Unit aggregates with deal/APC rollups outer-joined on the name."""
     iid = institution.id
     require_confirmed = institution.require_confirmed_affiliation
-    year_start, year_end = institution.data_window_start, institution.data_window_end or 9999
+    year_start = institution.data_window_start
+    year_end = institution.data_window_end if institution.data_window_end is not None else 9999
     key = _unit_key(level)
     agg_cols: list[Any] = [
         key.label("name"),
@@ -360,7 +361,8 @@ async def orgunit_detail(
     """Full unit bundle; None = unknown unit (404 upstream)."""
     iid = institution.id
     require_confirmed = institution.require_confirmed_affiliation
-    year_start, year_end = institution.data_window_start, institution.data_window_end or 9999
+    year_start = institution.data_window_start
+    year_end = institution.data_window_end if institution.data_window_end is not None else 9999
     units = _unit_rows(institution, level)
     unit_row = (
         await session.execute(select(units).where(units.c.name == name))

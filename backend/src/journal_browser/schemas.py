@@ -309,7 +309,7 @@ class FreshnessResponse(BaseModel):
     admin_contact: str | None = None
     research_portal_url: str | None = None
     data_window_start: int = 2020
-    data_window_end: int = 0  # 0 = open
+    data_window_end: int | None = None
     harvests: list[FreshnessEntry]
     # max timestamps (or year/period maxima for yearly tables)
     tables: dict[str, Any] = {}
@@ -565,7 +565,7 @@ class AdminInstitutionOut(BaseModel):
     pure_oai_base_url: str | None
     openaire_org_id: str | None
     data_window_start: int
-    data_window_end: int
+    data_window_end: int | None
     library_url: str | None
     oa_guide_url: str | None
     support_email: str | None

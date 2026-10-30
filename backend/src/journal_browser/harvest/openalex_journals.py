@@ -105,7 +105,7 @@ def journal_values(payload: dict[str, Any]) -> dict[str, Any] | None:
         default=None,
     )
     settings = get_settings()
-    window_end = settings.data_window_end or 9999
+    window_end = settings.data_window_end if settings.data_window_end is not None else 9999
     works_2020_plus = sum(
         int(e.get("works_count") or 0)
         for e in counts

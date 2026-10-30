@@ -96,11 +96,14 @@ def _canonical_name(code: str | None, publisher_name: str | None) -> str | None:
 
 
 def durations_overlap(a: Deal, b: Deal) -> bool:
-    """Year-range overlap; open ranges (None ends) overlap generously."""
-    a_end = a.end_year or 9999
-    b_end = b.end_year or 9999
-    a_start = a.start_year or 0
-    b_start = b.start_year or 0
+    """Year-range overlap; open ranges (None ends) overlap generously.
+
+    The year-0 substitution for a NULL start is the intended open-start
+    semantics; 9999 fills an open end the same way."""
+    a_end = a.end_year if a.end_year is not None else 9999
+    b_end = b.end_year if b.end_year is not None else 9999
+    a_start = a.start_year if a.start_year is not None else 0
+    b_start = b.start_year if b.start_year is not None else 0
     return a_start <= b_end and b_start <= a_end
 
 
