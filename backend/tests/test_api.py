@@ -1,52 +1,30 @@
 """Search API tests: corpus cutoff (owner decision 2026-10-23)."""
 
 import pytest
-from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from conftest import requires_db
-from journal_browser.db import get_session
+from conftest import journal_factory, requires_db
 from journal_browser.harvest.denorm import MATERIALIZE_SQL
-from journal_browser.main import app
-from journal_browser.models import Institution, Journal
-
-
-def _journal(issn_l: str, **kw) -> Journal:
-    base = dict(
-        issn_l=issn_l,
-        title=f"Journal {issn_l}",
-        type="journal",
-        is_oa=False,
-        is_in_doaj=False,
-        in_scimago=False,
-        last_active_year=None,
-        works_2020_plus=0,
-    )
-    base.update(kw)
-    return Journal(**base)
+from journal_browser.models import Institution
 
 
 @pytest.fixture
-async def api(db_engine):
+async def api(client, db_engine):
     maker = async_sessionmaker(db_engine, expire_on_commit=False)
-
-    async def _override():
-        async with maker() as session:
-            yield session
-
-    app.dependency_overrides[get_session] = _override
     async with maker() as session:
         session.add_all(
             [
                 # At the cutoff boundary: exactly 4 works stays in.
-                _journal("1111-1111", works_2020_plus=4),
-                _journal("2222-2222", works_2020_plus=1000),
+                journal_factory("1111-1111", works_2020_plus=4, search_text=None),
+                journal_factory("2222-2222", works_2020_plus=1000, search_text=None),
                 # Dropped: 3 works or fewer.
-                _journal("3333-3333", works_2020_plus=3),
-                _journal("4444-4444", works_2020_plus=0),
+                journal_factory("3333-3333", works_2020_plus=3, search_text=None),
+                journal_factory("4444-4444", works_2020_plus=0, search_text=None),
                 # Dropped regardless of works: not a journal type.
-                _journal("5555-5555", type="repository", works_2020_plus=50),
+                journal_factory(
+                    "5555-5555", type="repository", works_2020_plus=50, search_text=None
+                ),
             ]
         )
         await session.commit()
@@ -66,9 +44,7 @@ async def api(db_engine):
             {"iid": home.id},
         )
         await session.commit()
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
-        yield client
-    app.dependency_overrides.clear()
+    return client
 
 
 @requires_db
