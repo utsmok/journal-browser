@@ -17,12 +17,12 @@ from journal_browser.harvest.common import (
     get_active_institutions,
     resolve_institution,
 )
+from journal_browser.harvest.curation_report import render_curation_report
 from journal_browser.harvest.denorm import refresh_deal_flags
 from journal_browser.harvest.reconcile import (
     derive_nl_deal_coverage,
     enforce_unique_agreement_data,
     reconcile_deals,
-    render_curation_report,
 )
 
 
