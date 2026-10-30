@@ -1,32 +1,20 @@
 """Feedback system: public intake, admin triage, page-data dump storage."""
 
 import pytest
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import async_sessionmaker
+from httpx import AsyncClient
 
 from conftest import requires_db
 from journal_browser.config import reset_settings_cache
-from journal_browser.db import get_session
-from journal_browser.main import app
 
 PASSWORD = "test-admin-pw"
 
 
 @pytest.fixture
-async def feedback_api(db_engine, monkeypatch, tmp_path):
+async def feedback_api(client, monkeypatch, tmp_path):
     monkeypatch.setenv("JB_ADMIN_PASSWORD", PASSWORD)
     monkeypatch.setenv("JB_SETTINGS_YAML", str(tmp_path / "settings.yaml"))
     reset_settings_cache()
-    maker = async_sessionmaker(db_engine, expire_on_commit=False)
-
-    async def _override():
-        async with maker() as session:
-            yield session
-
-    app.dependency_overrides[get_session] = _override
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
-        yield client
-    app.dependency_overrides.clear()
+    return client
     reset_settings_cache()
 
 
