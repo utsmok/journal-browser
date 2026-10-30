@@ -1,25 +1,17 @@
 """/{code}/meta/freshness serves the institution display block from its row."""
 
 import pytest
-from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from conftest import requires_db
-from journal_browser.db import get_session
-from journal_browser.main import app
 from journal_browser.models import Institution
 
 
 @requires_db
 @pytest.fixture
-async def meta_api(db_engine):
+async def meta_api(client, db_engine):
     maker = async_sessionmaker(db_engine, expire_on_commit=False)
 
-    async def _override():
-        async with maker() as session:
-            yield session
-
-    app.dependency_overrides[get_session] = _override
     async with maker() as session:
         session.add(
             Institution(
@@ -33,11 +25,7 @@ async def meta_api(db_engine):
             )
         )
         await session.commit()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        yield client
-    app.dependency_overrides.pop(get_session, None)
+    return client
 
 
 @pytest.mark.anyio
