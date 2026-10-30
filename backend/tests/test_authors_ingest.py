@@ -8,6 +8,7 @@ from journal_browser.harvest.authors import (
     augment_faculty,
     author_id_index,
     build_edge_map,
+    canonical_confirmed,
     derive_identity,
     is_confirmed,
     primary_topic_from_venues,
@@ -113,6 +114,18 @@ def test_augment_faculty_no_path():
     data = _data()
     author = {"pure_uuid": "b-uuid", "orcid": None, "openalex_author_id": None}
     assert augment_faculty(author, data) is None
+
+
+def test_canonical_confirmed_via_person_orgs():
+    data = _data()
+    author = {"pure_uuid": "b-uuid", "orcid": "0000-0002-1234", "openalex_author_id": None}
+    data.person_orcids = {"0000-0002-1234": 11}
+    data.person_orgs = {11: [2]}  # TNW chains to the UT root (ROR match)
+    assert canonical_confirmed(author, data, UT_ROR) is True
+    data.person_orgs = {11: [4]}  # Delft resolves elsewhere
+    assert canonical_confirmed(author, data, UT_ROR) is False
+    data.person_orgs = {}
+    assert canonical_confirmed(author, data, UT_ROR) is False
 
 
 def test_is_confirmed_branches():
@@ -262,7 +275,7 @@ async def test_ingest_idempotent(db, institution_factory, monkeypatch):
     stats = await run_ingest(db, inst.id, None, inst.ror)
     await db.commit()
     assert stats == {
-        "authors": 2, "edges": 3, "with_faculty": 2, "with_research_group": 1, "confirmed": 1,
+        "authors": 2, "edges": 3, "with_faculty": 2, "with_research_group": 1, "confirmed": 2,
     }
 
     a_rows = {row.pure_uuid: row for row in (await db.execute(select(Author))).scalars()}
@@ -275,11 +288,11 @@ async def test_ingest_idempotent(db, institution_factory, monkeypatch):
     assert a_rows["a-uuid"].last_pub_year == 2023
     # Physics 1 vs Chemistry 1 tie -> alphabetical.
     assert a_rows["a-uuid"].primary_topic == "Chemistry"
-    # b: no CERIF affiliations (unconfirmed), faculty via canonical-person
-    # fallback.
+    # b: no CERIF affiliations, faculty + confirmation via canonical-person
+    # fallback (person_orgs[12] resolves to the UT root).
     assert a_rows["b-uuid"].faculty == TNW
     assert a_rows["b-uuid"].n_works == 1
-    assert a_rows["b-uuid"].confirmed is False
+    assert a_rows["b-uuid"].confirmed is True
     assert a_rows["b-uuid"].last_pub_year == 2023
     assert a_rows["b-uuid"].primary_topic == "Physics"
 

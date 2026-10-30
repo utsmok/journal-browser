@@ -262,11 +262,41 @@ def is_confirmed(payload: dict[str, Any], data: SourceData, ror: str | None) -> 
     target = _ror_id(ror)
     if target is None or not payload:
         return False
-    for org_id in _affiliation_org_ids(payload, data.orgs):
-        for _depth, ancestor_id in data.tree.get(org_id, []):
-            if _ror_id(data.org_rors.get(ancestor_id)) == target:
-                return True
-    return False
+    return _resolves_to_ror(
+        _affiliation_org_ids(payload, data.orgs), data, target
+    )
+
+
+def canonical_confirmed(
+    author: dict[str, Any], data: SourceData, ror: str | None
+) -> bool:
+    """Confirmed affiliated via the canonical-person path (person_org arms,
+    including work-level affiliations), reached when the author's own CERIF
+    payload carries no resolving affiliation — Pure person profiles can lose
+    their affiliations while the work records keep them."""
+    target = _ror_id(ror)
+    if target is None:
+        return False
+    return _resolves_to_ror(
+        (
+            org_id
+            for person_id in canonical_person_ids(author, data)
+            for org_id in data.person_orgs.get(person_id, [])
+        ),
+        data,
+        target,
+    )
+
+
+def _resolves_to_ror(
+    org_ids: Any, data: SourceData, target: str
+) -> bool:
+    """True when any org's closure (self at depth 0) reaches `target` ROR."""
+    return any(
+        _ror_id(data.org_rors.get(ancestor_id)) == target
+        for org_id in org_ids
+        for _depth, ancestor_id in data.tree.get(org_id, [])
+    )
 
 
 def topic_mass(
@@ -399,6 +429,8 @@ async def ingest_authors(
             stats["with_research_group"] += 1
         uuid = author["pure_uuid"]
         confirmed = is_confirmed(payload, data, inst_ror)
+        if not confirmed:
+            confirmed = canonical_confirmed(author, data, inst_ror)
         if confirmed:
             stats["confirmed"] += 1
         author_rows.append(
