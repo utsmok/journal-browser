@@ -13,7 +13,9 @@ jobs:
         working-directory: backend
     services:
       postgres:
-        image: postgres:17-alpine
+        # pgvector build: alembic 0020+ needs CREATE EXTENSION vector, and
+        # the compose db image ships it too (db/Dockerfile).
+        image: pgvector/pgvector:pg17
         env:
           POSTGRES_USER: journal
           POSTGRES_PASSWORD: journal
@@ -53,6 +55,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
       - run: npm run lint
       - run: npm run format:check
       - run: npm run build
