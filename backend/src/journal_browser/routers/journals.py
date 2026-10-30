@@ -38,9 +38,8 @@ from ..schemas import (
     StatsYear,
     WorksPage,
 )
-from ..services import detail_enrichment
+from ..services import detail_enrichment, work_sources
 from ..services import search as search_service
-from ..services import ut_metadata as ut_metadata_service
 from ..services.deal_coverage import deal_institution_join, dj_scope
 from ..vocab import OaType
 from .deals import DEAL_FIELDS
@@ -227,7 +226,7 @@ async def journal_works(
     known = await session.scalar(select(Journal.issn_l).where(Journal.issn_l == issn_l.upper()))
     if known is None or _is_ignored(known):
         raise HTTPException(status_code=404, detail="journal not found")
-    ut_rows = await ut_metadata_service.ut_works_for_journal(known)
+    ut_rows = await work_sources.works_for_journal(session, institution, known)
     return WorksPage(
         **await detail_enrichment.list_works(
             session, known, institution, page, page_size, ut_rows=ut_rows
@@ -355,7 +354,7 @@ async def journal_detail(
 
     summary_stats = journal.summary_stats or {}
     openalex_info = await detail_enrichment.openalex_info(session, journal.issn_l)
-    ut_rows = await ut_metadata_service.ut_works_for_journal(journal.issn_l)
+    ut_rows = await work_sources.works_for_journal(session, institution, journal.issn_l)
     return JournalDetailResponse(
         journal=JournalListItem(
             issn_l=journal.issn_l,

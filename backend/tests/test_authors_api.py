@@ -302,7 +302,7 @@ async def test_profile_openalex_only_merge(authors_api, db, monkeypatch):
     )
     await db.commit()
 
-    async def _fake(_aids, dsn=None):
+    async def _fake(_session, _institution, _author):
         return [
             # Duplicate of the local w-2024 by DOI: dropped (prefix noise on
             # purpose — normalize_doi must fold it).
@@ -357,7 +357,7 @@ async def test_profile_openalex_only_merge(authors_api, db, monkeypatch):
             },
         ]
 
-    monkeypatch.setattr("journal_browser.services.authors.ut_openalex_only_works_for_author", _fake)
+    monkeypatch.setattr("journal_browser.services.authors.openalex_only_works_for_author", _fake)
     body = (await authors_api.get("/api/v1/ut/authors/alice-uuid")).json()
     works = body["works"]
     assert [w["pure_uuid"] for w in works if w["in_pure"]] == [

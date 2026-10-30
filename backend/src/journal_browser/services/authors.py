@@ -14,7 +14,8 @@ from ..harvest.authors import topic_mass
 from ..models import Author, AuthorWork, Institution, Journal, JournalFlags, Work
 from .facets import author_facets
 from .search import _like, _oa_type, base_query
-from .ut_metadata import normalize_doi, ut_openalex_only_works_for_author
+from .ut_metadata import normalize_doi
+from .work_sources import openalex_only_works_for_author
 from .works_query import (
     YEAR_BUCKETS,
     author_works_join,
@@ -336,7 +337,7 @@ async def _similar_sections(
 
 
 async def _openalex_only_items(
-    institution: Institution, author: Author, work_rows: Any
+    session: AsyncSession, institution: Institution, author: Author, work_rows: Any
 ) -> list[dict[str, Any]]:
     """OpenAlex-attributed works the Pure population does not hold, as
     profile work items with in_pure False, appended after the local ones.
@@ -344,9 +345,9 @@ async def _openalex_only_items(
     Quality gates keep the merge honest: the institution's publication-year
     window applies, excluded work types (preprints/books) drop out, and a
     DOI that matches a local work is skipped (same publication; the Pure
-    copy stays the display record). Unreachable source degrades to a
+    copy stays the display record). Unavailable source degrades to a
     Pure-only page."""
-    rows = await ut_openalex_only_works_for_author([a for a in (author.openalex_ids or []) if a])
+    rows = await openalex_only_works_for_author(session, institution, author)
     if not rows:
         return []
     year_end = institution.data_window_end if institution.data_window_end is not None else 9999
@@ -507,5 +508,5 @@ async def author_profile(
             }
             for row in work_rows
         ]
-        + await _openalex_only_items(institution, author, work_rows),
+        + await _openalex_only_items(session, institution, author, work_rows),
     }
