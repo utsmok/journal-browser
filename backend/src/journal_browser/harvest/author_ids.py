@@ -404,8 +404,10 @@ async def resolve_author_ids(
     updates = [u for u in updates if u["external_id"]]
     candidate_rows = sum(1 for u in updates if u["status"] == "candidate")
     confirmed_rows = len(updates) - candidate_rows
-    if updates:
-        stmt = pg_insert(AuthorIdentity).values(updates)
+    # asyncpg caps one statement at 32767 bound params; each row binds 10.
+    for start in range(0, len(updates), 2000):
+        chunk = updates[start : start + 2000]
+        stmt = pg_insert(AuthorIdentity).values(chunk)
         await session.execute(
             stmt.on_conflict_do_update(
                 index_elements=[
