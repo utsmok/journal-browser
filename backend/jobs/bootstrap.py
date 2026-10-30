@@ -67,14 +67,25 @@ GLOBAL_DEPS: dict[str, list[str]] = {
 #: Per-institution layer, in order. Every step takes --institution CODE.
 INST_STEPS: list[tuple[str, list[str]]] = [
     ("pure", ["jobs/harvest_pure.py", "--full-sweep"]),
+    # CERIF enrichment + pure author lists (work_pure_authors) for the
+    # standalone author path; orgunits + persons build the org tree and
+    # the roster canon. Independent of the works sweep; sequenced after it
+    # so the OAI endpoint sees one heavy client at a time.
+    ("pure-cerif", ["jobs/harvest_pure.py", "--cerif"]),
+    ("pure-entities", ["jobs/harvest_pure_entities.py"]),
     ("enrich", ["jobs/enrich_works.py"]),
     ("openaire", ["jobs/harvest_openaire.py"]),
     ("stats", ["jobs/harvest_stats.py"]),
     # Participation derive + coverage flags: makes onboarding (one row +
     # this layer) self-sufficient without rerunning global deal merging.
     ("reconcile", ["jobs/reconcile.py"]),
-    # Author roster from the external canonical-works DB (skips cleanly
-    # without a DSN; onboarding needs one institutions row + this layer).
+    # Normalized store over the harvested OpenAlex works (works_stats
+    # payloads): authorship edges, openalex-only merge, journal works tab.
+    ("openalex-works", ["jobs/build_openalex_works.py"]),
+    # Author identity resolution (the ported cascade; runs with no DSN).
+    ("author-ids", ["jobs/resolve_author_ids.py"]),
+    # Author roster + edges from the source adapter (local tables by
+    # default; the ut-metadata DSN is an opt-in accelerator).
     ("authors", ["jobs/ingest_authors.py"]),
 ]
 
@@ -82,12 +93,16 @@ INST_STEPS: list[tuple[str, list[str]]] = [
 #: "step:code"; cross-layer deps name global steps.
 INST_DEPS: dict[str, list[str]] = {
     "pure": [],
+    "pure-cerif": ["pure"],
+    "pure-entities": ["pure"],
     "enrich": ["pure"],
     # DOI-to-work matching reads the institution's works
     "openaire": ["pure", "deals-issn-l"],
     "stats": ["enrich", "openaire", "openapc", "scimagojr", "flags"],
     "reconcile": ["stats", "deals-reconcile"],
-    "authors": ["reconcile"],
+    "openalex-works": ["stats"],
+    "author-ids": ["openalex-works", "pure-entities", "pure-cerif"],
+    "authors": ["author-ids", "reconcile"],
 }
 
 #: Institution-neutral, so it runs once after every stats layer.

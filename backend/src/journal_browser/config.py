@@ -110,6 +110,14 @@ class Settings(BaseSettings):
     pure_oai_base_url: str = "https://ris.utwente.nl/ws/oai"
     pure_oai_min_spacing: float = 1.0
 
+    # Author identity source: "local" (journal-browser's own harvests —
+    # the standalone default) or "utmd" (the ut-metadata DSN accelerator,
+    # requires a DSN on the institution row or the global fallback).
+    author_source: str = "local"
+    # Per-author OpenAlex works-enrichment sweep budget (authors per run,
+    # 50 batched A-ids per keyed call). 0 disables the sweep.
+    openalex_author_sweep_max_authors: int = 2000
+
     # Admin-curated ISSN ignore-list: treated as nonexistent on every
     # journal surface (search, facets, similar, author venues; detail 404s).
     ignored_issns: list[str] = []

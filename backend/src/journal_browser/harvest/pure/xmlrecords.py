@@ -3,6 +3,7 @@ import re
 import xml.etree.ElementTree as ET
 from typing import Any
 
+from .cerif import publication_contributors
 from .doi import extract_doi
 from .transport import DC_NS, DCT_NS, PureOaiError, oai_tag
 
@@ -56,7 +57,8 @@ def pure_uuid_for(oai_identifier: str) -> str:
 
 
 def _cerif_publication_fields(metadata_el: ET.Element | None) -> dict[str, Any]:
-    """Targeted CERIF Publication extraction: the fields works needs.
+    """Targeted CERIF Publication extraction: the fields works needs plus
+    the author list (the standalone author path's pure-side edges).
 
     The full generic CERIF mapper stays in ut-metadata; everything else in
     the record remains available verbatim via payload["metadata_xml"].
@@ -89,6 +91,9 @@ def _cerif_publication_fields(metadata_el: ET.Element | None) -> dict[str, Any]:
                         for n in sub:
                             if local(n) == "Name" and (t := " ".join(n.itertext()).strip()):
                                 fields["publisher"] = t
+    authors = publication_contributors(root, "Author")
+    if authors:
+        fields["authors"] = authors
     return fields
 
 

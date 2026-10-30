@@ -13,6 +13,8 @@ from .deals import Deal, DealInstitution, DealJournal
 from .evidence import ApcEvidence, InstitutionTrend, InstitutionWorksStats, JournalApcAggregate
 from .harvest import HarvestRun, HarvestState, RawFile, SourceRecord
 from .journals import Journal, JournalFlags, ScimagojrMetric
+from .openalex import AuthorIdentity, OpenalexWork
+from .pure import PureOrg, PureOrgParent, PurePerson, WorkPureAuthor
 from .reference import Institution, IssnMap, OpenalexPublisher, Publisher
 from .works import WORK_IDENTITY_UQ, Work, WorkIdentity
 
@@ -20,6 +22,7 @@ __all__ = [
     "WORK_IDENTITY_UQ",
     "ApcEvidence",
     "Author",
+    "AuthorIdentity",
     "AuthorWork",
     "Base",
     "CacheEpoch",
@@ -40,11 +43,16 @@ __all__ = [
     "Limitation",
     "ManualOverride",
     "OpenalexPublisher",
+    "OpenalexWork",
     "Publisher",
+    "PureOrg",
+    "PureOrgParent",
+    "PurePerson",
     "RawFile",
     "ScimagojrMetric",
     "SourceRecord",
     "Work",
     "WorkIdentity",
+    "WorkPureAuthor",
     "_tstamp",
 ]

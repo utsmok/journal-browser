@@ -2,11 +2,12 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...models import Work
+from .cerif import ref_uuid
 from .doi import extract_doi
 from .transport import PureOaiError
 from .xmlrecords import (
@@ -90,6 +91,69 @@ async def upsert_work(
         )
     )
     await session.execute(stmt)
+
+
+async def store_pure_work_authors(
+    session: AsyncSession,
+    work_uuid: str,
+    authors: list[dict[str, Any]],
+    *,
+    institution_id: int,
+) -> int:
+    """Full-replace one work's pure authorship edges (work_pure_authors).
+
+    Person and affiliation refs are CERIF relative ids
+    ('openaire_cris_persons/<uuid>'); both collapse to the bare uuid. The
+    flattened primary affiliation_id is the fallback when the affiliations
+    list is empty (ut-metadata collab._WORK_ORG_SQL's COALESCE). Rows for
+    works the institution does not hold are skipped — the FK onto works
+    must never fire (a cerif-only record can precede its works row; the
+    backfill job covers those)."""
+    from ...models import Work, WorkPureAuthor
+
+    exists = await session.scalar(
+        select(Work.pure_uuid).where(
+            Work.institution_id == institution_id, Work.pure_uuid == work_uuid
+        )
+    )
+    if exists is None:
+        return 0
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for position, author in enumerate(authors):
+        person_uuid = ref_uuid(author.get("person_id"))
+        if not person_uuid or person_uuid in seen:
+            continue
+        seen.add(person_uuid)
+        affiliations = [
+            ref
+            for ref in (
+                ref_uuid(aff.get("affiliation_id")) for aff in author.get("affiliations") or []
+            )
+            if ref
+        ]
+        if not affiliations and author.get("affiliation_id"):
+            affiliations = [ref_uuid(author["affiliation_id"])]
+        rows.append(
+            {
+                "institution_id": institution_id,
+                "work_pure_uuid": work_uuid,
+                "person_uuid": person_uuid,
+                "position": position,
+                "first_names": (author.get("first_names") or "").strip() or None,
+                "family_names": (author.get("family_names") or "").strip() or None,
+                "affiliations": affiliations,
+            }
+        )
+    await session.execute(
+        delete(WorkPureAuthor).where(
+            WorkPureAuthor.institution_id == institution_id,
+            WorkPureAuthor.work_pure_uuid == work_uuid,
+        )
+    )
+    if rows:
+        await session.execute(pg_insert(WorkPureAuthor), rows)
+    return len(rows)
 
 
 async def backfill_cerif(

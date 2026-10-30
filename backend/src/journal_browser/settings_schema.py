@@ -125,6 +125,23 @@ SETTINGS_REGISTRY: list[FieldDef] = [
         "Minimum seconds between OAI-PMH requests.",
     ),
     _f(
+        "author_source",
+        "global",
+        "string",
+        "Author data source",
+        "local (this deployment's own Pure + OpenAlex harvests; the "
+        "standalone default) or utmd (the ut-metadata Postgres DSN, a "
+        "Twente-local accelerator).",
+    ),
+    _f(
+        "openalex_author_sweep_max_authors",
+        "global",
+        "number",
+        "Author works sweep budget",
+        "Max authors per run for the per-author OpenAlex works enrichment "
+        "sweep (50 batched ids per keyed call); 0 disables the sweep.",
+    ),
+    _f(
         "landing_dir",
         "global",
         "string",

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...config import get_settings
 from ...ingest import IngestSession
-from .store import backfill_cerif, retire_absent, upsert_work
+from .store import backfill_cerif, retire_absent, store_pure_work_authors, upsert_work
 from .transport import (
     CRIS_PUBLICATIONS_SET,
     DEFAULT_YEAR_SET,
@@ -71,6 +71,17 @@ async def _ingest_oai_record(
             payload["cerif"],
             institution_id=institution_id,
         )
+        authors = payload["cerif"].get("authors") or []
+        if authors:
+            # Pure's own author list (the standalone author path's
+            # pure-side edges). Works-absent records skip silently; the
+            # backfill job covers them once the works sweep lands.
+            await store_pure_work_authors(
+                ingest.session,
+                pure_uuid_for(oai_identifier),
+                authors,
+                institution_id=institution_id,
+            )
     return kind
 
 

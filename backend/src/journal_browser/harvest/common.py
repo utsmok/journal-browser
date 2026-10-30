@@ -86,6 +86,17 @@ def canonical_oa_status(raw: str | None) -> str | None:
     return raw if raw in OA_STATUSES else "closed"
 
 
+def normalize_doi(doi: str | None) -> str | None:
+    """Lower-cased bare DOI form for cross-source dedupe ('', None -> None)."""
+    if not doi:
+        return None
+    value = doi.strip().lower()
+    for prefix in ("https://doi.org/", "http://doi.org/", "doi.org/", "doi:"):
+        if value.startswith(prefix):
+            value = value[len(prefix) :]
+    return value or None
+
+
 async def fetch_bytes(
     url: str,
     *,
