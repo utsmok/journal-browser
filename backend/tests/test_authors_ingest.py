@@ -2,7 +2,7 @@
 affiliation confirmation, primary topic) and an end-to-end idempotency run
 against the local DB with a fake source."""
 
-from conftest import requires_db
+from conftest import journal_factory, requires_db
 from journal_browser.harvest.authors import (
     SourceData,
     augment_faculty,
@@ -13,7 +13,7 @@ from journal_browser.harvest.authors import (
     primary_topic_from_venues,
 )
 from journal_browser.harvest.authors import ingest_authors as run_ingest
-from journal_browser.models import Author, AuthorWork, HarvestRun, Journal, Work
+from journal_browser.models import Author, AuthorWork, HarvestRun, Work
 
 UT_UUID = "ut-root-uuid"
 UT_ROR = "https://ror.org/006hf6230"
@@ -214,20 +214,6 @@ def _fixture_source() -> SourceData:
     return data
 
 
-def _journal(issn_l: str, topics: list) -> Journal:
-    return Journal(
-        issn_l=issn_l,
-        title=f"Journal {issn_l}",
-        type="journal",
-        is_oa=False,
-        is_in_doaj=False,
-        in_scimago=False,
-        works_2020_plus=10,
-        search_text=f"Journal {issn_l}",
-        topics=topics,
-    )
-
-
 @requires_db
 async def test_ingest_idempotent(db, institution_factory, monkeypatch):
     from datetime import UTC, datetime
@@ -245,8 +231,8 @@ async def test_ingest_idempotent(db, institution_factory, monkeypatch):
     await db.flush()
     db.add_all(
         [
-            _journal("1111-1111", [{"id": "T1", "display_name": "Physics"}]),
-            _journal("2222-2221", [{"id": "T2", "display_name": "Chemistry"}]),
+            journal_factory("1111-1111", topics=[{"id": "T1", "display_name": "Physics"}]),
+            journal_factory("2222-2221", topics=[{"id": "T2", "display_name": "Chemistry"}]),
             Work(
                 institution_id=inst.id,
                 pure_uuid="w1",
