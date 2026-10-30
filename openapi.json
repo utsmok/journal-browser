@@ -826,6 +826,130 @@
         }
       }
     },
+    "/api/v1/admin/author-identities": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Author Identities",
+        "description": "Identity rows, newest activity first, with the local author name.",
+        "operationId": "list_author_identities_api_v1_admin_author_identities_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "institution",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "institution code",
+              "title": "Institution"
+            },
+            "description": "institution code"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuthorIdentityAdminOut"
+                  },
+                  "title": "Response List Author Identities Api V1 Admin Author Identities Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Set Identity Status",
+        "description": "Flip one identity row (institution + author + source + external id).\n\nThe row is keyed by its full PK, sent in the body. 'rejected' is\nsticky: re-runs keep it out of authors.openalex_ids and never\nre-promote it. 'confirmed' forces the id into the next ingest's\nadditive openalex_ids build even if the cascade demotes it.",
+        "operationId": "set_identity_status_api_v1_admin_author_identities_put",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdentityStatusIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorIdentityAdminOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/feedback": {
       "post": {
         "tags": [
@@ -3392,6 +3516,111 @@
         ],
         "title": "AuthorFacet"
       },
+      "AuthorIdentityAdminOut": {
+        "properties": {
+          "institution_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institution Code"
+          },
+          "author_pure_uuid": {
+            "type": "string",
+            "title": "Author Pure Uuid"
+          },
+          "author_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author Name"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "external_id": {
+            "type": "string",
+            "title": "External Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/IdentityStatus"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "n_works": {
+            "type": "integer",
+            "title": "N Works"
+          },
+          "orcid_corroborated": {
+            "type": "boolean",
+            "title": "Orcid Corroborated"
+          },
+          "evidence": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Evidence"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "institution_code",
+          "author_pure_uuid",
+          "author_name",
+          "source",
+          "external_id",
+          "status",
+          "method",
+          "confidence",
+          "n_works",
+          "orcid_corroborated",
+          "evidence",
+          "updated_at"
+        ],
+        "title": "AuthorIdentityAdminOut",
+        "description": "One identity-cascade row for the admin review list."
+      },
       "AuthorItem": {
         "properties": {
           "pure_uuid": {
@@ -5347,6 +5576,49 @@
         ],
         "title": "HarvestStatus",
         "description": "harvest_runs.status (ck_harvest_runs_status)."
+      },
+      "IdentityStatus": {
+        "type": "string",
+        "enum": [
+          "confirmed",
+          "candidate",
+          "rejected"
+        ],
+        "title": "IdentityStatus",
+        "description": "author_identities.status (ck_author_identities_status)."
+      },
+      "IdentityStatusIn": {
+        "properties": {
+          "institution_id": {
+            "type": "integer",
+            "title": "Institution Id"
+          },
+          "author_pure_uuid": {
+            "type": "string",
+            "title": "Author Pure Uuid"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "default": "openalex"
+          },
+          "external_id": {
+            "type": "string",
+            "title": "External Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "institution_id",
+          "author_pure_uuid",
+          "external_id",
+          "status"
+        ],
+        "title": "IdentityStatusIn"
       },
       "InstitutionMetrics": {
         "properties": {

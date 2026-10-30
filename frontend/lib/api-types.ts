@@ -247,6 +247,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/author-identities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Author Identities
+         * @description Identity rows, newest activity first, with the local author name.
+         */
+        get: operations["list_author_identities_api_v1_admin_author_identities_get"];
+        /**
+         * Set Identity Status
+         * @description Flip one identity row (institution + author + source + external id).
+         *
+         *     The row is keyed by its full PK, sent in the body. 'rejected' is
+         *     sticky: re-runs keep it out of authors.openalex_ids and never
+         *     re-promote it. 'confirmed' forces the id into the next ingest's
+         *     additive openalex_ids build even if the cascade demotes it.
+         */
+        put: operations["set_identity_status_api_v1_admin_author_identities_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/feedback": {
         parameters: {
             query?: never;
@@ -794,6 +823,37 @@ export interface components {
             value: string;
             /** Count */
             count: number;
+        };
+        /**
+         * AuthorIdentityAdminOut
+         * @description One identity-cascade row for the admin review list.
+         */
+        AuthorIdentityAdminOut: {
+            /** Institution Code */
+            institution_code: string | null;
+            /** Author Pure Uuid */
+            author_pure_uuid: string;
+            /** Author Name */
+            author_name: string | null;
+            /** Source */
+            source: string;
+            /** External Id */
+            external_id: string;
+            status: components["schemas"]["IdentityStatus"];
+            /** Method */
+            method: string | null;
+            /** Confidence */
+            confidence: number | null;
+            /** N Works */
+            n_works: number;
+            /** Orcid Corroborated */
+            orcid_corroborated: boolean;
+            /** Evidence */
+            evidence: {
+                [key: string]: unknown;
+            };
+            /** Updated At */
+            updated_at: string | null;
         };
         /** AuthorItem */
         AuthorItem: {
@@ -1441,6 +1501,28 @@ export interface components {
          * @enum {string}
          */
         HarvestStatus: "running" | "completed" | "failed";
+        /**
+         * IdentityStatus
+         * @description author_identities.status (ck_author_identities_status).
+         * @enum {string}
+         */
+        IdentityStatus: "confirmed" | "candidate" | "rejected";
+        /** IdentityStatusIn */
+        IdentityStatusIn: {
+            /** Institution Id */
+            institution_id: number;
+            /** Author Pure Uuid */
+            author_pure_uuid: string;
+            /**
+             * Source
+             * @default openalex
+             */
+            source: string;
+            /** External Id */
+            external_id: string;
+            /** Status */
+            status: string;
+        };
         /**
          * InstitutionMetrics
          * @description OpenAlex view of this institution's publications in this journal,
@@ -2693,6 +2775,73 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_author_identities_api_v1_admin_author_identities_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                /** @description institution code */
+                institution?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorIdentityAdminOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_identity_status_api_v1_admin_author_identities_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdentityStatusIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorIdentityAdminOut"];
+                };
             };
             /** @description Validation Error */
             422: {
