@@ -6,40 +6,18 @@ import base64
 import json
 
 import pytest
-from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from conftest import requires_db
-from journal_browser.db import get_session
+from conftest import journal_factory, requires_db
 from journal_browser.harvest.denorm import BROWSE_EXCLUDED_SQL, MATERIALIZE_SQL
-from journal_browser.main import app
-from journal_browser.models import Institution, IssnMap, Journal, JournalApcAggregate
-
-
-def _journal(issn_l: str, **kw) -> Journal:
-    base = dict(
-        issn_l=issn_l,
-        title=f"Journal {issn_l}",
-        type="journal",
-        is_oa=False,
-        is_in_doaj=False,
-        in_scimago=False,
-        works_2020_plus=10,
-    )
-    base.update(kw)
-    return Journal(**base)
+from journal_browser.models import Institution, IssnMap, JournalApcAggregate
 
 
 @pytest.fixture
-async def api(db_engine):
+async def api(client, db_engine):
     maker = async_sessionmaker(db_engine, expire_on_commit=False)
 
-    async def _override():
-        async with maker() as session:
-            yield session
-
-    app.dependency_overrides[get_session] = _override
     async with db_engine.begin() as conn:
         # create_all skips migration-side extensions; the trigram operators
         # the fuzzy fallback needs live in pg_trgm (added by migration 0004).
@@ -49,127 +27,143 @@ async def api(db_engine):
             [
                 # Publisher/ISSN fixture: issn_l "1234-5678", print variant
                 # "5678-4321" resolves via IssnMap.
-                _journal(
+                journal_factory(
                     "1234-5678",
                     title="Journal of Widgets",
                     publisher_name="Massachusetts Institute of Technology Press",
                     search_text="Journal of Widgets",
                 ),
                 # Fuzzy fixture: near-miss queries must hit via trigram.
-                _journal(
+                journal_factory(
                     "1111-1111",
                     title="Bioinformatics Quarterly",
                     search_text="Bioinformatics Quarterly",
                 ),
                 # Topic fixture.
-                _journal(
+                journal_factory(
                     "2222-2222",
                     title="Quantum Studies",
                     topics=[{"display_name": "Quantum Chemistry"}],
                     search_text="Quantum Studies",
                 ),
                 # OA-type fixtures.
-                _journal("3333-3333", title="Gold Journal", is_in_doaj=True),
-                _journal(
+                journal_factory(
+                    "3333-3333", title="Gold Journal", is_in_doaj=True, search_text=None
+                ),
+                journal_factory(
                     "4444-4444",
                     title="Diamond Journal",
                     is_in_doaj=True,
                     doaj_in_doaj=True,
                     doaj_has_apc=False,
-                ),
+                    search_text=None,
+            ),
                 # DOAJ canon gold: DOAJ itself declares an APC.
-                _journal(
+                journal_factory(
                     "3030-3030",
                     title="Doaj Gold Journal",
                     is_oa=True,
                     doaj_in_doaj=True,
                     doaj_has_apc=True,
-                ),
-                _journal("5555-5555", title="Hybrid Journal"),
-                _journal("6666-6666", title="Subscription Journal"),
+                    search_text=None,
+            ),
+                journal_factory("5555-5555", title="Hybrid Journal", search_text=None),
+                journal_factory("6666-6666", title="Subscription Journal", search_text=None),
                 # Fully-OA per OpenAlex but missing from DOAJ (the MDPI
                 # Water case): priced -> gold; unpriced takes the color
                 # observed from recent works, falling back through the
                 # deal to subscription when nothing else says OA.
-                _journal("2323-2323", title="Water Journal", is_oa=True, latest_apc_euro=2500),
-                _journal(
+                journal_factory(
+                    "2323-2323", title="Water Journal", is_oa=True, latest_apc_euro=2500,
+                    search_text=None,
+                ),
+                journal_factory(
                     "2424-2424",
                     title="Free OA Journal",
                     is_oa=True,
                     oa_status_observed="diamond",
-                ),
-                _journal(
+                    search_text=None,
+            ),
+                journal_factory(
                     "2626-2626",
                     title="Observed Gold Journal",
                     is_oa=True,
                     oa_status_observed="gold",
-                ),
-                _journal(
+                    search_text=None,
+            ),
+                journal_factory(
                     "2727-2727",
                     title="Observed Closed Covered Journal",
                     is_oa=True,
                     oa_status_observed="closed",
+                    search_text=None,
+            ),
+                journal_factory(
+                    "2828-2828", title="Unobserved OA Journal", is_oa=True, search_text=None
                 ),
-                _journal("2828-2828", title="Unobserved OA Journal", is_oa=True),
                 # Similar fixtures.
-                _journal(
+                journal_factory(
                     "7777-7777",
                     title="Similar Strong",
                     topics=[{"display_name": "A"}, {"display_name": "B"}],
                     summary_stats={"two_yr_mean_citedness": "5.0"},
-                ),
-                _journal(
+                    search_text=None,
+            ),
+                journal_factory(
                     "8888-8888",
                     title="Similar Weak",
                     topics=[{"display_name": "A"}],
-                ),
-                _journal(
+                    search_text=None,
+            ),
+                journal_factory(
                     "9999-9999",
                     title="No Shared Topic",
                     topics=[{"display_name": "C"}],
-                ),
-                _journal(
+                    search_text=None,
+            ),
+                journal_factory(
                     "1010-1010",
                     title="Below Cutoff Similar",
                     topics=[{"display_name": "A"}],
                     works_2020_plus=2,
-                ),
+                    search_text=None,
+            ),
                 # Proceedings fixtures: pattern match, no deal, no UT works
                 # -> hidden; deal-covered -> stays; UT works -> stays.
-                _journal(
+                journal_factory(
                     "1212-1212",
                     title="Proceedings of the 2024 Workshop on Widgets",
                     search_text="Proceedings of the 2024 Workshop on Widgets",
                 ),
-                _journal(
+                journal_factory(
                     "1313-1313",
                     title="Conference Abstracts in Medicine",
                     search_text="Conference Abstracts in Medicine",
                 ),
-                _journal(
+                journal_factory(
                     "1414-1414",
                     title="Annual Symposium Proceedings",
                     search_text="Annual Symposium Proceedings",
                 ),
                 # APC fixtures: two periods for the most-recent test.
-                _journal(
+                journal_factory(
                     "1515-1515",
                     title="Priced Journal",
                     is_in_doaj=True,
                     search_text="Priced Journal",
                 ),
                 # NULL-twoyr pagination fixtures: no summary_stats at all.
-                _journal(
+                journal_factory(
                     "1717-1717",
                     title="Metricless Alpha",
                     search_text="Metricless Alpha Journal",
                 ),
-                _journal(
+                journal_factory(
                     "1818-1818",
                     title="Metricless Beta",
                     search_text="Metricless Beta Journal",
                 ),
-                _journal(
+                journal_factory(
                     "1919-1919",
                     title="Metric Gamma",
                     summary_stats={"two_yr_mean_citedness": "2.5"},
@@ -177,7 +171,7 @@ async def api(db_engine):
                 ),
                 # OpenAlex list-price fixture (no OpenAPC aggregates): the
                 # list endpoint must prefer it, EUR over USD.
-                _journal(
+                journal_factory(
                     "1616-1616",
                     title="Fee Listed Journal",
                     apc_prices=[
@@ -188,7 +182,7 @@ async def api(db_engine):
                 ),
                 # USD-only list price: the display path must convert to EUR
                 # (or keep USD when no rate is available).
-                _journal(
+                journal_factory(
                     "2121-2121",
                     title="Dollar Listed Journal",
                     apc_prices=[{"currency": "USD", "price": 1000}],
@@ -269,9 +263,7 @@ async def api(db_engine):
         # prod); recompute here so the proceedings fixtures get real values.
         await session.execute(BROWSE_EXCLUDED_SQL, {"iid": home.id})
         await session.commit()
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
-        yield client
-    app.dependency_overrides.clear()
+    return client
 
 
 def _issns(body: dict) -> set[str]:
