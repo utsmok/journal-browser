@@ -5,12 +5,9 @@ it. Both endpoints below execute no SQL, so no database override is needed.
 """
 
 import pytest
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from conftest import requires_db
 from journal_browser.config import reset_settings_cache
-from journal_browser.db import get_session
 from journal_browser.main import app
 
 FIXED_PREFIXES = ("/api/v1/admin", "/api/v1/feedback", "/api/v1/docs")
@@ -34,19 +31,10 @@ def test_fixed_prefixes_register_before_institution_scope():
 
 
 @pytest.fixture
-async def bare_client(db_engine, monkeypatch):
+async def bare_client(client, monkeypatch):
     monkeypatch.setenv("JB_ADMIN_PASSWORD", "route-test-pw")
     reset_settings_cache()
-    maker = async_sessionmaker(db_engine, expire_on_commit=False)
-
-    async def _override():
-        async with maker() as session:
-            yield session
-
-    app.dependency_overrides[get_session] = _override
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
-        yield c
-    app.dependency_overrides.clear()
+    return client
     reset_settings_cache()
 
 
