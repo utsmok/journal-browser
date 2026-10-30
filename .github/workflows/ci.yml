@@ -28,7 +28,7 @@ jobs:
     env:
       JB_DATABASE_URL: postgresql+asyncpg://journal:journal@localhost:5433/journalbrowser_test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v5
       - run: uv sync
       - run: uv run ruff check src tests jobs scripts
@@ -47,7 +47,7 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
