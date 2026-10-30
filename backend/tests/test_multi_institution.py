@@ -6,7 +6,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from conftest import requires_db
+from conftest import journal_factory, requires_db
 from journal_browser.db import get_session
 from journal_browser.main import app
 from journal_browser.models import (
@@ -14,25 +14,9 @@ from journal_browser.models import (
     DealInstitution,
     DealJournal,
     HarvestRun,
-    Journal,
     JournalFlags,
     Publisher,
 )
-
-
-def _journal(issn_l: str, **kw) -> Journal:
-    base = dict(
-        issn_l=issn_l,
-        title=f"Journal {issn_l}",
-        type="journal",
-        is_oa=False,
-        is_in_doaj=False,
-        in_scimago=False,
-        works_2020_plus=10,
-        search_text=f"Journal {issn_l}",
-    )
-    base.update(kw)
-    return Journal(**base)
 
 
 @pytest.fixture
@@ -61,9 +45,9 @@ async def multi_api(db, institution_factory):
         await session.flush()
         session.add_all(
             [
-                _journal("1234-5678", title="Shared Corpus Journal"),
-                _journal("2222-2222", title="RUG Only Corpus"),
-                _journal("3333-3333", title="Override Coverage Journal"),
+                journal_factory("1234-5678", title="Shared Corpus Journal"),
+                journal_factory("2222-2222", title="RUG Only Corpus"),
+                journal_factory("3333-3333", title="Override Coverage Journal"),
             ]
         )
         await session.flush()
