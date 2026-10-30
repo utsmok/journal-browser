@@ -5,14 +5,13 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from conftest import requires_db
+from conftest import journal_factory, requires_db
 from journal_browser.db import get_session
 from journal_browser.main import app
 from journal_browser.models import (
     Author,
     AuthorWork,
     HarvestRun,
-    Journal,
     JournalFlags,
     Work,
 )
@@ -22,21 +21,6 @@ DIM = 384
 
 def _vec(i: int) -> list[float]:
     return [1.0 if j == i else 0.0 for j in range(DIM)]
-
-
-def _journal(issn_l: str, **kw) -> Journal:
-    base = dict(
-        issn_l=issn_l,
-        title=f"Journal {issn_l}",
-        type="journal",
-        is_oa=False,
-        is_in_doaj=False,
-        in_scimago=False,
-        works_2020_plus=10,
-        search_text=f"Journal {issn_l}",
-    )
-    base.update(kw)
-    return Journal(**base)
 
 
 @pytest.fixture
@@ -61,15 +45,15 @@ async def authors_api(db, institution_factory):
     await session.flush()
     session.add_all(
         [
-            _journal("1234-5678", embedding=_vec(0)),  # J1: hybrid (covered)
-            _journal("2222-2221", embedding=_vec(1)),  # J2: subscription
-            _journal(
+            journal_factory("1234-5678", embedding=_vec(0)),  # J1: hybrid (covered)
+            journal_factory("2222-2221", embedding=_vec(1)),  # J2: subscription
+            journal_factory(
                 "3333-3331", is_in_doaj=True, doaj_in_doaj=True, doaj_has_apc=False,
                 embedding=_vec(2),
             ),  # J3: diamond
-            _journal("4444-4441", embedding=_vec(3)),  # J4: covered hybrid
-            _journal("5555-5551", embedding=_vec(4)),  # below cutoff
-            _journal("6666-6661", embedding=_vec(5)),  # browse-excluded
+            journal_factory("4444-4441", embedding=_vec(3)),  # J4: covered hybrid
+            journal_factory("5555-5551", embedding=_vec(4)),  # below cutoff
+            journal_factory("6666-6661", embedding=_vec(5)),  # browse-excluded
         ]
     )
     await session.flush()
