@@ -1,12 +1,9 @@
 """Deal register tests: the register is the home-linked deals only."""
 
 import pytest
-from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from conftest import requires_db
-from journal_browser.db import get_session
-from journal_browser.main import app
 from journal_browser.models import (
     Deal,
     DealInstitution,
@@ -18,14 +15,9 @@ from journal_browser.models import (
 
 
 @pytest.fixture
-async def deals_api(db_engine):
+async def deals_api(client, db_engine):
     maker = async_sessionmaker(db_engine, expire_on_commit=False)
 
-    async def _override():
-        async with maker() as session:
-            yield session
-
-    app.dependency_overrides[get_session] = _override
     async with maker() as session:
         home = Institution(
             name="University of Twente", code="ut", active=True
@@ -77,9 +69,7 @@ async def deals_api(db_engine):
         )
         await session.commit()
         ids = (twente_deal.id, foreign_deal.id, journal.issn_l)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
-        yield client, ids
-    app.dependency_overrides.clear()
+    return client, ids
 
 
 @requires_db
