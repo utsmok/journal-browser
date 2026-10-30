@@ -6,8 +6,11 @@ Source side (all names verified live 2026-10-26):
                                 order by id; no created_at)
     org / org_tree              org display names + closure (depth 0 = self)
     work_authors                author_a_id is an OpenAlex author id in
-                                LOWERCASE form; core_work_link maps canonical
-                                work ids to Pure uuids
+                                LOWERCASE form; work_authors.work_id is the
+                                canonical work id, which pure_item_population
+                                maps to the Pure uuid. core_work_link has NO
+                                canonical id (its id is a surrogate), so it
+                                must not sit between these two.
     person / person_org / source_identity (persons)  canonical-person path
 
 Faculty rule (mirrors the source repo's reconcile/org_tree.py): walking org
@@ -117,8 +120,8 @@ async def fetch_source(engine: AsyncEngine) -> SourceData:
             (a, w)
             for a, w in await conn.execute(
                 text(
-                    "SELECT wa.author_a_id, w.pure_uuid FROM work_authors wa "
-                    "JOIN core_work_link w ON w.id = wa.work_id"
+                    "SELECT wa.author_a_id, pop.uuid FROM work_authors wa "
+                    "JOIN pure_item_population pop ON pop.canonical_id = wa.work_id"
                 )
             )
         ]
