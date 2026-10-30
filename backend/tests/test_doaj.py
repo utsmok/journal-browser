@@ -4,7 +4,7 @@ reworked oa_type decision (DOAJ gold/diamond + generic fallback)."""
 import pytest
 from sqlalchemy import select
 
-from conftest import requires_db
+from conftest import journal_factory, requires_db
 from journal_browser.harvest.common import HarvestDataError
 from journal_browser.harvest.doaj import (
     _apply_rows,
@@ -79,34 +79,21 @@ def test_oa_type_value_mirror():
     assert oa_type_value(False, False, False, False) == "subscription"
 
 
-def _journal(issn_l: str, **kw) -> Journal:
-    base = dict(
-        issn_l=issn_l,
-        title=f"Journal {issn_l}",
-        type="journal",
-        is_oa=False,
-        is_in_doaj=False,
-        in_scimago=False,
-        works_2020_plus=10,
-    )
-    base.update(kw)
-    return Journal(**base)
-
-
 @requires_db
 async def test_apply_rows_matches_variant_issns(db):
     db.add_all(
         [
             # Matched via the linking ISSN itself.
-            _journal("1569-8432", is_oa=True),
+            journal_factory("1569-8432", is_oa=True, search_text=None),
             # Matched via a variant ISSN in journals.issns.
-            _journal(
+            journal_factory(
                 "0303-2434",
                 is_oa=True,
                 issns=["0303-2434", "1569-8432", "1872-826X"],
+                search_text=None,
             ),
             # Untouched: no ISSN overlap.
-            _journal("9999-9991", is_oa=True),
+            journal_factory("9999-9991", is_oa=True, search_text=None),
         ]
     )
     await db.commit()
@@ -131,10 +118,12 @@ async def test_apply_rows_matches_variant_issns(db):
 async def test_stamp_not_listed_targets_oa_candidates(db):
     db.add_all(
         [
-            _journal("1111-1119", is_oa=True),  # stamped False
-            _journal("2222-2229", is_in_doaj=True),  # stamped False
-            _journal("3333-3339", is_oa=False, is_in_doaj=False),  # untouched
-            _journal("4444-4449", is_oa=True, doaj_in_doaj=True),  # untouched
+            journal_factory("1111-1119", is_oa=True, search_text=None),  # stamped False
+            journal_factory("2222-2229", is_in_doaj=True, search_text=None),  # stamped False
+            # untouched
+            journal_factory("3333-3339", is_oa=False, is_in_doaj=False, search_text=None),
+            # untouched
+            journal_factory("4444-4449", is_oa=True, doaj_in_doaj=True, search_text=None),
         ]
     )
     await db.commit()
