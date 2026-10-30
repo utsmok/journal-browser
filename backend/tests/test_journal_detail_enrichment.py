@@ -4,12 +4,9 @@ bundle, per-year oa_* stats columns, and the paginated /works list."""
 from datetime import UTC, datetime
 
 import pytest
-from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from conftest import requires_db
-from journal_browser.db import get_session
-from journal_browser.main import app
+from conftest import journal_factory, requires_db
 from journal_browser.models import (
     HarvestRun,
     Institution,
@@ -100,29 +97,11 @@ WORKS_PAYLOADS = {
 }
 
 
-def _journal(issn_l: str) -> Journal:
-    return Journal(
-        issn_l=issn_l,
-        title=f"Journal {issn_l}",
-        type="journal",
-        is_oa=False,
-        is_in_doaj=False,
-        in_scimago=False,
-        works_2020_plus=10,
-    )
-
-
 @pytest.fixture
-async def api(db_engine):
+async def api(client, db_engine):
     maker = async_sessionmaker(db_engine, expire_on_commit=False)
-
-    async def _override():
-        async with maker() as session:
-            yield session
-
-    app.dependency_overrides[get_session] = _override
     async with maker() as session:
-        session.add_all([_journal(MAIN_ISSN), _journal(OTHER_ISSN)])
+        session.add_all([journal_factory(MAIN_ISSN), journal_factory(OTHER_ISSN)])
         home = Institution(name="Test U", code="tu", active=True)
         session.add(home)
         await session.flush()
@@ -254,10 +233,7 @@ async def api(db_engine):
             ]
         )
         await session.commit()
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
-        yield client
-    app.dependency_overrides.clear()
+    return client
 
 
 @requires_db
