@@ -19,9 +19,7 @@ async def deals_api(client, db_engine):
     maker = async_sessionmaker(db_engine, expire_on_commit=False)
 
     async with maker() as session:
-        home = Institution(
-            name="University of Twente", code="ut", active=True
-        )
+        home = Institution(name="University of Twente", code="ut", active=True)
         session.add(home)
         await session.flush()
         pub = Publisher(name="Springer")

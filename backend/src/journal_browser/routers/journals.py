@@ -62,14 +62,13 @@ def _split_csv(v: str | list | None) -> list[str] | None:
 
 
 #: Comma-separated oa_type multi-select, validated against OaType (422).
-OaTypeFilter = Annotated[
-    list[OaType] | None, BeforeValidator(_split_csv), Query(max_length=60)
-]
+OaTypeFilter = Annotated[list[OaType] | None, BeforeValidator(_split_csv), Query(max_length=60)]
 
 
 def _is_ignored(issn_l: str) -> bool:
     """Admin ignore-list: an ignored journal is treated as nonexistent."""
     return issn_l.upper() in set(get_settings().ignored_issns)
+
 
 #: Per-field source attribution (structural; caveat codes resolve against
 #: the limitations registry served at /api/v1/meta/limitations).
@@ -195,9 +194,7 @@ async def semantic_search_journals(
     cursor: Annotated[str | None, Query(max_length=512, pattern=r"^[A-Za-z0-9_-]*={0,2}$")] = None,
 ) -> JournalSearchResponse:
     """Free-text "journals like this description" search over embeddings."""
-    result = await search_service.semantic_search(
-        session, q, institution.id, limit, cursor
-    )
+    result = await search_service.semantic_search(session, q, institution.id, limit, cursor)
     return JournalSearchResponse(
         items=[_to_list_item(item) for item in result["items"]],
         total=result["total"],

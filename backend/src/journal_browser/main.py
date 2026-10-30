@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends
+import os
+
+from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -49,7 +51,10 @@ async def healthz(session: AsyncSession = Depends(get_session)) -> dict:
 
 def _warm_embedding_model() -> None:
     """Load the ~130 MB ONNX query encoder off the request path, so the
-    first semantic search after a restart does not pay the model load."""
+    first semantic search after a restart does not pay the model load.
+    JB_SKIP_EMBEDDING_WARMUP=1 skips the load (offline schema dumps, CI)."""
+    if os.environ.get("JB_SKIP_EMBEDDING_WARMUP") == "1":
+        return
     import threading
 
     from .services.embeddings import encode_query
@@ -57,9 +62,7 @@ def _warm_embedding_model() -> None:
     threading.Thread(target=lambda: encode_query("warmup"), daemon=True).start()
 
 
-def create_app() -> "FastAPI":  # noqa: F821
-    from fastapi import FastAPI
-
+def create_app() -> "FastAPI":
     settings = get_settings()
     app = FastAPI(title="Journal Browser API", version=__version__)
     app.add_middleware(
@@ -69,12 +72,14 @@ def create_app() -> "FastAPI":  # noqa: F821
         allow_headers=["*"],
     )
     app.include_router(api_router)
+
     # parse_cursor and friends raise ValueError for malformed input; map it
     # to 400. FastAPI's own RequestValidationError (422) handles params it
     # validates at the boundary.
     @app.exception_handler(ValueError)
-    async def value_error_to_400(request, exc: ValueError):  # noqa: ANN202
+    async def value_error_to_400(request, exc: ValueError):
         return JSONResponse(status_code=400, content={"detail": str(exc)})
+
     _warm_embedding_model()
     return app
 

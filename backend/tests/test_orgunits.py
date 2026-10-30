@@ -31,6 +31,7 @@ async def orgunits_api(db, institution_factory):
     Policy Lab); Frank is unconfirmed (hidden by the gate). Works w1+w2 sit
     in deal-covered J1 with APC evidence (latest period per doi), w3/w4 in
     uncovered J2. rug: one author, one APC row scoped to rug only."""
+
     async def _override():
         async with async_sessionmaker(db.bind, expire_on_commit=False)() as session:
             yield session
@@ -84,28 +85,54 @@ async def orgunits_api(db, institution_factory):
     session.add_all(
         [
             _author(
-                "alice-uuid", "Alice Author", faculty=TNW, group="Quantum Matter",
-                n_works=40, topic="Physics", orcid="0000-0002-1111",
+                "alice-uuid",
+                "Alice Author",
+                faculty=TNW,
+                group="Quantum Matter",
+                n_works=40,
+                topic="Physics",
+                orcid="0000-0002-1111",
             ),
             _author(
-                "bob-uuid", "Bob Builder", faculty=TNW, group="Quantum Matter",
-                n_works=5, topic="Chemistry",
+                "bob-uuid",
+                "Bob Builder",
+                faculty=TNW,
+                group="Quantum Matter",
+                n_works=5,
+                topic="Chemistry",
             ),
             _author(
-                "carol-uuid", "Carol Navigator", faculty=TNW, group=None,
-                n_works=5, topic="Physics",
+                "carol-uuid",
+                "Carol Navigator",
+                faculty=TNW,
+                group=None,
+                n_works=5,
+                topic="Physics",
             ),
             _author(
-                "dan-uuid", "Dan Datalab", faculty=TNW, group="Nano Lab",
-                n_works=4, topic="Materials",
+                "dan-uuid",
+                "Dan Datalab",
+                faculty=TNW,
+                group="Nano Lab",
+                n_works=4,
+                topic="Materials",
             ),
             _author(
-                "eve-uuid", "Eve Policy", faculty=BMS, group="Policy Lab",
-                n_works=60, topic="Governance",
+                "eve-uuid",
+                "Eve Policy",
+                faculty=BMS,
+                group="Policy Lab",
+                n_works=60,
+                topic="Governance",
             ),
             _author(
-                "frank-uuid", "Frank Hidden", faculty=TNW, group="Secret Group",
-                n_works=100, confirmed=False, topic="Physics",
+                "frank-uuid",
+                "Frank Hidden",
+                faculty=TNW,
+                group="Secret Group",
+                n_works=100,
+                confirmed=False,
+                topic="Physics",
             ),
             Author(
                 institution_id=rug.id,
@@ -176,7 +203,7 @@ async def orgunits_api(db, institution_factory):
 
 @requires_db
 async def test_orgunit_faculty_list(orgunits_api):
-    client, ids = orgunits_api
+    client, _ids = orgunits_api
     r = await client.get("/api/v1/ut/orgunits")
     assert r.status_code == 200
     body = r.json()
@@ -216,7 +243,7 @@ async def test_orgunit_faculty_list(orgunits_api):
 
 @requires_db
 async def test_orgunit_group_list_facet_and_filter(orgunits_api):
-    client, ids = orgunits_api
+    client, _ids = orgunits_api
     body = (await client.get("/api/v1/ut/orgunits", params={"level": "group"})).json()
     assert body["level"] == "group"
     assert body["total"] == 3  # Carol has no group; Frank is gated out
@@ -246,7 +273,7 @@ async def test_orgunit_group_list_facet_and_filter(orgunits_api):
 
 @requires_db
 async def test_orgunit_filters_and_sorts(orgunits_api):
-    client, ids = orgunits_api
+    client, _ids = orgunits_api
 
     async def names(params: dict) -> list[str]:
         body = (await client.get("/api/v1/ut/orgunits", params=params)).json()
@@ -273,7 +300,7 @@ async def test_orgunit_filters_and_sorts(orgunits_api):
 
 @requires_db
 async def test_orgunit_facets_drop_own_dimension(orgunits_api):
-    client, ids = orgunits_api
+    client, _ids = orgunits_api
     body = (await client.get("/api/v1/ut/orgunits", params={"level": "group"})).json()
     assert body["facets"] == {
         "faculty": {BMS: 1, TNW: 2},
@@ -307,7 +334,7 @@ async def test_orgunit_facets_drop_own_dimension(orgunits_api):
 
 @requires_db
 async def test_orgunit_faculty_detail(orgunits_api):
-    client, ids = orgunits_api
+    client, _ids = orgunits_api
     r = await client.get(f"/api/v1/ut/orgunits/faculty/{quote(TNW)}")
     assert r.status_code == 200
     body = r.json()
@@ -336,6 +363,7 @@ async def test_orgunit_faculty_detail(orgunits_api):
     ]
     assert body["authors"][0]["orcid"] == "0000-0002-1111"
     assert body["authors"][0]["primary_topic"] == "Physics"
+
     # Unit authors' works per year, newest first, works.oa_status splits.
     def _year(year: int, total: int, **oa: int) -> dict:
         return {
@@ -366,7 +394,7 @@ async def test_orgunit_faculty_detail(orgunits_api):
 
 @requires_db
 async def test_orgunit_group_detail(orgunits_api):
-    client, ids = orgunits_api
+    client, _ids = orgunits_api
     r = await client.get("/api/v1/ut/orgunits/group/Quantum Matter")
     assert r.status_code == 200
     body = r.json()
@@ -392,7 +420,7 @@ async def test_orgunit_group_detail(orgunits_api):
 
 @requires_db
 async def test_orgunit_institution_isolation(orgunits_api):
-    client, ids = orgunits_api
+    client, _ids = orgunits_api
     body = (await client.get("/api/v1/rug/orgunits")).json()
     assert body["total"] == 1
     assert body["items"][0]["name"] == "Science"

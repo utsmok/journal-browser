@@ -1,0 +1,7306 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Journal Browser API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/institutions": {
+      "get": {
+        "tags": [
+          "institutions"
+        ],
+        "summary": "List Institutions",
+        "operationId": "list_institutions_api_v1_institutions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/InstitutionOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Institutions Api V1 Institutions Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/login": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Login",
+        "operationId": "login_api_v1_admin_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Login Api V1 Admin Login Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/runs": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Runs",
+        "operationId": "list_runs_api_v1_admin_runs_get",
+        "parameters": [
+          {
+            "name": "institution",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Institution"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdminRunOut"
+                  },
+                  "title": "Response List Runs Api V1 Admin Runs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/flagged": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Flagged Deals",
+        "operationId": "flagged_deals_api_v1_admin_flagged_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FlaggedDealOut"
+                  },
+                  "type": "array",
+                  "title": "Response Flagged Deals Api V1 Admin Flagged Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/settings": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Effective Settings",
+        "operationId": "effective_settings_api_v1_admin_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Effective Settings Api V1 Admin Settings Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Update Settings",
+        "operationId": "update_settings_api_v1_admin_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Update Settings Api V1 Admin Settings Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/institutions/{code}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Get Institution",
+        "operationId": "get_institution_api_v1_admin_institutions__code__get",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminInstitutionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Update Institution",
+        "operationId": "update_institution_api_v1_admin_institutions__code__put",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstitutionUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminInstitutionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/deals": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Deals",
+        "operationId": "list_deals_api_v1_admin_deals_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AdminDealOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Deals Api V1 Admin Deals Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Create Deal",
+        "operationId": "create_deal_api_v1_admin_deals_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DealCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDealDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/deals/{deal_id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Get Deal",
+        "operationId": "get_deal_api_v1_admin_deals__deal_id__get",
+        "parameters": [
+          {
+            "name": "deal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Deal Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDealDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Update Deal",
+        "operationId": "update_deal_api_v1_admin_deals__deal_id__put",
+        "parameters": [
+          {
+            "name": "deal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Deal Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DealUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDealDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/deals/{deal_id}/journals": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Update Deal Journals",
+        "operationId": "update_deal_journals_api_v1_admin_deals__deal_id__journals_put",
+        "parameters": [
+          {
+            "name": "deal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Deal Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DealJournalsBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDealDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/deals/{deal_id}/participations": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Update Deal Participations",
+        "operationId": "update_deal_participations_api_v1_admin_deals__deal_id__participations_put",
+        "parameters": [
+          {
+            "name": "deal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Deal Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DealParticipationsBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDealDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/feedback": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Feedback",
+        "operationId": "list_feedback_api_v1_admin_feedback_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FeedbackAdminOut"
+                  },
+                  "title": "Response List Feedback Api V1 Admin Feedback Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/feedback/{feedback_id}": {
+      "patch": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Update Feedback",
+        "operationId": "update_feedback_api_v1_admin_feedback__feedback_id__patch",
+        "parameters": [
+          {
+            "name": "feedback_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Feedback Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackUpdateIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackPatchOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Delete Feedback",
+        "operationId": "delete_feedback_api_v1_admin_feedback__feedback_id__delete",
+        "parameters": [
+          {
+            "name": "feedback_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Feedback Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/docs/{slug}/edits": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Put Doc Edit",
+        "operationId": "put_doc_edit_api_v1_admin_docs__slug__edits_put",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocEditIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocEditOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/docs/{slug}/edits/{block_key}": {
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Delete Doc Edit",
+        "operationId": "delete_doc_edit_api_v1_admin_docs__slug__edits__block_key__delete",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          },
+          {
+            "name": "block_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Block Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/feedback": {
+      "post": {
+        "tags": [
+          "feedback"
+        ],
+        "summary": "Create Feedback",
+        "operationId": "create_feedback_api_v1_feedback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFeedbackIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/docs": {
+      "get": {
+        "tags": [
+          "docs"
+        ],
+        "summary": "Docs Index",
+        "operationId": "docs_index_api_v1_docs_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DocMetaOut"
+                  },
+                  "type": "array",
+                  "title": "Response Docs Index Api V1 Docs Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/docs/{slug}": {
+      "get": {
+        "tags": [
+          "docs"
+        ],
+        "summary": "Doc Detail",
+        "operationId": "doc_detail_api_v1_docs__slug__get",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocDetailOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/journals": {
+      "get": {
+        "tags": [
+          "journals"
+        ],
+        "summary": "Search Journals",
+        "operationId": "search_journals_api_v1__institution_code__journals_get",
+        "parameters": [
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "search_in",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(all|title|publisher|topic)$",
+              "default": "all",
+              "title": "Search In"
+            }
+          },
+          {
+            "name": "deal",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(any|covered|not_covered)$",
+              "default": "any",
+              "title": "Deal"
+            }
+          },
+          {
+            "name": "oa",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oa"
+            }
+          },
+          {
+            "name": "doaj",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Doaj"
+            }
+          },
+          {
+            "name": "quartile",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^Q[1-4]$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Quartile"
+            }
+          },
+          {
+            "name": "topic",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Topic"
+            }
+          },
+          {
+            "name": "publisher",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Publisher"
+            }
+          },
+          {
+            "name": "has_apc",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Has Apc"
+            }
+          },
+          {
+            "name": "has_works",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Has Works"
+            }
+          },
+          {
+            "name": "oa_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OaType"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 60,
+              "title": "Oa Type"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(relevance|title|publisher|institution_works|quartile|topic|apc|2yr_mean_citedness)$",
+              "default": "relevance",
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(asc|desc)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dir"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 512,
+                  "pattern": "^[A-Za-z0-9_-]*={0,2}$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "include_facets",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Include Facets"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JournalSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/journals/semantic-search": {
+      "get": {
+        "tags": [
+          "journals"
+        ],
+        "summary": "Semantic Search Journals",
+        "description": "Free-text \"journals like this description\" search over embeddings.",
+        "operationId": "semantic_search_journals_api_v1__institution_code__journals_semantic_search_get",
+        "parameters": [
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 512,
+              "title": "Q"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 40,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 512,
+                  "pattern": "^[A-Za-z0-9_-]*={0,2}$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JournalSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/journals/{issn_l}/similar": {
+      "get": {
+        "tags": [
+          "journals"
+        ],
+        "summary": "Similar Journals",
+        "operationId": "similar_journals_api_v1__institution_code__journals__issn_l__similar_get",
+        "parameters": [
+          {
+            "name": "issn_l",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Issn L"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimilarJournalsBundle"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/journals/{issn_l}/works": {
+      "get": {
+        "tags": [
+          "journals"
+        ],
+        "summary": "Journal Works",
+        "operationId": "journal_works_api_v1__institution_code__journals__issn_l__works_get",
+        "parameters": [
+          {
+            "name": "issn_l",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Issn L"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorksPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/journals/{issn_l}": {
+      "get": {
+        "tags": [
+          "journals"
+        ],
+        "summary": "Journal Detail",
+        "operationId": "journal_detail_api_v1__institution_code__journals__issn_l__get",
+        "parameters": [
+          {
+            "name": "issn_l",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Issn L"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JournalDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/authors": {
+      "get": {
+        "tags": [
+          "authors"
+        ],
+        "summary": "Search Authors",
+        "operationId": "search_authors_api_v1__institution_code__authors_get",
+        "parameters": [
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "faculty",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Faculty"
+            }
+          },
+          {
+            "name": "org",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Org"
+            }
+          },
+          {
+            "name": "has_orcid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "yes",
+                    "no"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Has Orcid"
+            }
+          },
+          {
+            "name": "works",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 60
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Works"
+            }
+          },
+          {
+            "name": "last_pub",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 60
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Last Pub"
+            }
+          },
+          {
+            "name": "topic",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Topic"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "works_desc",
+                "name_asc",
+                "name_desc",
+                "last_pub_desc"
+              ],
+              "type": "string",
+              "default": "works_desc",
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/authors/{pure_uuid}": {
+      "get": {
+        "tags": [
+          "authors"
+        ],
+        "summary": "Author Profile",
+        "operationId": "author_profile_api_v1__institution_code__authors__pure_uuid__get",
+        "parameters": [
+          {
+            "name": "pure_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pure Uuid"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorProfileResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/publishers": {
+      "get": {
+        "tags": [
+          "publishers"
+        ],
+        "summary": "Search Publishers",
+        "operationId": "search_publishers_api_v1__institution_code__publishers_get",
+        "parameters": [
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "oa_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OaType"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 60,
+              "title": "Oa Type"
+            }
+          },
+          {
+            "name": "deal",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(covered|none)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deal"
+            }
+          },
+          {
+            "name": "quartile",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "Q1",
+                      "Q2",
+                      "Q3",
+                      "Q4"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 20,
+              "title": "Quartile"
+            }
+          },
+          {
+            "name": "topic",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Topic"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 20
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Size"
+            }
+          },
+          {
+            "name": "has_apc",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Has Apc"
+            }
+          },
+          {
+            "name": "has_works",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Has Works"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(relevance|name|journals|works|deals|apc)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(asc|desc)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dir"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "include_facets",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Include Facets"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublisherSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/publishers/{name}": {
+      "get": {
+        "tags": [
+          "publishers"
+        ],
+        "summary": "Publisher Detail",
+        "operationId": "publisher_detail_api_v1__institution_code__publishers__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublisherDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/orgunits": {
+      "get": {
+        "tags": [
+          "orgunits"
+        ],
+        "summary": "Search Orgunits",
+        "operationId": "search_orgunits_api_v1__institution_code__orgunits_get",
+        "parameters": [
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "faculty",
+                "group"
+              ],
+              "type": "string",
+              "default": "faculty",
+              "title": "Level"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "faculty",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Faculty"
+            }
+          },
+          {
+            "name": "works",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 60
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Works"
+            }
+          },
+          {
+            "name": "uses_deals",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Uses Deals"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(relevance|name|authors|works|deal_works)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "include_facets",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Include Facets"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgUnitSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/orgunits/faculty/{name}": {
+      "get": {
+        "tags": [
+          "orgunits"
+        ],
+        "summary": "Faculty Detail",
+        "operationId": "faculty_detail_api_v1__institution_code__orgunits_faculty__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgUnitDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/orgunits/group/{name}": {
+      "get": {
+        "tags": [
+          "orgunits"
+        ],
+        "summary": "Group Detail",
+        "operationId": "group_detail_api_v1__institution_code__orgunits_group__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgUnitDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/deals": {
+      "get": {
+        "tags": [
+          "deals"
+        ],
+        "summary": "List Deals",
+        "operationId": "list_deals_api_v1__institution_code__deals_get",
+        "parameters": [
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(current|archive|all)$",
+              "default": "current",
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DealOut"
+                  },
+                  "title": "Response List Deals Api V1  Institution Code  Deals Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/deals/{deal_id}": {
+      "get": {
+        "tags": [
+          "deals"
+        ],
+        "summary": "Deal Detail",
+        "operationId": "deal_detail_api_v1__institution_code__deals__deal_id__get",
+        "parameters": [
+          {
+            "name": "deal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Deal Id"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DealOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/meta/limitations": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "List Limitations",
+        "operationId": "list_limitations_api_v1__institution_code__meta_limitations_get",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 50
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LimitationOut"
+                  },
+                  "title": "Response List Limitations Api V1  Institution Code  Meta Limitations Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/meta/freshness": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "Freshness",
+        "operationId": "freshness_api_v1__institution_code__meta_freshness_get",
+        "parameters": [
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreshnessResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/healthz": {
+      "get": {
+        "summary": "Healthz",
+        "operationId": "healthz_api_v1_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Healthz Api V1 Healthz Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdminDealDetail": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "publisher_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Id"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          },
+          "esac_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Esac Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DealStatus"
+          },
+          "start_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Year"
+          },
+          "end_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Year"
+          },
+          "corresponding_authors_only": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corresponding Authors Only"
+          },
+          "capped": {
+            "type": "boolean",
+            "title": "Capped"
+          },
+          "cap_numbers": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap Numbers"
+          },
+          "cap_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap Text"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "journal_count": {
+            "type": "integer",
+            "title": "Journal Count"
+          },
+          "participations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Participations"
+          },
+          "needs_curation": {
+            "type": "boolean",
+            "title": "Needs Curation"
+          },
+          "needs_curation_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Needs Curation Reason"
+          },
+          "journals": {
+            "items": {
+              "$ref": "#/components/schemas/AdminDealJournal"
+            },
+            "type": "array",
+            "title": "Journals"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "publisher_id",
+          "publisher",
+          "esac_id",
+          "status",
+          "start_year",
+          "end_year",
+          "corresponding_authors_only",
+          "capped",
+          "cap_numbers",
+          "cap_text",
+          "summary",
+          "journal_count",
+          "participations",
+          "needs_curation",
+          "needs_curation_reason",
+          "journals"
+        ],
+        "title": "AdminDealDetail"
+      },
+      "AdminDealJournal": {
+        "properties": {
+          "issn": {
+            "type": "string",
+            "title": "Issn"
+          },
+          "issn_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issn L"
+          },
+          "journal_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Name"
+          },
+          "source": {
+            "$ref": "#/components/schemas/DealJournalSource"
+          },
+          "excluded": {
+            "type": "boolean",
+            "title": "Excluded"
+          }
+        },
+        "type": "object",
+        "required": [
+          "issn",
+          "issn_l",
+          "journal_name",
+          "source",
+          "excluded"
+        ],
+        "title": "AdminDealJournal"
+      },
+      "AdminDealOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "publisher_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Id"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          },
+          "esac_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Esac Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DealStatus"
+          },
+          "start_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Year"
+          },
+          "end_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Year"
+          },
+          "corresponding_authors_only": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corresponding Authors Only"
+          },
+          "capped": {
+            "type": "boolean",
+            "title": "Capped"
+          },
+          "cap_numbers": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap Numbers"
+          },
+          "cap_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap Text"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "journal_count": {
+            "type": "integer",
+            "title": "Journal Count"
+          },
+          "participations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Participations"
+          },
+          "needs_curation": {
+            "type": "boolean",
+            "title": "Needs Curation"
+          },
+          "needs_curation_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Needs Curation Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "publisher_id",
+          "publisher",
+          "esac_id",
+          "status",
+          "start_year",
+          "end_year",
+          "corresponding_authors_only",
+          "capped",
+          "cap_numbers",
+          "cap_text",
+          "summary",
+          "journal_count",
+          "participations",
+          "needs_curation",
+          "needs_curation_reason"
+        ],
+        "title": "AdminDealOut"
+      },
+      "AdminInstitutionOut": {
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "short_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Name"
+          },
+          "ror": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ror"
+          },
+          "openalex_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Id"
+          },
+          "pure_oai_base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Oai Base Url"
+          },
+          "openaire_org_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openaire Org Id"
+          },
+          "data_window_start": {
+            "type": "integer",
+            "title": "Data Window Start"
+          },
+          "data_window_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Window End"
+          },
+          "library_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Library Url"
+          },
+          "oa_guide_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Guide Url"
+          },
+          "support_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Support Email"
+          },
+          "admin_contact": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Contact"
+          },
+          "research_portal_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Portal Url"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active"
+          },
+          "require_confirmed_affiliation": {
+            "type": "boolean",
+            "title": "Require Confirmed Affiliation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "name",
+          "short_name",
+          "ror",
+          "openalex_id",
+          "pure_oai_base_url",
+          "openaire_org_id",
+          "data_window_start",
+          "data_window_end",
+          "library_url",
+          "oa_guide_url",
+          "support_email",
+          "admin_contact",
+          "research_portal_url",
+          "active",
+          "require_confirmed_affiliation"
+        ],
+        "title": "AdminInstitutionOut"
+      },
+      "AdminRunOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "entity_type": {
+            "type": "string",
+            "title": "Entity Type"
+          },
+          "institution_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institution Id"
+          },
+          "institution_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institution Code"
+          },
+          "status": {
+            "$ref": "#/components/schemas/HarvestStatus"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "stats": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Stats"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "entity_type",
+          "institution_id",
+          "institution_code",
+          "status",
+          "started_at",
+          "finished_at",
+          "stats"
+        ],
+        "title": "AdminRunOut"
+      },
+      "ApcAggregateOut": {
+        "properties": {
+          "period": {
+            "type": "integer",
+            "title": "Period"
+          },
+          "article_count": {
+            "type": "integer",
+            "title": "Article Count"
+          },
+          "euro_min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Euro Min"
+          },
+          "euro_max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Euro Max"
+          },
+          "euro_mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Euro Mean"
+          }
+        },
+        "type": "object",
+        "required": [
+          "period",
+          "article_count",
+          "euro_min",
+          "euro_max",
+          "euro_mean"
+        ],
+        "title": "ApcAggregateOut"
+      },
+      "ApcEvidenceOut": {
+        "properties": {
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "period": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period"
+          },
+          "euro": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Euro"
+          },
+          "is_hybrid": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Hybrid"
+          },
+          "agreement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agreement"
+          },
+          "issn_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issn L"
+          }
+        },
+        "type": "object",
+        "required": [
+          "doi",
+          "period",
+          "euro",
+          "is_hybrid",
+          "agreement",
+          "issn_l"
+        ],
+        "title": "ApcEvidenceOut"
+      },
+      "Attribution": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "caveat_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Caveat Codes",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "source"
+        ],
+        "title": "Attribution"
+      },
+      "AuthorAlternative": {
+        "properties": {
+          "issn_l": {
+            "type": "string",
+            "title": "Issn L"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "n_works": {
+            "type": "integer",
+            "title": "N Works"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/AuthorSimilarJournal"
+            },
+            "type": "array",
+            "title": "Options"
+          }
+        },
+        "type": "object",
+        "required": [
+          "issn_l",
+          "title",
+          "n_works",
+          "options"
+        ],
+        "title": "AuthorAlternative"
+      },
+      "AuthorFacet": {
+        "properties": {
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "value",
+          "count"
+        ],
+        "title": "AuthorFacet"
+      },
+      "AuthorItem": {
+        "properties": {
+          "pure_uuid": {
+            "type": "string",
+            "title": "Pure Uuid"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "faculty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Faculty"
+          },
+          "research_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Group"
+          },
+          "n_works": {
+            "type": "integer",
+            "title": "N Works"
+          },
+          "orcid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orcid"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "title": "Confirmed"
+          },
+          "last_pub_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Pub Year"
+          },
+          "primary_topic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Topic"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pure_uuid",
+          "name",
+          "faculty",
+          "research_group",
+          "n_works",
+          "orcid",
+          "confirmed"
+        ],
+        "title": "AuthorItem"
+      },
+      "AuthorJournalRow": {
+        "properties": {
+          "issn_l": {
+            "type": "string",
+            "title": "Issn L"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "n_works": {
+            "type": "integer",
+            "title": "N Works"
+          },
+          "oa_type": {
+            "type": "string",
+            "title": "Oa Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "issn_l",
+          "title",
+          "n_works",
+          "oa_type"
+        ],
+        "title": "AuthorJournalRow"
+      },
+      "AuthorOut": {
+        "properties": {
+          "pure_uuid": {
+            "type": "string",
+            "title": "Pure Uuid"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "orcid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orcid"
+          },
+          "openalex_author_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Author Id"
+          },
+          "openaire_person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openaire Person Id"
+          },
+          "crossref_orcid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crossref Orcid"
+          },
+          "faculty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Faculty"
+          },
+          "research_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Group"
+          },
+          "orgs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Orgs"
+          },
+          "n_works": {
+            "type": "integer",
+            "title": "N Works"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pure_uuid",
+          "name",
+          "orcid",
+          "openalex_author_id",
+          "openaire_person_id",
+          "crossref_orcid",
+          "faculty",
+          "research_group",
+          "orgs",
+          "n_works"
+        ],
+        "title": "AuthorOut"
+      },
+      "AuthorProfileResponse": {
+        "properties": {
+          "author": {
+            "$ref": "#/components/schemas/AuthorOut"
+          },
+          "oa_by_year": {
+            "items": {
+              "$ref": "#/components/schemas/AuthorYearRow"
+            },
+            "type": "array",
+            "title": "Oa By Year"
+          },
+          "journals": {
+            "items": {
+              "$ref": "#/components/schemas/AuthorJournalRow"
+            },
+            "type": "array",
+            "title": "Journals"
+          },
+          "topics": {
+            "items": {
+              "$ref": "#/components/schemas/AuthorTopicRow"
+            },
+            "type": "array",
+            "title": "Topics"
+          },
+          "similar": {
+            "$ref": "#/components/schemas/AuthorSimilarBundle"
+          },
+          "alternatives": {
+            "items": {
+              "$ref": "#/components/schemas/AuthorAlternative"
+            },
+            "type": "array",
+            "title": "Alternatives"
+          },
+          "works": {
+            "items": {
+              "$ref": "#/components/schemas/AuthorWorkItem"
+            },
+            "type": "array",
+            "title": "Works"
+          }
+        },
+        "type": "object",
+        "required": [
+          "author",
+          "oa_by_year",
+          "journals",
+          "topics",
+          "similar",
+          "alternatives",
+          "works"
+        ],
+        "title": "AuthorProfileResponse"
+      },
+      "AuthorSearchResponse": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "default": 0
+          },
+          "sort": {
+            "type": "string",
+            "title": "Sort",
+            "default": "works_desc"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuthorItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "facets": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/AuthorFacet"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Facets",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled",
+          "total",
+          "items"
+        ],
+        "title": "AuthorSearchResponse"
+      },
+      "AuthorSimilarBundle": {
+        "properties": {
+          "all": {
+            "items": {
+              "$ref": "#/components/schemas/AuthorSimilarJournal"
+            },
+            "type": "array",
+            "title": "All"
+          },
+          "deals": {
+            "items": {
+              "$ref": "#/components/schemas/AuthorSimilarJournal"
+            },
+            "type": "array",
+            "title": "Deals"
+          },
+          "diamond": {
+            "items": {
+              "$ref": "#/components/schemas/AuthorSimilarJournal"
+            },
+            "type": "array",
+            "title": "Diamond"
+          }
+        },
+        "type": "object",
+        "required": [
+          "all",
+          "deals",
+          "diamond"
+        ],
+        "title": "AuthorSimilarBundle"
+      },
+      "AuthorSimilarJournal": {
+        "properties": {
+          "issn_l": {
+            "type": "string",
+            "title": "Issn L"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "oa_type": {
+            "type": "string",
+            "title": "Oa Type"
+          },
+          "deal_covered": {
+            "type": "boolean",
+            "title": "Deal Covered"
+          }
+        },
+        "type": "object",
+        "required": [
+          "issn_l",
+          "title",
+          "score",
+          "oa_type",
+          "deal_covered"
+        ],
+        "title": "AuthorSimilarJournal"
+      },
+      "AuthorTopicRow": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "n": {
+            "type": "integer",
+            "title": "N"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "n"
+        ],
+        "title": "AuthorTopicRow"
+      },
+      "AuthorWorkItem": {
+        "properties": {
+          "pure_uuid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Uuid"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "oa_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Status"
+          },
+          "journal_issn_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Issn L"
+          },
+          "journal_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Title"
+          },
+          "in_pure": {
+            "type": "boolean",
+            "title": "In Pure",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "year",
+          "doi",
+          "oa_status",
+          "journal_issn_l",
+          "journal_title"
+        ],
+        "title": "AuthorWorkItem"
+      },
+      "AuthorYearRow": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "gold": {
+            "type": "integer",
+            "title": "Gold"
+          },
+          "green": {
+            "type": "integer",
+            "title": "Green"
+          },
+          "hybrid": {
+            "type": "integer",
+            "title": "Hybrid"
+          },
+          "bronze": {
+            "type": "integer",
+            "title": "Bronze"
+          },
+          "closed": {
+            "type": "integer",
+            "title": "Closed"
+          },
+          "diamond": {
+            "type": "integer",
+            "title": "Diamond",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "total",
+          "gold",
+          "green",
+          "hybrid",
+          "bronze",
+          "closed"
+        ],
+        "title": "AuthorYearRow"
+      },
+      "CanonicalOa": {
+        "properties": {
+          "gold": {
+            "type": "integer",
+            "title": "Gold",
+            "default": 0
+          },
+          "hybrid": {
+            "type": "integer",
+            "title": "Hybrid",
+            "default": 0
+          },
+          "green": {
+            "type": "integer",
+            "title": "Green",
+            "default": 0
+          },
+          "bronze": {
+            "type": "integer",
+            "title": "Bronze",
+            "default": 0
+          },
+          "diamond": {
+            "type": "integer",
+            "title": "Diamond",
+            "default": 0
+          },
+          "closed": {
+            "type": "integer",
+            "title": "Closed",
+            "default": 0
+          },
+          "unknown": {
+            "type": "integer",
+            "title": "Unknown",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "CanonicalOa",
+        "description": "ut-metadata oa_status distribution over a journal's works."
+      },
+      "CreateFeedbackIn": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Description"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FeedbackCategory"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "page_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Url"
+          },
+          "page_data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Page Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "description"
+        ],
+        "title": "CreateFeedbackIn"
+      },
+      "DealCreate": {
+        "properties": {
+          "publisher_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Id"
+          },
+          "publisher_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Name"
+          },
+          "esac_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Esac Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DealStatus",
+            "default": "current"
+          },
+          "start_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Year"
+          },
+          "end_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Year"
+          },
+          "corresponding_authors_only": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corresponding Authors Only"
+          }
+        },
+        "type": "object",
+        "title": "DealCreate"
+      },
+      "DealDiscrepancyRow": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "publisher_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Name"
+          },
+          "deal_publisher": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deal Publisher"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "publisher_name",
+          "deal_publisher"
+        ],
+        "title": "DealDiscrepancyRow",
+        "description": "A group journal covered by another publisher's deal: a publisher\nflip or stale ESAC entry, flagged for follow-up rather than shown as\nthis publisher's agreement."
+      },
+      "DealJournalAdd": {
+        "properties": {
+          "issn": {
+            "type": "string",
+            "title": "Issn"
+          },
+          "journal_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "issn"
+        ],
+        "title": "DealJournalAdd"
+      },
+      "DealJournalSource": {
+        "type": "string",
+        "enum": [
+          "jct",
+          "manual",
+          "publisher-pattern"
+        ],
+        "title": "DealJournalSource",
+        "description": "deal_journals.source (provenance of the membership row)."
+      },
+      "DealJournalsBody": {
+        "properties": {
+          "add": {
+            "items": {
+              "$ref": "#/components/schemas/DealJournalAdd"
+            },
+            "type": "array",
+            "title": "Add",
+            "default": []
+          },
+          "remove": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Remove",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "DealJournalsBody"
+      },
+      "DealLinkOut": {
+        "properties": {
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          }
+        },
+        "type": "object",
+        "title": "DealLinkOut",
+        "description": "Register link entry ([{url, text, category}], seeded by curation jobs)."
+      },
+      "DealOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "esac_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Esac Id"
+          },
+          "publisher_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Name"
+          },
+          "covers_in_group": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Covers In Group"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DealStatus"
+          },
+          "start_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Year"
+          },
+          "end_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Year"
+          },
+          "duration_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Text"
+          },
+          "corresponding_authors_only": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corresponding Authors Only"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "conditions_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conditions Text"
+          },
+          "workflow_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Text"
+          },
+          "article_types_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Article Types Text"
+          },
+          "cap_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap Text"
+          },
+          "cap_numbers": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap Numbers"
+          },
+          "contract_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Url"
+          },
+          "openaccess_nl_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openaccess Nl Url"
+          },
+          "jct_data_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jct Data Url"
+          },
+          "per_year_oa_counts": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Year Oa Counts"
+          },
+          "needs_curation": {
+            "type": "boolean",
+            "title": "Needs Curation"
+          },
+          "needs_curation_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Needs Curation Reason"
+          },
+          "links": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DealLinkOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Links"
+          },
+          "journal_count": {
+            "type": "integer",
+            "title": "Journal Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "esac_id",
+          "publisher_name",
+          "status",
+          "start_year",
+          "end_year",
+          "duration_text",
+          "corresponding_authors_only",
+          "summary",
+          "conditions_text",
+          "workflow_text",
+          "article_types_text",
+          "cap_text",
+          "cap_numbers",
+          "contract_url",
+          "openaccess_nl_url",
+          "jct_data_url",
+          "per_year_oa_counts",
+          "needs_curation",
+          "needs_curation_reason"
+        ],
+        "title": "DealOut"
+      },
+      "DealParticipationsBody": {
+        "properties": {
+          "add": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Add",
+            "default": []
+          },
+          "remove": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Remove",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "DealParticipationsBody"
+      },
+      "DealStatus": {
+        "type": "string",
+        "enum": [
+          "current",
+          "archive"
+        ],
+        "title": "DealStatus",
+        "description": "deals.status (ck_deals_status)."
+      },
+      "DealUpdate": {
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DealStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "start_year": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2100.0,
+                "minimum": 1900.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Year"
+          },
+          "end_year": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2100.0,
+                "minimum": 1900.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Year"
+          },
+          "corresponding_authors_only": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corresponding Authors Only"
+          },
+          "cap_numbers": {
+            "anyOf": [
+              {
+                "patternProperties": {
+                  "^\\d{4}$": {
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap Numbers"
+          },
+          "cap_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap Text"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "esac_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Esac Id"
+          },
+          "publisher_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "DealUpdate",
+        "description": "PATCH-shaped PUT body: absent fields are untouched, explicit null\nclears nullable columns, and non-nullable columns reject null."
+      },
+      "DealUsageRow": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "n_works": {
+            "type": "integer",
+            "title": "N Works"
+          },
+          "euro": {
+            "type": "number",
+            "title": "Euro"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "n_works",
+          "euro"
+        ],
+        "title": "DealUsageRow"
+      },
+      "DegradedSource": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          },
+          "since": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Since"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "detail",
+          "since"
+        ],
+        "title": "DegradedSource",
+        "description": "A serving-time source currently answering in degraded mode."
+      },
+      "DocBlock": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level"
+          },
+          "lang": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lang"
+          },
+          "edited": {
+            "type": "boolean",
+            "title": "Edited",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "type",
+          "text"
+        ],
+        "title": "DocBlock"
+      },
+      "DocDetailOut": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "group": {
+            "type": "string",
+            "title": "Group"
+          },
+          "order": {
+            "type": "integer",
+            "title": "Order"
+          },
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/DocBlock"
+            },
+            "type": "array",
+            "title": "Blocks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "title",
+          "group",
+          "order",
+          "blocks"
+        ],
+        "title": "DocDetailOut"
+      },
+      "DocEditIn": {
+        "properties": {
+          "block_key": {
+            "type": "string",
+            "title": "Block Key"
+          },
+          "original_hash": {
+            "type": "string",
+            "title": "Original Hash"
+          },
+          "replacement": {
+            "type": "string",
+            "title": "Replacement"
+          }
+        },
+        "type": "object",
+        "required": [
+          "block_key",
+          "original_hash",
+          "replacement"
+        ],
+        "title": "DocEditIn"
+      },
+      "DocEditOut": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "block_key": {
+            "type": "string",
+            "title": "Block Key"
+          },
+          "edited": {
+            "type": "boolean",
+            "title": "Edited"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "block_key",
+          "edited"
+        ],
+        "title": "DocEditOut"
+      },
+      "DocMetaOut": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "group": {
+            "type": "string",
+            "title": "Group"
+          },
+          "order": {
+            "type": "integer",
+            "title": "Order"
+          },
+          "edits": {
+            "type": "integer",
+            "title": "Edits"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "title",
+          "group",
+          "order",
+          "edits"
+        ],
+        "title": "DocMetaOut"
+      },
+      "FeedbackAdminOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FeedbackCategory"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/FeedbackStatus"
+          },
+          "priority": {
+            "$ref": "#/components/schemas/FeedbackPriority"
+          },
+          "page_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Url"
+          },
+          "page_data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Page Data"
+          },
+          "resolution_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution Notes"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "description",
+          "category",
+          "status",
+          "priority",
+          "page_url",
+          "page_data",
+          "resolution_notes",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "FeedbackAdminOut"
+      },
+      "FeedbackCategory": {
+        "type": "string",
+        "enum": [
+          "bug",
+          "data",
+          "feature",
+          "improvement",
+          "other"
+        ],
+        "title": "FeedbackCategory",
+        "description": "feedback_items.category (the /feedback intake surface; the DB has no\nCHECK yet \u2014 the API set is authoritative)."
+      },
+      "FeedbackOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "status",
+          "created_at"
+        ],
+        "title": "FeedbackOut"
+      },
+      "FeedbackPatchOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/FeedbackStatus"
+          },
+          "priority": {
+            "$ref": "#/components/schemas/FeedbackPriority"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "priority"
+        ],
+        "title": "FeedbackPatchOut"
+      },
+      "FeedbackPriority": {
+        "type": "string",
+        "enum": [
+          "low",
+          "normal",
+          "high",
+          "critical"
+        ],
+        "title": "FeedbackPriority",
+        "description": "feedback_items.priority (ck_feedback_priority)."
+      },
+      "FeedbackStatus": {
+        "type": "string",
+        "enum": [
+          "todo",
+          "in_progress",
+          "done",
+          "wontfix"
+        ],
+        "title": "FeedbackStatus",
+        "description": "feedback_items.status (ck_feedback_status)."
+      },
+      "FeedbackUpdateIn": {
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "resolution_notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution Notes"
+          }
+        },
+        "type": "object",
+        "title": "FeedbackUpdateIn"
+      },
+      "FlaggedDealOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "publisher": {
+            "type": "string",
+            "title": "Publisher"
+          },
+          "esac_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Esac Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DealStatus"
+          },
+          "duration": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration"
+          },
+          "journals": {
+            "type": "integer",
+            "title": "Journals"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "publisher",
+          "esac_id",
+          "status",
+          "duration",
+          "journals",
+          "reason"
+        ],
+        "title": "FlaggedDealOut"
+      },
+      "FreshnessEntry": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "entity_type": {
+            "type": "string",
+            "title": "Entity Type"
+          },
+          "filter_set": {
+            "type": "string",
+            "title": "Filter Set"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "stats": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stats"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "entity_type",
+          "filter_set",
+          "status",
+          "finished_at",
+          "stats"
+        ],
+        "title": "FreshnessEntry"
+      },
+      "FreshnessResponse": {
+        "properties": {
+          "institution": {
+            "type": "string",
+            "title": "Institution"
+          },
+          "institution_short": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institution Short"
+          },
+          "ror": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ror"
+          },
+          "library_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Library Url"
+          },
+          "oa_guide_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Guide Url"
+          },
+          "support_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Support Email"
+          },
+          "admin_contact": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Contact"
+          },
+          "research_portal_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Portal Url"
+          },
+          "data_window_start": {
+            "type": "integer",
+            "title": "Data Window Start",
+            "default": 2020
+          },
+          "data_window_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Window End"
+          },
+          "harvests": {
+            "items": {
+              "$ref": "#/components/schemas/FreshnessEntry"
+            },
+            "type": "array",
+            "title": "Harvests"
+          },
+          "tables": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Tables",
+            "default": {}
+          },
+          "degraded": {
+            "items": {
+              "$ref": "#/components/schemas/DegradedSource"
+            },
+            "type": "array",
+            "title": "Degraded",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "institution",
+          "harvests"
+        ],
+        "title": "FreshnessResponse",
+        "description": "Config comes from the institution row; unset optional fields are\nNone rather than global defaults."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HarvestStatus": {
+        "type": "string",
+        "enum": [
+          "running",
+          "completed",
+          "failed"
+        ],
+        "title": "HarvestStatus",
+        "description": "harvest_runs.status (ck_harvest_runs_status)."
+      },
+      "InstitutionMetrics": {
+        "properties": {
+          "openalex_matched": {
+            "type": "integer",
+            "title": "Openalex Matched",
+            "default": 0
+          },
+          "fwci_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fwci Avg"
+          },
+          "fwci_n": {
+            "type": "integer",
+            "title": "Fwci N",
+            "default": 0
+          },
+          "retracted": {
+            "type": "integer",
+            "title": "Retracted",
+            "default": 0
+          },
+          "cited_total": {
+            "type": "integer",
+            "title": "Cited Total",
+            "default": 0
+          },
+          "canonical_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Total"
+          },
+          "canonical_retracted": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Retracted"
+          },
+          "canonical_oa": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CanonicalOa"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "InstitutionMetrics",
+        "description": "OpenAlex view of this institution's publications in this journal,\nplus canonical-store totals when the external works store is reachable\n(otherwise the canonical_* keys are None)."
+      },
+      "InstitutionOut": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "short_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Name"
+          },
+          "data_window_start": {
+            "type": "integer",
+            "title": "Data Window Start"
+          },
+          "data_window_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Window End"
+          },
+          "library_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Library Url"
+          },
+          "oa_guide_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Guide Url"
+          },
+          "support_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Support Email"
+          },
+          "admin_contact": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Contact"
+          },
+          "research_portal_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Portal Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "name",
+          "data_window_start"
+        ],
+        "title": "InstitutionOut"
+      },
+      "InstitutionUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "short_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Name"
+          },
+          "ror": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ror"
+          },
+          "openalex_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Id"
+          },
+          "pure_oai_base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Oai Base Url"
+          },
+          "openaire_org_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openaire Org Id"
+          },
+          "data_window_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Window Start"
+          },
+          "data_window_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Window End"
+          },
+          "library_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Library Url"
+          },
+          "oa_guide_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Guide Url"
+          },
+          "support_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Support Email"
+          },
+          "admin_contact": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Contact"
+          },
+          "research_portal_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Portal Url"
+          },
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          },
+          "require_confirmed_affiliation": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Require Confirmed Affiliation"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "InstitutionUpdate",
+        "description": "PATCH-shaped PUT body: absent fields are untouched, explicit null\nclears nullable columns, and the four non-nullable fields reject null."
+      },
+      "JournalDetailResponse": {
+        "properties": {
+          "journal": {
+            "$ref": "#/components/schemas/JournalListItem"
+          },
+          "issns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Issns",
+            "default": []
+          },
+          "alternate_titles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Alternate Titles",
+            "default": []
+          },
+          "topics": {
+            "items": {},
+            "type": "array",
+            "title": "Topics",
+            "default": []
+          },
+          "apc_prices": {
+            "items": {},
+            "type": "array",
+            "title": "Apc Prices",
+            "default": []
+          },
+          "summary_stats": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Stats"
+          },
+          "counts_by_year": {
+            "items": {},
+            "type": "array",
+            "title": "Counts By Year",
+            "default": []
+          },
+          "homepage_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Homepage Url"
+          },
+          "doaj_homepage_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doaj Homepage Url"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "harvested_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harvested At"
+          },
+          "deals": {
+            "items": {
+              "$ref": "#/components/schemas/DealOut"
+            },
+            "type": "array",
+            "title": "Deals",
+            "default": []
+          },
+          "stats": {
+            "items": {
+              "$ref": "#/components/schemas/StatsYear"
+            },
+            "type": "array",
+            "title": "Stats",
+            "default": []
+          },
+          "stats_totals": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Stats Totals",
+            "default": {}
+          },
+          "scimagojr": {
+            "items": {
+              "$ref": "#/components/schemas/ScimagojrOut"
+            },
+            "type": "array",
+            "title": "Scimagojr",
+            "default": []
+          },
+          "apc_aggregates": {
+            "items": {
+              "$ref": "#/components/schemas/ApcAggregateOut"
+            },
+            "type": "array",
+            "title": "Apc Aggregates",
+            "default": []
+          },
+          "apc_evidence": {
+            "items": {
+              "$ref": "#/components/schemas/ApcEvidenceOut"
+            },
+            "type": "array",
+            "title": "Apc Evidence",
+            "default": []
+          },
+          "openalex": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpenalexInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "openaire": {
+            "$ref": "#/components/schemas/OpenaireInfo",
+            "default": {
+              "matched_works": 0
+            }
+          },
+          "institution_metrics": {
+            "$ref": "#/components/schemas/InstitutionMetrics",
+            "default": {
+              "openalex_matched": 0,
+              "fwci_n": 0,
+              "retracted": 0,
+              "cited_total": 0
+            }
+          },
+          "attribution": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Attribution"
+            },
+            "type": "object",
+            "title": "Attribution",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "journal"
+        ],
+        "title": "JournalDetailResponse"
+      },
+      "JournalListItem": {
+        "properties": {
+          "issn_l": {
+            "type": "string",
+            "title": "Issn L"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "publisher_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Name"
+          },
+          "publisher_canonical": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Canonical"
+          },
+          "is_oa": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Oa"
+          },
+          "is_in_doaj": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is In Doaj"
+          },
+          "in_scimago": {
+            "type": "boolean",
+            "title": "In Scimago",
+            "default": false
+          },
+          "last_active_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Active Year"
+          },
+          "deal_covered": {
+            "type": "boolean",
+            "title": "Deal Covered",
+            "default": false
+          },
+          "works": {
+            "type": "integer",
+            "title": "Works",
+            "default": 0
+          },
+          "quartile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quartile"
+          },
+          "twoyr_mean_citedness": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Twoyr Mean Citedness"
+          },
+          "oa_type": {
+            "$ref": "#/components/schemas/OaType",
+            "default": "subscription"
+          },
+          "primary_topic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Topic"
+          },
+          "apc_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apc Source"
+          },
+          "apc_currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apc Currency"
+          },
+          "apc_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apc Price"
+          },
+          "apc_low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apc Low"
+          },
+          "apc_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apc High"
+          },
+          "apc_stats": {
+            "items": {
+              "$ref": "#/components/schemas/ApcAggregateOut"
+            },
+            "type": "array",
+            "title": "Apc Stats",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "issn_l",
+          "title",
+          "publisher_name",
+          "is_oa",
+          "is_in_doaj"
+        ],
+        "title": "JournalListItem"
+      },
+      "JournalSearchResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/JournalListItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "fuzzy": {
+            "type": "boolean",
+            "title": "Fuzzy",
+            "default": false
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Facets",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "JournalSearchResponse"
+      },
+      "LimitationOut": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          },
+          "hint": {
+            "type": "string",
+            "title": "Hint"
+          },
+          "severity": {
+            "type": "string",
+            "title": "Severity"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "source",
+          "scope",
+          "hint",
+          "severity",
+          "url"
+        ],
+        "title": "LimitationOut"
+      },
+      "LoginIn": {
+        "properties": {
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "title": "LoginIn"
+      },
+      "OaType": {
+        "type": "string",
+        "enum": [
+          "gold",
+          "diamond",
+          "generic",
+          "hybrid",
+          "subscription"
+        ],
+        "title": "OaType",
+        "description": "Journal-level OA classification (journals.oa_type; services/search.py\nSQL case + Python mirror, search filter vocabulary)."
+      },
+      "OpenaireInfo": {
+        "properties": {
+          "matched_works": {
+            "type": "integer",
+            "title": "Matched Works",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "OpenaireInfo"
+      },
+      "OpenalexInfo": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "cited_by_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cited By Count"
+          },
+          "works_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Works Count"
+          },
+          "host_organization_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Organization Name"
+          },
+          "first_publication_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Publication Year"
+          },
+          "last_publication_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Publication Year"
+          },
+          "topics": {
+            "items": {
+              "$ref": "#/components/schemas/OpenalexTopicOut"
+            },
+            "type": "array",
+            "title": "Topics",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "OpenalexInfo",
+        "description": "Venue-level OpenAlex source object (topics sorted count desc, nulls last)."
+      },
+      "OpenalexTopicOut": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Count"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "subfield": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subfield"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain"
+          }
+        },
+        "type": "object",
+        "title": "OpenalexTopicOut",
+        "description": "Topic entry of an OpenAlex source object (sorted count desc)."
+      },
+      "OrgUnitAuthorRow": {
+        "properties": {
+          "pure_uuid": {
+            "type": "string",
+            "title": "Pure Uuid"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "n_works": {
+            "type": "integer",
+            "title": "N Works"
+          },
+          "orcid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orcid"
+          },
+          "primary_topic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Topic"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pure_uuid",
+          "name",
+          "n_works",
+          "orcid",
+          "primary_topic"
+        ],
+        "title": "OrgUnitAuthorRow"
+      },
+      "OrgUnitDetailResponse": {
+        "properties": {
+          "unit": {
+            "$ref": "#/components/schemas/OrgUnitItem"
+          },
+          "groups": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OrgUnitItem"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Groups"
+          },
+          "journals": {
+            "items": {
+              "$ref": "#/components/schemas/OrgUnitJournalRow"
+            },
+            "type": "array",
+            "title": "Journals",
+            "default": []
+          },
+          "authors": {
+            "items": {
+              "$ref": "#/components/schemas/OrgUnitAuthorRow"
+            },
+            "type": "array",
+            "title": "Authors",
+            "default": []
+          },
+          "works_by_year": {
+            "items": {
+              "$ref": "#/components/schemas/StatsYear"
+            },
+            "type": "array",
+            "title": "Works By Year",
+            "default": []
+          },
+          "deal_usage": {
+            "items": {
+              "$ref": "#/components/schemas/DealUsageRow"
+            },
+            "type": "array",
+            "title": "Deal Usage",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "unit"
+        ],
+        "title": "OrgUnitDetailResponse"
+      },
+      "OrgUnitItem": {
+        "properties": {
+          "level": {
+            "type": "string",
+            "enum": [
+              "faculty",
+              "group"
+            ],
+            "title": "Level"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "faculty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Faculty"
+          },
+          "n_authors": {
+            "type": "integer",
+            "title": "N Authors"
+          },
+          "n_works": {
+            "type": "integer",
+            "title": "N Works"
+          },
+          "n_groups": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N Groups"
+          },
+          "deal_works": {
+            "type": "integer",
+            "title": "Deal Works"
+          },
+          "apc_euro_total": {
+            "type": "number",
+            "title": "Apc Euro Total"
+          },
+          "apc_n": {
+            "type": "integer",
+            "title": "Apc N"
+          },
+          "topics": {
+            "items": {
+              "$ref": "#/components/schemas/TopicMassRow"
+            },
+            "type": "array",
+            "title": "Topics",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "level",
+          "name",
+          "n_authors",
+          "n_works",
+          "deal_works",
+          "apc_euro_total",
+          "apc_n"
+        ],
+        "title": "OrgUnitItem"
+      },
+      "OrgUnitJournalRow": {
+        "properties": {
+          "issn_l": {
+            "type": "string",
+            "title": "Issn L"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "n_works": {
+            "type": "integer",
+            "title": "N Works"
+          },
+          "deal_covered": {
+            "type": "boolean",
+            "title": "Deal Covered"
+          },
+          "oa_type": {
+            "type": "string",
+            "title": "Oa Type"
+          },
+          "quartile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quartile"
+          }
+        },
+        "type": "object",
+        "required": [
+          "issn_l",
+          "title",
+          "n_works",
+          "deal_covered",
+          "oa_type",
+          "quartile"
+        ],
+        "title": "OrgUnitJournalRow"
+      },
+      "OrgUnitSearchResponse": {
+        "properties": {
+          "level": {
+            "type": "string",
+            "title": "Level"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OrgUnitItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Facets",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "level",
+          "items",
+          "total"
+        ],
+        "title": "OrgUnitSearchResponse"
+      },
+      "PublisherApcSummary": {
+        "properties": {
+          "n_journals": {
+            "type": "integer",
+            "title": "N Journals"
+          },
+          "eur_min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eur Min"
+          },
+          "eur_max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eur Max"
+          }
+        },
+        "type": "object",
+        "required": [
+          "n_journals"
+        ],
+        "title": "PublisherApcSummary"
+      },
+      "PublisherDetailResponse": {
+        "properties": {
+          "publisher": {
+            "$ref": "#/components/schemas/PublisherListItem"
+          },
+          "journals": {
+            "items": {
+              "$ref": "#/components/schemas/JournalListItem"
+            },
+            "type": "array",
+            "title": "Journals"
+          },
+          "deals": {
+            "items": {
+              "$ref": "#/components/schemas/DealOut"
+            },
+            "type": "array",
+            "title": "Deals",
+            "default": []
+          },
+          "deal_discrepancies": {
+            "items": {
+              "$ref": "#/components/schemas/DealDiscrepancyRow"
+            },
+            "type": "array",
+            "title": "Deal Discrepancies",
+            "default": []
+          },
+          "n_discrepancies": {
+            "type": "integer",
+            "title": "N Discrepancies",
+            "default": 0
+          },
+          "works_by_year": {
+            "items": {
+              "$ref": "#/components/schemas/StatsYear"
+            },
+            "type": "array",
+            "title": "Works By Year",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "publisher",
+          "journals"
+        ],
+        "title": "PublisherDetailResponse"
+      },
+      "PublisherListItem": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "n_journals": {
+            "type": "integer",
+            "title": "N Journals"
+          },
+          "n_works": {
+            "type": "integer",
+            "title": "N Works"
+          },
+          "deal_journals": {
+            "type": "integer",
+            "title": "Deal Journals"
+          },
+          "oa_types": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Oa Types"
+          },
+          "quartiles": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Quartiles"
+          },
+          "apc": {
+            "$ref": "#/components/schemas/PublisherApcSummary"
+          },
+          "topics": {
+            "items": {
+              "$ref": "#/components/schemas/TopicMassRow"
+            },
+            "type": "array",
+            "title": "Topics",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "n_journals",
+          "n_works",
+          "deal_journals",
+          "oa_types",
+          "quartiles",
+          "apc"
+        ],
+        "title": "PublisherListItem"
+      },
+      "PublisherSearchResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PublisherListItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Facets",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "PublisherSearchResponse"
+      },
+      "ScimagojrOut": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "sjr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sjr"
+          },
+          "best_quartile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Quartile"
+          },
+          "h_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "H Index"
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "sjr",
+          "best_quartile",
+          "h_index"
+        ],
+        "title": "ScimagojrOut"
+      },
+      "SettingsUpdate": {
+        "properties": {
+          "values": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Values"
+          }
+        },
+        "type": "object",
+        "required": [
+          "values"
+        ],
+        "title": "SettingsUpdate"
+      },
+      "SimilarJournalItem": {
+        "properties": {
+          "issn_l": {
+            "type": "string",
+            "title": "Issn L"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "publisher_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Name"
+          },
+          "publisher_canonical": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Canonical"
+          },
+          "quartile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quartile"
+          },
+          "is_oa": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Oa"
+          },
+          "deal_covered": {
+            "type": "boolean",
+            "title": "Deal Covered"
+          },
+          "works": {
+            "type": "integer",
+            "title": "Works"
+          },
+          "shared_topics": {
+            "type": "integer",
+            "title": "Shared Topics"
+          },
+          "similarity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Similarity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "issn_l",
+          "title",
+          "publisher_name",
+          "quartile",
+          "is_oa",
+          "deal_covered",
+          "works",
+          "shared_topics"
+        ],
+        "title": "SimilarJournalItem"
+      },
+      "SimilarJournalsBundle": {
+        "properties": {
+          "institution": {
+            "items": {
+              "$ref": "#/components/schemas/SimilarJournalItem"
+            },
+            "type": "array",
+            "title": "Institution"
+          },
+          "deals": {
+            "items": {
+              "$ref": "#/components/schemas/SimilarJournalItem"
+            },
+            "type": "array",
+            "title": "Deals"
+          },
+          "all": {
+            "items": {
+              "$ref": "#/components/schemas/SimilarJournalItem"
+            },
+            "type": "array",
+            "title": "All"
+          }
+        },
+        "type": "object",
+        "required": [
+          "institution",
+          "deals",
+          "all"
+        ],
+        "title": "SimilarJournalsBundle",
+        "description": "Similar-journal lists: UT-publishing venues and deal-covered venues as\nteaser cuts, plus the general list."
+      },
+      "StatsYear": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "works_count": {
+            "type": "integer",
+            "title": "Works Count"
+          },
+          "works_count_source": {
+            "$ref": "#/components/schemas/WorksSource",
+            "default": "openalex_institution_filter"
+          },
+          "oa_gold": {
+            "type": "integer",
+            "title": "Oa Gold"
+          },
+          "oa_hybrid": {
+            "type": "integer",
+            "title": "Oa Hybrid"
+          },
+          "oa_green": {
+            "type": "integer",
+            "title": "Oa Green"
+          },
+          "oa_bronze": {
+            "type": "integer",
+            "title": "Oa Bronze"
+          },
+          "oa_diamond": {
+            "type": "integer",
+            "title": "Oa Diamond"
+          },
+          "oa_closed": {
+            "type": "integer",
+            "title": "Oa Closed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "works_count",
+          "oa_gold",
+          "oa_hybrid",
+          "oa_green",
+          "oa_bronze",
+          "oa_diamond",
+          "oa_closed"
+        ],
+        "title": "StatsYear"
+      },
+      "TopicMassRow": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "n": {
+            "type": "number",
+            "title": "N"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "n"
+        ],
+        "title": "TopicMassRow"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WorkItem": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "oa_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Status"
+          },
+          "fwci": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fwci"
+          },
+          "cited_by_count": {
+            "type": "integer",
+            "title": "Cited By Count",
+            "default": 0
+          },
+          "is_retracted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Retracted"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "work_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Type"
+          },
+          "in_openalex": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Openalex"
+          }
+        },
+        "type": "object",
+        "title": "WorkItem"
+      },
+      "WorksPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WorkItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "WorksPage"
+      },
+      "WorksSource": {
+        "type": "string",
+        "enum": [
+          "pure_canon",
+          "openalex_institution_filter"
+        ],
+        "title": "WorksSource",
+        "description": "institution_works_stats.works_count_source (which pipeline filled the\nyearly counts)."
+      }
+    }
+  }
+}

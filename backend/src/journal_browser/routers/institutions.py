@@ -1,6 +1,5 @@
 """/api/v1/institutions: hosted-institution directory."""
 
-
 from fastapi import APIRouter
 from pydantic import BaseModel
 

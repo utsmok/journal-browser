@@ -28,6 +28,7 @@ class CacheEpoch(Base):
         TIMESTAMP(timezone=True), server_default=text("now()")
     )
 
+
 class Limitation(Base):
     """Registered caveat per data source/scope, surfaced in the UI."""
 
@@ -125,6 +126,4 @@ class DocEdit(Base):
     replacement: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[datetime] = _tstamp()
 
-    __table_args__ = (
-        UniqueConstraint("doc_slug", "block_key", name="uq_doc_edits_block"),
-    )
+    __table_args__ = (UniqueConstraint("doc_slug", "block_key", name="uq_doc_edits_block"),)

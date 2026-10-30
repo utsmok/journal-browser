@@ -84,9 +84,7 @@ async def update_feedback(
 
 
 @router.delete("/feedback/{feedback_id}", status_code=204)
-async def delete_feedback(
-    feedback_id: int, session: SessionDep, _: AdminDep
-) -> None:
+async def delete_feedback(feedback_id: int, session: SessionDep, _: AdminDep) -> None:
     row = await session.get(Feedback, feedback_id)
     if row is None:
         raise HTTPException(404, "feedback not found")

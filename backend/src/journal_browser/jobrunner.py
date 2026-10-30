@@ -2,7 +2,7 @@
 
 Usage inside a job module::
 
-    from jobs._runner import run_job
+    from journal_browser.jobrunner import run_job
 
     async def main(session, limit):
         ...

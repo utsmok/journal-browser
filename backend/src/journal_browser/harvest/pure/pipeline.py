@@ -31,6 +31,7 @@ from .xmlrecords import (
 
 logger = logging.getLogger(__name__)
 
+
 async def _ingest_oai_record(
     ingest: IngestSession,
     record: ET.Element,
@@ -41,7 +42,7 @@ async def _ingest_oai_record(
     entity_type: str,
 ) -> str:
     """Store one <record> verbatim + upsert the canonical row; returns kind."""
-    oai_identifier, datestamp, set_specs, status = _header_fields(record)
+    oai_identifier, datestamp, _set_specs, status = _header_fields(record)
     if status == "deleted":
         # deletedRecord=no on this endpoint, so a deleted header is an anomaly.
         ingest.parse_failures += 1
@@ -218,8 +219,6 @@ async def _harvest_set(
     return stats
 
 
-
-
 # Full sweep = every configured window year (settings.data_window_*). Drives
 # the retirement pass (works absent from a full sweep are marked, never deleted).
 async def harvest_pure_years(
@@ -284,9 +283,7 @@ async def harvest_pure_years(
     # Retirement is only sound against the runs of THIS sweep: per-year sets
     # each get their own harvest_run, so retiring against only the last run
     # would retire every other year.
-    stats["retired"] = (
-        await retire_absent(session, run_ids, institution.id) if full_sweep else 0
-    )
+    stats["retired"] = await retire_absent(session, run_ids, institution.id) if full_sweep else 0
     await session.commit()
     stats.update(totals)
     return stats

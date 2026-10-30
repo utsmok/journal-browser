@@ -30,6 +30,7 @@ dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "ruff>=0.17.1",
+    "ty>=0.0.95",
 ]
 
 [build-system]
@@ -48,13 +49,32 @@ markers = [
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests", "jobs"]
+src = ["src", "tests", "jobs", "scripts"]
 # Applied migrations are historical record; never reformat them.
 extend-exclude = ["alembic/versions"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "C4", "RET", "RUF"]
+# Intentional typography in strings and docstrings (en dashes, arrows,
+# multiplication signs in harvest text) is not an obfuscation risk.
+allowed-confusables = ["–", "—", "×", "→"]
 
 [tool.ruff.lint.per-file-ignores]
 # FastAPI's Depends() default pattern is idiomatic.
 "src/journal_browser/main.py" = ["B008"]
+
+[tool.ty.src]
+include = ["src", "jobs", "tests", "scripts"]
+
+[tool.ty.rules]
+# Alpha-ty false positives on SQLAlchemy/FastAPI/pydantic idioms (ORM Row
+# coercion, Mapped descriptors, JSONB looseness, constr() in annotations).
+# Structural rules (unresolved-import, call-non-callable, invalid-raise,
+# call-non-callable) stay at error; revisit these as ty matures.
+invalid-argument-type = "warn"
+unresolved-attribute = "warn"
+invalid-assignment = "warn"
+unsupported-operator = "warn"
+invalid-return-type = "warn"
+not-subscriptable = "warn"
+invalid-type-form = "warn"

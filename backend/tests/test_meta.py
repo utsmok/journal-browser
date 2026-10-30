@@ -42,6 +42,4 @@ async def test_freshness_exposes_institution_display_block(meta_api) -> None:
     assert settings["support_email"] is None
     assert settings["research_portal_url"] is None
     # optional personal contact: string or absent, never a stale constant
-    assert settings.get("admin_contact") in (None, "") or "@" in settings[
-        "admin_contact"
-    ]
+    assert settings.get("admin_contact") in (None, "") or "@" in settings["admin_contact"]

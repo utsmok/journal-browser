@@ -89,16 +89,14 @@ async def _sample(client: Any, row: Any) -> tuple[str, str | None]:
             raw=True,
         )
         results = ((resp.json() if resp is not None else None) or {}).get("results") or []
-    except Exception as exc:  # noqa: BLE001 - one bad journal must not kill the sweep
+    except Exception as exc:  # per-record resilience
         logger.warning("oa sample %s failed: %s", row.issn_l, exc)
         return row.issn_l, None
     statuses = [(w.get("open_access") or {}).get("oa_status") for w in results]
     return row.issn_l, observed_color(statuses)
 
 
-async def harvest_oa_statuses(
-    session: AsyncSession, limit: int | None = None
-) -> dict[str, Any]:
+async def harvest_oa_statuses(session: AsyncSession, limit: int | None = None) -> dict[str, Any]:
     """Sample recent works for every OA-flagged journal missing a color."""
     rows = (
         await session.execute(
@@ -116,9 +114,7 @@ async def harvest_oa_statuses(
         sampled = colored = 0
         async with AlethecaClient(**client_kwargs) as client:
             for chunk in (rows[i : i + CONCURRENCY] for i in range(0, len(rows), CONCURRENCY)):
-                for issn_l, color in await asyncio.gather(
-                    *(_sample(client, row) for row in chunk)
-                ):
+                for issn_l, color in await asyncio.gather(*(_sample(client, row) for row in chunk)):
                     sampled += 1
                     if color:
                         colored += 1
@@ -132,6 +128,4 @@ async def harvest_oa_statuses(
         await session.commit()
         return {"sampled": sampled, "colored": colored}
 
-    return await run_harvest(
-        SOURCE, ENTITY_TYPE, FILTER_SET, {"sample_n": SAMPLE_N}, body, session
-    )
+    return await run_harvest(SOURCE, ENTITY_TYPE, FILTER_SET, {"sample_n": SAMPLE_N}, body, session)

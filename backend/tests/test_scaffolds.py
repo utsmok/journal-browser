@@ -17,7 +17,7 @@ class FakeWorks:
         self._work_ids = work_ids
         self._counts = counts
 
-    async def iterate(self, page_size: int, filters: dict, select: str):  # noqa: A002
+    async def iterate(self, page_size: int, filters: dict, select: str):
         for work_id in self._work_ids:
             yield _ingest_record_into_batches(work_id)
 

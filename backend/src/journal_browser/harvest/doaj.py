@@ -80,8 +80,7 @@ async def _stamp_not_listed(session: AsyncSession) -> int:
         Journal.__table__.update()
         .where(
             Journal.__table__.c.doaj_in_doaj.is_(None),
-            (Journal.__table__.c.is_oa.is_(True))
-            | (Journal.__table__.c.is_in_doaj.is_(True)),
+            (Journal.__table__.c.is_oa.is_(True)) | (Journal.__table__.c.is_in_doaj.is_(True)),
         )
         .values(doaj_in_doaj=False)
     )
@@ -121,14 +120,14 @@ async def _apply_rows(session: AsyncSession, fields_list: list[dict[str, Any]]) 
                 matched[issn_l] = fields
     now = datetime.now(UTC)
     params = [
-        dict(
-            b_issn_l=issn_l,
-            b_has_apc=f["has_apc"],
-            b_apc_max=f["apc_max"],
-            b_apc_currency=f["apc_currency"],
-            b_homepage=f["homepage_url"],
-            b_now=now,
-        )
+        {
+            "b_issn_l": issn_l,
+            "b_has_apc": f["has_apc"],
+            "b_apc_max": f["apc_max"],
+            "b_apc_currency": f["apc_currency"],
+            "b_homepage": f["homepage_url"],
+            "b_now": now,
+        }
         for issn_l, f in matched.items()
     ]
     if params:

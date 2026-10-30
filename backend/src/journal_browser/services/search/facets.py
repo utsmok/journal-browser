@@ -40,8 +40,21 @@ async def facet_counts(
     # Unfiltered browse facets are identical for every visitor until the next
     # harvest, so cache them briefly; ~0.6s of aggregates per landing view was
     # the hot path. Bounded staleness (5 min) after a harvest is acceptable.
-    cacheable = not any([q, oa, doaj, quartile, topic, publisher, has_apc is not None,
-                         has_works is not None, oa_types, deal != "any", search_in != "all"])
+    cacheable = not any(
+        [
+            q,
+            oa,
+            doaj,
+            quartile,
+            topic,
+            publisher,
+            has_apc is not None,
+            has_works is not None,
+            oa_types,
+            deal != "any",
+            search_in != "all",
+        ]
+    )
     # The ignore-list and the harvest epoch shape the counts; either change
     # invalidates immediately instead of serving stale facets for 24h.
     # Deferred get_settings keeps the search-module monkeypatch seam
@@ -58,20 +71,20 @@ async def facet_counts(
         hit = cache_get(FACET_CACHE, cache_key, 86400)
         if hit is not None:
             return hit
-    defaults = dict(
-        institution_id=institution_id,
-        q=q,
-        search_in=search_in,
-        deal=deal,
-        oa=oa,
-        doaj=doaj,
-        quartile=quartile,
-        topic=topic,
-        publisher=publisher,
-        has_apc=has_apc,
-        has_works=has_works,
-        oa_types=oa_types,
-    )
+    defaults = {
+        "institution_id": institution_id,
+        "q": q,
+        "search_in": search_in,
+        "deal": deal,
+        "oa": oa,
+        "doaj": doaj,
+        "quartile": quartile,
+        "topic": topic,
+        "publisher": publisher,
+        "has_apc": has_apc,
+        "has_works": has_works,
+        "oa_types": oa_types,
+    }
 
     def base_sub(**override: Any) -> Any:
         return base_query(**{**defaults, **override}).subquery()
@@ -153,9 +166,7 @@ async def facet_counts(
                 func.count().filter(counted.c.quartile == "Q4").label("q4"),
                 func.count().filter(counted.c.apc_any).label("apc_true"),
                 func.count().filter(counted.c.works > 0).label("works_true"),
-                func.jsonb_object_agg(counted.c.oa_type, counted.c.oa_n).label(
-                    "oa_type_counts"
-                ),
+                func.jsonb_object_agg(counted.c.oa_type, counted.c.oa_n).label("oa_type_counts"),
                 func.jsonb_object_agg(counted.c.publisher_name, counted.c.pub_n)
                 .filter(counted.c.publisher_name.is_not(None))
                 .label("publisher_counts"),
@@ -210,7 +221,7 @@ async def facet_counts(
         facets["doaj"] = {"true": dj_true, "false": dj_total - dj_true}
     if quartile in {"Q1", "Q2", "Q3", "Q4"}:
         qt = variant_sub("quartile")
-        qt_total, (w1, w2, w3, w4) = await _flag_counts(
+        _qt_total, (w1, w2, w3, w4) = await _flag_counts(
             qt,
             qt.c.quartile == "Q1",
             qt.c.quartile == "Q2",

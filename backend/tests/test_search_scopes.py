@@ -57,7 +57,7 @@ async def api(client, db_engine):
                     doaj_in_doaj=True,
                     doaj_has_apc=False,
                     search_text=None,
-            ),
+                ),
                 # DOAJ canon gold: DOAJ itself declares an APC.
                 journal_factory(
                     "3030-3030",
@@ -66,7 +66,7 @@ async def api(client, db_engine):
                     doaj_in_doaj=True,
                     doaj_has_apc=True,
                     search_text=None,
-            ),
+                ),
                 journal_factory("5555-5555", title="Hybrid Journal", search_text=None),
                 journal_factory("6666-6666", title="Subscription Journal", search_text=None),
                 # Fully-OA per OpenAlex but missing from DOAJ (the MDPI
@@ -74,7 +74,10 @@ async def api(client, db_engine):
                 # observed from recent works, falling back through the
                 # deal to subscription when nothing else says OA.
                 journal_factory(
-                    "2323-2323", title="Water Journal", is_oa=True, latest_apc_euro=2500,
+                    "2323-2323",
+                    title="Water Journal",
+                    is_oa=True,
+                    latest_apc_euro=2500,
                     search_text=None,
                 ),
                 journal_factory(
@@ -83,21 +86,21 @@ async def api(client, db_engine):
                     is_oa=True,
                     oa_status_observed="diamond",
                     search_text=None,
-            ),
+                ),
                 journal_factory(
                     "2626-2626",
                     title="Observed Gold Journal",
                     is_oa=True,
                     oa_status_observed="gold",
                     search_text=None,
-            ),
+                ),
                 journal_factory(
                     "2727-2727",
                     title="Observed Closed Covered Journal",
                     is_oa=True,
                     oa_status_observed="closed",
                     search_text=None,
-            ),
+                ),
                 journal_factory(
                     "2828-2828", title="Unobserved OA Journal", is_oa=True, search_text=None
                 ),
@@ -108,26 +111,26 @@ async def api(client, db_engine):
                     topics=[{"display_name": "A"}, {"display_name": "B"}],
                     summary_stats={"two_yr_mean_citedness": "5.0"},
                     search_text=None,
-            ),
+                ),
                 journal_factory(
                     "8888-8888",
                     title="Similar Weak",
                     topics=[{"display_name": "A"}],
                     search_text=None,
-            ),
+                ),
                 journal_factory(
                     "9999-9999",
                     title="No Shared Topic",
                     topics=[{"display_name": "C"}],
                     search_text=None,
-            ),
+                ),
                 journal_factory(
                     "1010-1010",
                     title="Below Cutoff Similar",
                     topics=[{"display_name": "A"}],
                     works_2020_plus=2,
                     search_text=None,
-            ),
+                ),
                 # Proceedings fixtures: pattern match, no deal, no UT works
                 # -> hidden; deal-covered -> stays; UT works -> stays.
                 journal_factory(
@@ -224,9 +227,7 @@ async def api(client, db_engine):
         # columns. Materialize one row per journal, then set the fixture
         # specifics; the corpus cutoff passes for everything except the
         # below-cutoff fixture.
-        home = Institution(
-            name="University of Twente", code="ut", active=True
-        )
+        home = Institution(name="University of Twente", code="ut", active=True)
         session.add(home)
         await session.flush()
         await session.execute(MATERIALIZE_SQL, {"iid": home.id})
@@ -453,6 +454,7 @@ async def test_facet_variants_drop_own_filter(api):
     body = (await api.get("/api/v1/ut/journals", params=params)).json()
     assert body["total"] == 0
     assert body["facets"]["apc"] == {"true": 0, "false": 1}
+
 
 @requires_db
 async def test_has_apc_filter(api):

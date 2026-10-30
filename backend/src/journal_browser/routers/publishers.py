@@ -36,9 +36,7 @@ def _split(raw: str | list | None) -> list[str] | None:
 
 
 #: Pipe-joined oa_type multi-select, validated against OaType (422).
-OaTypeFilter = Annotated[
-    list[OaType] | None, BeforeValidator(_split), Query(max_length=60)
-]
+OaTypeFilter = Annotated[list[OaType] | None, BeforeValidator(_split), Query(max_length=60)]
 #: Pipe-joined quartile multi-select (422 on unknown values).
 QuartileFilter = Annotated[
     list[Literal["Q1", "Q2", "Q3", "Q4"]] | None,
@@ -113,9 +111,7 @@ async def publisher_detail(
             )
             for d, publisher_name, n_covered in detail["deals"]
         ],
-        deal_discrepancies=[
-            DealDiscrepancyRow(**row) for row in detail["deal_discrepancies"]
-        ],
+        deal_discrepancies=[DealDiscrepancyRow(**row) for row in detail["deal_discrepancies"]],
         n_discrepancies=detail["n_discrepancies"],
         works_by_year=detail["works_by_year"],
     )

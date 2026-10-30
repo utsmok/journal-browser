@@ -61,8 +61,12 @@ async def publishers_api(db, institution_factory):
                 ],
             ),  # J1: covered hybrid
             journal_factory(
-                "2222-2221", publisher_name="Elsevier BV", is_in_doaj=True,
-                doaj_in_doaj=True, doaj_has_apc=False, latest_quartile="Q2",
+                "2222-2221",
+                publisher_name="Elsevier BV",
+                is_in_doaj=True,
+                doaj_in_doaj=True,
+                doaj_has_apc=False,
+                latest_quartile="Q2",
             ),
             journal_factory(
                 "3333-3331",
@@ -168,7 +172,7 @@ async def publishers_api(db, institution_factory):
 
 @requires_db
 async def test_publisher_list_aggregates(publishers_api):
-    client, ids = publishers_api
+    client, _ids = publishers_api
     r = await client.get("/api/v1/ut/publishers")
     assert r.status_code == 200
     body = r.json()
@@ -206,7 +210,7 @@ async def test_publisher_list_aggregates(publishers_api):
 
 @requires_db
 async def test_publisher_filters_and_multiselect(publishers_api):
-    client, ids = publishers_api
+    client, _ids = publishers_api
 
     async def names(params: dict) -> list[str]:
         body = (await client.get("/api/v1/ut/publishers", params=params)).json()
@@ -240,7 +244,7 @@ async def test_publisher_filters_and_multiselect(publishers_api):
 
 @requires_db
 async def test_publisher_facets_drop_own_dimension(publishers_api):
-    client, ids = publishers_api
+    client, _ids = publishers_api
     body = (await client.get("/api/v1/ut/publishers")).json()
     assert body["facets"] == {
         "oa_type": {"gold": 0, "diamond": 1, "generic": 0, "hybrid": 2, "subscription": 3},
@@ -275,7 +279,7 @@ async def test_publisher_facets_drop_own_dimension(publishers_api):
 
 @requires_db
 async def test_publisher_detail(publishers_api):
-    client, ids = publishers_api
+    client, _ids = publishers_api
     r = await client.get(f"/api/v1/ut/publishers/{quote('Elsevier BV')}")
     assert r.status_code == 200
     body = r.json()
@@ -325,7 +329,7 @@ async def test_publisher_detail(publishers_api):
 
 @requires_db
 async def test_publisher_detail_404_and_slash_name(publishers_api):
-    client, ids = publishers_api
+    client, _ids = publishers_api
     assert (await client.get("/api/v1/ut/publishers/Nonexistent")).status_code == 404
     r = await client.get(f"/api/v1/ut/publishers/{quote('Alpha/Beta Press')}")
     assert r.status_code == 200
@@ -335,7 +339,7 @@ async def test_publisher_detail_404_and_slash_name(publishers_api):
 
 @requires_db
 async def test_publisher_institution_isolation(publishers_api):
-    client, ids = publishers_api
+    client, _ids = publishers_api
     body = (await client.get("/api/v1/rug/publishers")).json()
     assert body["total"] == 1
     item = body["items"][0]
@@ -404,7 +408,7 @@ async def canonical_api(publishers_api, db):
 
 @requires_db
 async def test_publisher_canonical_merges_subbrands(canonical_api):
-    client, ids = canonical_api
+    client, _ids = canonical_api
     body = (await client.get("/api/v1/ut/publishers")).json()
     # Two publisher_names (Springer, Nature Research) collapse into one
     # canonical group; uncanonicalized names keep their own groups.
@@ -421,7 +425,11 @@ async def test_publisher_canonical_merges_subbrands(canonical_api):
     assert merged["n_works"] == 13  # 10 + 2 + 1
     assert merged["deal_journals"] == 1
     assert merged["oa_types"] == {
-        "gold": 0, "diamond": 0, "generic": 0, "hybrid": 1, "subscription": 2,
+        "gold": 0,
+        "diamond": 0,
+        "generic": 0,
+        "hybrid": 1,
+        "subscription": 2,
     }
     assert merged["quartiles"] == {"q1": 1, "q2": 0, "q3": 0, "q4": 0, "none": 2}
     assert merged["apc"] == {"n_journals": 1, "eur_min": 1500.0, "eur_max": 1500.0}
@@ -434,7 +442,7 @@ async def test_publisher_canonical_merges_subbrands(canonical_api):
 
 @requires_db
 async def test_publisher_search_matches_member_names(canonical_api):
-    client, ids = canonical_api
+    client, _ids = canonical_api
     # q reaches the canonical group through a sub-brand publisher_name,
     # and a member-name prefix ranks the group as relevant.
     body = (await client.get("/api/v1/ut/publishers", params={"q": "Nature"})).json()
@@ -447,7 +455,7 @@ async def test_publisher_search_matches_member_names(canonical_api):
 
 @requires_db
 async def test_publisher_detail_by_canonical_name(canonical_api):
-    client, ids = canonical_api
+    client, _ids = canonical_api
     r = await client.get(f"/api/v1/ut/publishers/{quote('Springer Nature')}")
     assert r.status_code == 200
     body = r.json()
@@ -465,7 +473,7 @@ async def test_publisher_detail_by_canonical_name(canonical_api):
 
 @requires_db
 async def test_publisher_facets_on_merged_groups(canonical_api):
-    client, ids = canonical_api
+    client, _ids = canonical_api
     body = (await client.get("/api/v1/ut/publishers")).json()
     # Size buckets run over merged group sizes (3 journals -> "2-4").
     assert body["facets"]["size"] == {"1": 3, "2-4": 2, "5-9": 0, "10+": 0}
@@ -484,7 +492,7 @@ async def test_publisher_facets_on_merged_groups(canonical_api):
 
 @requires_db
 async def test_publisher_snapshot_per_institution(publishers_api):
-    client, ids = publishers_api
+    client, _ids = publishers_api
     # rug first, ut second: each institution builds its own snapshot.
     rug = (await client.get("/api/v1/rug/publishers")).json()
     assert rug["total"] == 1

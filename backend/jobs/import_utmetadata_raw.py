@@ -128,9 +128,7 @@ async def copy_stream(
     last = ""
     while True:
         rows = (
-            await ext.execute(
-                text(link_sql), {"source": source, "last": last, "n": PAGE}
-            )
+            await ext.execute(text(link_sql), {"source": source, "last": last, "n": PAGE})
         ).all()
         if not rows:
             break
@@ -222,9 +220,8 @@ async def main(code: str) -> None:
 
         # DOI identities for the copied OpenAIRE records (same rule as the
         # live harvest: best-effort DOI -> confirmed work_identity).
-        doi_to_work = {
-            doi: uuid
-            for doi, uuid in (
+        doi_to_work = dict(
+            (
                 await session.execute(
                     text(
                         "SELECT doi_normalized, pure_uuid FROM works "
@@ -234,7 +231,7 @@ async def main(code: str) -> None:
                     {"iid": institution.id},
                 )
             ).all()
-        }
+        )
         confirmed = 0
         async with ext_engine.connect() as ext:
             last = ""

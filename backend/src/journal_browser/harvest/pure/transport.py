@@ -23,6 +23,8 @@ PREFIX_CERIF = "oai_cerif_openaire"
 # badResumptionToken => restart the whole set from scratch, at most this often.
 MAX_TOKEN_RESTARTS = 2
 MAX_HTTP_ATTEMPTS = 5
+
+
 class PureOaiError(RuntimeError):
     """OAI-PMH protocol error (the <error code="..."> element) or parse failure."""
 

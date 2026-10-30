@@ -17,9 +17,7 @@ from journal_browser.models import (
 
 @requires_db
 async def test_feedback_rejects_unknown_category(db):
-    db.add(
-        Feedback(title="t", description="d", category="bogus")
-    )
+    db.add(Feedback(title="t", description="d", category="bogus"))
     with pytest.raises(IntegrityError):
         await db.commit()
 
@@ -70,8 +68,9 @@ async def _seed_work(db, code: str, pure_uuid: str) -> Institution:
     inst = Institution(code=code, name="C")
     db.add(inst)
     await db.flush()
-    run = HarvestRun(source="test", entity_type="work", institution_id=inst.id,
-                     config_fingerprint="t")
+    run = HarvestRun(
+        source="test", entity_type="work", institution_id=inst.id, config_fingerprint="t"
+    )
     db.add(run)
     await db.flush()
     db.add(
@@ -122,8 +121,6 @@ async def test_work_identity_accepts_trgm_threshold(db):
 
 @requires_db
 async def test_harvest_state_rejects_unknown_status(db):
-    db.add(
-        HarvestState(source="s", entity_type="e", filter_set="all", status="paused")
-    )
+    db.add(HarvestState(source="s", entity_type="e", filter_set="all", status="paused"))
     with pytest.raises(IntegrityError):
         await db.commit()

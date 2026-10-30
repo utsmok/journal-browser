@@ -22,6 +22,4 @@ def dj_scope(institution_id: int) -> Any:
 
 def deal_institution_join(institution_id: int) -> Any:
     """Participation join condition from Deal to this institution."""
-    return (DealInstitution.deal_id == Deal.id) & (
-        DealInstitution.institution_id == institution_id
-    )
+    return (DealInstitution.deal_id == Deal.id) & (DealInstitution.institution_id == institution_id)

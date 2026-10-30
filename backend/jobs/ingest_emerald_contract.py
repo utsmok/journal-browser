@@ -157,7 +157,7 @@ async def resolve_unmatched(unmatched: list[str]) -> dict[str, dict]:
                 )
                 resp.raise_for_status()
                 results = resp.json().get("results", [])
-            except Exception as exc:  # noqa: BLE001 - per-record resilience
+            except Exception as exc:  # background job; log and stop
                 print(f"  search failed for {title!r}: {exc}")
                 continue
             norm_query = _norm(title)

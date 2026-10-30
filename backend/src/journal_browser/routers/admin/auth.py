@@ -46,8 +46,11 @@ async def _require_admin(request: Request) -> None:
     if not _valid_token(token):
         raise HTTPException(401, "invalid or expired token")
 
+
 AdminDep = Annotated[None, Depends(_require_admin)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+
 @router.post("/login")
 async def login(body: LoginIn) -> dict[str, Any]:
     password = get_settings().admin_password

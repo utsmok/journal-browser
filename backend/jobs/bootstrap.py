@@ -146,10 +146,8 @@ def build_plan(codes: list[str], only_institution: str | None) -> tuple[list, di
     for code in codes:
         for name, job_args in INST_STEPS:
             full = f"{name}:{code}"
-            steps.append((full, job_args + ["--institution", code]))
-            deps[full] = [
-                dep if dep in GLOBAL_DEPS else f"{dep}:{code}" for dep in INST_DEPS[name]
-            ]
+            steps.append((full, [*job_args, "--institution", code]))
+            deps[full] = [dep if dep in GLOBAL_DEPS else f"{dep}:{code}" for dep in INST_DEPS[name]]
             if name == "stats":
                 stats_names.append(full)
     if only_institution is None:
@@ -228,8 +226,11 @@ async def main() -> int:
         return 0
     codes = await hosted_codes()
     if only_institution is not None and only_institution not in codes:
-        print(f"bootstrap: unknown or inactive institution {only_institution!r} "
-              f"(hosted: {', '.join(codes) or 'none'})", file=sys.stderr)
+        print(
+            f"bootstrap: unknown or inactive institution {only_institution!r} "
+            f"(hosted: {', '.join(codes) or 'none'})",
+            file=sys.stderr,
+        )
         return 2
     if (
         "--from" not in args

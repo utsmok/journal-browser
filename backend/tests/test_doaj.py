@@ -52,18 +52,24 @@ def test_journal_fields_normalization():
     assert (odd["has_apc"], odd["apc_max"]) == (True, None)
 
     # Garbage ISSNs only: nothing to match on.
-    assert journal_fields(_row(**{
-        "Journal ISSN (print version)": "not-an-issn",
-        "Journal EISSN (online version)": "",
-    })) is None
+    assert (
+        journal_fields(
+            _row(
+                **{
+                    "Journal ISSN (print version)": "not-an-issn",
+                    "Journal EISSN (online version)": "",
+                }
+            )
+        )
+        is None
+    )
 
 
 def test_oa_type_value_mirror():
     # DOAJ canon: listed with charges -> gold; listed without -> diamond.
     assert oa_type_value(False, True, False, False, doaj_in_doaj=True, doaj_has_apc=True) == "gold"
     assert (
-        oa_type_value(False, True, False, False, doaj_in_doaj=True, doaj_has_apc=False)
-        == "diamond"
+        oa_type_value(False, True, False, False, doaj_in_doaj=True, doaj_has_apc=False) == "diamond"
     )
     # Observed prices (OpenAlex list price / OpenAPC) make it gold even
     # without a DOAJ match (has_charges=True).
@@ -148,9 +154,7 @@ async def _fake_download(payload: bytes):
 async def test_harvest_doaj_fails_on_renamed_column(db, monkeypatch):
     """A renamed DOAJ column must fail the run, not land zero rows silently."""
     download = await _fake_download(b"Journal Title,Journal URL\nT,u\n")
-    monkeypatch.setattr(
-        "journal_browser.harvest.doaj.download_to_landing", download
-    )
+    monkeypatch.setattr("journal_browser.harvest.doaj.download_to_landing", download)
     with pytest.raises(HarvestDataError, match="missing columns"):
         await harvest_doaj(db)
 
@@ -162,8 +166,6 @@ async def test_harvest_doaj_fails_on_zero_issn_rows(db, monkeypatch):
         b"Journal EISSN (online version),Publisher,APC,APC amount\n"
         b"T,https://x,,,P,No,\n"
     )
-    monkeypatch.setattr(
-        "journal_browser.harvest.doaj.download_to_landing", download
-    )
+    monkeypatch.setattr("journal_browser.harvest.doaj.download_to_landing", download)
     with pytest.raises(HarvestDataError, match="zero ISSN-bearing rows"):
         await harvest_doaj(db)

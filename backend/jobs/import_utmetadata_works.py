@@ -115,8 +115,7 @@ async def import_works(
 
     # Journal link target: upper-cased issn_l -> the stored journals form.
     journals_by_upper = {
-        issn_l.upper(): issn_l
-        for (issn_l,) in (await session.execute(select(Journal.issn_l)))
+        issn_l.upper(): issn_l for (issn_l,) in (await session.execute(select(Journal.issn_l)))
     }
     # DOIs already claimed locally (the stored 2020+ corpus keeps priority).
     claimed: dict[str, str] = {
@@ -186,18 +185,14 @@ async def import_works(
             index_elements=[Work.institution_id, Work.pure_uuid],
             set_={
                 # DOI/publisher/OA/journal: import fills, never clobbers.
-                "doi_normalized": func.coalesce(
-                    stmt.excluded.doi_normalized, Work.doi_normalized
-                ),
+                "doi_normalized": func.coalesce(stmt.excluded.doi_normalized, Work.doi_normalized),
                 "title": stmt.excluded.title,
                 "norm_title": stmt.excluded.norm_title,
                 "year": stmt.excluded.year,
                 "work_type": stmt.excluded.work_type,
                 "publisher": func.coalesce(stmt.excluded.publisher, Work.publisher),
                 "oa_status": func.coalesce(stmt.excluded.oa_status, Work.oa_status),
-                "journal_issn_l": func.coalesce(
-                    Work.journal_issn_l, stmt.excluded.journal_issn_l
-                ),
+                "journal_issn_l": func.coalesce(Work.journal_issn_l, stmt.excluded.journal_issn_l),
                 "last_seen_run": run_id,
                 "retired_at": None,
                 "updated_at": datetime.now(UTC),

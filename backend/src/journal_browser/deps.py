@@ -12,9 +12,7 @@ from .models import Institution
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
-async def get_scoped_institution(
-    institution_code: str, session: SessionDep
-) -> Institution:
+async def get_scoped_institution(institution_code: str, session: SessionDep) -> Institution:
     """Resolve /{institution_code}/... path scopes; 404 for unknown codes."""
     inst = await get_institution_by_code(session, institution_code)
     if inst is None:

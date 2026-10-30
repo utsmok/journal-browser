@@ -9,7 +9,6 @@ from .transport import DC_NS, DCT_NS, PureOaiError, oai_tag
 logger = logging.getLogger(__name__)
 
 
-
 def _header_fields(record: ET.Element) -> tuple[str, str, list[str], str | None]:
     """(oai_identifier, datestamp, set_specs, status) from a <record> header."""
     header = record.find(oai_tag("header"))
@@ -67,7 +66,10 @@ def _cerif_publication_fields(metadata_el: ET.Element | None) -> dict[str, Any]:
     root = next(iter(metadata_el), None)
     if root is None or root.tag.rsplit("}", 1)[-1] != "Publication":
         return {}
-    local = lambda el: el.tag.rsplit("}", 1)[-1]  # noqa: E731
+
+    def local(el: Any) -> str:
+        return el.tag.rsplit("}", 1)[-1]
+
     fields: dict[str, Any] = {}
     for child in root:
         name = local(child)

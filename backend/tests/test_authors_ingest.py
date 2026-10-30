@@ -76,9 +76,7 @@ def test_derive_identity_short_code_canonicalized():
     data.orgs[5] = ("eemcs-uuid", "EEMCS")
     data.tree[5] = [(0, 5), (1, 1)]
     faculty, _group, _orgs = derive_identity(_payload("eemcs-uuid"), data)
-    assert faculty == (
-        "Faculty of Electrical Engineering, Mathematics and Computer Science"
-    )
+    assert faculty == ("Faculty of Electrical Engineering, Mathematics and Computer Science")
 
 
 def test_derive_identity_without_faculty_chain():
@@ -155,26 +153,37 @@ def test_is_confirmed_branches():
 
 
 def test_primary_topic_weighting_and_ties():
-    topics = {"j1": [{"id": "T1", "display_name": "Physics"},
-                     {"id": "T2", "display_name": "Chemistry"}],
-              "j2": [{"id": "T2", "display_name": "Chemistry"}]}
+    topics = {
+        "j1": [{"id": "T1", "display_name": "Physics"}, {"id": "T2", "display_name": "Chemistry"}],
+        "j2": [{"id": "T2", "display_name": "Chemistry"}],
+    }
     # Without stored counts a venue contributes to its primary topic only:
     # Physics 3 beats Chemistry 1.
     assert primary_topic_from_venues({"j1": 3, "j2": 1}, topics) == "Physics"
     # With counts, venue mass splits by the per-source topic share: j1
     # spreads 3 works 1.5/1.5, j2 adds 1 -> Chemistry 2.5 beats Physics 1.5.
-    counted = {"j1": [{"id": "T1", "display_name": "Physics", "count": 1},
-                      {"id": "T2", "display_name": "Chemistry", "count": 1}],
-               "j2": [{"id": "T2", "display_name": "Chemistry", "count": 1}]}
+    counted = {
+        "j1": [
+            {"id": "T1", "display_name": "Physics", "count": 1},
+            {"id": "T2", "display_name": "Chemistry", "count": 1},
+        ],
+        "j2": [{"id": "T2", "display_name": "Chemistry", "count": 1}],
+    }
     assert primary_topic_from_venues({"j1": 3, "j2": 1}, counted) == "Chemistry"
     # A 1:1 count split inside one venue ties; alphabetical wins.
     assert primary_topic_from_venues({"j1": 1}, counted) == "Chemistry"
     # Entries with a subfield are labelled by subfield, split by count.
-    sub = {"j1": [{"display_name": "T-a", "count": 3, "subfield": "Materials"},
-                  {"display_name": "T-b", "count": 1, "subfield": "Optics"}]}
+    sub = {
+        "j1": [
+            {"display_name": "T-a", "count": 3, "subfield": "Materials"},
+            {"display_name": "T-b", "count": 1, "subfield": "Optics"},
+        ]
+    }
     assert primary_topic_from_venues({"j1": 4}, sub) == "Materials"
-    both = {"j1": [{"id": "T1", "display_name": "Zeta"}],
-            "j2": [{"id": "T1", "display_name": "Alpha"}]}
+    both = {
+        "j1": [{"id": "T1", "display_name": "Zeta"}],
+        "j2": [{"id": "T1", "display_name": "Alpha"}],
+    }
     assert primary_topic_from_venues({"j1": 1, "j2": 1}, both) == "Alpha"
     # No venues / no topics / malformed entries -> None.
     assert primary_topic_from_venues({}, topics) is None
@@ -290,7 +299,11 @@ async def test_ingest_idempotent(db, institution_factory, monkeypatch):
     stats = await run_ingest(db, inst.id, None, inst.ror)
     await db.commit()
     assert stats == {
-        "authors": 2, "edges": 4, "with_faculty": 2, "with_research_group": 1, "confirmed": 2,
+        "authors": 2,
+        "edges": 4,
+        "with_faculty": 2,
+        "with_research_group": 1,
+        "confirmed": 2,
     }
 
     a_rows = {row.pure_uuid: row for row in (await db.execute(select(Author))).scalars()}
@@ -318,7 +331,10 @@ async def test_ingest_idempotent(db, institution_factory, monkeypatch):
         for row in (await db.execute(select(AuthorWork))).scalars()
     }
     assert edges == {
-        ("a-uuid", "w1"), ("a-uuid", "w2"), ("b-uuid", "w1"), ("b-uuid", "w2"),
+        ("a-uuid", "w1"),
+        ("a-uuid", "w2"),
+        ("b-uuid", "w1"),
+        ("b-uuid", "w2"),
     }
 
     # Rerun: identical end state (upsert + full edge replace, no dupes).

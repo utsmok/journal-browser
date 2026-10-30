@@ -50,7 +50,7 @@ async def docs_api(client, monkeypatch, tmp_path):
     monkeypatch.setenv("JB_SETTINGS_YAML", str(tmp_path / "settings.yaml"))
     monkeypatch.setenv("JB_DOCS_DIR", str(REPO_DOCS))
     reset_settings_cache()
-    return client
+    yield client
     reset_settings_cache()
 
 

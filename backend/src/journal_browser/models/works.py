@@ -23,9 +23,7 @@ class Work(Base):
 
     __tablename__ = "works"
 
-    institution_id: Mapped[int] = mapped_column(
-        ForeignKey("institutions.id"), primary_key=True
-    )
+    institution_id: Mapped[int] = mapped_column(ForeignKey("institutions.id"), primary_key=True)
     pure_uuid: Mapped[str] = mapped_column(Text, primary_key=True)
     doi_normalized: Mapped[str | None] = mapped_column(Text, nullable=True)
     title: Mapped[str] = mapped_column(Text, nullable=False)
@@ -81,9 +79,7 @@ class WorkIdentity(Base):
     __tablename__ = "work_identity"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    institution_id: Mapped[int] = mapped_column(
-        ForeignKey("institutions.id"), nullable=False
-    )
+    institution_id: Mapped[int] = mapped_column(ForeignKey("institutions.id"), nullable=False)
     source: Mapped[str] = mapped_column(Text, nullable=False)
     source_pk: Mapped[str] = mapped_column(Text, nullable=False)
     work_id: Mapped[str] = mapped_column(Text, nullable=False)
@@ -108,8 +104,6 @@ class WorkIdentity(Base):
             ["works.institution_id", "works.pure_uuid"],
             ondelete="CASCADE",
         ),
-        UniqueConstraint(
-            "institution_id", "source", "source_pk", name=WORK_IDENTITY_UQ
-        ),
+        UniqueConstraint("institution_id", "source", "source_pk", name=WORK_IDENTITY_UQ),
         Index("ix_work_identity_inst_work", "institution_id", "work_id"),
     )

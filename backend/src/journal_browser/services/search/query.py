@@ -58,6 +58,8 @@ def _list_price(currency: str) -> Any:
         func.jsonb_path_query_first(Journal.apc_prices, path).op("->>")("price"),
         Numeric,
     )
+
+
 def _like(term: str) -> str:
     """Escapes LIKE wildcards so user input matches literally."""
     return term.replace("\\", "\\\\").replace("%", r"\%").replace("_", r"\_")
@@ -65,6 +67,8 @@ def _like(term: str) -> str:
 
 def _norm_issn(term: str) -> str:
     return term.replace("-", "").replace(" ", "").upper()
+
+
 def base_query(
     *,
     institution_id: int,
@@ -142,9 +146,9 @@ def base_query(
             # Display/sort price: OpenAlex list price (EUR, then USD), else
             # the OpenAPC latest cost. apc_prices order is unspecified, so
             # the currency match goes through jsonb_path_query_first.
-            func.coalesce(
-                _list_price("EUR"), _list_price("USD"), J.latest_apc_euro
-            ).label("apc_price"),
+            func.coalesce(_list_price("EUR"), _list_price("USD"), J.latest_apc_euro).label(
+                "apc_price"
+            ),
             # Any-source APC presence; the facet pass filters on this.
             APC_SHOWN.label("apc_any"),
         )
@@ -218,9 +222,7 @@ def base_query(
     if has_apc is not None:
         query = query.where(APC_SHOWN if has_apc else ~APC_SHOWN)
     if has_works is not None:
-        query = query.where(
-            flags.c.works_count > 0 if has_works else flags.c.works_count == 0
-        )
+        query = query.where(flags.c.works_count > 0 if has_works else flags.c.works_count == 0)
     return query
 
 
@@ -241,6 +243,8 @@ def _order(sort: SortKey, subq: Any) -> tuple[Any, str]:
     if sort == "2yr_mean_citedness":
         return func.coalesce(subq.c.twoyr, 0), "desc"
     return func.coalesce(subq.c.rank, 0), "desc"  # relevance
+
+
 async def attach_apc_display(session: AsyncSession, items: list[dict[str, Any]]) -> None:
     """Stamp display APC fields onto each item dict in place (page-sized).
 
@@ -257,9 +261,7 @@ async def attach_apc_display(session: AsyncSession, items: list[dict[str, Any]])
             select(Journal.issn_l, Journal.apc_prices).where(Journal.issn_l.in_(issns))
         )
     ).all():
-        entries = [
-            p for p in (prices or []) if isinstance(p, dict) and p.get("price") is not None
-        ]
+        entries = [p for p in (prices or []) if isinstance(p, dict) and p.get("price") is not None]
         by_currency = {p.get("currency"): p["price"] for p in entries}
         matched = next((c for c in ("EUR", "USD") if c in by_currency), None)
         if matched:

@@ -29,20 +29,20 @@ async def search_journals(
     limit: int = 20,
     include_facets: bool = True,
 ) -> dict[str, Any]:
-    filters = dict(
-        institution_id=institution_id,
-        q=q,
-        search_in=search_in,
-        deal=deal,
-        oa=oa,
-        doaj=doaj,
-        quartile=quartile,
-        topic=topic,
-        publisher=publisher,
-        has_apc=has_apc,
-        has_works=has_works,
-        oa_types=oa_types,
-    )
+    filters = {
+        "institution_id": institution_id,
+        "q": q,
+        "search_in": search_in,
+        "deal": deal,
+        "oa": oa,
+        "doaj": doaj,
+        "quartile": quartile,
+        "topic": topic,
+        "publisher": publisher,
+        "has_apc": has_apc,
+        "has_works": has_works,
+        "oa_types": oa_types,
+    }
     subq = base_query(**filters).subquery()
     total = await session.scalar(select(func.count()).select_from(subq)) or 0
     fuzzy = False

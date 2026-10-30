@@ -24,9 +24,7 @@ class HarvestRun(Base):
     entity_type: Mapped[str] = mapped_column(Text, nullable=False)
     # NULL = global job (journals, deals, OpenAPC, ...); institution-scoped
     # jobs (pure, enrich, openaire, works stats) carry the institution id.
-    institution_id: Mapped[int | None] = mapped_column(
-        ForeignKey("institutions.id"), nullable=True
-    )
+    institution_id: Mapped[int | None] = mapped_column(ForeignKey("institutions.id"), nullable=True)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="running")
     started_at: Mapped[datetime] = _tstamp()
     finished_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
@@ -51,9 +49,7 @@ class HarvestState(Base):
     source: Mapped[str] = mapped_column(Text, nullable=False)
     entity_type: Mapped[str] = mapped_column(Text, nullable=False)
     filter_set: Mapped[str] = mapped_column(Text, nullable=False)
-    institution_id: Mapped[int | None] = mapped_column(
-        ForeignKey("institutions.id"), nullable=True
-    )
+    institution_id: Mapped[int | None] = mapped_column(ForeignKey("institutions.id"), nullable=True)
     status: Mapped[str | None] = mapped_column(Text, nullable=True)
     stats: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     last_run_id: Mapped[int | None] = mapped_column(

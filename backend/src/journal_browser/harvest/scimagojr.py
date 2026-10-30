@@ -80,7 +80,7 @@ async def ingest_year(session: AsyncSession, year: int, landing_dir: Path) -> di
 
     ingest = IngestSession(session)
     await ingest.start_run(SOURCE, ENTITY_TYPE, f"year={year}", {"file": str(path)})
-    kind, _ = await ingest.ingest_record(
+    _kind, _ = await ingest.ingest_record(
         str(year), {"filename": path.name, "bytes_sha_head": data[:64].hex()}
     )
     rows = parse_export(data)
@@ -96,12 +96,12 @@ async def ingest_year(session: AsyncSession, year: int, landing_dir: Path) -> di
             for issn in issn_candidates(row.get("Issn", "")):
                 issn_l = await lookup_issn_l(session, issn)
                 if issn_l:
-                    values = dict(
-                        sjr=sjr,
-                        best_quartile=quartile,
-                        h_index=h_index,
-                        extras={k: v for k, v in row.items() if k not in COLUMNS},
-                    )
+                    values = {
+                        "sjr": sjr,
+                        "best_quartile": quartile,
+                        "h_index": h_index,
+                        "extras": {k: v for k, v in row.items() if k not in COLUMNS},
+                    }
                     await session.execute(
                         pg_insert(ScimagojrMetric)
                         .values(issn_l=issn_l, year=year, **values)

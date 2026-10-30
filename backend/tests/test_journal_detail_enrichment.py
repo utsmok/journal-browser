@@ -107,7 +107,9 @@ async def api(client, db_engine):
         await session.flush()
         # works_stats records are institution-scoped via their harvest run.
         run = HarvestRun(
-            source="openalex", entity_type="test", config_fingerprint="t",
+            source="openalex",
+            entity_type="test",
+            config_fingerprint="t",
             institution_id=home.id,
         )
         oa_run = HarvestRun(source="openaire", entity_type="test", config_fingerprint="t")

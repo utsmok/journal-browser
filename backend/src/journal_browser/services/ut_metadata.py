@@ -136,11 +136,15 @@ async def ut_openalex_only_works_for_author(
     try:
         async with _get_engine(dsn).connect() as conn:
             rows = (
-                await conn.execute(
-                    _AUTHOR_OPENALEX_ONLY_SQL,
-                    {"aids": [a.lower() for a in author_a_ids]},
+                (
+                    await conn.execute(
+                        _AUTHOR_OPENALEX_ONLY_SQL,
+                        {"aids": [a.lower() for a in author_a_ids]},
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
     except Exception:
         logger.exception("ut-metadata author query failed; serving pure-only works")
         record_degraded("ut-metadata", "author works query failed; serving pure-only")

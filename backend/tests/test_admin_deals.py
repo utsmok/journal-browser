@@ -298,20 +298,22 @@ async def search_api(db_engine):
 
     app.dependency_overrides[get_session] = _override
     async with maker() as session:
-        session.add(
-            Institution(
-                name="University of Twente", code="ut", active=True
-            )
-        )
+        session.add(Institution(name="University of Twente", code="ut", active=True))
         await session.flush()
         session.add_all(
             [
                 Journal(
-                    issn_l="0000-0000", title="J Zero", type="journal", publisher_name="Alpha",
+                    issn_l="0000-0000",
+                    title="J Zero",
+                    type="journal",
+                    publisher_name="Alpha",
                     works_2020_plus=10,
                 ),
                 Journal(
-                    issn_l="1111-1111", title="J One", type="journal", publisher_name="Beta",
+                    issn_l="1111-1111",
+                    title="J One",
+                    type="journal",
+                    publisher_name="Beta",
                     works_2020_plus=10,
                 ),
             ]
@@ -320,9 +322,7 @@ async def search_api(db_engine):
         await session.execute(
             MATERIALIZE_SQL, {"iid": (await session.scalar(select(Institution.id)))}
         )
-        await session.execute(
-            text("UPDATE journal_flags SET works_window_plus = 10")
-        )
+        await session.execute(text("UPDATE journal_flags SET works_window_plus = 10"))
         await session.commit()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
         yield client
@@ -410,21 +410,35 @@ async def test_participation_tombstone_blocks_jct(admin_api, db_engine):
                 "last_reviewed": "",
             },
             journals=[],
-            institutions=[{"ROR ID": "https://ror.org/006hf6230",
-                           "Institution Name": "University of Twente",
-                           "Institution First Seen": "2026", "Institution Last Seen": "2026"}],
+            institutions=[
+                {
+                    "ROR ID": "https://ror.org/006hf6230",
+                    "Institution Name": "University of Twente",
+                    "Institution First Seen": "2026",
+                    "Institution Last Seen": "2026",
+                }
+            ],
             fetched_at="2026-10-26",
         )
         await session.commit()
-        assert await session.scalar(
-            select(DealInstitution).where(
-                DealInstitution.deal_id == deal_id,
-                DealInstitution.institution_id == inst.id,
+        assert (
+            await session.scalar(
+                select(DealInstitution).where(
+                    DealInstitution.deal_id == deal_id,
+                    DealInstitution.institution_id == inst.id,
+                )
             )
-        ) is None
-        assert await session.scalar(select(ManualOverride).where(
-            ManualOverride.table_name == "deal_institutions",
-            ManualOverride.row_key == f"{deal_id}:{inst.id}")) is not None
+            is None
+        )
+        assert (
+            await session.scalar(
+                select(ManualOverride).where(
+                    ManualOverride.table_name == "deal_institutions",
+                    ManualOverride.row_key == f"{deal_id}:{inst.id}",
+                )
+            )
+            is not None
+        )
 
     # Re-add clears the tombstone.
     r = await admin_api.put(
@@ -434,9 +448,15 @@ async def test_participation_tombstone_blocks_jct(admin_api, db_engine):
     )
     assert r.status_code == 200 and r.json()["participations"] == ["ut"]
     async with maker() as session:
-        assert await session.scalar(select(ManualOverride).where(
-            ManualOverride.table_name == "deal_institutions",
-            ManualOverride.row_key == f"{deal_id}:{inst.id}")) is None
+        assert (
+            await session.scalar(
+                select(ManualOverride).where(
+                    ManualOverride.table_name == "deal_institutions",
+                    ManualOverride.row_key == f"{deal_id}:{inst.id}",
+                )
+            )
+            is None
+        )
 
 
 @requires_db
@@ -510,7 +530,5 @@ async def test_deal_put_rejects_null_nonnullable(admin_api):
     headers = await _login(admin_api)
     deal_id = (await admin_api.get("/api/v1/admin/deals", headers=headers)).json()[0]["id"]
     for key in ("status", "start_year", "end_year", "corresponding_authors_only", "publisher_id"):
-        r = await admin_api.put(
-            f"/api/v1/admin/deals/{deal_id}", headers=headers, json={key: None}
-        )
+        r = await admin_api.put(f"/api/v1/admin/deals/{deal_id}", headers=headers, json={key: None})
         assert r.status_code == 422, key

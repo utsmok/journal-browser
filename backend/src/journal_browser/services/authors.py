@@ -161,8 +161,10 @@ async def search_authors(
     else:
         order = (Author.n_works.desc(), func.lower(Author.name), Author.pure_uuid)
     rows = (
-        await session.execute(query.order_by(*order).offset(offset).limit(min(limit, MAX_LIMIT)))
-    ).scalars().all()
+        (await session.execute(query.order_by(*order).offset(offset).limit(min(limit, MAX_LIMIT))))
+        .scalars()
+        .all()
+    )
     facet_base = list(base) + ([q_cond] if q_cond is not None else [])
     facets = await author_facets(session, facet_base, conds)
     return {
@@ -344,9 +346,7 @@ async def _openalex_only_items(
     DOI that matches a local work is skipped (same publication; the Pure
     copy stays the display record). Unreachable source degrades to a
     Pure-only page."""
-    rows = await ut_openalex_only_works_for_author(
-        [a for a in (author.openalex_ids or []) if a]
-    )
+    rows = await ut_openalex_only_works_for_author([a for a in (author.openalex_ids or []) if a])
     if not rows:
         return []
     year_end = institution.data_window_end if institution.data_window_end is not None else 9999
@@ -506,5 +506,6 @@ async def author_profile(
                 "in_pure": True,
             }
             for row in work_rows
-        ] + await _openalex_only_items(institution, author, work_rows),
+        ]
+        + await _openalex_only_items(institution, author, work_rows),
     }

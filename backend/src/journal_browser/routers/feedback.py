@@ -55,6 +55,4 @@ async def create_feedback(body: CreateFeedbackIn, session: SessionDep) -> Feedba
     session.add(row)
     await session.commit()
     await session.refresh(row)
-    return FeedbackOut(
-        id=row.id, title=row.title, status=row.status, created_at=row.created_at
-    )
+    return FeedbackOut(id=row.id, title=row.title, status=row.status, created_at=row.created_at)

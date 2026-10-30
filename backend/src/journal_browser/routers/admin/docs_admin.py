@@ -17,6 +17,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 # doc_edits, applied at read time by routers/docs.py; the source files stay
 # untouched. original_hash records what the editor saw, provenance only.
 
+
 class DocEditIn(BaseModel):
     block_key: str
     original_hash: str
@@ -33,9 +34,7 @@ async def put_doc_edit(
     if not body.replacement.strip():
         raise HTTPException(422, "replacement must not be empty")
     row = await session.scalar(
-        select(DocEdit).where(
-            DocEdit.doc_slug == slug, DocEdit.block_key == body.block_key
-        )
+        select(DocEdit).where(DocEdit.doc_slug == slug, DocEdit.block_key == body.block_key)
     )
     if row is None:
         row = DocEdit(doc_slug=slug, block_key=body.block_key)
@@ -47,13 +46,9 @@ async def put_doc_edit(
 
 
 @router.delete("/docs/{slug}/edits/{block_key}", status_code=204)
-async def delete_doc_edit(
-    slug: str, block_key: str, session: SessionDep, _: AdminDep
-) -> None:
+async def delete_doc_edit(slug: str, block_key: str, session: SessionDep, _: AdminDep) -> None:
     slug = slug.lower()
     await session.execute(
-        delete(DocEdit).where(
-            DocEdit.doc_slug == slug, DocEdit.block_key == block_key
-        )
+        delete(DocEdit).where(DocEdit.doc_slug == slug, DocEdit.block_key == block_key)
     )
     await session.commit()

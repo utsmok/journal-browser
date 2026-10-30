@@ -18,5 +18,6 @@ def get_engine():
 
 async def get_session() -> AsyncIterator[AsyncSession]:
     get_engine()
+    assert _sessionmaker is not None, "get_engine() must initialize the sessionmaker"
     async with _sessionmaker() as session:
         yield session

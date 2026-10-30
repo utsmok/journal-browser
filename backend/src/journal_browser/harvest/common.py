@@ -123,6 +123,7 @@ async def fetch_bytes(
                     if retry_after.isdigit():
                         delay = max(delay, min(int(retry_after), 30))
                 await asyncio.sleep(delay)
+        assert last_error is not None  # loop always runs at least one attempt
         raise last_error  # pragma: no cover
 
 
@@ -166,9 +167,7 @@ class HarvestDataError(RuntimeError):
     """Upstream payload shape broke; the harvest must fail, not produce empties."""
 
 
-def require_headers(
-    rows: list[dict[str, str]], required: set[str], source: str
-) -> None:
+def require_headers(rows: list[dict[str, str]], required: set[str], source: str) -> None:
     """Fail the run when upstream renamed/dropped a column we read, or sent
     an empty payload — silent empty output would pass unnoticed otherwise."""
     if not rows:

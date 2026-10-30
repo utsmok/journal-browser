@@ -317,9 +317,7 @@ def _order_pubs(pubs: list[_Pub], sort: str, q: str | None, dir: str | None) -> 
             return p.eur_max or 0
         if sort == "relevance" and q:
             ql = q.strip().lower()
-            prefix = p.name.lower().startswith(ql) or any(
-                m.startswith(ql) for m in p.members_lower
-            )
+            prefix = p.name.lower().startswith(ql) or any(m.startswith(ql) for m in p.members_lower)
             return 1 if prefix else 0
         return p.n_works  # works, and relevance without q
 
@@ -383,9 +381,7 @@ async def search_publishers(
 
     # The q filter rides along in facet counts; the dimension filters don't
     # (drop-own-dimension).
-    q_base = (
-        [p for p in snap.values() if q_hit(p)] if q_lower else list(snap.values())
-    )
+    q_base = [p for p in snap.values() if q_hit(p)] if q_lower else list(snap.values())
     preds = publisher_predicates(
         oa_types=oa_types,
         deal=deal,
@@ -476,9 +472,7 @@ async def publisher_detail(
     # rn == 1 keeps the dominant publisher per deal (a handful of rows, so
     # the outer join below stays a hash join).
     top_attr = (
-        select(attribution.c.deal_id, attribution.c.grp)
-        .where(attribution.c.rn == 1)
-        .subquery()
+        select(attribution.c.deal_id, attribution.c.grp).where(attribution.c.rn == 1).subquery()
     )
     # Every (group journal, covering deal) pair for this institution's
     # current deals; the deals section and the discrepancy flags split on

@@ -294,14 +294,10 @@ def is_confirmed(payload: dict[str, Any], data: SourceData, ror: str | None) -> 
     target = _ror_id(ror)
     if target is None or not payload:
         return False
-    return _resolves_to_ror(
-        _affiliation_org_ids(payload, data.orgs), data, target
-    )
+    return _resolves_to_ror(_affiliation_org_ids(payload, data.orgs), data, target)
 
 
-def canonical_confirmed(
-    author: dict[str, Any], data: SourceData, ror: str | None
-) -> bool:
+def canonical_confirmed(author: dict[str, Any], data: SourceData, ror: str | None) -> bool:
     """Confirmed affiliated via the canonical-person path (person_org arms,
     including work-level affiliations), reached when the author's own CERIF
     payload carries no resolving affiliation — Pure person profiles can lose
@@ -320,9 +316,7 @@ def canonical_confirmed(
     )
 
 
-def _resolves_to_ror(
-    org_ids: Any, data: SourceData, target: str
-) -> bool:
+def _resolves_to_ror(org_ids: Any, data: SourceData, target: str) -> bool:
     """True when any org's closure (self at depth 0) reaches `target` ROR."""
     return any(
         _ror_id(data.org_rors.get(ancestor_id)) == target
@@ -331,9 +325,7 @@ def _resolves_to_ror(
     )
 
 
-def topic_mass(
-    venues: dict[str, int], topics_by_issn: dict[str, list[Any]]
-) -> dict[str, float]:
+def topic_mass(venues: dict[str, int], topics_by_issn: dict[str, list[Any]]) -> dict[str, float]:
     """Works-weighted topic mass across venues.
 
     Each venue's works are spread over its OpenAlex topic list in

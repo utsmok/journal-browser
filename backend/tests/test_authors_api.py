@@ -48,7 +48,10 @@ async def authors_api(db, institution_factory):
             journal_factory("1234-5678", embedding=_vec(0)),  # J1: hybrid (covered)
             journal_factory("2222-2221", embedding=_vec(1)),  # J2: subscription
             journal_factory(
-                "3333-3331", is_in_doaj=True, doaj_in_doaj=True, doaj_has_apc=False,
+                "3333-3331",
+                is_in_doaj=True,
+                doaj_in_doaj=True,
+                doaj_has_apc=False,
                 embedding=_vec(2),
             ),  # J3: diamond
             journal_factory("4444-4441", embedding=_vec(3)),  # J4: covered hybrid
@@ -57,6 +60,7 @@ async def authors_api(db, institution_factory):
         ]
     )
     await session.flush()
+
     def _flags(issn_l: str, **kw) -> JournalFlags:
         return JournalFlags(institution_id=ut.id, issn_l=issn_l, **kw)
 
@@ -154,10 +158,9 @@ async def authors_api(db, institution_factory):
         ]
     )
     await session.flush()
+
     def _edge(work: str) -> AuthorWork:
-        return AuthorWork(
-            institution_id=ut.id, author_pure_uuid="alice-uuid", work_pure_uuid=work
-        )
+        return AuthorWork(institution_id=ut.id, author_pure_uuid="alice-uuid", work_pure_uuid=work)
 
     session.add_all([_edge("w-2024"), _edge("w-2023a"), _edge("w-2023b"), _edge("w-2021")])
     await session.commit()
@@ -197,8 +200,12 @@ async def test_search_ranked_and_filtered(authors_api):
 async def test_search_not_enabled_and_unknown_institution(authors_api):
     body = (await authors_api.get("/api/v1/rug/authors")).json()
     assert body == {
-        "enabled": False, "total": 0, "offset": 0, "sort": "works_desc",
-        "items": [], "facets": {},
+        "enabled": False,
+        "total": 0,
+        "offset": 0,
+        "sort": "works_desc",
+        "items": [],
+        "facets": {},
     }
     assert (await authors_api.get("/api/v1/nonsense/authors")).status_code == 404
 
@@ -209,7 +216,13 @@ async def test_profile_shape(authors_api):
     assert r.status_code == 200
     body = r.json()
     assert set(body) == {
-        "author", "oa_by_year", "journals", "topics", "similar", "alternatives", "works",
+        "author",
+        "oa_by_year",
+        "journals",
+        "topics",
+        "similar",
+        "alternatives",
+        "works",
     }
     author = body["author"]
     assert author["orgs"] == ["Quantum Transport in Matter", "University of Twente"]
@@ -217,7 +230,13 @@ async def test_profile_shape(authors_api):
     # year desc, known buckets only (diamond counts in total, no column)
     assert [row["year"] for row in body["oa_by_year"]] == [2024, 2023, 2021]
     assert body["oa_by_year"][1] == {
-        "year": 2023, "total": 2, "gold": 1, "green": 0, "hybrid": 0, "bronze": 0, "closed": 1,
+        "year": 2023,
+        "total": 2,
+        "gold": 1,
+        "green": 0,
+        "hybrid": 0,
+        "bronze": 0,
+        "closed": 1,
         "diamond": 0,
     }
     # journals: works count desc, shared oa_type case
@@ -276,9 +295,7 @@ async def test_profile_openalex_only_merge(authors_api, db, monkeypatch):
     from sqlalchemy import update
 
     await db.execute(
-        update(Author)
-        .where(Author.pure_uuid == "alice-uuid")
-        .values(openalex_ids=["a5038098443"])
+        update(Author).where(Author.pure_uuid == "alice-uuid").values(openalex_ids=["a5038098443"])
     )
     await db.execute(
         update(Work).where(Work.pure_uuid == "w-2024").values(doi_normalized="10.1000/local")
@@ -289,31 +306,65 @@ async def test_profile_openalex_only_merge(authors_api, db, monkeypatch):
         return [
             # Duplicate of the local w-2024 by DOI: dropped (prefix noise on
             # purpose — normalize_doi must fold it).
-            {"title": "Dup", "year": 2024, "doi": "https://doi.org/10.1000/LOCAL",
-             "oa_status": "gold", "work_type": "article", "venue_name": None,
-             "issn_l": None},
+            {
+                "title": "Dup",
+                "year": 2024,
+                "doi": "https://doi.org/10.1000/LOCAL",
+                "oa_status": "gold",
+                "work_type": "article",
+                "venue_name": None,
+                "issn_l": None,
+            },
             # Outside the institution's data window: dropped.
-            {"title": "Old", "year": 1999, "doi": "10.1000/old", "oa_status": "closed",
-             "work_type": "article", "venue_name": None, "issn_l": None},
+            {
+                "title": "Old",
+                "year": 1999,
+                "doi": "10.1000/old",
+                "oa_status": "closed",
+                "work_type": "article",
+                "venue_name": None,
+                "issn_l": None,
+            },
             # Excluded work type: dropped.
-            {"title": "Pre", "year": 2021, "doi": None, "oa_status": None,
-             "work_type": "preprint", "venue_name": None, "issn_l": None},
+            {
+                "title": "Pre",
+                "year": 2021,
+                "doi": None,
+                "oa_status": None,
+                "work_type": "preprint",
+                "venue_name": None,
+                "issn_l": None,
+            },
             # Kept: new DOI, in window.
-            {"title": "Only OA", "year": 2022, "doi": "10.1000/oa-only",
-             "oa_status": None, "work_type": None, "venue_name": "Outside Journal",
-             "issn_l": "9999-9991"},
+            {
+                "title": "Only OA",
+                "year": 2022,
+                "doi": "10.1000/oa-only",
+                "oa_status": None,
+                "work_type": None,
+                "venue_name": "Outside Journal",
+                "issn_l": "9999-9991",
+            },
             # Kept: no DOI to dedupe on.
-            {"title": "No Doi", "year": 2020, "doi": None, "oa_status": "green",
-             "work_type": "article", "venue_name": None, "issn_l": None},
+            {
+                "title": "No Doi",
+                "year": 2020,
+                "doi": None,
+                "oa_status": "green",
+                "work_type": "article",
+                "venue_name": None,
+                "issn_l": None,
+            },
         ]
 
-    monkeypatch.setattr(
-        "journal_browser.services.authors.ut_openalex_only_works_for_author", _fake
-    )
+    monkeypatch.setattr("journal_browser.services.authors.ut_openalex_only_works_for_author", _fake)
     body = (await authors_api.get("/api/v1/ut/authors/alice-uuid")).json()
     works = body["works"]
     assert [w["pure_uuid"] for w in works if w["in_pure"]] == [
-        "w-2024", "w-2023a", "w-2023b", "w-2021"
+        "w-2024",
+        "w-2023a",
+        "w-2023b",
+        "w-2021",
     ]
     merged = [w for w in works if not w["in_pure"]]
     assert [(w["title"], w["doi"]) for w in merged] == [
@@ -352,14 +403,20 @@ async def test_require_confirmed_affiliation_toggle(authors_api, db):
     body = (await authors_api.get("/api/v1/ut/authors")).json()
     assert body["total"] == 4
     assert [i["pure_uuid"] for i in body["items"]] == [
-        "bob-uuid", "dan-uuid", "alice-uuid", "carol-uuid",
+        "bob-uuid",
+        "dan-uuid",
+        "alice-uuid",
+        "carol-uuid",
     ]
     bob = next(i for i in body["items"] if i["pure_uuid"] == "bob-uuid")
     assert bob["confirmed"] is False
     # Facet counts respect the flag: Bob joins the 50+ / 2025-2026 buckets.
     assert {f["value"]: f["count"] for f in body["facets"]["works"]} == {"1-4": 2, "50+": 2}
     assert {f["value"]: f["count"] for f in body["facets"]["last_pub"]} == {
-        "2020-2021": 1, "2022-2024": 1, "2025-2026": 1, "none": 1,
+        "2020-2021": 1,
+        "2022-2024": 1,
+        "2025-2026": 1,
+        "none": 1,
     }
 
 
@@ -370,14 +427,16 @@ async def test_search_folds_diacritics(authors_api, db):
     from journal_browser.models import Author, Institution
 
     ut_id = await db.scalar(select(Institution.id).where(Institution.code == "ut"))
-    db.add(Author(
-        institution_id=ut_id,
-        pure_uuid="julia-uuid",
-        name="Jülia Föllmer",
-        orgs=[],
-        n_works=0,
-        confirmed=True,
-    ))
+    db.add(
+        Author(
+            institution_id=ut_id,
+            pure_uuid="julia-uuid",
+            name="Jülia Föllmer",
+            orgs=[],
+            n_works=0,
+            confirmed=True,
+        )
+    )
     await db.commit()
     # Plain-ASCII query finds the umlauted name; the accented query still works.
     for q in ("follmer", "Föllmer", "julia"):

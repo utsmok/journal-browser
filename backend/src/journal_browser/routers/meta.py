@@ -55,7 +55,7 @@ async def freshness(session: SessionDep, institution: InstitutionDep) -> Freshne
         ).all()
     )
 
-    async def table_ts(stmt) -> datetime | None:  # noqa: ANN202
+    async def table_ts(stmt) -> datetime | None:
         return await session.scalar(stmt)
 
     tables = {
@@ -91,7 +91,7 @@ async def freshness(session: SessionDep, institution: InstitutionDep) -> Freshne
             )
             for state, finished_at in harvests
         ],
-        tables={k: v for k, v in tables.items()},
+        tables=dict(tables.items()),
         degraded=[
             DegradedSource(
                 source=entry["source"],

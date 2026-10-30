@@ -124,7 +124,7 @@ async def _home_institution_id(session: AsyncSession) -> int | None:
 
 async def _publisher_names(session: AsyncSession) -> dict[int, str]:
     rows = await session.execute(select(Publisher.id, Publisher.name))
-    return {pid: name for pid, name in rows.all()}
+    return dict(rows.all())
 
 
 async def _override_protected(session: AsyncSession, deal_ids: list[int]) -> set[int]:
@@ -224,11 +224,7 @@ async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
         if linked is None:
             await session.execute(
                 pg_insert(DealInstitution)
-                .values(
-                    [
-                        {"deal_id": deal.id, "institution_id": inst.id} for inst in participants
-                    ]
-                )
+                .values([{"deal_id": deal.id, "institution_id": inst.id} for inst in participants])
                 .on_conflict_do_nothing(index_elements=["deal_id", "institution_id"])
             )
             stats["linked"] += len(participants)
@@ -275,14 +271,15 @@ async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
                 index_where=text("institution_id IS NULL"),
             )
         )
-        deal.provenance = list(deal.provenance or []) + [
+        deal.provenance = [
+            *list(deal.provenance or []),
             {
                 "source": "reconcile",
                 "derived": "publisher-pattern",
                 "participants": [i.code or i.name for i in participants],
                 "patterns": patterns,
                 "at": datetime.now(UTC).isoformat(),
-            }
+            },
         ]
         if deal.id not in protected and deal.needs_curation:
             deal.needs_curation = False
@@ -313,9 +310,7 @@ async def reconcile_deals(session: AsyncSession) -> dict[str, int]:
         twente_deal_ids = set(
             (
                 await session.execute(
-                    select(DealInstitution.deal_id).where(
-                        DealInstitution.institution_id == home_id
-                    )
+                    select(DealInstitution.deal_id).where(DealInstitution.institution_id == home_id)
                 )
             ).scalars()
         )
@@ -400,9 +395,7 @@ async def reconcile_deals(session: AsyncSession) -> dict[str, int]:
         twente_deal_ids = set(
             (
                 await session.execute(
-                    select(DealInstitution.deal_id).where(
-                        DealInstitution.institution_id == home_id
-                    )
+                    select(DealInstitution.deal_id).where(DealInstitution.institution_id == home_id)
                 )
             ).scalars()
         )
@@ -485,11 +478,11 @@ async def _merge(session: AsyncSession, canonical: Deal, jct: Deal) -> None:
         canonical.needs_curation_reason = (
             f"status conflict: openaccess.nl={canonical.status}, JCT={status}"
         )
-    canonical.provenance = list(canonical.provenance or []) + [
-        {"source": "jct", "esac_id": esac_id, "merged_at": datetime.now(UTC).isoformat()}
+    canonical.provenance = [
+        *list(canonical.provenance or []),
+        {"source": "jct", "esac_id": esac_id, "merged_at": datetime.now(UTC).isoformat()},
     ]
     await session.flush()
-
 
 
 async def enforce_unique_agreement_data(session: AsyncSession) -> list[dict[str, str]]:
@@ -601,5 +594,3 @@ async def _resolve_pair(
     if b_match and not a_match:
         return b, a
     return a, None
-
-

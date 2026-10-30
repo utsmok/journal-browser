@@ -19,7 +19,6 @@ from .xmlrecords import (
 logger = logging.getLogger(__name__)
 
 
-
 async def upsert_work(
     session: AsyncSession,
     payload: dict[str, Any],
@@ -127,7 +126,6 @@ async def backfill_cerif(
         .where(Work.institution_id == institution_id, Work.pure_uuid == uuid)
         .values(**values)
     )
-
 
 
 async def retire_absent(session: AsyncSession, run_ids: list[int], institution_id: int) -> int:

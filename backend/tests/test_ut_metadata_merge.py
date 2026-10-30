@@ -186,7 +186,9 @@ async def api(db_engine, monkeypatch):
         await session.flush()
         # works_stats records resolve their institution through the run.
         run = HarvestRun(
-            source="openalex", entity_type="test", config_fingerprint="t",
+            source="openalex",
+            entity_type="test",
+            config_fingerprint="t",
             institution_id=home.id,
         )
         session.add(run)

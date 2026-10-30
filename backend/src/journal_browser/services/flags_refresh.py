@@ -49,7 +49,7 @@ async def _flags_refresh_loop() -> None:
         _flags_rerun = False
         try:
             await _refresh_deal_flags_soon()
-        except Exception:  # noqa: BLE001 - background job; log and stop
+        except Exception:  # one bad journal must not kill the sweep
             import logging
 
             logging.getLogger("journal_browser.admin").exception(

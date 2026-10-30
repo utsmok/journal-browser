@@ -91,9 +91,7 @@ async def update_settings(body: SettingsUpdate, _: AdminDep) -> dict[str, Any]:
             # normalize on write so "12345678" or lowercase still matches.
             normalized = sorted({n for n in (normalize_issn(v) for v in value) if n})
             if len(normalized) != len(value):
-                raise HTTPException(
-                    400, "ignored_issns: entries must be valid ISSNs"
-                )
+                raise HTTPException(400, "ignored_issns: entries must be valid ISSNs")
             value = normalized
         doc[key] = value
     _write_settings_yaml(doc)
@@ -164,9 +162,7 @@ async def _get_institution_or_404(session: AsyncSession, code: str) -> Instituti
 
 
 @router.get("/institutions/{code}", response_model=AdminInstitutionOut)
-async def get_institution(
-    code: str, session: SessionDep, _: AdminDep
-) -> dict[str, Any]:
+async def get_institution(code: str, session: SessionDep, _: AdminDep) -> dict[str, Any]:
     return _institution_payload(await _get_institution_or_404(session, code))
 
 

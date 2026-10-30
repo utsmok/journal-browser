@@ -186,9 +186,7 @@ def publisher_facets(
     return out
 
 
-def publisher_topic_facet(
-    pubs: list["_Pub"], preds: dict[str, Any], limit: int
-) -> dict[str, int]:
+def publisher_topic_facet(pubs: list["_Pub"], preds: dict[str, Any], limit: int) -> dict[str, int]:
     """Publishers (under every filter except topic) with >=1 journal per
     topic label; top `limit` by publisher count."""
     counts: dict[str, int] = {}

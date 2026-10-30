@@ -35,7 +35,7 @@ def test_parse_csv_rows_handles_bom_and_semicolons():
 
 
 def test_require_headers_missing_column_names_source():
-    with pytest.raises(HarvestDataError, match="doaj journals.*Journal URL"):
+    with pytest.raises(HarvestDataError, match=r"doaj journals.*Journal URL"):
         require_headers([{"Journal title": "x"}], {"Journal title", "Journal URL"}, "doaj journals")
 
 

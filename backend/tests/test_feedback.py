@@ -14,7 +14,7 @@ async def feedback_api(client, monkeypatch, tmp_path):
     monkeypatch.setenv("JB_ADMIN_PASSWORD", PASSWORD)
     monkeypatch.setenv("JB_SETTINGS_YAML", str(tmp_path / "settings.yaml"))
     reset_settings_cache()
-    return client
+    yield client
     reset_settings_cache()
 
 
@@ -78,9 +78,7 @@ async def test_admin_triage_requires_token(feedback_api):
 async def test_admin_patch_and_status_filter(feedback_api):
     headers = await _login(feedback_api)
     for title in ("a", "b"):
-        await feedback_api.post(
-            "/api/v1/feedback", json={"title": title, "description": "d"}
-        )
+        await feedback_api.post("/api/v1/feedback", json={"title": title, "description": "d"})
 
     r = await feedback_api.get("/api/v1/admin/feedback", headers=headers)
     first = r.json()[-1]["id"]

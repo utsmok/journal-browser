@@ -11,6 +11,8 @@ from .query import attach_apc_display, base_query
 #: general list carries the full ten.
 SIMILAR_FILTERED_LIMIT = 5
 SIMILAR_ALL_LIMIT = 10
+
+
 async def similar_journals(
     session: AsyncSession, issn_l: str, institution_id: int
 ) -> dict[str, Any] | None:
@@ -104,6 +106,7 @@ def _similar_item(row: Any, *, embedding: bool) -> dict[str, Any]:
         item["shared_topics"] = 0
     return item
 
+
 async def semantic_search(
     session: AsyncSession,
     q: str,
@@ -121,7 +124,7 @@ async def semantic_search(
     embedding set, so paging is a plain decimal offset into it — the cursor
     is only meaningful for the query that produced it, the same contract the
     frontend already honors by resetting on filter/query changes."""
-    from .embeddings import encode_query
+    from ..embeddings import encode_query
 
     offset = 0
     if cursor is not None:
@@ -145,9 +148,7 @@ async def semantic_search(
     # ef_search scales with paging depth (per-iteration batch); the exact
     # scan this replaced cost ~0.8 s over ~134k vectors.
     await session.execute(text("SET LOCAL hnsw.iterative_scan = strict_order"))
-    await session.execute(
-        text(f"SET LOCAL hnsw.ef_search = {max(200, offset + limit + 100)}")
-    )
+    await session.execute(text(f"SET LOCAL hnsw.ef_search = {max(200, offset + limit + 100)}"))
     total = (await session.execute(select(func.count()).select_from(subq))).scalar_one()
     rows = (
         await session.execute(

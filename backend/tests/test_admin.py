@@ -56,7 +56,7 @@ async def admin_api(client, db_engine, monkeypatch, tmp_path):
             )
         )
         await session.commit()
-    return client
+    yield client
     reset_settings_cache()
 
 
@@ -79,9 +79,7 @@ async def test_login_and_runs(admin_api):
     r = await admin_api.post("/api/v1/admin/login", json={"password": PASSWORD})
     assert r.status_code == 200
     token = r.json()["token"]
-    r = await admin_api.get(
-        "/api/v1/admin/runs", headers={"Authorization": f"Bearer {token}"}
-    )
+    r = await admin_api.get("/api/v1/admin/runs", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
     runs = r.json()
     sources = {run["source"]: run for run in runs}
@@ -90,9 +88,9 @@ async def test_login_and_runs(admin_api):
 
 @requires_db
 async def test_flagged_and_settings(admin_api):
-    token = (
-        await admin_api.post("/api/v1/admin/login", json={"password": PASSWORD})
-    ).json()["token"]
+    token = (await admin_api.post("/api/v1/admin/login", json={"password": PASSWORD})).json()[
+        "token"
+    ]
     headers = {"Authorization": f"Bearer {token}"}
     flagged = (await admin_api.get("/api/v1/admin/flagged", headers=headers)).json()
     assert len(flagged) == 1
@@ -103,8 +101,7 @@ async def test_flagged_and_settings(admin_api):
     assert settings["values"]["admin_password"] == "********"
     assert "institution_name" not in settings["values"]
     assert any(
-        f["key"] == "institution_name" and f["section"] == "institution"
-        for f in settings["schema"]
+        f["key"] == "institution_name" and f["section"] == "institution" for f in settings["schema"]
     )
 
 
@@ -227,9 +224,7 @@ async def test_feedback_limit_rejects_nonpositive(admin_api):
 async def test_institution_put_rejects_null_nonnullable(admin_api):
     headers = await _login(admin_api)
     for key in ("name", "data_window_start", "data_window_end", "active"):
-        r = await admin_api.put(
-            "/api/v1/admin/institutions/ut", headers=headers, json={key: None}
-        )
+        r = await admin_api.put("/api/v1/admin/institutions/ut", headers=headers, json={key: None})
         assert r.status_code == 422, key
     # A nullable field still clears on explicit null.
     r = await admin_api.put(

@@ -28,9 +28,7 @@ async def api(client, db_engine):
             ]
         )
         await session.commit()
-        home = Institution(
-            name="University of Twente", code="ut", active=True
-        )
+        home = Institution(name="University of Twente", code="ut", active=True)
         session.add(home)
         await session.flush()
         # The cutoff lives on journal_flags.works_window_plus per institution.

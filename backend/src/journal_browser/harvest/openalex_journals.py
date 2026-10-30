@@ -111,33 +111,33 @@ def journal_values(payload: dict[str, Any]) -> dict[str, Any] | None:
         for e in counts
         if settings.data_window_start <= int(e.get("year") or 0) <= window_end
     )
-    return dict(
-        issn_l=issn_l,
-        openalex_id=payload.get("id"),
-        title=title,
-        publisher_name=payload.get("host_organization_name"),
-        type=payload.get("type"),
-        is_oa=payload.get("is_oa"),
-        is_in_doaj=payload.get("is_in_doaj"),
-        homepage_url=payload.get("homepage_url"),
-        country_code=payload.get("country_code"),
-        issns=[
+    return {
+        "issn_l": issn_l,
+        "openalex_id": payload.get("id"),
+        "title": title,
+        "publisher_name": payload.get("host_organization_name"),
+        "type": payload.get("type"),
+        "is_oa": payload.get("is_oa"),
+        "is_in_doaj": payload.get("is_in_doaj"),
+        "homepage_url": payload.get("homepage_url"),
+        "country_code": payload.get("country_code"),
+        "issns": [
             i
             for i in (normalize_issn(x) for x in (payload.get("issn") or []))
             if i and issn_checksum_ok(i)
         ],
-        alternate_titles=alternate_titles,
-        topics=topics,
-        apc_prices=payload.get("apc_prices"),
-        summary_stats=payload.get("summary_stats"),
-        counts_by_year=counts,
-        works_count=payload.get("works_count"),
-        cited_by_count=payload.get("cited_by_count"),
-        last_active_year=last_active,
-        works_2020_plus=works_2020_plus,
-        harvested_at=datetime.now(UTC),
-        search_text=" ".join([title or "", *alternate_titles]).strip(),
-    )
+        "alternate_titles": alternate_titles,
+        "topics": topics,
+        "apc_prices": payload.get("apc_prices"),
+        "summary_stats": payload.get("summary_stats"),
+        "counts_by_year": counts,
+        "works_count": payload.get("works_count"),
+        "cited_by_count": payload.get("cited_by_count"),
+        "last_active_year": last_active,
+        "works_2020_plus": works_2020_plus,
+        "harvested_at": datetime.now(UTC),
+        "search_text": " ".join([title or "", *alternate_titles]).strip(),
+    }
 
 
 async def _upsert_journal(session: AsyncSession, payload: dict[str, Any]) -> str | None:

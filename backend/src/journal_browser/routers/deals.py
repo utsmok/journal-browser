@@ -76,9 +76,7 @@ async def list_deals(
 
 
 @router.get("/{deal_id}", response_model=DealOut)
-async def deal_detail(
-    deal_id: int, session: SessionDep, institution: InstitutionDep
-) -> DealOut:
+async def deal_detail(deal_id: int, session: SessionDep, institution: InstitutionDep) -> DealOut:
     covered = _covered_join(institution.id)
     row = (
         await session.execute(

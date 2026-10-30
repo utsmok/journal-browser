@@ -25,7 +25,4 @@ def clear(source: str) -> None:
 
 def snapshot() -> list[dict]:
     with _lock:
-        return [
-            {"source": s, "detail": d, "since": ts}
-            for s, (d, ts) in sorted(_degraded.items())
-        ]
+        return [{"source": s, "detail": d, "since": ts} for s, (d, ts) in sorted(_degraded.items())]

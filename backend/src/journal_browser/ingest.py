@@ -210,20 +210,20 @@ class IngestSession:
                 # The two partial unique indexes have different column sets:
                 # the global one has no institution_id column to name.
                 **(
-                    dict(
-                        index_elements=[
+                    {
+                        "index_elements": [
                             "source",
                             "entity_type",
                             "filter_set",
                             "institution_id",
                         ],
-                        index_where=text("institution_id IS NOT NULL"),
-                    )
+                        "index_where": text("institution_id IS NOT NULL"),
+                    }
                     if self.institution_id is not None
-                    else dict(
-                        index_elements=["source", "entity_type", "filter_set"],
-                        index_where=text("institution_id IS NULL"),
-                    )
+                    else {
+                        "index_elements": ["source", "entity_type", "filter_set"],
+                        "index_where": text("institution_id IS NULL"),
+                    }
                 ),
                 set_={
                     "status": status,

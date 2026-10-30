@@ -90,11 +90,7 @@ class Institution(Base):
         """Inclusive publication-year window, capped at the current year."""
         import datetime as dt
 
-        last = (
-            self.data_window_end
-            if self.data_window_end is not None
-            else dt.date.today().year
-        )
+        last = self.data_window_end if self.data_window_end is not None else dt.date.today().year
         return list(range(self.data_window_start, min(last, dt.date.today().year) + 1))
 
 

@@ -44,9 +44,7 @@ def unit_author_join(institution_id: int) -> ColumnElement:
 
 def unit_work_join(institution_id: int) -> ColumnElement:
     """Work join completing unit_author_join."""
-    return (Work.institution_id == institution_id) & (
-        Work.pure_uuid == AuthorWork.work_pure_uuid
-    )
+    return (Work.institution_id == institution_id) & (Work.pure_uuid == AuthorWork.work_pure_uuid)
 
 
 def work_window(institution: Any) -> tuple[ColumnElement, ColumnElement]:

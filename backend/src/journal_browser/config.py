@@ -19,9 +19,7 @@ EXCLUDED_WORK_TYPES = frozenset(
 def normalize_work_type(value: str | None) -> str:
     """Bare, lower-cased work type so source spellings collapse onto one
     form: 'info:eu-repo/semantics/bookPart' and 'book-part' -> 'bookpart'."""
-    return (
-        (value or "").replace("info:eu-repo/semantics/", "").replace("-", "").strip().lower()
-    )
+    return (value or "").replace("info:eu-repo/semantics/", "").replace("-", "").strip().lower()
 
 
 def work_type_excluded(value: str | None) -> bool:
@@ -121,11 +119,7 @@ class Settings(BaseSettings):
         """Inclusive publication-year window, capped at the current year."""
         import datetime as dt
 
-        last = (
-            self.data_window_end
-            if self.data_window_end is not None
-            else dt.date.today().year
-        )
+        last = self.data_window_end if self.data_window_end is not None else dt.date.today().year
         return list(range(self.data_window_start, min(last, dt.date.today().year) + 1))
 
     @property

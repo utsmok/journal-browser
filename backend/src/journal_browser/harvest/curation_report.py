@@ -1,4 +1,3 @@
-
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 def _esc(text: str | None) -> str:
     return (text or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
 
 def _conf(value: float | None) -> str:
     return f"{value:.2f}" if value is not None else "—"
@@ -73,9 +73,7 @@ async def render_curation_report(
         twente_deal_ids = set(
             (
                 await session.execute(
-                    select(DealInstitution.deal_id).where(
-                        DealInstitution.institution_id == home_id
-                    )
+                    select(DealInstitution.deal_id).where(DealInstitution.institution_id == home_id)
                 )
             ).scalars()
         )

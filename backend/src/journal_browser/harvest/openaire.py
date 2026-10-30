@@ -91,13 +91,10 @@ async def harvest_openaire_products(
     filter_set = f"relOrganizationId={org_id}"
     ingest = IngestSession(session)
     config = {"filter_set": filter_set, "page_size": PAGE_SIZE}
-    await ingest.start_run(
-        SOURCE, "work", filter_set, config, institution_id=institution.id
-    )
+    await ingest.start_run(SOURCE, "work", filter_set, config, institution_id=institution.id)
 
-    doi_to_work = {
-        doi: uuid
-        for doi, uuid in (
+    doi_to_work = dict(
+        (
             await session.execute(
                 select(Work.doi_normalized, Work.pure_uuid).where(
                     Work.institution_id == institution.id,
@@ -106,7 +103,7 @@ async def harvest_openaire_products(
                 )
             )
         ).all()
-    }
+    )
 
     stats: dict[str, Any] = {"matched_doi": 0, "no_doi": 0}
     async with AireloomClient() as client:
@@ -121,7 +118,7 @@ async def harvest_openaire_products(
                 )
                 continue
             payload = _strip_nuls(item.model_dump(mode="json"))
-            kind, _ = await ingest.ingest_record(item.id, payload)
+            _kind, _ = await ingest.ingest_record(item.id, payload)
             doi = _extract_doi(item)
             if doi and (uuid := doi_to_work.get(doi)):
                 await _confirm(

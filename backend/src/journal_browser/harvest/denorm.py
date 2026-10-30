@@ -63,9 +63,7 @@ WORKS_COUNT_SQL = text(
     """
 )
 
-RESET_WORKS_COUNT_SQL = text(
-    "UPDATE journal_flags SET works_count = 0 WHERE institution_id = :iid"
-)
+RESET_WORKS_COUNT_SQL = text("UPDATE journal_flags SET works_count = 0 WHERE institution_id = :iid")
 
 # Journal's own works inside THIS institution's data window (the >3 corpus
 # cutoff, owner decision 2026-10-23). Left-joined so journals with empty
@@ -148,9 +146,7 @@ async def refresh_institution_stats(session: AsyncSession, institution: Institut
     await session.execute(MATERIALIZE_SQL, {"iid": iid})
     await session.execute(RESET_WORKS_COUNT_SQL, {"iid": iid})
     await session.execute(WORKS_COUNT_SQL, {"iid": iid})
-    window_end = (
-        institution.data_window_end if institution.data_window_end is not None else 9999
-    )
+    window_end = institution.data_window_end if institution.data_window_end is not None else 9999
     await session.execute(
         WORKS_WINDOW_SQL, {"iid": iid, "ws": institution.data_window_start, "we": window_end}
     )

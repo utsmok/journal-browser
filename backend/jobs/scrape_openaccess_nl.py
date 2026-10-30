@@ -2,11 +2,8 @@
 
 import logging
 
-try:
-    from jobs._runner import run_job
-except ImportError:  # direct `python jobs/scrape_openaccess_nl.py` run: jobs/ is sys.path[0]
-    from _runner import run_job
 from journal_browser.harvest.openaccess_nl import harvest
+from journal_browser.jobrunner import run_job
 
 
 async def main(session, limit):

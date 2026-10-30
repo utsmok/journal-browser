@@ -33,6 +33,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 # journal sets excluded=true and keeps the row so the JCT upsert cannot
 # resurrect it.
 
+
 class DealUpdate(BaseModel):
     """PATCH-shaped PUT body: absent fields are untouched, explicit null
     clears nullable columns, and non-nullable columns reject null."""
@@ -100,9 +101,7 @@ async def _deal_detail(session: AsyncSession, deal_id: int) -> dict[str, Any]:
         raise HTTPException(404, f"unknown deal: {deal_id}")
     deal, publisher = row
     journal_count = await session.scalar(
-        select(func.count()).where(
-            DealJournal.deal_id == deal_id, DealJournal.excluded.is_(False)
-        )
+        select(func.count()).where(DealJournal.deal_id == deal_id, DealJournal.excluded.is_(False))
     )
     codes = (
         (
@@ -143,6 +142,8 @@ async def _deal_detail(session: AsyncSession, deal_id: int) -> dict[str, Any]:
             for dj in journals
         ],
     }
+
+
 async def _get_deal_or_404(session: AsyncSession, deal_id: int) -> Deal:
     deal = await session.get(Deal, deal_id)
     if deal is None:

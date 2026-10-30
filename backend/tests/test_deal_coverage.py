@@ -36,13 +36,9 @@ async def _seed(db):
     db.add_all(
         [
             DealInstitution(deal_id=deal.id, institution_id=shared.id),
-            DealInstitution(
-                deal_id=deal.id, institution_id=override.id, journal_override=True
-            ),
+            DealInstitution(deal_id=deal.id, institution_id=override.id, journal_override=True),
             # Shared sheet rows: 1111 covered, 2222 admin-excluded.
-            DealJournal(
-                deal_id=deal.id, issn="1111-111X", issn_l="1111-111X", source="manual"
-            ),
+            DealJournal(deal_id=deal.id, issn="1111-111X", issn_l="1111-111X", source="manual"),
             DealJournal(
                 deal_id=deal.id,
                 issn="2222-2220",

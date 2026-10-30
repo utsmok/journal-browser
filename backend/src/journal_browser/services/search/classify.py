@@ -37,6 +37,7 @@ _OBSERVED = case(
     else_=None,
 )
 
+
 #: Per-journal OA type (owner-approved 2026-10-28; supersedes 2026-10-23).
 #: DOAJ is the gold/diamond canon: its has_apc declaration (with observed
 #: prices as corroboration) splits gold from diamond; a DOAJ-listed venue
@@ -52,6 +53,7 @@ def _oa_type(deal_covered: Any) -> Any:
         (_OA_EVIDENCE, OaType.GENERIC),
         else_=OaType.SUBSCRIPTION,
     ).label("oa_type")
+
 
 #: Journal OA-type vocabulary (the OA_TYPE values); the oa_type facet
 #: multi-selects these with OR semantics.

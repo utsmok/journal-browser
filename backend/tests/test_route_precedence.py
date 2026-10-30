@@ -34,7 +34,7 @@ def test_fixed_prefixes_register_before_institution_scope():
 async def bare_client(client, monkeypatch):
     monkeypatch.setenv("JB_ADMIN_PASSWORD", "route-test-pw")
     reset_settings_cache()
-    return client
+    yield client
     reset_settings_cache()
 
 

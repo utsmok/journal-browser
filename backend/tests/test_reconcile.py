@@ -242,7 +242,8 @@ async def test_consortium_merge_without_members_flagged(maker):
         pub_o = await _publisher(session, "Karger", slug="karger")
         pub_j = await _publisher(session, "KAR")
         oanl = await _deal(
-            session, pub_o.id,
+            session,
+            pub_o.id,
             openaccess_nl_url="https://www.openaccess.nl/en/publisherdeal/karger-2025-2027",
         )
         oanl.start_year, oanl.end_year = 2025, 2027
@@ -311,12 +312,15 @@ async def test_duplicate_data_guard_purges_cross_publisher(maker):
             for i, issn in enumerate(issns):
                 session.add(
                     DealJournal(
-                        deal_id=target.id, issn=issn, journal_name=f"J{i}",
+                        deal_id=target.id,
+                        issn=issn,
+                        journal_name=f"J{i}",
                         source="jct",
                     )
                 )
         j = Journal(
-            issn_l="0000-0000", title="Elsevier Journal",
+            issn_l="0000-0000",
+            title="Elsevier Journal",
             publisher_name="Elsevier",
         )
         session.add(j)
@@ -330,27 +334,23 @@ async def test_duplicate_data_guard_purges_cross_publisher(maker):
     assert losers == {"eme2025ukb"}
 
     async with maker() as s3:
-        for esac, expected in (
-            ("els2025ukb", 60), ("els2024vanderbilt", 60), ("eme2025ukb", 0)
-        ):
-            deal = (await s3.execute(
-                select(Deal).where(Deal.esac_id == esac)
-            )).scalar_one()
-            n = len((await s3.execute(
-                select(DealJournal).where(DealJournal.deal_id == deal.id)
-            )).all())
+        for esac, expected in (("els2025ukb", 60), ("els2024vanderbilt", 60), ("eme2025ukb", 0)):
+            deal = (await s3.execute(select(Deal).where(Deal.esac_id == esac))).scalar_one()
+            n = len(
+                (await s3.execute(select(DealJournal).where(DealJournal.deal_id == deal.id))).all()
+            )
             assert n == expected, esac
-        flagged = (await s3.execute(
-            select(Deal).where(Deal.esac_id == "eme2025ukb")
-        )).scalar_one()
+        flagged = (await s3.execute(select(Deal).where(Deal.esac_id == "eme2025ukb"))).scalar_one()
         assert flagged.needs_curation is True
         assert "els2025ukb" in flagged.needs_curation_reason or "els2024" in (
             flagged.needs_curation_reason or ""
         )
         # Participation survives a wrong sheet: consortium membership is real.
-        links = (await s3.execute(
-            select(DealInstitution).where(DealInstitution.deal_id == flagged.id)
-        )).scalars().all()
+        links = (
+            (await s3.execute(select(DealInstitution).where(DealInstitution.deal_id == flagged.id)))
+            .scalars()
+            .all()
+        )
         assert len(links) == 1
 
 
@@ -372,26 +372,30 @@ async def test_derive_nl_deal_coverage_links_and_covers(maker):
         pub_ign = await _publisher(session, "Unknown Press")
         pub_acs = await _publisher(session, "American Chemical Society (ACS)")
         acm = await _deal(
-            session, pub_acm.id,
+            session,
+            pub_acm.id,
             openaccess_nl_url="https://www.openaccess.nl/en/publisherdeal/acm-2021-2030",
             conditions_text=(
                 "License and conditions: ... University of Twente ... (duration 2026-2028)"
             ),
         )
         dgb = await _deal(
-            session, pub_dgb.id,
+            session,
+            pub_dgb.id,
             openaccess_nl_url="https://www.openaccess.nl/en/publisherdeal/de-gruyter-brill-2026-2028",
             conditions_text=(
                 "Eligible institutions are: University of Amsterdam, VU University Amsterdam"
             ),
         )
         ign = await _deal(
-            session, pub_ign.id,
+            session,
+            pub_ign.id,
             openaccess_nl_url="https://www.openaccess.nl/en/publisherdeal/unknown-2026",
             conditions_text="License and conditions: University of Twente participates",
         )
         acs = await _deal(
-            session, pub_acs.id,
+            session,
+            pub_acs.id,
             openaccess_nl_url="https://www.openaccess.nl/en/publisherdeal/american-chemical-society-acs-2026-2028",
             conditions_text=(
                 "The corresponding author must be associated with a participating "
@@ -401,10 +405,12 @@ async def test_derive_nl_deal_coverage_links_and_covers(maker):
         for d in (acm, dgb, ign, acs):
             d.start_year, d.end_year = 2026, 2028
         for i, (issn, pname) in enumerate(
-            [("0001-0001", "Association for Computing Machinery"),
-             ("0002-0002", "Association for Computing Machinery"),
-             ("0003-0003", "De Gruyter"),
-             ("0004-0004", "American Chemical Society")]
+            [
+                ("0001-0001", "Association for Computing Machinery"),
+                ("0002-0002", "Association for Computing Machinery"),
+                ("0003-0003", "De Gruyter"),
+                ("0004-0004", "American Chemical Society"),
+            ]
         ):
             session.add(Journal(issn_l=issn, title=f"J{i}", publisher_name=pname))
         await session.commit()
@@ -420,13 +426,17 @@ async def test_derive_nl_deal_coverage_links_and_covers(maker):
     async with maker() as s3:
         linked = set((await s3.execute(select(DealInstitution.deal_id))).scalars())
         assert acm_id in linked and acs_id in linked and dgb_id not in linked
-        rows = (await s3.execute(
-            select(DealJournal).where(DealJournal.deal_id == acm_id)
-        )).scalars().all()
+        rows = (
+            (await s3.execute(select(DealJournal).where(DealJournal.deal_id == acm_id)))
+            .scalars()
+            .all()
+        )
         assert {r.issn for r in rows} == {"0001-0001", "0002-0002"}
-        acs_rows = (await s3.execute(
-            select(DealJournal).where(DealJournal.deal_id == acs_id)
-        )).scalars().all()
+        acs_rows = (
+            (await s3.execute(select(DealJournal).where(DealJournal.deal_id == acs_id)))
+            .scalars()
+            .all()
+        )
         assert {r.issn for r in acs_rows} == {"0004-0004"}
         assert all(r.source == "publisher-pattern" for r in rows + acs_rows)
         # idempotent: a second derive adds nothing

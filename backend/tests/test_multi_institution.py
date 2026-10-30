@@ -26,15 +26,14 @@ async def multi_api(db, institution_factory):
     - LWW deal listed for RUG only (the ESAC text names RUG, not UT),
     - override deal where RUG carries its own journal list.
     """
+
     async def _override():
         async with async_sessionmaker(db.bind, expire_on_commit=False)() as session:
             yield session
 
     app.dependency_overrides[get_session] = _override
     ut = await institution_factory(code="ut")
-    rug = await institution_factory(
-        code="rug", data_window_start=2025, data_window_end=2025
-    )
+    rug = await institution_factory(code="rug", data_window_start=2025, data_window_end=2025)
     session = db
     if True:
         # Works land only for UT on 1234-5678; RUG's corpus is elsewhere.
@@ -55,28 +54,41 @@ async def multi_api(db, institution_factory):
         session.add_all(
             [
                 JournalFlags(
-                    institution_id=ut.id, issn_l="1234-5678",
-                    works_count=7, works_window_plus=9, deal_covered=True,
+                    institution_id=ut.id,
+                    issn_l="1234-5678",
+                    works_count=7,
+                    works_window_plus=9,
+                    deal_covered=True,
                 ),
                 JournalFlags(
-                    institution_id=rug.id, issn_l="1234-5678",
-                    works_count=0, works_window_plus=4,
+                    institution_id=rug.id,
+                    issn_l="1234-5678",
+                    works_count=0,
+                    works_window_plus=4,
                 ),
                 JournalFlags(
-                    institution_id=rug.id, issn_l="2222-2222",
-                    works_count=3, works_window_plus=5,
+                    institution_id=rug.id,
+                    issn_l="2222-2222",
+                    works_count=3,
+                    works_window_plus=5,
                 ),
                 JournalFlags(
-                    institution_id=ut.id, issn_l="2222-2222",
-                    works_count=0, works_window_plus=4,
+                    institution_id=ut.id,
+                    issn_l="2222-2222",
+                    works_count=0,
+                    works_window_plus=4,
                 ),
                 JournalFlags(
-                    institution_id=ut.id, issn_l="3333-3333",
-                    works_count=0, works_window_plus=4,
+                    institution_id=ut.id,
+                    issn_l="3333-3333",
+                    works_count=0,
+                    works_window_plus=4,
                 ),
                 JournalFlags(
-                    institution_id=rug.id, issn_l="3333-3333",
-                    works_count=0, works_window_plus=4,
+                    institution_id=rug.id,
+                    issn_l="3333-3333",
+                    works_count=0,
+                    works_window_plus=4,
                 ),
             ]
         )
@@ -85,12 +97,18 @@ async def multi_api(db, institution_factory):
         session.add_all([springer, lww])
         await session.flush()
         shared_deal = Deal(
-            publisher_id=springer.id, esac_id="sp2024", status="current",
-            start_year=2024, end_year=2026,
+            publisher_id=springer.id,
+            esac_id="sp2024",
+            status="current",
+            start_year=2024,
+            end_year=2026,
         )
         lww_deal = Deal(
-            publisher_id=lww.id, esac_id="lww2025", status="current",
-            start_year=2025, end_year=2027,
+            publisher_id=lww.id,
+            esac_id="lww2025",
+            status="current",
+            start_year=2025,
+            end_year=2027,
         )
         session.add_all([shared_deal, lww_deal])
         await session.flush()
@@ -102,7 +120,8 @@ async def multi_api(db, institution_factory):
                 # RUG participates in the shared deal AND overrides its
                 # journal list with its own.
                 DealInstitution(
-                    deal_id=shared_deal.id, institution_id=rug.id,
+                    deal_id=shared_deal.id,
+                    institution_id=rug.id,
                     journal_override=True,
                 ),
             ]
@@ -112,21 +131,28 @@ async def multi_api(db, institution_factory):
         session.add_all(
             [
                 DealJournal(
-                    deal_id=shared_deal.id, issn_l="1234-5678",
-                    issn="1234-5678", source="manual",
+                    deal_id=shared_deal.id,
+                    issn_l="1234-5678",
+                    issn="1234-5678",
+                    source="manual",
                 ),
                 DealJournal(
-                    deal_id=shared_deal.id, issn_l="2222-2222",
-                    issn="2222-2222", source="manual", institution_id=rug.id,
+                    deal_id=shared_deal.id,
+                    issn_l="2222-2222",
+                    issn="2222-2222",
+                    source="manual",
+                    institution_id=rug.id,
                 ),
                 DealJournal(
-                    deal_id=lww_deal.id, issn_l="3333-3333",
-                    issn="3333-3333", source="manual",
+                    deal_id=lww_deal.id,
+                    issn_l="3333-3333",
+                    issn="3333-3333",
+                    source="manual",
                 ),
             ]
         )
         await session.commit()
-        ids = dict(ut=ut.id, rug=rug.id, shared=shared_deal.id, lww=lww_deal.id)
+        ids = {"ut": ut.id, "rug": rug.id, "shared": shared_deal.id, "lww": lww_deal.id}
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
         yield client, ids
     app.dependency_overrides.clear()

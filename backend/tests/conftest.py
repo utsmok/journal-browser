@@ -123,16 +123,16 @@ def institution_factory(db):
 
 def journal_factory(issn_l: str, **kw) -> Journal:
     """Union of the ten former per-file _journal() defaults."""
-    base = dict(
-        issn_l=issn_l,
-        title=f"Journal {issn_l}",
-        search_text=f"Journal {issn_l}",
-        type="journal",
-        is_oa=False,
-        is_in_doaj=False,
-        in_scimago=False,
-        works_2020_plus=10,
-    )
+    base = {
+        "issn_l": issn_l,
+        "title": f"Journal {issn_l}",
+        "search_text": f"Journal {issn_l}",
+        "type": "journal",
+        "is_oa": False,
+        "is_in_doaj": False,
+        "in_scimago": False,
+        "works_2020_plus": 10,
+    }
     base.update(kw)
     return Journal(**base)
 

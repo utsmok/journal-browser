@@ -263,9 +263,7 @@ async def search_orgunits(
         conds["works"] = strata_cond(units.c.n_works, works)
     if uses_deals is True:
         conds["uses_deals"] = units.c.deal_works > 0
-    q_cond = (
-        units.c.name.ilike(f"%{_like(q.strip())}%", escape="\\") if q and q.strip() else None
-    )
+    q_cond = units.c.name.ilike(f"%{_like(q.strip())}%", escape="\\") if q and q.strip() else None
     where = list(conds.values()) + ([q_cond] if q_cond is not None else [])
     total = await session.scalar(select(func.count()).select_from(units).where(*where)) or 0
 
@@ -304,9 +302,7 @@ async def orgunit_detail(
     iid = institution.id
     require_confirmed = institution.require_confirmed_affiliation
     units = _unit_rows(institution, level)
-    unit_row = (
-        await session.execute(select(units).where(units.c.name == name))
-    ).one_or_none()
+    unit_row = (await session.execute(select(units).where(units.c.name == name))).one_or_none()
     if unit_row is None:
         return None
 
@@ -527,7 +523,6 @@ async def orgunit_detail(
         ],
         "works_by_year": works_by_year,
         "deal_usage": [
-            {"label": r.label, "n_works": int(r.n_works), "euro": float(r.euro)}
-            for r in usage_rows
+            {"label": r.label, "n_works": int(r.n_works), "euro": float(r.euro)} for r in usage_rows
         ],
     }
