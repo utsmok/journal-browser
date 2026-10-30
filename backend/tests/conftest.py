@@ -10,10 +10,13 @@ import secrets
 
 import asyncpg
 import pytest
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from journal_browser.models import Base
+from journal_browser.db import get_session
+from journal_browser.main import app
+from journal_browser.models import Base, Journal
 
 # Admin ops (CREATE/DROP DATABASE) go through the always-present maintenance
 # db, not `journalbrowser`: the CI service only creates journalbrowser_test.
@@ -116,3 +119,32 @@ def institution_factory(db):
         return inst
 
     return _make
+
+
+def journal_factory(issn_l: str, **kw) -> Journal:
+    """Union of the ten former per-file _journal() defaults."""
+    base = dict(
+        issn_l=issn_l,
+        title=f"Journal {issn_l}",
+        search_text=f"Journal {issn_l}",
+        type="journal",
+        is_oa=False,
+        is_in_doaj=False,
+        in_scimago=False,
+        works_2020_plus=10,
+    )
+    base.update(kw)
+    return Journal(**base)
+
+
+@pytest.fixture
+async def client(db_engine):
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+
+    async def _override():
+        async with maker() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = _override
+    yield AsyncClient(transport=ASGITransport(app=app), base_url="http://t")
+    app.dependency_overrides.clear()
