@@ -12,10 +12,10 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from conftest import requires_db
+from conftest import journal_factory, requires_db
 from journal_browser.db import get_session
 from journal_browser.main import app
-from journal_browser.models import HarvestRun, Institution, Journal, SourceRecord
+from journal_browser.models import HarvestRun, Institution, SourceRecord
 from journal_browser.services import ut_metadata
 
 # ── Pure logic (no database) ───────────────────────────────────────────────
@@ -171,18 +171,6 @@ def test_sort_order_year_cited_title():
 # ── API path: union via a faked ut_works_for_journal ──────────────────────
 
 
-def _journal(issn_l: str) -> Journal:
-    return Journal(
-        issn_l=issn_l,
-        title=f"Journal {issn_l}",
-        type="journal",
-        is_oa=False,
-        is_in_doaj=False,
-        in_scimago=False,
-        works_2020_plus=10,
-    )
-
-
 @pytest.fixture
 async def api(db_engine, monkeypatch):
     maker = async_sessionmaker(db_engine, expire_on_commit=False)
@@ -202,7 +190,7 @@ async def api(db_engine, monkeypatch):
             institution_id=home.id,
         )
         session.add(run)
-        session.add(_journal("1234-5678"))
+        session.add(journal_factory("1234-5678", search_text=None))
         await session.flush()
         session.add_all(
             [
