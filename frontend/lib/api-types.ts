@@ -953,6 +953,11 @@ export interface components {
             bronze: number;
             /** Closed */
             closed: number;
+            /**
+             * Diamond
+             * @default 0
+             */
+            diamond: number;
         };
         /**
          * CanonicalOa
