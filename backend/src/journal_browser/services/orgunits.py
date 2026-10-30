@@ -8,7 +8,7 @@ window."""
 
 from typing import Any
 
-from sqlalchemy import case, false, func, or_, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
@@ -23,14 +23,14 @@ from ..models import (
 )
 from .search import _like, _oa_type
 from .works_query import (
+    WORKS_STRATA,
+    YEAR_BUCKETS,
     empty_year_buckets,
     strata_bound,
     strata_cond,
     unit_author_join,
     unit_work_join,
     work_window,
-    WORKS_STRATA,
-    YEAR_BUCKETS,
 )
 
 DEFAULT_LIMIT = 20
@@ -458,7 +458,9 @@ async def orgunit_detail(
     ).all()
     by_year: dict[int, dict[str, int]] = {}
     for row in year_rows:
-        bucket = by_year.setdefault(row.year, {"year": row.year, "total": 0, **empty_year_buckets()})
+        bucket = by_year.setdefault(
+            row.year, {"year": row.year, "total": 0, **empty_year_buckets()}
+        )
         bucket["total"] += row.n
         if row.oa_status in YEAR_BUCKETS:
             bucket[row.oa_status] += row.n

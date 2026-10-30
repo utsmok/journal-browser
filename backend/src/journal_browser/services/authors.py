@@ -6,7 +6,7 @@ apply to every suggestion; the oa_type case is shared via search._oa_type."""
 
 from typing import Any
 
-from sqlalchemy import and_, case, false, func, or_, select, text
+from sqlalchemy import case, false, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
@@ -14,11 +14,11 @@ from ..harvest.authors import topic_mass
 from ..models import Author, AuthorWork, Institution, Journal, JournalFlags, Work
 from .search import _like, _oa_type, base_query
 from .works_query import (
+    YEAR_BUCKETS,
     author_works_join,
     empty_year_buckets,
     strata_cond,
     work_window,
-    YEAR_BUCKETS,
 )
 
 #: Search page + recommendation list sizes.
@@ -412,7 +412,9 @@ async def author_profile(
     ).all()
     by_year: dict[int, dict[str, int]] = {}
     for row in year_rows:
-        bucket = by_year.setdefault(row.year, {"year": row.year, "total": 0, **empty_year_buckets()})
+        bucket = by_year.setdefault(
+            row.year, {"year": row.year, "total": 0, **empty_year_buckets()}
+        )
         bucket["total"] += row.n
         if row.oa_status in YEAR_BUCKETS:
             bucket[row.oa_status] += row.n
