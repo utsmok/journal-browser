@@ -267,7 +267,11 @@ async def _author_journals(
                 Work.retired_at.is_(None),
                 Work.year >= institution.data_window_start,
                 Work.year
-                <= (institution.data_window_end if institution.data_window_end is not None else 9999),
+                <= (
+                    institution.data_window_end
+                    if institution.data_window_end is not None
+                    else 9999
+                ),
                 *([Journal.issn_l.not_in(sorted(set(ignored)))] if ignored else []),
             )
             .group_by(

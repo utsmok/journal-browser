@@ -32,6 +32,7 @@ async def backfill_deal_issn_l(session: AsyncSession) -> dict[str, int]:
             resolved += 1
         else:
             row.needs_curation = True
+            row.needs_curation_reason = "issn could not be resolved to ISSN-L"
             unresolved += 1
     # Deals with no journal rows at all need curation (JCT lists are never
     # empty; scraper-only deals without a resolvable list are the gap).

@@ -90,6 +90,11 @@ class HarvestState(Base):
     updated_at: Mapped[datetime] = _tstamp()
 
     __table_args__ = (
+        # Same vocabulary as ck_harvest_runs_status; NULL = never run.
+        CheckConstraint(
+            "status IN ('running', 'completed', 'failed')",
+            name="ck_harvest_state_status",
+        ),
         # Partial uniques keep one state row per key for global (NULL) and
         # institution-scoped rows separately; same pattern as deal_journals.
         Index(
@@ -306,6 +311,10 @@ class Deal(Base):
 
     __table_args__ = (
         CheckConstraint("status IN ('current', 'archive')", name="ck_deals_status"),
+        CheckConstraint(
+            "needs_curation = true OR needs_curation_reason IS NULL",
+            name="ck_deals_curation_reason",
+        ),
         Index("ix_deals_publisher", "publisher_id", "status"),
     )
 
@@ -333,6 +342,7 @@ class DealJournal(Base):
     needs_curation: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
+    needs_curation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Admin-removed from the deal (PUT /admin/deals/{id}/journals). The row
     # is kept so the JCT upsert cannot resurrect it; hidden from coverage.
     excluded: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
@@ -341,6 +351,10 @@ class DealJournal(Base):
         CheckConstraint(
             "source IN ('jct', 'manual', 'publisher-pattern')",
             name="ck_deal_journals_source",
+        ),
+        CheckConstraint(
+            "needs_curation = true OR needs_curation_reason IS NULL",
+            name="ck_deal_journals_curation_reason",
         ),
         # Partial uniques instead of one NULLS NOT DISTINCT key: ON CONFLICT
         # can target each partial index explicitly.
@@ -383,6 +397,13 @@ class DealInstitution(Base):
     )
     first_seen: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_seen: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "participation IN ('named', 'consortium')",
+            name="ck_deal_institutions_participation",
+        ),
+    )
 
 
 # ── Journals ────────────────────────────────────────────────────────────────
@@ -638,6 +659,10 @@ class Work(Base):
     updated_at: Mapped[datetime] = _tstamp()
 
     __table_args__ = (
+        CheckConstraint(
+            "oa_status IN ('gold', 'hybrid', 'green', 'bronze', 'diamond', 'closed')",
+            name="ck_works_oa_status",
+        ),
         # Pure occasionally carries one publication under two uuids; the
         # twin keeps the DOI and the other row stays NULL-doi.
         Index(
@@ -685,6 +710,14 @@ class WorkIdentity(Base):
     updated_at: Mapped[datetime] = _tstamp()
 
     __table_args__ = (
+        CheckConstraint(
+            "status IN ('confirmed', 'missing', 'candidate')",
+            name="ck_work_identity_status",
+        ),
+        CheckConstraint(
+            "matched_by ~ '^(doi|verbatim|trgm:.+)$'",
+            name="ck_work_identity_matched_by",
+        ),
         ForeignKeyConstraint(
             ["institution_id", "work_id"],
             ["works.institution_id", "works.pure_uuid"],
@@ -806,7 +839,7 @@ class Feedback(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
-    # bug | feature | improvement | other
+    # bug | data | feature | improvement | other (ck_feedback_items_category)
     category: Mapped[str | None] = mapped_column(Text, nullable=True)
     # todo | in_progress | done | wontfix
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="todo")
@@ -828,6 +861,10 @@ class Feedback(Base):
         CheckConstraint(
             "priority IN ('low', 'normal', 'high', 'critical')",
             name="ck_feedback_priority",
+        ),
+        CheckConstraint(
+            "category IN ('bug', 'data', 'feature', 'improvement', 'other')",
+            name="ck_feedback_items_category",
         ),
     )
 

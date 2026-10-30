@@ -229,7 +229,7 @@ async def enrich_openalex(
                             source_pk=f"doi:{doi}",
                             work_id=by_doi[doi].pure_uuid,
                             matched_by="doi",
-                            confidence=0.0,
+                            confidence=None,  # missing = no evidence, not zero confidence
                             status="missing",
                         )
                         .on_conflict_do_nothing(constraint=WORK_IDENTITY_UQ)

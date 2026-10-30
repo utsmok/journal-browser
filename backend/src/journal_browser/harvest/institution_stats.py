@@ -112,7 +112,9 @@ async def harvest_institution_stats(
 
             year = payload.get("publication_year")
             if isinstance(year, int) and institution.data_window_start <= year <= (
-                institution.data_window_end if institution.data_window_end is not None else current_year
+                institution.data_window_end
+                if institution.data_window_end is not None
+                else current_year
             ):
                 status = _oa_status(payload)
                 per_year[(year, status)] += 1

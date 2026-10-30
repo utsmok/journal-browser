@@ -644,7 +644,11 @@ async def publisher_detail(
                     InstitutionWorksStats.issn_l.in_(issns),
                     InstitutionWorksStats.year >= institution.data_window_start,
                     InstitutionWorksStats.year
-                    <= (institution.data_window_end if institution.data_window_end is not None else 9999),
+                    <= (
+                        institution.data_window_end
+                        if institution.data_window_end is not None
+                        else 9999
+                    ),
                 )
                 .order_by(InstitutionWorksStats.year)
             )

@@ -1,7 +1,5 @@
 """Data window semantics: NULL end = open; bounded end filters strictly."""
 
-import pytest
-
 from conftest import requires_db
 from journal_browser.models import Institution
 
