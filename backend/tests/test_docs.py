@@ -1,7 +1,6 @@
 """Docs surface: markdown block parser + /api/v1/docs GETs + admin edits."""
 
 import hashlib
-from pathlib import Path
 
 import pytest
 from httpx import AsyncClient
@@ -11,7 +10,6 @@ from journal_browser.config import reset_settings_cache
 from journal_browser.docs import parse_blocks
 
 PASSWORD = "test-admin-pw"
-REPO_DOCS = Path(__file__).resolve().parents[2] / "docs"
 
 
 # ── Parser ─────────────────────────────────────────────────────────────────
@@ -46,9 +44,28 @@ def test_parse_fence_keeps_blank_lines_and_lang():
 
 @pytest.fixture
 async def docs_api(client, monkeypatch, tmp_path):
+    """Hermetic docs tree (the repo docs/ dir is untracked local content).
+
+    Mirrors the layout journal_browser.docs expects: data-pipeline/OVERVIEW
+    first, further data-pipeline files as sources (glob order), pitch last.
+    """
     monkeypatch.setenv("JB_ADMIN_PASSWORD", PASSWORD)
     monkeypatch.setenv("JB_SETTINGS_YAML", str(tmp_path / "settings.yaml"))
-    monkeypatch.setenv("JB_DOCS_DIR", str(REPO_DOCS))
+    docs_dir = tmp_path / "docs"
+    (docs_dir / "data-pipeline").mkdir(parents=True)
+    (docs_dir / "pitch").mkdir()
+    (docs_dir / "data-pipeline" / "OVERVIEW.md").write_text(
+        "# Overview\n\nIntro paragraph.\n\n```python\nx = 1\n\ny = 2\n```\n",
+        encoding="utf-8",
+    )
+    (docs_dir / "data-pipeline" / "aaa-source.md").write_text(
+        "# A Source\n\nSource text.\n", encoding="utf-8"
+    )
+    (docs_dir / "data-pipeline" / "bbb-source.md").write_text(
+        "# B Source\n\nSource text.\n", encoding="utf-8"
+    )
+    (docs_dir / "pitch" / "extra.md").write_text("# Extra\n\nPitch text.\n", encoding="utf-8")
+    monkeypatch.setenv("JB_DOCS_DIR", str(docs_dir))
     reset_settings_cache()
     yield client
     reset_settings_cache()
