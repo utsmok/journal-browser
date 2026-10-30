@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -9,14 +9,14 @@ resolution-markers = [
 
 [[package]]
 name = "aireloom"
-version = "0.5.2"
+version = "0.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bibliofabric" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c9/5e/5705fa7270f484456b5b3ed277f4d5d9575593535149736046a7a927870b/aireloom-0.5.2.tar.gz", hash = "sha256:2e62a5a53b79df71bd41181fd25f9e89cbd4892dca3d981690ab21d4428db4ac", size = 340886, upload-time = "2026-09-08T11:42:24.453Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a6/0d/b269a41d09cc959f5594d48abd72dc109004cf100776ab9dfb0e1c23a926/aireloom-0.6.0.tar.gz", hash = "sha256:103e912e59f148371f7c39fd79737b2091eeeb6832f147c128ff2e277ede39c6", size = 341546, upload-time = "2026-10-27T10:28:24.063Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/86/c1/944869e8e42be292277c4638086d462762661f445e31f46a66b97831c9fb/aireloom-0.5.2-py3-none-any.whl", hash = "sha256:08c41b37cf103fd4d9ee352c62d7a0ab2a01eb7e3ac9f51add83dadd34b05d9b", size = 58843, upload-time = "2026-09-08T11:42:23.165Z" },
+    { url = "https://files.pythonhosted.org/packages/ef/40/5d2d0f6f34906c225c97175941a4f1f84a245e2b4b9bf197c61a0602ad1f/aireloom-0.6.0-py3-none-any.whl", hash = "sha256:65b7971c1e14e5d5a29b83905f08a4a4016c8e1a61e57cc18e69d68c20bd7145", size = 59375, upload-time = "2026-10-27T10:28:22.813Z" },
 ]
 
 [[package]]
