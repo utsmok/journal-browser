@@ -8,7 +8,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from conftest import requires_db
+from conftest import journal_factory, requires_db
 from journal_browser.db import get_session
 from journal_browser.main import app
 from journal_browser.models import (
@@ -16,28 +16,12 @@ from journal_browser.models import (
     Author,
     AuthorWork,
     HarvestRun,
-    Journal,
     JournalFlags,
     Work,
 )
 
 TNW = "Faculty of Science and Technology"
 BMS = "Faculty of Behavioural, Management and Social Sciences"
-
-
-def _journal(issn_l: str, **kw) -> Journal:
-    base = dict(
-        issn_l=issn_l,
-        title=f"Journal {issn_l}",
-        type="journal",
-        is_oa=False,
-        is_in_doaj=False,
-        in_scimago=False,
-        works_2020_plus=10,
-        search_text=f"Journal {issn_l}",
-    )
-    base.update(kw)
-    return Journal(**base)
 
 
 @pytest.fixture
@@ -60,8 +44,8 @@ async def orgunits_api(db, institution_factory):
     await session.flush()
     session.add_all(
         [
-            _journal("1234-5678", publisher_name="Springer", latest_quartile="Q1"),
-            _journal("2222-2221", publisher_name="Wiley", latest_quartile="Q2"),
+            journal_factory("1234-5678", publisher_name="Springer", latest_quartile="Q1"),
+            journal_factory("2222-2221", publisher_name="Wiley", latest_quartile="Q2"),
         ]
     )
     await session.flush()
