@@ -35,7 +35,17 @@ async def bump_cache_epoch(session: AsyncSession) -> None:
 ISSN_RE = re.compile(r"^\d{4}-?\d{3}[\dXx]$")
 
 # Transient HTTP failures worth one retry; everything else fails loudly.
-_RETRY_STATUS = {429, 500, 502, 503, 504}
+RETRY_STATUS = {429, 500, 502, 503, 504}
+
+HTTP_RETRY_SLEEP = 5.0
+HTTP_RETRY_MAX_SLEEP = 60.0
+
+
+def retry_delay(attempt: int, retry_after: str) -> float:
+    """Retry-After seconds when numeric, else capped exponential backoff."""
+    if retry_after.isdigit():
+        return float(retry_after)
+    return min(HTTP_RETRY_SLEEP * 2 ** (attempt - 1), HTTP_RETRY_MAX_SLEEP)
 
 
 def normalize_issn(raw: str | None) -> str | None:
@@ -91,7 +101,7 @@ async def fetch_bytes(
         for attempt in range(retries):
             try:
                 response = await client.request(method, url, content=data)
-                if response.status_code in _RETRY_STATUS:
+                if response.status_code in RETRY_STATUS:
                     raise httpx.HTTPStatusError(
                         f"transient status {response.status_code}",
                         request=response.request,
@@ -103,7 +113,7 @@ async def fetch_bytes(
                 last_error = exc
                 transient = isinstance(exc, httpx.TransportError) or (
                     isinstance(exc, httpx.HTTPStatusError)
-                    and exc.response.status_code in _RETRY_STATUS
+                    and exc.response.status_code in RETRY_STATUS
                 )
                 if not transient or attempt == retries - 1:
                     raise

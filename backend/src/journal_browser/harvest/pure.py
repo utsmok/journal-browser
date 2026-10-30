@@ -35,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import get_settings
 from ..ingest import IngestSession
 from ..models import Work
+from .common import RETRY_STATUS, retry_delay
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +52,6 @@ PREFIX_CERIF = "oai_cerif_openaire"
 # badResumptionToken => restart the whole set from scratch, at most this often.
 MAX_TOKEN_RESTARTS = 2
 MAX_HTTP_ATTEMPTS = 5
-TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
-HTTP_RETRY_SLEEP = 5.0
-HTTP_RETRY_MAX_SLEEP = 60.0
 
 # Full sweep = every configured window year (settings.data_window_*). Drives
 # the retirement pass (works absent from a full sweep are marked, never deleted).
@@ -83,13 +81,6 @@ class Pacer:
         if delay > 0:
             await asyncio.sleep(delay)
         self._next_ok = time.monotonic() + self.min_interval
-
-
-def retry_delay(attempt: int, retry_after: str) -> float:
-    """Retry-After seconds when numeric, else capped exponential backoff."""
-    if retry_after.isdigit():
-        return float(retry_after)
-    return min(HTTP_RETRY_SLEEP * 2 ** (attempt - 1), HTTP_RETRY_MAX_SLEEP)
 
 
 # ── DOI extraction (port of ut-metadata identifiers.extract_doi) ────────────
@@ -147,7 +138,7 @@ async def _oai_get(base_url: str, params: dict[str, str], pacer: Pacer) -> ET.El
                 logger.warning("OAI transport error (attempt %s): %s", attempt, exc)
                 await asyncio.sleep(retry_delay(attempt, ""))
                 continue
-            if resp.status_code in TRANSIENT_STATUS_CODES:
+            if resp.status_code in RETRY_STATUS:
                 if attempt == MAX_HTTP_ATTEMPTS:
                     resp.raise_for_status()
                 delay = retry_delay(attempt, resp.headers.get("Retry-After", ""))
