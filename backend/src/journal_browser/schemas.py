@@ -12,6 +12,7 @@ from .vocab import (
     FeedbackPriority,
     FeedbackStatus,
     HarvestStatus,
+    IdentityStatus,
     OaType,
     WorksSource,
 )
@@ -558,6 +559,24 @@ class FlaggedDealOut(BaseModel):
     duration: str | None
     journals: int
     reason: str | None
+
+
+class AuthorIdentityAdminOut(BaseModel):
+    """One identity-cascade row for the admin review list."""
+
+    institution_id: int
+    institution_code: str | None
+    author_pure_uuid: str
+    author_name: str | None
+    source: str
+    external_id: str
+    status: IdentityStatus
+    method: str | None
+    confidence: float | None
+    n_works: int
+    orcid_corroborated: bool
+    evidence: dict[str, Any]
+    updated_at: datetime | None
 
 
 class AdminInstitutionOut(BaseModel):

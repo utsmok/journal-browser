@@ -14,6 +14,7 @@ from fastapi import APIRouter
 
 from . import (
     auth,
+    authors_admin,
     deals_admin,
     docs_admin,
     feedback_admin,
@@ -32,3 +33,4 @@ router.include_router(settings_admin.router)
 router.include_router(deals_admin.router)
 router.include_router(feedback_admin.router)
 router.include_router(docs_admin.router)
+router.include_router(authors_admin.router)

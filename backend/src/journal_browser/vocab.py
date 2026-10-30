@@ -86,3 +86,11 @@ class HarvestStatus(StrEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class IdentityStatus(StrEnum):
+    """author_identities.status (ck_author_identities_status)."""
+
+    CONFIRMED = "confirmed"
+    CANDIDATE = "candidate"
+    REJECTED = "rejected"

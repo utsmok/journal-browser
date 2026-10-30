@@ -2,11 +2,14 @@
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from conftest import requires_db
 from journal_browser.config import get_settings, reset_settings_cache
 from journal_browser.models import (
+    Author,
+    AuthorIdentity,
     Deal,
     DealJournal,
     HarvestRun,
@@ -232,3 +235,82 @@ async def test_institution_put_rejects_null_nonnullable(admin_api):
     )
     assert r.status_code == 200
     assert r.json()["admin_contact"] is None
+
+
+@requires_db
+async def test_author_identities_list_and_flip(admin_api, db_engine):
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with maker() as session:
+        inst_id = (await session.execute(select(Institution.id).limit(1))).scalar_one()
+        session.add(
+            Author(
+                institution_id=inst_id,
+                pure_uuid="p-review",
+                name="Review Me",
+                n_works=1,
+                confirmed=True,
+            )
+        )
+        session.add(
+            AuthorIdentity(
+                institution_id=inst_id,
+                author_pure_uuid="p-review",
+                source="openalex",
+                external_id="a-1",
+                status="candidate",
+                method="initials",
+                n_works=2,
+                evidence={"conflicts": 1},
+            )
+        )
+        await session.commit()
+
+    headers = await _login(admin_api)
+    r = await admin_api.get(
+        "/api/v1/admin/author-identities", params={"status": "candidate"}, headers=headers
+    )
+    assert r.status_code == 200
+    row = next(row for row in r.json() if row["author_pure_uuid"] == "p-review")
+    assert row["author_name"] == "Review Me"
+    assert row["institution_code"] == "ut"
+
+    # flip to confirmed
+    r = await admin_api.put(
+        "/api/v1/admin/author-identities",
+        headers=headers,
+        json={
+            "institution_id": row["institution_id"],
+            "author_pure_uuid": "p-review",
+            "source": "openalex",
+            "external_id": "a-1",
+            "status": "confirmed",
+        },
+    )
+    assert r.status_code == 200
+    assert r.json()["status"] == "confirmed"
+
+    # invalid status 422; unknown row 404
+    r = await admin_api.put(
+        "/api/v1/admin/author-identities",
+        headers=headers,
+        json={
+            "institution_id": row["institution_id"],
+            "author_pure_uuid": "p-review",
+            "source": "openalex",
+            "external_id": "a-1",
+            "status": "maybe",
+        },
+    )
+    assert r.status_code == 422
+    r = await admin_api.put(
+        "/api/v1/admin/author-identities",
+        headers=headers,
+        json={
+            "institution_id": row["institution_id"],
+            "author_pure_uuid": "p-missing",
+            "source": "openalex",
+            "external_id": "a-1",
+            "status": "confirmed",
+        },
+    )
+    assert r.status_code == 404
