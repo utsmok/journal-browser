@@ -234,6 +234,7 @@ async def test_profile_shape(authors_api):
     assert [row["year"] for row in body["oa_by_year"]] == [2024, 2023, 2021]
     assert body["oa_by_year"][1] == {
         "year": 2023, "total": 2, "gold": 1, "green": 0, "hybrid": 0, "bronze": 0, "closed": 1,
+        "diamond": 0,
     }
     # journals: works count desc, shared oa_type case
     assert [(j["issn_l"], j["n_works"], j["oa_type"]) for j in body["journals"]] == [

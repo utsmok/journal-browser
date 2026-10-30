@@ -13,6 +13,13 @@ from ..config import get_settings
 from ..harvest.authors import topic_mass
 from ..models import Author, AuthorWork, Institution, Journal, JournalFlags, Work
 from .search import _like, _oa_type, base_query
+from .works_query import (
+    author_works_join,
+    empty_year_buckets,
+    strata_cond,
+    work_window,
+    YEAR_BUCKETS,
+)
 
 #: Search page + recommendation list sizes.
 DEFAULT_LIMIT = 25
@@ -23,28 +30,12 @@ ALTERNATIVE_JOURNALS = 5
 ALTERNATIVE_OPTIONS = 3
 WORKS_CAP = 200
 
-#: Response buckets of works.oa_status (diamond exists in works but the
-#: contract's year split has no diamond column; it still counts in total).
-_YEAR_BUCKETS = ("gold", "green", "hybrid", "bronze", "closed")
+#: Response buckets of works.oa_status are shared (works_query.YEAR_BUCKETS);
+#: the contract's year split historically had no diamond column but now does.
 
-
-#: Works-count strata and last-publication-year buckets (facet vocabulary).
-WORKS_STRATA = ("1-4", "5-19", "20-49", "50+")
 LAST_PUB_BUCKETS = ("2025-2026", "2022-2024", "2020-2021", "none")
 
-_WORKS_BOUNDS = {"1-4": (1, 4), "5-19": (5, 19), "20-49": (20, 49)}  # 50+ = >= 50
 _LAST_PUB_BOUNDS = {"2025-2026": (2025, 2026), "2022-2024": (2022, 2024), "2020-2021": (2020, 2021)}
-
-
-def _works_cond(values: list[str]) -> Any:
-    """OR of stratum ranges; an unknown value matches nothing (no error)."""
-    parts = []
-    for value in values:
-        if value == "50+":
-            parts.append(Author.n_works >= 50)
-        elif bounds := _WORKS_BOUNDS.get(value):
-            parts.append(Author.n_works.between(*bounds))
-    return or_(*parts) if parts else false()
 
 
 def _last_pub_cond(values: list[str]) -> Any:
@@ -83,7 +74,7 @@ def _filter_conds(
     if topic:
         conds["topic"] = Author.primary_topic.in_(topic)
     if works:
-        conds["works"] = _works_cond(works)
+        conds["works"] = strata_cond(Author.n_works, works)
     if last_pub:
         conds["last_pub"] = _last_pub_cond(last_pub)
     if has_orcid:
@@ -254,24 +245,14 @@ async def _author_journals(
             .select_from(Work)
             .join(
                 AuthorWork,
-                and_(
-                    AuthorWork.institution_id == iid,
-                    AuthorWork.work_pure_uuid == Work.pure_uuid,
-                    AuthorWork.author_pure_uuid == pure_uuid,
-                ),
+                author_works_join(iid, pure_uuid),
             )
             .join(Journal, Journal.issn_l == Work.journal_issn_l)
             .join(flags, flags.c.issn_l == Journal.issn_l)
             .where(
                 Work.institution_id == iid,
                 Work.retired_at.is_(None),
-                Work.year >= institution.data_window_start,
-                Work.year
-                <= (
-                    institution.data_window_end
-                    if institution.data_window_end is not None
-                    else 9999
-                ),
+                *work_window(institution),
                 *([Journal.issn_l.not_in(sorted(set(ignored)))] if ignored else []),
             )
             .group_by(
@@ -390,24 +371,17 @@ async def author_profile(
     """Full profile bundle; None = unknown author (404 upstream). All
     per-author work views are bounded to the institution's data window."""
     iid = institution.id
-    year_start = institution.data_window_start
-    year_end = institution.data_window_end if institution.data_window_end is not None else 9999
     author = await session.scalar(
         select(Author).where(Author.institution_id == iid, Author.pure_uuid == pure_uuid)
     )
     if author is None:
         return None
 
-    work_join = and_(
-        AuthorWork.institution_id == iid,
-        AuthorWork.work_pure_uuid == Work.pure_uuid,
-        AuthorWork.author_pure_uuid == pure_uuid,
-    )
+    work_join = author_works_join(iid, pure_uuid)
     in_window = (
         Work.institution_id == iid,
         Work.retired_at.is_(None),
-        Work.year >= year_start,
-        Work.year <= year_end,
+        *work_window(institution),
     )
     work_rows = (
         await session.execute(
@@ -438,11 +412,9 @@ async def author_profile(
     ).all()
     by_year: dict[int, dict[str, int]] = {}
     for row in year_rows:
-        bucket = by_year.setdefault(
-            row.year, {"year": row.year, "total": 0, **dict.fromkeys(_YEAR_BUCKETS, 0)}
-        )
+        bucket = by_year.setdefault(row.year, {"year": row.year, "total": 0, **empty_year_buckets()})
         bucket["total"] += row.n
-        if row.oa_status in _YEAR_BUCKETS:
+        if row.oa_status in YEAR_BUCKETS:
             bucket[row.oa_status] += row.n
     oa_by_year = [by_year[year] for year in sorted(by_year, reverse=True)]
 

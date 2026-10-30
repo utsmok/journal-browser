@@ -368,6 +368,7 @@ class AuthorYearRow(BaseModel):
     hybrid: int
     bronze: int
     closed: int
+    diamond: int = 0
 
 
 class AuthorJournalRow(BaseModel):

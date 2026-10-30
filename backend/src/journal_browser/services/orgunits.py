@@ -22,6 +22,16 @@ from ..models import (
     Work,
 )
 from .search import _like, _oa_type
+from .works_query import (
+    empty_year_buckets,
+    strata_bound,
+    strata_cond,
+    unit_author_join,
+    unit_work_join,
+    work_window,
+    WORKS_STRATA,
+    YEAR_BUCKETS,
+)
 
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 100
@@ -32,13 +42,7 @@ TOPICS_PER_ITEM = 3
 TOPICS_PER_DETAIL = 5
 
 LEVELS = ("faculty", "group")
-WORKS_STRATA = ("1-4", "5-19", "20-49", "50+")
 SORT_KEYS = ("relevance", "name", "authors", "works", "deal_works")
-
-_STRATA_BOUNDS = {"1-4": (1, 4), "5-19": (5, 19), "20-49": (20, 49)}  # 50+ = >= 50
-
-#: Response buckets of works.oa_status (StatsYear carries all six splits).
-_YEAR_BUCKETS = ("gold", "green", "hybrid", "bronze", "closed", "diamond")
 
 
 def _unit_key(level: str) -> Any:
@@ -57,8 +61,6 @@ def _unit_rows(institution: Institution, level: str) -> Any:
     """Unit aggregates with deal/APC rollups outer-joined on the name."""
     iid = institution.id
     require_confirmed = institution.require_confirmed_affiliation
-    year_start = institution.data_window_start
-    year_end = institution.data_window_end if institution.data_window_end is not None else 9999
     key = _unit_key(level)
     agg_cols: list[Any] = [
         key.label("name"),
@@ -93,8 +95,7 @@ def _unit_rows(institution: Institution, level: str) -> Any:
             key != "",
             Work.institution_id == iid,
             Work.retired_at.is_(None),
-            Work.year >= year_start,
-            Work.year <= year_end,
+            *work_window(institution),
         ]
         if dois_only:
             conds.append(Work.doi_normalized.is_not(None))
@@ -103,12 +104,11 @@ def _unit_rows(institution: Institution, level: str) -> Any:
             .select_from(Author)
             .join(
                 AuthorWork,
-                (AuthorWork.institution_id == iid)
-                & (AuthorWork.author_pure_uuid == Author.pure_uuid),
+                unit_author_join(iid),
             )
             .join(
                 Work,
-                (Work.institution_id == iid) & (Work.pure_uuid == AuthorWork.work_pure_uuid),
+                unit_work_join(iid),
             )
             .where(*conds)
             .distinct()
@@ -174,17 +174,6 @@ def _unit_rows(institution: Institution, level: str) -> Any:
         )
         .subquery()
     )
-
-
-def _strata_cond(col: Any, values: list[str]) -> Any:
-    """OR of stratum ranges; an unknown value matches nothing (no error)."""
-    parts = []
-    for value in values:
-        if value == "50+":
-            parts.append(col >= 50)
-        elif bounds := _STRATA_BOUNDS.get(value):
-            parts.append(col.between(*bounds))
-    return or_(*parts) if parts else false()
 
 
 def _order(units: Any, sort: str, q: str | None) -> tuple[Any, str]:
@@ -272,7 +261,7 @@ async def search_orgunits(
     if faculty and level == "group":
         conds["faculty"] = units.c.faculty.in_(faculty)
     if works:
-        conds["works"] = _strata_cond(units.c.n_works, works)
+        conds["works"] = strata_cond(units.c.n_works, works)
     if uses_deals is True:
         conds["uses_deals"] = units.c.deal_works > 0
     q_cond = (
@@ -325,11 +314,7 @@ async def search_orgunits(
             await session.execute(
                 select(
                     *[
-                        func.count().filter(
-                            units.c.n_works.between(*_STRATA_BOUNDS[stratum])
-                            if stratum != "50+"
-                            else units.c.n_works >= 50
-                        )
+                        func.count().filter(strata_bound(units.c.n_works, stratum))
                         for stratum in WORKS_STRATA
                     ]
                 )
@@ -361,8 +346,6 @@ async def orgunit_detail(
     """Full unit bundle; None = unknown unit (404 upstream)."""
     iid = institution.id
     require_confirmed = institution.require_confirmed_affiliation
-    year_start = institution.data_window_start
-    year_end = institution.data_window_end if institution.data_window_end is not None else 9999
     units = _unit_rows(institution, level)
     unit_row = (
         await session.execute(select(units).where(units.c.name == name))
@@ -411,20 +394,18 @@ async def orgunit_detail(
             .select_from(Author)
             .join(
                 AuthorWork,
-                (AuthorWork.institution_id == iid)
-                & (AuthorWork.author_pure_uuid == Author.pure_uuid),
+                unit_author_join(iid),
             )
             .join(
                 Work,
-                (Work.institution_id == iid) & (Work.pure_uuid == AuthorWork.work_pure_uuid),
+                unit_work_join(iid),
             )
             .join(Journal, Journal.issn_l == Work.journal_issn_l)
             .join(flags, flags.c.issn_l == Journal.issn_l)
             .where(
                 *membership,
                 Work.retired_at.is_(None),
-                Work.year >= year_start,
-                Work.year <= year_end,
+                *work_window(institution),
                 *([Journal.issn_l.not_in(sorted(set(ignored)))] if ignored else []),
             )
             .group_by(
@@ -461,36 +442,32 @@ async def orgunit_detail(
             .select_from(Author)
             .join(
                 AuthorWork,
-                (AuthorWork.institution_id == iid)
-                & (AuthorWork.author_pure_uuid == Author.pure_uuid),
+                unit_author_join(iid),
             )
             .join(
                 Work,
-                (Work.institution_id == iid) & (Work.pure_uuid == AuthorWork.work_pure_uuid),
+                unit_work_join(iid),
             )
             .where(
                 *membership,
                 Work.retired_at.is_(None),
-                Work.year >= year_start,
-                Work.year <= year_end,
+                *work_window(institution),
             )
             .group_by(Work.year, Work.oa_status)
         )
     ).all()
     by_year: dict[int, dict[str, int]] = {}
     for row in year_rows:
-        bucket = by_year.setdefault(
-            row.year, {"year": row.year, "total": 0, **dict.fromkeys(_YEAR_BUCKETS, 0)}
-        )
+        bucket = by_year.setdefault(row.year, {"year": row.year, "total": 0, **empty_year_buckets()})
         bucket["total"] += row.n
-        if row.oa_status in _YEAR_BUCKETS:
+        if row.oa_status in YEAR_BUCKETS:
             bucket[row.oa_status] += row.n
     works_by_year = [
         {
             "year": year,
             "works_count": by_year[year]["total"],
             "works_count_source": "pure_canon",
-            **{f"oa_{status}": by_year[year][status] for status in _YEAR_BUCKETS},
+            **{f"oa_{status}": by_year[year][status] for status in YEAR_BUCKETS},
         }
         for year in sorted(by_year, reverse=True)
     ]
@@ -504,12 +481,8 @@ async def orgunit_detail(
             Journal.publisher_name.label("publisher"),
         )
         .select_from(Author)
-        .join(
-            AuthorWork,
-            (AuthorWork.institution_id == iid)
-            & (AuthorWork.author_pure_uuid == Author.pure_uuid),
-        )
-        .join(Work, (Work.institution_id == iid) & (Work.pure_uuid == AuthorWork.work_pure_uuid))
+        .join(AuthorWork, unit_author_join(iid))
+        .join(Work, unit_work_join(iid))
         .join(
             JournalFlags,
             (JournalFlags.institution_id == iid)
@@ -520,8 +493,7 @@ async def orgunit_detail(
         .where(
             *membership,
             Work.retired_at.is_(None),
-            Work.year >= year_start,
-            Work.year <= year_end,
+            *work_window(institution),
         )
         .subquery()
     )

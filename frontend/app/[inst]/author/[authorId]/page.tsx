@@ -184,7 +184,7 @@ function toStatsYear(oa_by_year: AuthorProfile["oa_by_year"]): StatsYear[] {
       oa_hybrid: y.hybrid,
       oa_green: y.green,
       oa_bronze: y.bronze,
-      oa_diamond: 0,
+      oa_diamond: y.diamond ?? 0,
       oa_closed: y.closed,
     }));
 }
