@@ -12,10 +12,9 @@ then commit the regenerated files together with the backend change.
 
 ## Commands
 
-| Purpose | Command |
-|---|---|
-| Lint (ESLint) | `npm run lint` |
-| Format (Biome) | `npm run format` |
+| Purpose           | Command                |
+| ----------------- | ---------------------- |
+| Lint (ESLint)     | `npm run lint`         |
+| Format (Biome)    | `npm run format`       |
 | Format check (CI) | `npm run format:check` |
-| Production build | `npm run build` |
-
+| Production build  | `npm run build`        |
