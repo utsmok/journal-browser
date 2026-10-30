@@ -5,11 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
-import {
-  FacetGroupList,
-  type FacetGroupDef,
-  type FacetValue,
-} from "@/components/filter-panel";
+import { FacetGroupList, type FacetGroupDef, type FacetValue } from "@/components/filter-panel";
 import { OaCompositionBar } from "@/components/oa-composition";
 import { ListSkeletonRows } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -56,10 +52,7 @@ const SELECT_CLASS =
   "h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2";
 
 /** Comma-joined multi-select param → list of values (journal-search convention). */
-function paramValues(
-  sp: { get(key: string): string | null },
-  key: string,
-): string[] {
+function paramValues(sp: { get(key: string): string | null }, key: string): string[] {
   return (sp.get(key) ?? "").split("|").filter(Boolean);
 }
 
@@ -74,8 +67,7 @@ function facetValues(
     .slice(0, 8)
     .map(([value, count]) => ({ value, count, label: label?.(value) }));
   for (const value of active)
-    if (!list.some((v) => v.value === value))
-      list.unshift({ value, label: label?.(value) });
+    if (!list.some((v) => v.value === value)) list.unshift({ value, label: label?.(value) });
   return list;
 }
 
@@ -122,8 +114,7 @@ function ApcCell({ item }: { item: PublisherListItem }) {
       className="tabular-nums"
       title={`APC known for ${n_journals} ${n_journals === 1 ? "journal" : "journals"}; list prices and OpenAPC ranges combined`}
     >
-      {range} €{" "}
-      <span className="text-[var(--muted-foreground)]">({n_journals})</span>
+      {range} € <span className="text-[var(--muted-foreground)]">({n_journals})</span>
     </span>
   );
 }
@@ -155,8 +146,7 @@ function PublishersView() {
   const sizes = paramValues(sp, "size");
   const topic = sp.get("topic") ?? "";
   const apcParam = sp.get("has_apc");
-  const hasApc: "yes" | "no" | null =
-    apcParam === "yes" || apcParam === "no" ? apcParam : null;
+  const hasApc: "yes" | "no" | null = apcParam === "yes" || apcParam === "no" ? apcParam : null;
   const anyFilter =
     oaTypes.length > 0 ||
     deal !== null ||
@@ -180,8 +170,7 @@ function PublishersView() {
   const limitParam = parseInt(sp.get("limit") ?? "", 10);
   const pageSize = PAGE_SIZES.includes(limitParam) ? limitParam : 50;
   const offsetParam = parseInt(sp.get("offset") ?? "", 10);
-  const offset =
-    Number.isFinite(offsetParam) && offsetParam > 0 ? offsetParam : 0;
+  const offset = Number.isFinite(offsetParam) && offsetParam > 0 ? offsetParam : 0;
 
   const setParams = React.useCallback(
     (patch: Record<string, string | undefined>) => {
@@ -214,21 +203,19 @@ function PublishersView() {
     return () => clearTimeout(t);
   }, [input, q, update]);
 
-  const { data, isPending, isFetching, isError, error, refetch } = usePublishers(
-    {
-      q: q || undefined,
-      oa_type: oaTypes.length > 0 ? oaTypes : undefined,
-      deal: deal ?? undefined,
-      quartile: quartiles.length > 0 ? quartiles : undefined,
-      size: sizes.length > 0 ? sizes : undefined,
-      topic: topic || undefined,
-      has_apc: hasApc === null ? undefined : hasApc === "yes",
-      sort,
-      offset: offset > 0 ? offset : undefined,
-      limit: pageSize === 50 ? undefined : pageSize,
-      include_facets: true,
-    },
-  );
+  const { data, isPending, isFetching, isError, error, refetch } = usePublishers({
+    q: q || undefined,
+    oa_type: oaTypes.length > 0 ? oaTypes : undefined,
+    deal: deal ?? undefined,
+    quartile: quartiles.length > 0 ? quartiles : undefined,
+    size: sizes.length > 0 ? sizes : undefined,
+    topic: topic || undefined,
+    has_apc: hasApc === null ? undefined : hasApc === "yes",
+    sort,
+    offset: offset > 0 ? offset : undefined,
+    limit: pageSize === 50 ? undefined : pageSize,
+    include_facets: true,
+  });
 
   const rows = data?.items ?? [];
   const facets = data?.facets;
@@ -241,8 +228,7 @@ function PublishersView() {
 
   const toggleFacet = (key: string, value: string) => {
     if (key === "oa_type" || key === "quartile" || key === "size") {
-      const current =
-        key === "oa_type" ? oaTypes : key === "quartile" ? quartiles : sizes;
+      const current = key === "oa_type" ? oaTypes : key === "quartile" ? quartiles : sizes;
       const next = current.includes(value)
         ? current.filter((v) => v !== value)
         : [...current, value];
@@ -325,8 +311,8 @@ function PublishersView() {
         <section className="order-1 mb-8 min-[960px]:col-start-2 min-[960px]:row-start-1 min-[960px]:mb-6">
           <h1 className="mb-3 text-3xl font-bold text-balance">Publishers</h1>
           <p className="mb-6 max-w-2xl text-[var(--muted-foreground)]">
-            Browse the journals of {site.name} by publisher, with their output,
-            open access mix, deals, and article costs.
+            Browse the journals of {site.name} by publisher, with their output, open access mix,
+            deals, and article costs.
           </p>
           <form
             className="flex max-w-2xl gap-2"
@@ -362,22 +348,14 @@ function PublishersView() {
         {/* Stacked filter card: the only filter UI below 960px. */}
         {data != null && (
           <section className="order-2 mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
-            <FacetGroupList
-              groups={groups}
-              onToggle={toggleFacet}
-              variant="chips"
-            />
+            <FacetGroupList groups={groups} onToggle={toggleFacet} variant="chips" />
           </section>
         )}
 
         {/* Wide-screen sidebar: sticky, scrolls on its own when long. */}
         {data != null && (
           <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:col-start-1 min-[960px]:row-span-2 min-[960px]:row-start-1 min-[960px]:block">
-            <FacetGroupList
-              groups={groups}
-              onToggle={toggleFacet}
-              variant="rows"
-            />
+            <FacetGroupList groups={groups} onToggle={toggleFacet} variant="rows" />
           </aside>
         )}
 
@@ -392,19 +370,14 @@ function PublishersView() {
               value={sort ?? "default"}
               onChange={(event) =>
                 setParams({
-                  sort:
-                    event.target.value === "default"
-                      ? undefined
-                      : event.target.value,
+                  sort: event.target.value === "default" ? undefined : event.target.value,
                 })
               }
               className={SELECT_CLASS}
             >
               {/* The backend default is relevance with a query, works count
                 without; say so instead of guessing one label. */}
-              <option value="default">
-                {q ? "Relevance" : "Works (high→low)"}
-              </option>
+              <option value="default">{q ? "Relevance" : "Works (high→low)"}</option>
               {(
                 [
                   ["name", "Name (A→Z)"],
@@ -428,8 +401,7 @@ function PublishersView() {
               value={pageSize}
               onChange={(event) =>
                 setParams({
-                  limit:
-                    event.target.value === "50" ? undefined : event.target.value,
+                  limit: event.target.value === "50" ? undefined : event.target.value,
                 })
               }
               className={SELECT_CLASS}
@@ -481,8 +453,7 @@ function PublishersView() {
                       <ChevronLeft aria-hidden className="size-4" /> Prev
                     </Button>
                     <span className="whitespace-nowrap text-sm tabular-nums text-[var(--muted-foreground)]">
-                      Page {page.toLocaleString("en")} of{" "}
-                      {pageCount.toLocaleString("en")}
+                      Page {page.toLocaleString("en")} of {pageCount.toLocaleString("en")}
                     </span>
                     <Button
                       variant="outline"
@@ -499,15 +470,8 @@ function PublishersView() {
 
               {isError ? (
                 <div className="py-10 text-center">
-                  <p className="text-[var(--destructive)]">
-                    {errorMessage(error)}
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-3"
-                    onClick={() => refetch()}
-                  >
+                  <p className="text-[var(--destructive)]">{errorMessage(error)}</p>
+                  <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
                     Retry
                   </Button>
                 </div>
@@ -522,11 +486,7 @@ function PublishersView() {
                       No publishers match{anyFilter ? " these filters" : ""}.
                       {anyFilter && (
                         <div className="mt-3">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={clearFilters}
-                          >
+                          <Button variant="outline" size="sm" onClick={clearFilters}>
                             Clear filters
                           </Button>
                         </div>
@@ -539,9 +499,7 @@ function PublishersView() {
                   {/* Stacked cards on narrow viewports: eight columns would
                     push the counts off-screen behind horizontal scrolling. */}
                   <ul
-                    className={
-                      isFetching ? "opacity-60 md:hidden" : "md:hidden"
-                    }
+                    className={isFetching ? "opacity-60 md:hidden" : "md:hidden"}
                     aria-label="Publisher results"
                   >
                     {rows.map((p) => (
@@ -561,20 +519,12 @@ function PublishersView() {
                             {p.n_journals === 1 ? "journal" : "journals"}
                           </span>
                           <span>
-                            {p.n_works.toLocaleString("en")}{" "}
-                            {p.n_works === 1 ? "work" : "works"}
+                            {p.n_works.toLocaleString("en")} {p.n_works === 1 ? "work" : "works"}
                           </span>
-                          {p.deal_journals > 0 && (
-                            <span>
-                              {p.deal_journals} deal-covered
-                            </span>
-                          )}
+                          {p.deal_journals > 0 && <span>{p.deal_journals} deal-covered</span>}
                         </div>
                         <div className="mt-1.5 max-w-48">
-                          <OaCompositionBar
-                            counts={p.oa_types}
-                            total={p.n_journals}
-                          />
+                          <OaCompositionBar counts={p.oa_types} total={p.n_journals} />
                         </div>
                         {p.topics.length > 0 && (
                           <div className="mt-1 text-xs text-[var(--muted-foreground)]">
@@ -587,17 +537,9 @@ function PublishersView() {
                       </li>
                     ))}
                   </ul>
-                  <div
-                    className={
-                      isFetching
-                        ? "hidden opacity-60 md:block"
-                        : "hidden md:block"
-                    }
-                  >
+                  <div className={isFetching ? "hidden opacity-60 md:block" : "hidden md:block"}>
                     <Table>
-                      <caption className="sr-only">
-                        Publisher search results
-                      </caption>
+                      <caption className="sr-only">Publisher search results</caption>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Publisher</TableHead>
@@ -618,10 +560,7 @@ function PublishersView() {
                                 href={`/${inst}/publisher/${encodeNamePath(p.name)}`}
                                 className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
                               >
-                                <span
-                                  className="block max-w-56 truncate"
-                                  title={p.name}
-                                >
+                                <span className="block max-w-56 truncate" title={p.name}>
                                   {p.name}
                                 </span>
                               </Link>
@@ -634,10 +573,7 @@ function PublishersView() {
                             </TableCell>
                             <TableCell>
                               <div className="w-28">
-                                <OaCompositionBar
-                                  counts={p.oa_types}
-                                  total={p.n_journals}
-                                />
+                                <OaCompositionBar counts={p.oa_types} total={p.n_journals} />
                               </div>
                             </TableCell>
                             <TableCell className="whitespace-nowrap text-right tabular-nums">
@@ -659,17 +595,16 @@ function PublishersView() {
                                   className="block max-w-40 truncate"
                                   title={p.topics
                                     .slice(0, 2)
-                                    .map(
-                                      (t) => `${t.name} (${Math.round(t.n)})`,
-                                    )
+                                    .map((t) => `${t.name} (${Math.round(t.n)})`)
                                     .join(" · ")}
                                 >
-                                  {p.topics.slice(0, 2).map((t) => t.name).join(" · ")}
+                                  {p.topics
+                                    .slice(0, 2)
+                                    .map((t) => t.name)
+                                    .join(" · ")}
                                 </span>
                               ) : (
-                                <span className="text-[var(--muted-foreground)]">
-                                  —
-                                </span>
+                                <span className="text-[var(--muted-foreground)]">—</span>
                               )}
                             </TableCell>
                           </TableRow>

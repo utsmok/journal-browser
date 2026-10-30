@@ -24,10 +24,7 @@ export function MermaidBlock({ code }: { code: string }) {
         // it lazily, only when a page actually contains a diagram.
         const mermaid = (await import("mermaid")).default;
         mermaid.initialize({ startOnLoad: false, theme: "default" });
-        const { svg } = await mermaid.render(
-          `mmd-${Math.random().toString(36).slice(2)}`,
-          code,
-        );
+        const { svg } = await mermaid.render(`mmd-${Math.random().toString(36).slice(2)}`, code);
         if (!cancelled && ref.current) {
           ref.current.innerHTML = svg;
           setFailed(false);

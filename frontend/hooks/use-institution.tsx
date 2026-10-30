@@ -15,11 +15,7 @@ export function InstitutionProvider({
   code: string;
   children: React.ReactNode;
 }) {
-  return (
-    <InstitutionContext.Provider value={code}>
-      {children}
-    </InstitutionContext.Provider>
-  );
+  return <InstitutionContext.Provider value={code}>{children}</InstitutionContext.Provider>;
 }
 
 export function useInstitution(): string {

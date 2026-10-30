@@ -11,13 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  AdminError,
-  adminDelete,
-  adminGet,
-  adminPatch,
-  type FeedbackAdmin,
-} from "@/lib/admin";
+import { AdminError, adminDelete, adminGet, adminPatch, type FeedbackAdmin } from "@/lib/admin";
 
 const STATUSES = ["todo", "in_progress", "done", "wontfix"] as const;
 const PRIORITIES = ["low", "normal", "high", "critical"] as const;
@@ -37,9 +31,7 @@ function FeedbackDetail({
   const [error, setError] = useState<string | null>(null);
   // page_data is the widget's own buildPageDump output; the contract types it
   // as a free-form object, so the two read sites narrow it here.
-  const pageData = item.page_data as
-    | { url?: string; queries?: unknown[] }
-    | undefined;
+  const pageData = item.page_data as { url?: string; queries?: unknown[] } | undefined;
 
   async function run(fn: () => Promise<unknown>) {
     try {
@@ -75,7 +67,9 @@ function FeedbackDetail({
             />
             <Button
               size="sm"
-              onClick={() => run(() => adminPatch(`/feedback/${item.id}`, token, { resolution_notes: notes }))}
+              onClick={() =>
+                run(() => adminPatch(`/feedback/${item.id}`, token, { resolution_notes: notes }))
+              }
             >
               Save notes
             </Button>
@@ -154,7 +148,8 @@ export function FeedbackSection({
     }
   }
 
-  const selectCls = "rounded-[var(--radius)] border border-input bg-[var(--card)] px-2 py-1 text-xs";
+  const selectCls =
+    "rounded-[var(--radius)] border border-input bg-[var(--card)] px-2 py-1 text-xs";
 
   return (
     <section className="space-y-3">

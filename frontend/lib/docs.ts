@@ -37,8 +37,7 @@ export function fetchDoc(slug: string): Promise<DocDetail> {
 export function sortDocs(docs: DocsListItem[]): DocsListItem[] {
   return [...docs].sort(
     (a, b) =>
-      DOC_GROUPS.findIndex((g) => g === a.group) -
-        DOC_GROUPS.findIndex((g) => g === b.group) ||
+      DOC_GROUPS.findIndex((g) => g === a.group) - DOC_GROUPS.findIndex((g) => g === b.group) ||
       a.order - b.order ||
       a.title.localeCompare(b.title),
   );
@@ -46,13 +45,8 @@ export function sortDocs(docs: DocsListItem[]): DocsListItem[] {
 
 /** sha256 hex of the block text the editor saw; sent as original_hash on PUT. */
 export async function sha256Hex(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(text),
-  );
-  return Array.from(new Uint8Array(digest), (b) =>
-    b.toString(16).padStart(2, "0"),
-  ).join("");
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 /** Heading anchor id: slugified heading text ("Open data & sources" → "open-data-sources"). */
@@ -106,19 +100,11 @@ export function parseTable(text: string): TableRow[] {
 }
 
 /** Serialize rows back to markdown, swapping in one edited cell. */
-export function replaceCell(
-  rows: TableRow[],
-  row: number,
-  col: number,
-  value: string,
-): string {
+export function replaceCell(rows: TableRow[], row: number, col: number, value: string): string {
   return rows
     .map((r, i) => {
-      const cells =
-        i === row ? r.cells.map((c, j) => (j === col ? value : c)) : r.cells;
-      return r.align
-        ? r.raw
-        : `| ${cells.map((c) => c.replace(/\|/g, "\\|")).join(" | ")} |`;
+      const cells = i === row ? r.cells.map((c, j) => (j === col ? value : c)) : r.cells;
+      return r.align ? r.raw : `| ${cells.map((c) => c.replace(/\|/g, "\\|")).join(" | ")} |`;
     })
     .join("\n");
 }

@@ -33,10 +33,7 @@ export function CardPager({
   label?: string;
 }) {
   return (
-    <nav
-      className="flex flex-wrap items-center gap-1 text-xs"
-      aria-label={`${label} pages`}
-    >
+    <nav className="flex flex-wrap items-center gap-1 text-xs" aria-label={`${label} pages`}>
       <Button
         variant="outline"
         size="sm"

@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "generate": "curl -sf ${JB_API:-http://localhost:8000}/openapi.json -o .openapi.json && openapi-typescript .openapi.json -o lib/api-types.ts && rm .openapi.json"
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "generate": "openapi-typescript ../openapi.json -o lib/api-types.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.62.0",
@@ -22,6 +24,7 @@
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.6.4",
     "@eslint/eslintrc": "^3.3.7",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^22",

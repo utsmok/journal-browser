@@ -16,8 +16,7 @@ const NEXT_META: Record<Mode, { next: Mode; label: string }> = {
 function apply(mode: Mode) {
   const dark =
     mode === "dark" ||
-    (mode === "system" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches);
+    (mode === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.classList.toggle("dark", dark);
 }
 

@@ -109,8 +109,7 @@ export default function AboutPage() {
       <header>
         <h1 className="mb-2 text-3xl font-bold">About this browser</h1>
         <p className="max-w-2xl text-[var(--muted-foreground)]">
-          A journal browser for{" "}
-          <strong>{freshness?.institution ?? site.name}</strong>
+          A journal browser for <strong>{freshness?.institution ?? site.name}</strong>
           {freshness?.ror && (
             <>
               {" "}
@@ -158,11 +157,7 @@ export default function AboutPage() {
 
       {(freshnessQuery.isError || limitationsQuery.isError) && (
         <p aria-live="polite" className="text-sm text-[var(--destructive)]">
-          {errorMessage(
-            freshnessQuery.isError
-              ? freshnessQuery.error
-              : limitationsQuery.error,
-          )}{" "}
+          {errorMessage(freshnessQuery.isError ? freshnessQuery.error : limitationsQuery.error)}{" "}
           <button
             type="button"
             onClick={() => {
@@ -189,12 +184,10 @@ export default function AboutPage() {
               >
                 WUR journal browser
               </a>
-              , rebuilt on fully open data, released as open source, and easy to
-              self-host.
+              , rebuilt on fully open data, released as open source, and easy to self-host.
             </p>
             <p>
-              The code is open source under the Apache-2.0 license and available
-              on{" "}
+              The code is open source under the Apache-2.0 license and available on{" "}
               <a
                 href="https://github.com/utsmok/journal-browser"
                 target="_blank"
@@ -204,9 +197,7 @@ export default function AboutPage() {
                 <Github aria-hidden className="size-4" />
                 GitHub
               </a>
-              {site.adminContact
-                ? ". Technical questions? Contact the admin, "
-                : ". "}
+              {site.adminContact ? ". Technical questions? Contact the admin, " : ". "}
               {site.adminContact && (
                 <a
                   href={`mailto:${site.adminContact}`}
@@ -215,8 +206,7 @@ export default function AboutPage() {
                   {site.adminContact}
                 </a>
               )}{" "}
-              For open access policy questions, see the library links in the
-              footer.
+              For open access policy questions, see the library links in the footer.
             </p>
           </CardContent>
         </Card>
@@ -239,26 +229,23 @@ export default function AboutPage() {
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-0.5 font-semibold text-[var(--primary-text)] hover:underline"
                     >
-                      {info.name}{" "}
-                      <ExternalLink aria-hidden className="size-3" />
+                      {info.name} <ExternalLink aria-hidden className="size-3" />
                     </a>
                     <span className="block text-xs text-[var(--muted-foreground)]">
                       {info.role}
                     </span>
                   </span>
                   <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
-                    Latest data:{" "}
-                    {freshnessQuery.isPending ? "…" : fmt(stamp(info))}
+                    Latest data: {freshnessQuery.isPending ? "…" : fmt(stamp(info))}
                   </span>
                 </li>
               ))}
             </ul>
             <p className="mt-4 max-w-prose text-xs text-[var(--muted-foreground)]">
-              Harvest jobs run when the library refreshes the data, and per-run
-              status is listed below. The deal register is maintained by hand,
-              so a re-ingest can never overwrite reviewed deal information.
-              Publication statistics cover works published in {site.windowStart}{" "}
-              or later, and the search lists journals with more than 3
+              Harvest jobs run when the library refreshes the data, and per-run status is listed
+              below. The deal register is maintained by hand, so a re-ingest can never overwrite
+              reviewed deal information. Publication statistics cover works published in{" "}
+              {site.windowStart} or later, and the search lists journals with more than 3
               publications in that window.
             </p>
           </CardContent>
@@ -272,8 +259,8 @@ export default function AboutPage() {
             <CardContent className="overflow-x-auto pt-6">
               <table className="w-full text-xs">
                 <caption className="sr-only">
-                  Most recent harvest runs per source, entity, and filter set,
-                  with status and finish time
+                  Most recent harvest runs per source, entity, and filter set, with status and
+                  finish time
                 </caption>
                 <thead>
                   <tr className="text-left text-[var(--muted-foreground)]">
@@ -310,25 +297,19 @@ export default function AboutPage() {
                         </td>
                         <td className="py-1.5 pr-3">{h.entity_type}</td>
                         <td className="py-1.5 pr-3">
-                          <Badge
-                            variant={
-                              h.status === "completed" ? "muted" : "outline"
-                            }
-                          >
+                          <Badge variant={h.status === "completed" ? "muted" : "outline"}>
                             {h.status ?? "—"}
                           </Badge>
                         </td>
-                        <td className="py-1.5 tabular-nums">
-                          {fmt(h.finished_at)}
-                        </td>
+                        <td className="py-1.5 tabular-nums">{fmt(h.finished_at)}</td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
               <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-                Rows for deal sources are historical. The deal register has been
-                maintained by hand since October 2026.
+                Rows for deal sources are historical. The deal register has been maintained by hand
+                since October 2026.
               </p>
             </CardContent>
           </Card>
@@ -338,14 +319,12 @@ export default function AboutPage() {
       <section>
         <h2 className="mb-1 text-xl font-bold">Data limitations</h2>
         <p className="mb-3 text-sm text-[var(--muted-foreground)]">
-          Every number in this browser shows its source. This registry lists the
-          caveats behind the sources, and each entry links to the data provider.
+          Every number in this browser shows its source. This registry lists the caveats behind the
+          sources, and each entry links to the data provider.
         </p>
         <div className="grid gap-4 md:grid-cols-2">
           {(limitations ?? []).length === 0 && !limitationsQuery.isPending ? (
-            <p className="text-sm text-[var(--muted-foreground)]">
-              No limitations registered.
-            </p>
+            <p className="text-sm text-[var(--muted-foreground)]">No limitations registered.</p>
           ) : null}
           {(limitations ?? []).map((l) => (
             <Card key={l.code}>
@@ -392,8 +371,7 @@ export default function AboutPage() {
         <Card>
           <CardContent className="pt-6 text-sm">
             <p className="mb-2 text-[var(--muted-foreground)]">
-              Questions about open access publishing at {site.name}? The library
-              can help.
+              Questions about open access publishing at {site.name}? The library can help.
             </p>
             <ul className="flex flex-wrap gap-x-6 gap-y-1">
               <li>
@@ -403,8 +381,7 @@ export default function AboutPage() {
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-0.5 text-[var(--primary-text)] hover:underline"
                 >
-                  {site.name} Library{" "}
-                  <ExternalLink aria-hidden className="size-3" />
+                  {site.name} Library <ExternalLink aria-hidden className="size-3" />
                 </a>
               </li>
               <li>
@@ -414,8 +391,7 @@ export default function AboutPage() {
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-0.5 text-[var(--primary-text)] hover:underline"
                 >
-                  Open Access publishing guide{" "}
-                  <ExternalLink aria-hidden className="size-3" />
+                  Open Access publishing guide <ExternalLink aria-hidden className="size-3" />
                 </a>
               </li>
               <li>

@@ -7,11 +7,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { CollapsibleCard } from "@/components/collapsible-card";
-import {
-  FacetGroupList,
-  type FacetGroupDef,
-  type FacetValue,
-} from "@/components/filter-panel";
+import { FacetGroupList, type FacetGroupDef, type FacetValue } from "@/components/filter-panel";
 import { ListSkeletonRows } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -64,23 +60,16 @@ const LAST_PUB_LABELS: Record<string, string> = {
 };
 
 /** Comma-joined multi-select param → list of values (journal-search convention). */
-function paramValues(
-  sp: { get(key: string): string | null },
-  key: string,
-): string[] {
+function paramValues(sp: { get(key: string): string | null }, key: string): string[] {
   return (sp.get(key) ?? "").split("|").filter(Boolean);
 }
 
 /** Top 8 buckets, with every active value kept visible even outside the top 8. */
-function topBuckets(
-  buckets: AuthorFacetBucket[] | undefined,
-  active: string[],
-): FacetValue[] {
+function topBuckets(buckets: AuthorFacetBucket[] | undefined, active: string[]): FacetValue[] {
   const list: FacetValue[] = (buckets ?? [])
     .slice(0, 8)
     .map((b) => ({ value: b.value, count: b.count }));
-  for (const value of active)
-    if (!list.some((b) => b.value === value)) list.unshift({ value });
+  for (const value of active) if (!list.some((b) => b.value === value)) list.unshift({ value });
   return list;
 }
 
@@ -116,8 +105,7 @@ function AuthorsView() {
     topic: paramValues(sp, "topic"),
   };
   const anyFilter =
-    hasOrcid !== null ||
-    Object.values(selected).some((values) => values.length > 0);
+    hasOrcid !== null || Object.values(selected).some((values) => values.length > 0);
 
   // Sort and paging are URL state too; defaults stay out of the params.
   const sortParam = sp.get("sort");
@@ -127,8 +115,7 @@ function AuthorsView() {
   const limitParam = parseInt(sp.get("limit") ?? "", 10);
   const pageSize = PAGE_SIZES.includes(limitParam) ? limitParam : 50;
   const offsetParam = parseInt(sp.get("offset") ?? "", 10);
-  const offset =
-    Number.isFinite(offsetParam) && offsetParam > 0 ? offsetParam : 0;
+  const offset = Number.isFinite(offsetParam) && offsetParam > 0 ? offsetParam : 0;
 
   const setParams = React.useCallback(
     (patch: Record<string, string | undefined>) => {
@@ -197,9 +184,7 @@ function AuthorsView() {
       return;
     }
     const current = selected[key as keyof typeof selected];
-    const next = current.includes(value)
-      ? current.filter((v) => v !== value)
-      : [...current, value];
+    const next = current.includes(value) ? current.filter((v) => v !== value) : [...current, value];
     setParams({ [key]: next.join("|") || undefined });
   };
 
@@ -275,8 +260,8 @@ function AuthorsView() {
         <section className="order-1 mb-8 min-[960px]:col-start-2 min-[960px]:row-start-1 min-[960px]:mb-6">
           <h1 className="mb-3 text-3xl font-bold text-balance">Authors</h1>
           <p className="mb-6 max-w-2xl text-[var(--muted-foreground)]">
-            Search researchers at {site.name} to find experts, co-authors, or
-            reviewers, and see where they publish.
+            Search researchers at {site.name} to find experts, co-authors, or reviewers, and see
+            where they publish.
           </p>
           {!disabled && (
             <form
@@ -314,22 +299,14 @@ function AuthorsView() {
         {/* Stacked filter card: the only filter UI below 960px. */}
         {!disabled && data != null && (
           <section className="order-2 mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
-            <FacetGroupList
-              groups={groups}
-              onToggle={toggleFacet}
-              variant="chips"
-            />
+            <FacetGroupList groups={groups} onToggle={toggleFacet} variant="chips" />
           </section>
         )}
 
         {/* Wide-screen sidebar: sticky, scrolls on its own when long. */}
         {!disabled && data != null && (
           <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:col-start-1 min-[960px]:row-span-2 min-[960px]:row-start-1 min-[960px]:block">
-            <FacetGroupList
-              groups={groups}
-              onToggle={toggleFacet}
-              variant="rows"
-            />
+            <FacetGroupList groups={groups} onToggle={toggleFacet} variant="rows" />
           </aside>
         )}
 
@@ -346,10 +323,7 @@ function AuthorsView() {
                 value={sort}
                 onChange={(event) =>
                   setParams({
-                    sort:
-                      event.target.value === "works_desc"
-                        ? undefined
-                        : event.target.value,
+                    sort: event.target.value === "works_desc" ? undefined : event.target.value,
                   })
                 }
                 className={SELECT_CLASS}
@@ -369,10 +343,7 @@ function AuthorsView() {
                 value={pageSize}
                 onChange={(event) =>
                   setParams({
-                    limit:
-                      event.target.value === "50"
-                        ? undefined
-                        : event.target.value,
+                    limit: event.target.value === "50" ? undefined : event.target.value,
                   })
                 }
                 className={SELECT_CLASS}
@@ -434,17 +405,14 @@ function AuthorsView() {
                         <ChevronLeft aria-hidden className="size-4" /> Prev
                       </Button>
                       <span className="whitespace-nowrap text-sm tabular-nums text-[var(--muted-foreground)]">
-                        Page {page.toLocaleString("en")} of{" "}
-                        {pageCount.toLocaleString("en")}
+                        Page {page.toLocaleString("en")} of {pageCount.toLocaleString("en")}
                       </span>
                       <Button
                         variant="outline"
                         size="sm"
                         aria-label="Next page"
                         disabled={offset + pageSize >= total}
-                        onClick={() =>
-                          setParams({ offset: String(offset + pageSize) })
-                        }
+                        onClick={() => setParams({ offset: String(offset + pageSize) })}
                       >
                         Next <ChevronRight aria-hidden className="size-4" />
                       </Button>
@@ -454,15 +422,8 @@ function AuthorsView() {
 
                 {isError ? (
                   <div className="py-10 text-center">
-                    <p className="text-[var(--destructive)]">
-                      {errorMessage(error)}
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-3"
-                      onClick={() => refetch()}
-                    >
+                    <p className="text-[var(--destructive)]">{errorMessage(error)}</p>
+                    <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
                       Retry
                     </Button>
                   </div>
@@ -477,11 +438,7 @@ function AuthorsView() {
                         No authors match{anyFilter ? " these filters" : ""}.
                         {anyFilter && (
                           <div className="mt-3">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={clearFilters}
-                            >
+                            <Button variant="outline" size="sm" onClick={clearFilters}>
                               Clear filters
                             </Button>
                           </div>
@@ -494,9 +451,7 @@ function AuthorsView() {
                     {/* Stacked cards on narrow viewports: seven columns would push
                       the works count off-screen behind horizontal scrolling. */}
                     <ul
-                      className={
-                        isFetching ? "opacity-60 md:hidden" : "md:hidden"
-                      }
+                      className={isFetching ? "opacity-60 md:hidden" : "md:hidden"}
                       aria-label="Author results"
                     >
                       {rows.map((a) => (
@@ -511,23 +466,15 @@ function AuthorsView() {
                             {a.name}
                           </Link>
                           <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-                            {[a.faculty, a.research_group]
-                              .filter(Boolean)
-                              .join(" · ") || "—"}
+                            {[a.faculty, a.research_group].filter(Boolean).join(" · ") || "—"}
                           </div>
                           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs tabular-nums text-[var(--muted-foreground)]">
                             <span>
-                              {a.n_works.toLocaleString("en")}{" "}
-                              {a.n_works === 1 ? "work" : "works"}
+                              {a.n_works.toLocaleString("en")} {a.n_works === 1 ? "work" : "works"}
                             </span>
-                            {a.last_pub_year != null && (
-                              <span>Last pub {a.last_pub_year}</span>
-                            )}
+                            {a.last_pub_year != null && <span>Last pub {a.last_pub_year}</span>}
                             {a.primary_topic && (
-                              <span
-                                className="max-w-52 truncate"
-                                title={a.primary_topic}
-                              >
+                              <span className="max-w-52 truncate" title={a.primary_topic}>
                                 {a.primary_topic}
                               </span>
                             )}
@@ -536,26 +483,16 @@ function AuthorsView() {
                         </li>
                       ))}
                     </ul>
-                    <div
-                      className={
-                        isFetching
-                          ? "hidden opacity-60 md:block"
-                          : "hidden md:block"
-                      }
-                    >
+                    <div className={isFetching ? "hidden opacity-60 md:block" : "hidden md:block"}>
                       <Table>
-                        <caption className="sr-only">
-                          Author search results
-                        </caption>
+                        <caption className="sr-only">Author search results</caption>
                         <TableHeader>
                           <TableRow>
                             <TableHead>Name</TableHead>
                             <TableHead>Faculty</TableHead>
                             <TableHead>Research group</TableHead>
                             <TableHead className="text-right">Works</TableHead>
-                            <TableHead className="text-right">
-                              Last pub
-                            </TableHead>
+                            <TableHead className="text-right">Last pub</TableHead>
                             <TableHead>Topic</TableHead>
                             <TableHead>ORCID</TableHead>
                           </TableRow>
@@ -577,9 +514,7 @@ function AuthorsView() {
                                   title={a.faculty ?? undefined}
                                 >
                                   {a.faculty || (
-                                    <span className="text-[var(--muted-foreground)]">
-                                      —
-                                    </span>
+                                    <span className="text-[var(--muted-foreground)]">—</span>
                                   )}
                                 </span>
                               </TableCell>
@@ -589,9 +524,7 @@ function AuthorsView() {
                                   title={a.research_group ?? undefined}
                                 >
                                   {a.research_group || (
-                                    <span className="text-[var(--muted-foreground)]">
-                                      —
-                                    </span>
+                                    <span className="text-[var(--muted-foreground)]">—</span>
                                   )}
                                 </span>
                               </TableCell>
@@ -600,23 +533,16 @@ function AuthorsView() {
                               </TableCell>
                               <TableCell className="text-right tabular-nums">
                                 {a.last_pub_year ?? (
-                                  <span className="text-[var(--muted-foreground)]">
-                                    —
-                                  </span>
+                                  <span className="text-[var(--muted-foreground)]">—</span>
                                 )}
                               </TableCell>
                               <TableCell>
                                 {a.primary_topic ? (
-                                  <span
-                                    className="block max-w-40 truncate"
-                                    title={a.primary_topic}
-                                  >
+                                  <span className="block max-w-40 truncate" title={a.primary_topic}>
                                     {a.primary_topic}
                                   </span>
                                 ) : (
-                                  <span className="text-[var(--muted-foreground)]">
-                                    —
-                                  </span>
+                                  <span className="text-[var(--muted-foreground)]">—</span>
                                 )}
                               </TableCell>
                               <TableCell>

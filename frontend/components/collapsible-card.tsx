@@ -49,10 +49,7 @@ export function CollapsibleCard({
         </CardTitle>
         {description}
       </CardHeader>
-      <CardContent
-        id={`${id}-content`}
-        className={cn(!open && "hidden", contentClassName)}
-      >
+      <CardContent id={`${id}-content`} className={cn(!open && "hidden", contentClassName)}>
         {children}
       </CardContent>
     </Card>

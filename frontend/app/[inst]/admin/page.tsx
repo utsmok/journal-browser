@@ -22,10 +22,7 @@ export default function InstAdminPage() {
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    adminGet<AdminRun[]>(
-      `/runs?limit=100&institution=${encodeURIComponent(inst)}`,
-      token,
-    )
+    adminGet<AdminRun[]>(`/runs?limit=100&institution=${encodeURIComponent(inst)}`, token)
       .then((r) => {
         if (cancelled) return;
         setRuns(r);
@@ -49,9 +46,7 @@ export default function InstAdminPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-10">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">
-          Admin — {uni?.short_name ?? uni?.name ?? inst}
-        </h1>
+        <h1 className="text-xl font-semibold">Admin — {uni?.short_name ?? uni?.name ?? inst}</h1>
         <Button variant="outline" onClick={() => setToken(null)}>
           Sign out
         </Button>

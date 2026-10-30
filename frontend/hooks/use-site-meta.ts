@@ -33,7 +33,7 @@ export function useSiteMeta() {
     // university's seed value.
     adminContact: data
       ? data.admin_contact || null
-      : dir?.admin_contact ?? seed?.adminContact ?? null,
+      : (dir?.admin_contact ?? seed?.adminContact ?? null),
     researchPortalUrl:
       data?.research_portal_url ?? dir?.research_portal_url ?? seed?.researchPortalUrl ?? "",
     /** First publication year this institution's statistics cover. */

@@ -61,21 +61,26 @@ const INST_FIELDS: SettingField[] = [
 
 /** API value → editable draft: raw input text for text-ish fields, boolean for bools. */
 function toDraft(field: SettingField, value: unknown): string | boolean {
-  if (field.type === "bool")
-    return value == null ? field.default === true : value === true;
+  if (field.type === "bool") return value == null ? field.default === true : value === true;
   if (field.type === "list") return Array.isArray(value) ? value.join("\n") : "";
   if (field.type === "secret") return ""; // typed new value only; masked stored value is never echoed
   return value == null ? "" : String(value);
 }
 
 /** Draft → PUT body value; undefined = leave out of the request (keeps stored value). */
-function toBodyValue(field: SettingField, raw: string | boolean): string | number | boolean | string[] | undefined {
+function toBodyValue(
+  field: SettingField,
+  raw: string | boolean,
+): string | number | boolean | string[] | undefined {
   if (field.type === "bool") return raw === true;
   if (field.type === "secret") return raw === "" ? undefined : String(raw);
   const text = String(raw);
   if (field.type === "number") return text.trim() === "" ? undefined : Number(text.trim());
   if (field.type === "list")
-    return text.split("\n").map((line) => line.trim()).filter(Boolean);
+    return text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
   const trimmed = text.trim();
   return trimmed === "" ? "" : trimmed;
 }
@@ -228,7 +233,11 @@ function SettingsForm({
 
   const save = async () => {
     for (const f of fields) {
-      if (f.type === "number" && String(draft[f.key]).trim() !== "" && Number.isNaN(Number(draft[f.key]))) {
+      if (
+        f.type === "number" &&
+        String(draft[f.key]).trim() !== "" &&
+        Number.isNaN(Number(draft[f.key]))
+      ) {
         setError(`"${f.label}" must be a number.`);
         return;
       }
@@ -307,5 +316,7 @@ export function InstitutionSettingsForm({
   code: string;
   onUnauthorized: (token: string | null) => void;
 }) {
-  return <SettingsForm variant="institution" token={token} code={code} onUnauthorized={onUnauthorized} />;
+  return (
+    <SettingsForm variant="institution" token={token} code={code} onUnauthorized={onUnauthorized} />
+  );
 }

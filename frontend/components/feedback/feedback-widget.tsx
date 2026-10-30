@@ -166,8 +166,7 @@ export function FeedbackWidget() {
                 required
               />
               <p className="text-xs text-[var(--muted-foreground)]">
-                The current URL and the data shown on this page are included
-                automatically.
+                The current URL and the data shown on this page are included automatically.
               </p>
               {phase === "error" && (
                 <p className="text-sm text-[var(--destructive)]">

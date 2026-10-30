@@ -12,8 +12,7 @@ import {
 import type { AdminRun, InstitutionDirectoryEntry } from "@/lib/admin";
 
 export function StatusBadge({ status }: { status: string }) {
-  const variant =
-    status === "completed" ? "secondary" : status === "failed" ? "outline" : "muted";
+  const variant = status === "completed" ? "secondary" : status === "failed" ? "outline" : "muted";
   return <Badge variant={variant}>{status}</Badge>;
 }
 
@@ -44,8 +43,8 @@ export function RunsTable({
             <TableCell>
               {run.institution_code == null
                 ? "shared"
-                : directory.find((i) => i.code === run.institution_code)?.short_name ??
-                  run.institution_code}
+                : (directory.find((i) => i.code === run.institution_code)?.short_name ??
+                  run.institution_code)}
             </TableCell>
             <TableCell>
               {run.source}/{run.entity_type}

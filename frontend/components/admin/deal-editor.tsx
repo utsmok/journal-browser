@@ -302,7 +302,11 @@ export function DealEditor({
 
   const toggleParticipation = (code: string, add: boolean) => {
     setError(null);
-    adminPut<AdminDealDetail>(`/deals/${dealId}/participations`, token, add ? { add: [code] } : { remove: [code] })
+    adminPut<AdminDealDetail>(
+      `/deals/${dealId}/participations`,
+      token,
+      add ? { add: [code] } : { remove: [code] },
+    )
       .then((d) => {
         setDetail(d);
         onChanged();
@@ -320,9 +324,7 @@ export function DealEditor({
         <FlagBadge deal={detail} />
       </div>
       {detail.needs_curation && detail.needs_curation_reason && (
-        <p className="text-sm text-muted-foreground">
-          Flag reason: {detail.needs_curation_reason}
-        </p>
+        <p className="text-sm text-muted-foreground">Flag reason: {detail.needs_curation_reason}</p>
       )}
 
       <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
@@ -417,8 +419,7 @@ export function DealEditor({
 
       <div className="space-y-2">
         <p className="text-sm font-medium">
-          Cap per year{" "}
-          <span className="text-muted-foreground">(empty = not capped)</span>
+          Cap per year <span className="text-muted-foreground">(empty = not capped)</span>
         </p>
         {capRows.map((row, i) => (
           <div key={i} className="flex items-center gap-2">
@@ -532,7 +533,10 @@ export function DealEditor({
             </TableHeader>
             <TableBody>
               {detail.journals.map((j) => (
-                <TableRow key={j.issn} className={cn(j.excluded && "text-muted-foreground line-through")}>
+                <TableRow
+                  key={j.issn}
+                  className={cn(j.excluded && "text-muted-foreground line-through")}
+                >
                   <TableCell className={cn("font-mono text-xs", j.excluded && "line-through")}>
                     {j.issn}
                   </TableCell>
@@ -630,8 +634,7 @@ export function CreateDealForm({
       onCreated(detail.id);
     } catch (err) {
       if (err instanceof AdminError && err.status === 401) onUnauthorized(null);
-      else if (err instanceof AdminError && err.status === 409)
-        setError("ESAC id already in use.");
+      else if (err instanceof AdminError && err.status === 409) setError("ESAC id already in use.");
       else if (err instanceof AdminError && err.status === 422)
         setError("Publisher not found — provide a publisher name.");
       else setError(`Create failed (${err instanceof Error ? err.message : err}).`);

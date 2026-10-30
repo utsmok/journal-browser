@@ -33,9 +33,7 @@ function cleanLabel(link: DealLink) {
   const aliased = TEXT_ALIASES[text.toLowerCase()];
   if (aliased) return aliased;
   // Scraped single-word labels sometimes arrive lowercase ("documentation").
-  return /^[a-z][a-z\s]*$/.test(text)
-    ? text.charAt(0).toUpperCase() + text.slice(1)
-    : text;
+  return /^[a-z][a-z\s]*$/.test(text) ? text.charAt(0).toUpperCase() + text.slice(1) : text;
 }
 
 /** Last path segment; identifies the same document mirrored on two hosts. */
@@ -48,14 +46,10 @@ function docKey(url: string) {
 }
 
 export function orderedDealLinks(links: DealLink[]) {
-  const rank = new Map<string, number>(
-    DEAL_LINK_ORDER.map((e, i) => [e.category, i]),
-  );
+  const rank = new Map<string, number>(DEAL_LINK_ORDER.map((e, i) => [e.category, i]));
   const seen = new Set<string>();
   return [...links]
-    .sort(
-      (a, b) => (rank.get(a.category ?? "") ?? 99) - (rank.get(b.category ?? "") ?? 99),
-    )
+    .sort((a, b) => (rank.get(a.category ?? "") ?? 99) - (rank.get(b.category ?? "") ?? 99))
     .filter((link) => {
       // Same URL, or the same document re-hosted under a different domain,
       // is listed once.

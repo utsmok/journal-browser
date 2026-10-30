@@ -9,8 +9,7 @@ import type { StatsYear } from "@/lib/api";
  */
 export function OaTrend({ stats }: { stats: StatsYear[] }) {
   const site = useSiteMeta();
-  const total = (s: StatsYear) =>
-    OA_STATUS_ORDER.reduce((acc, k) => acc + (s[`oa_${k}`] ?? 0), 0);
+  const total = (s: StatsYear) => OA_STATUS_ORDER.reduce((acc, k) => acc + (s[`oa_${k}`] ?? 0), 0);
   const max = Math.max(1, ...stats.map(total));
   const currentYear = new Date().getFullYear();
   return (
@@ -79,9 +78,7 @@ export function OaTrend({ stats }: { stats: StatsYear[] }) {
             {OA_STATUS_META[status].label}
           </li>
         ))}
-        {stats.some((s) => s.year === currentYear) && (
-          <li>* year in progress</li>
-        )}
+        {stats.some((s) => s.year === currentYear) && <li>* year in progress</li>}
       </ul>
     </div>
   );

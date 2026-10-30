@@ -5,22 +5,16 @@ import type { ReactNode } from "react";
 
 import { MermaidBlock } from "@/components/docs/mermaid-block";
 import { useInstitution } from "@/hooks/use-institution";
-import {
-  parseTable,
-  slugifyHeading,
-  type DocBlock,
-} from "@/lib/docs";
+import { parseTable, slugifyHeading, type DocBlock } from "@/lib/docs";
 
 /*
  * Minimal inline markdown: **bold**, *italic*, `code`, [text](url). Link
  * targets: relative *.md → /{inst}/docs/{stem} (#anchor preserved),
  * #anchor in-page, http(s) external in a new tab.
  */
-const INLINE_RE =
-  /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(\*[^*\n]+\*)|(\[[^\]\n]+\]\([^)\s]*\))/g;
+const INLINE_RE = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(\*[^*\n]+\*)|(\[[^\]\n]+\]\([^)\s]*\))/g;
 
-const LINK_CLASS =
-  "text-[var(--primary-text)] underline-offset-2 hover:underline";
+const LINK_CLASS = "text-[var(--primary-text)] underline-offset-2 hover:underline";
 
 function DocLink({ href, children }: { href: string; children: ReactNode }) {
   const inst = useInstitution();
@@ -35,10 +29,7 @@ function DocLink({ href, children }: { href: string; children: ReactNode }) {
     const [path, anchor] = href.split("#");
     const stem = path.split("/").pop()!.replace(/\.md$/i, "");
     return (
-      <Link
-        href={`/${inst}/docs/${stem}${anchor ? `#${anchor}` : ""}`}
-        className={LINK_CLASS}
-      >
+      <Link href={`/${inst}/docs/${stem}${anchor ? `#${anchor}` : ""}`} className={LINK_CLASS}>
         {children}
       </Link>
     );
@@ -64,10 +55,7 @@ export function renderInline(text: string): ReactNode[] {
     const tok = m[0];
     if (tok.startsWith("`")) {
       out.push(
-        <code
-          key={k++}
-          className="rounded bg-[var(--muted)] px-1 py-0.5 font-mono text-[0.9em]"
-        >
+        <code key={k++} className="rounded bg-[var(--muted)] px-1 py-0.5 font-mono text-[0.9em]">
           {tok.slice(1, -1)}
         </code>,
       );
@@ -99,9 +87,7 @@ function headingTag(level: number): "h2" | "h3" | "h4" {
 function listItems(text: string): { ordered: boolean; items: string[] } {
   const lines = text.split("\n").filter((l) => l.trim());
   const ordered = /^\s*\d+[.)]\s/.test(lines[0] ?? "");
-  const items = lines.map((l) =>
-    l.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, ""),
-  );
+  const items = lines.map((l) => l.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, ""));
   return { ordered, items };
 }
 
@@ -141,9 +127,7 @@ export function BlockContent({ block }: { block: DocBlock }) {
       const { ordered, items } = listItems(block.text);
       const List = ordered ? "ol" : "ul";
       return (
-        <List
-          className={`space-y-1 pl-6 ${ordered ? "list-decimal" : "list-disc"}`}
-        >
+        <List className={`space-y-1 pl-6 ${ordered ? "list-decimal" : "list-disc"}`}>
           {items.map((item, i) => (
             <li key={i} className="whitespace-pre-line">
               {renderInline(item)}
@@ -166,9 +150,7 @@ export function BlockContent({ block }: { block: DocBlock }) {
     case "quote":
       return (
         <blockquote className="rounded-[var(--radius)] bg-[var(--muted)] px-4 py-3">
-          <p className="whitespace-pre-line">
-            {renderInline(block.text.replace(/^>\s?/gm, ""))}
-          </p>
+          <p className="whitespace-pre-line">{renderInline(block.text.replace(/^>\s?/gm, ""))}</p>
         </blockquote>
       );
     case "hr":
@@ -194,8 +176,7 @@ export function TableMarkup({
   const rows = parseTable(block.text);
   const header = rows[1]?.align ? rows[0] : null;
   const body = header ? rows.slice(2) : rows;
-  const cellClass =
-    "border-b border-[var(--border)] px-3 py-2 align-top tabular-nums";
+  const cellClass = "border-b border-[var(--border)] px-3 py-2 align-top tabular-nums";
   return (
     <div className="relative w-full overflow-x-auto">
       <table className="w-full border-collapse text-sm">
@@ -214,8 +195,7 @@ export function TableMarkup({
           {body.map((r, i) => (
             <tr key={i}>
               {r.cells.map((c, j) => {
-                const active =
-                  cell != null && cell.row === i + (header ? 2 : 0) && cell.col === j;
+                const active = cell != null && cell.row === i + (header ? 2 : 0) && cell.col === j;
                 return (
                   <td
                     key={j}
@@ -229,9 +209,7 @@ export function TableMarkup({
                     }
                     onKeyDown={active ? onCellKeyDown : undefined}
                     className={`${cellClass} ${
-                      active
-                        ? "cursor-text outline outline-1 outline-[var(--ring)]"
-                        : ""
+                      active ? "cursor-text outline outline-1 outline-[var(--ring)]" : ""
                     }`}
                   >
                     {active ? c : renderInline(c)}

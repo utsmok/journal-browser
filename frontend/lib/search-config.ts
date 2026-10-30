@@ -12,10 +12,7 @@ export const SORTS: { value: SortKey; label: string }[] = [
 
 // Sortable columns: backend key + natural direction. The header button
 // cycles natural → reversed → off (back to the mode's default sort).
-export const COLUMN_SORTS: Record<
-  string,
-  { key: SortKey; natural: "asc" | "desc" }
-> = {
+export const COLUMN_SORTS: Record<string, { key: SortKey; natural: "asc" | "desc" }> = {
   title: { key: "title", natural: "asc" },
   publisher: { key: "publisher", natural: "asc" },
   works: { key: "institution_works", natural: "desc" },

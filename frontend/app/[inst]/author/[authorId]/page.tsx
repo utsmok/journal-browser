@@ -129,15 +129,11 @@ function SectionNav({ sections }: { sections: { id: string; label: string }[] })
                 aria-current={active === s.id ? "true" : undefined}
                 onClick={(e) => {
                   e.preventDefault();
-                  document
-                    .getElementById(s.id)
-                    ?.scrollIntoView({ behavior: "smooth" });
+                  document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth" });
                 }}
                 className={cn(
                   "inline-block whitespace-nowrap rounded px-2 py-1 text-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white",
-                  active === s.id
-                    ? "font-medium text-white underline"
-                    : "text-white/80",
+                  active === s.id ? "font-medium text-white underline" : "text-white/80",
                 )}
               >
                 {s.label}
@@ -192,9 +188,7 @@ function toStatsYear(oa_by_year: AuthorProfile["oa_by_year"]): StatsYear[] {
 export default function AuthorPage() {
   const params = useParams<{ authorId: string }>();
   const inst = useInstitution();
-  const authorId = params?.authorId
-    ? decodeURIComponent(params.authorId)
-    : undefined;
+  const authorId = params?.authorId ? decodeURIComponent(params.authorId) : undefined;
   const backHref = useLastSearchHref();
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["author", inst, authorId ?? ""],
@@ -212,35 +206,24 @@ export default function AuthorPage() {
   }, [authorId]);
 
   if (isPending) return <DetailSkeleton />;
-  if (isError || !data)
-    return <ErrorPanel message={errorMessage(error)} backHref={backHref} />;
+  if (isError || !data) return <ErrorPanel message={errorMessage(error)} backHref={backHref} />;
 
-  const { author, oa_by_year, journals, topics, similar, alternatives, works } =
-    data;
+  const { author, oa_by_year, journals, topics, similar, alternatives, works } = data;
   const journalPages = Math.max(1, Math.ceil(journals.length / PAGE_SIZE));
   const workPages = Math.max(1, Math.ceil(works.length / PAGE_SIZE));
-  const journalRows = journals.slice(
-    (journalPage - 1) * PAGE_SIZE,
-    journalPage * PAGE_SIZE,
-  );
+  const journalRows = journals.slice((journalPage - 1) * PAGE_SIZE, journalPage * PAGE_SIZE);
   const workRows = works.slice((workPage - 1) * PAGE_SIZE, workPage * PAGE_SIZE);
   const trendStats = toStatsYear(oa_by_year);
   const hasSimilar =
-    similar.all.length > 0 ||
-    similar.deals.length > 0 ||
-    similar.diamond.length > 0;
+    similar.all.length > 0 || similar.deals.length > 0 || similar.diamond.length > 0;
 
   // One nav entry per rendered section, in DOM order.
   const sections = [
-    ...(trendStats.length > 0
-      ? [{ id: "oa-over-time", label: "Open access over time" }]
-      : []),
+    ...(trendStats.length > 0 ? [{ id: "oa-over-time", label: "Open access over time" }] : []),
     ...(journals.length > 0 ? [{ id: "journals", label: "Where they publish" }] : []),
     ...(topics.length > 0 ? [{ id: "topics", label: "Topics" }] : []),
     ...(hasSimilar ? [{ id: "next", label: "Where to publish next" }] : []),
-    ...(alternatives.length > 0
-      ? [{ id: "alternatives", label: "Alternatives" }]
-      : []),
+    ...(alternatives.length > 0 ? [{ id: "alternatives", label: "Alternatives" }] : []),
     ...(works.length > 0 ? [{ id: "publications", label: "Publications" }] : []),
   ];
 
@@ -262,8 +245,7 @@ export default function AuthorPage() {
               </Badge>
             )}
             <span className="text-sm text-[var(--muted-foreground)]">
-              {author.n_works.toLocaleString("en")}{" "}
-              {author.n_works === 1 ? "work" : "works"}
+              {author.n_works.toLocaleString("en")} {author.n_works === 1 ? "work" : "works"}
             </span>
           </div>
           {(author.orcid || author.openalex_author_id || author.openaire_person_id) && (
@@ -295,15 +277,9 @@ export default function AuthorPage() {
           )}
 
           {journals.length > 0 && (
-            <CollapsibleCard
-              id="journals"
-              title="Where they publish"
-              contentClassName="text-sm"
-            >
+            <CollapsibleCard id="journals" title="Where they publish" contentClassName="text-sm">
               <Table>
-                <caption className="sr-only">
-                  Journals this author publishes in
-                </caption>
+                <caption className="sr-only">Journals this author publishes in</caption>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Journal</TableHead>
@@ -345,19 +321,13 @@ export default function AuthorPage() {
           )}
 
           {topics.length > 0 && (
-            <CollapsibleCard
-              id="topics"
-              title="Topics"
-              contentClassName="flex flex-wrap gap-1.5"
-            >
+            <CollapsibleCard id="topics" title="Topics" contentClassName="flex flex-wrap gap-1.5">
               {topics.map((t) => (
                 <Badge
                   key={t.name}
                   variant="muted"
                   className="font-normal normal-case"
-                  title={`${t.n.toLocaleString("en")} ${
-                    t.n === 1 ? "work" : "works"
-                  }`}
+                  title={`${t.n.toLocaleString("en")} ${t.n === 1 ? "work" : "works"}`}
                 >
                   {t.name}
                 </Badge>
@@ -400,8 +370,8 @@ export default function AuthorPage() {
               contentClassName="space-y-5 text-sm"
               description={
                 <p className="text-sm text-[var(--muted-foreground)]">
-                  Journals where this author publishes paywalled, with open
-                  access venues covering the same territory.
+                  Journals where this author publishes paywalled, with open access venues covering
+                  the same territory.
                 </p>
               }
             >
@@ -415,8 +385,7 @@ export default function AuthorPage() {
                       {alt.title || alt.issn_l}
                     </Link>
                     <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
-                      {alt.n_works.toLocaleString("en")}{" "}
-                      {alt.n_works === 1 ? "work" : "works"}
+                      {alt.n_works.toLocaleString("en")} {alt.n_works === 1 ? "work" : "works"}
                     </span>
                   </div>
                   <ul className="mt-1 divide-y divide-[var(--border)]">
@@ -430,15 +399,9 @@ export default function AuthorPage() {
           )}
 
           {works.length > 0 && (
-            <CollapsibleCard
-              id="publications"
-              title="Publications"
-              contentClassName="text-sm"
-            >
+            <CollapsibleCard id="publications" title="Publications" contentClassName="text-sm">
               <Table>
-                <caption className="sr-only">
-                  This author&apos;s publications
-                </caption>
+                <caption className="sr-only">This author&apos;s publications</caption>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Year</TableHead>
@@ -452,15 +415,9 @@ export default function AuthorPage() {
                     const href = doiHref(w.doi);
                     return (
                       <TableRow key={w.pure_uuid ?? w.doi ?? `oa-${idx}`}>
-                        <TableCell className="whitespace-nowrap tabular-nums">
-                          {w.year}
-                        </TableCell>
+                        <TableCell className="whitespace-nowrap tabular-nums">{w.year}</TableCell>
                         <TableCell className="min-w-0 font-medium">
-                          {href ? (
-                            <External href={href}>{w.title}</External>
-                          ) : (
-                            w.title
-                          )}
+                          {href ? <External href={href}>{w.title}</External> : w.title}
                           {!w.in_pure && (
                             <Badge
                               variant="outline"

@@ -34,24 +34,18 @@ const PAGE_SIZE = 20;
 
 /** Unit headline stats: authors, works, deal-covered share, APC spend. */
 function UnitStats({ unit }: { unit: OrgUnitItem }) {
-  const share =
-    unit.n_works > 0 ? Math.round((unit.deal_works / unit.n_works) * 100) : 0;
+  const share = unit.n_works > 0 ? Math.round((unit.deal_works / unit.n_works) * 100) : 0;
   return (
     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--muted-foreground)]">
       <span className="tabular-nums">
-        {unit.n_authors.toLocaleString("en")}{" "}
-        {unit.n_authors === 1 ? "author" : "authors"}
+        {unit.n_authors.toLocaleString("en")} {unit.n_authors === 1 ? "author" : "authors"}
       </span>
       <span aria-hidden>·</span>
       <span className="tabular-nums">
-        {unit.n_works.toLocaleString("en")}{" "}
-        {unit.n_works === 1 ? "work" : "works"}
+        {unit.n_works.toLocaleString("en")} {unit.n_works === 1 ? "work" : "works"}
       </span>
       <span aria-hidden>·</span>
-      <span
-        className="tabular-nums"
-        title="Works in journals covered by an open access deal"
-      >
+      <span className="tabular-nums" title="Works in journals covered by an open access deal">
         {unit.deal_works.toLocaleString("en")} deal-covered
         {unit.n_works > 0 && ` (${share}%)`}
       </span>
@@ -70,8 +64,7 @@ function UnitStats({ unit }: { unit: OrgUnitItem }) {
         <>
           <span aria-hidden>·</span>
           <span className="tabular-nums">
-            {unit.n_groups.toLocaleString("en")} research{" "}
-            {unit.n_groups === 1 ? "group" : "groups"}
+            {unit.n_groups.toLocaleString("en")} research {unit.n_groups === 1 ? "group" : "groups"}
           </span>
         </>
       )}
@@ -88,19 +81,13 @@ export default function OrgUnitPage() {
     levelSeg === "faculty" || levelSeg === "group" ? levelSeg : undefined;
   const name = nameSegs.map(decodeURIComponent).join("/");
 
-  const backHref =
-    level === "group" ? `/${inst}/orgunit?level=group` : `/${inst}/orgunit`;
-  const { data, isPending, isError, error } = useOrgUnit(
-    level,
-    level && name ? name : undefined,
-  );
+  const backHref = level === "group" ? `/${inst}/orgunit?level=group` : `/${inst}/orgunit`;
+  const { data, isPending, isError, error } = useOrgUnit(level, level && name ? name : undefined);
 
   if (!level)
     return (
       <div className="mx-auto max-w-screen-2xl px-4 py-10">
-        <p className="text-[var(--destructive)]">
-          Unknown unit type. Use a faculty or group page.
-        </p>
+        <p className="text-[var(--destructive)]">Unknown unit type. Use a faculty or group page.</p>
         <div className="mt-2">
           <BackLink href={`/${inst}/orgunit`} label="Back to faculties" />
         </div>
@@ -133,14 +120,8 @@ function OrgUnitDetail({
   const { unit, groups, journals, authors, works_by_year, deal_usage } = data;
   const [groupPage, setGroupPage] = React.useState(1);
   const [authorPage, setAuthorPage] = React.useState(1);
-  const groupRows = (groups ?? []).slice(
-    (groupPage - 1) * PAGE_SIZE,
-    groupPage * PAGE_SIZE,
-  );
-  const authorRows = authors.slice(
-    (authorPage - 1) * PAGE_SIZE,
-    authorPage * PAGE_SIZE,
-  );
+  const groupRows = (groups ?? []).slice((groupPage - 1) * PAGE_SIZE, groupPage * PAGE_SIZE);
+  const authorRows = authors.slice((authorPage - 1) * PAGE_SIZE, authorPage * PAGE_SIZE);
   const groupPages = Math.max(1, Math.ceil((groups ?? []).length / PAGE_SIZE));
   const authorPages = Math.max(1, Math.ceil(authors.length / PAGE_SIZE));
 
@@ -167,15 +148,9 @@ function OrgUnitDetail({
 
       <div className="space-y-6">
         {groups != null && groups.length > 0 && (
-          <CollapsibleCard
-            id="groups"
-            title="Research groups"
-            contentClassName="text-sm"
-          >
+          <CollapsibleCard id="groups" title="Research groups" contentClassName="text-sm">
             <Table>
-              <caption className="sr-only">
-                Research groups of this faculty
-              </caption>
+              <caption className="sr-only">Research groups of this faculty</caption>
               <TableHeader>
                 <TableRow>
                   <TableHead>Research group</TableHead>
@@ -186,10 +161,7 @@ function OrgUnitDetail({
               </TableHeader>
               <TableBody>
                 {groupRows.map((g) => {
-                  const share =
-                    g.n_works > 0
-                      ? Math.round((g.deal_works / g.n_works) * 100)
-                      : 0;
+                  const share = g.n_works > 0 ? Math.round((g.deal_works / g.n_works) * 100) : 0;
                   return (
                     <TableRow key={g.name}>
                       <TableCell className="font-medium">
@@ -209,10 +181,7 @@ function OrgUnitDetail({
                       <TableCell className="text-right tabular-nums">
                         {g.deal_works.toLocaleString("en")}
                         {g.n_works > 0 && (
-                          <span className="text-[var(--muted-foreground)]">
-                            {" "}
-                            ({share}%)
-                          </span>
+                          <span className="text-[var(--muted-foreground)]"> ({share}%)</span>
                         )}
                       </TableCell>
                     </TableRow>
@@ -233,11 +202,7 @@ function OrgUnitDetail({
         )}
 
         {authors.length > 0 && (
-          <CollapsibleCard
-            id="authors"
-            title="Most publishing authors"
-            contentClassName="text-sm"
-          >
+          <CollapsibleCard id="authors" title="Most publishing authors" contentClassName="text-sm">
             <Table>
               <caption className="sr-only">Authors of this unit</caption>
               <TableHeader>
@@ -263,10 +228,7 @@ function OrgUnitDetail({
                     </TableCell>
                     <TableCell>
                       {a.primary_topic ? (
-                        <span
-                          className="block max-w-40 truncate"
-                          title={a.primary_topic}
-                        >
+                        <span className="block max-w-40 truncate" title={a.primary_topic}>
                           {a.primary_topic}
                         </span>
                       ) : (
@@ -290,15 +252,9 @@ function OrgUnitDetail({
         )}
 
         {journals.length > 0 && (
-          <CollapsibleCard
-            id="journals"
-            title="Journals"
-            contentClassName="text-sm"
-          >
+          <CollapsibleCard id="journals" title="Journals" contentClassName="text-sm">
             <Table>
-              <caption className="sr-only">
-                Journals this unit publishes in
-              </caption>
+              <caption className="sr-only">Journals this unit publishes in</caption>
               <TableHeader>
                 <TableRow>
                   <TableHead>Journal</TableHead>
@@ -345,15 +301,9 @@ function OrgUnitDetail({
         )}
 
         {deal_usage.length > 0 && (
-          <CollapsibleCard
-            id="deal-usage"
-            title="Deal usage"
-            contentClassName="text-sm"
-          >
+          <CollapsibleCard id="deal-usage" title="Deal usage" contentClassName="text-sm">
             <Table>
-              <caption className="sr-only">
-                Open access deals used by this unit
-              </caption>
+              <caption className="sr-only">Open access deals used by this unit</caption>
               <TableHeader>
                 <TableRow>
                   <TableHead>Agreement</TableHead>
@@ -372,9 +322,7 @@ function OrgUnitDetail({
                     <TableCell className="text-right tabular-nums">
                       {d.n_works.toLocaleString("en")}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatEur(d.euro)} €
-                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{formatEur(d.euro)} €</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

@@ -97,7 +97,12 @@ export function LockIcon({ state }: { state: LockState }) {
         <path
           key={`${cx},${cy}`}
           className="jb-sparkle"
-          style={{ "--d": pose.d, animationDelay: `calc(${pose.d} - ${i * 0.05}s)` } as React.CSSProperties}
+          style={
+            {
+              "--d": pose.d,
+              animationDelay: `calc(${pose.d} - ${i * 0.05}s)`,
+            } as React.CSSProperties
+          }
           d={sparklePath(cx, cy, r)}
           fill="currentColor"
         />
@@ -226,7 +231,10 @@ function Lockup({
 type OaType = "gold" | "diamond" | "generic" | "hybrid" | "subscription";
 
 /** Access-type lockups: progressive shackle + integrated wordmark. */
-const OA_TYPE_META: Record<OaType, { label: string; title: string; lock: LockState; className: string; width: number }> = {
+const OA_TYPE_META: Record<
+  OaType,
+  { label: string; title: string; lock: LockState; className: string; width: number }
+> = {
   gold: {
     label: "OPEN",
     title: "Gold open access — every article is published open access on the journal's own site.",
@@ -243,14 +251,16 @@ const OA_TYPE_META: Record<OaType, { label: string; title: string; lock: LockSta
   },
   generic: {
     label: "OA",
-    title: "Open access journal — the exact OA model (gold or diamond) could not be determined from the sources.",
+    title:
+      "Open access journal — the exact OA model (gold or diamond) could not be determined from the sources.",
     lock: "wide",
     className: ACCESS_TEXT.generic,
     width: 34,
   },
   hybrid: {
     label: "HYBRID",
-    title: "Hybrid journal — subscription journal where individual articles can be made open access, often via an open access deal.",
+    title:
+      "Hybrid journal — subscription journal where individual articles can be made open access, often via an open access deal.",
     lock: "ajar",
     className: ACCESS_TEXT.hybrid,
     width: 68,
@@ -269,13 +279,7 @@ const OA_TYPE_META: Record<OaType, { label: string; title: string; lock: LockSta
  * backend models oa_type as a plain string; unknown values render nothing
  * rather than guessing.
  */
-export function OaTypeBadge({
-  oaType,
-  isOa,
-}: {
-  oaType?: string | null;
-  isOa?: boolean | null;
-}) {
+export function OaTypeBadge({ oaType, isOa }: { oaType?: string | null; isOa?: boolean | null }) {
   const type: string | null = oaType ?? (isOa === false ? "subscription" : null);
   if (!type || !(type in OA_TYPE_META)) return null;
   const meta = OA_TYPE_META[type as OaType];
@@ -287,19 +291,9 @@ export function OaTypeBadge({
 }
 
 /** Work-level OA statuses; one color map shared by chips and the trend chart. */
-export const OA_STATUS_ORDER = [
-  "gold",
-  "hybrid",
-  "green",
-  "bronze",
-  "diamond",
-  "closed",
-] as const;
+export const OA_STATUS_ORDER = ["gold", "hybrid", "green", "bronze", "diamond", "closed"] as const;
 
-export const OA_STATUS_META: Record<
-  string,
-  { label: string; bar: string }
-> = {
+export const OA_STATUS_META: Record<string, { label: string; bar: string }> = {
   gold: { label: "Gold", bar: "bg-amber-400 dark:bg-amber-500" },
   hybrid: { label: "Hybrid", bar: "bg-blue-400 dark:bg-blue-500" },
   green: { label: "Green", bar: "bg-emerald-400 dark:bg-emerald-500" },
@@ -309,7 +303,10 @@ export const OA_STATUS_META: Record<
 };
 
 /** Work-level status lockup; reuses the journal lock icons where they map. */
-const OA_STATUS_LOCKUP: Record<string, { label: string; title: string; className: string; width: number; glyph: React.ReactNode }> = {
+const OA_STATUS_LOCKUP: Record<
+  string,
+  { label: string; title: string; className: string; width: number; glyph: React.ReactNode }
+> = {
   gold: { ...OA_TYPE_META.gold, glyph: <LockIcon state="open" /> },
   hybrid: { ...OA_TYPE_META.hybrid, glyph: <LockIcon state="ajar" /> },
   diamond: { ...OA_TYPE_META.diamond, glyph: <LockIcon state="wide" /> },
@@ -322,14 +319,16 @@ const OA_STATUS_LOCKUP: Record<string, { label: string; title: string; className
   },
   green: {
     label: "GREEN",
-    title: "Green open access — an author copy of this publication is freely available in a repository.",
+    title:
+      "Green open access — an author copy of this publication is freely available in a repository.",
     className: "text-emerald-700 dark:text-emerald-300",
     width: 59,
     glyph: <GreenGlyph />,
   },
   bronze: {
     label: "BRONZE",
-    title: "Bronze open access — free to read on the publisher's site, without an explicit open license.",
+    title:
+      "Bronze open access — free to read on the publisher's site, without an explicit open license.",
     className: "text-orange-700 dark:text-orange-300",
     width: 68,
     glyph: <BronzeGlyph />,

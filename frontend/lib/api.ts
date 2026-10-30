@@ -36,11 +36,7 @@ export type AuthorSearchItem = Schemas["AuthorItem"];
 export type AuthorFacetBucket = Schemas["AuthorFacet"];
 
 /** Author search ordering; the backend default is works_desc. */
-export type AuthorSearchSort =
-  | "works_desc"
-  | "name_asc"
-  | "name_desc"
-  | "last_pub_desc";
+export type AuthorSearchSort = "works_desc" | "name_asc" | "name_desc" | "last_pub_desc";
 
 export type AuthorSearchResponse = Schemas["AuthorSearchResponse"];
 
@@ -119,8 +115,7 @@ export function errorMessage(err: unknown): string {
     if (err.status === 400 || err.status === 422)
       return "The request was not valid. Adjust the filters and try again.";
     if (err.status === 404) return "We could not find that information.";
-    if (err.status >= 500)
-      return "The server could not process the search. Try again in a moment.";
+    if (err.status >= 500) return "The server could not process the search. Try again in a moment.";
   }
   return "Something went wrong while loading this data. Try again in a moment.";
 }
@@ -171,10 +166,7 @@ export async function fetchAuthors(
   });
 }
 
-export async function fetchAuthor(
-  inst: string,
-  pureUuid: string,
-): Promise<AuthorProfile> {
+export async function fetchAuthor(inst: string, pureUuid: string): Promise<AuthorProfile> {
   return apiGet<AuthorProfile>(`/${inst}/authors/${encodeURIComponent(pureUuid)}`);
 }
 
@@ -192,13 +184,7 @@ export type DealDiscrepancy = Schemas["DealDiscrepancyRow"];
 
 export type PublisherDetailResponse = Schemas["PublisherDetailResponse"];
 
-export type PublisherSearchSort =
-  | "relevance"
-  | "name"
-  | "journals"
-  | "works"
-  | "deals"
-  | "apc";
+export type PublisherSearchSort = "relevance" | "name" | "journals" | "works" | "deals" | "apc";
 
 /** List params for the publisher surface; arrays are pipe-joined in the query. */
 export type PublisherSearchParams = {
@@ -226,12 +212,7 @@ export type OrgUnitSearchResponse = Schemas["OrgUnitSearchResponse"];
 
 export type OrgUnitDetailResponse = Schemas["OrgUnitDetailResponse"];
 
-export type OrgUnitSearchSort =
-  | "relevance"
-  | "name"
-  | "authors"
-  | "works"
-  | "deal_works";
+export type OrgUnitSearchSort = "relevance" | "name" | "authors" | "works" | "deal_works";
 
 export type OrgUnitSearchParams = {
   level?: OrgUnitLevel;
@@ -274,13 +255,8 @@ export async function fetchPublishers(
   });
 }
 
-export async function fetchPublisher(
-  inst: string,
-  name: string,
-): Promise<PublisherDetailResponse> {
-  return apiGet<PublisherDetailResponse>(
-    `/${inst}/publishers/${encodeNamePath(name)}`,
-  );
+export async function fetchPublisher(inst: string, name: string): Promise<PublisherDetailResponse> {
+  return apiGet<PublisherDetailResponse>(`/${inst}/publishers/${encodeNamePath(name)}`);
 }
 
 export async function fetchOrgUnits(
@@ -305,7 +281,5 @@ export async function fetchOrgUnit(
   level: OrgUnitLevel,
   name: string,
 ): Promise<OrgUnitDetailResponse> {
-  return apiGet<OrgUnitDetailResponse>(
-    `/${inst}/orgunits/${level}/${encodeNamePath(name)}`,
-  );
+  return apiGet<OrgUnitDetailResponse>(`/${inst}/orgunits/${level}/${encodeNamePath(name)}`);
 }

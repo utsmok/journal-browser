@@ -18,8 +18,16 @@ import {
 
 /** One-line pitch for each real surface, linked from the top of the index. */
 const LIVE_SURFACES = [
-  { path: "journals/0027-8424", label: "Journal pages", blurb: "deals, APCs, and statistics for one title" },
-  { path: "author", label: "Author profiles", blurb: "where colleagues publish and what covers them" },
+  {
+    path: "journals/0027-8424",
+    label: "Journal pages",
+    blurb: "deals, APCs, and statistics for one title",
+  },
+  {
+    path: "author",
+    label: "Author profiles",
+    blurb: "where colleagues publish and what covers them",
+  },
   { path: "publisher", label: "Publishers", blurb: "agreements and output per publisher" },
   { path: "", label: "Journal search", blurb: "the main search over all titles" },
 ] as const;
@@ -51,8 +59,8 @@ export default function DocsIndexPage() {
     <div className="mx-auto max-w-3xl px-4 py-10">
       <h1 className="text-3xl font-bold">Documentation</h1>
       <p className="mt-2 text-[var(--muted-foreground)]">
-        What this browser shows, where the data comes from, and how to argue
-        for open access with it.
+        What this browser shows, where the data comes from, and how to argue for open access with
+        it.
       </p>
 
       <div className="mt-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4">
@@ -72,13 +80,9 @@ export default function DocsIndexPage() {
         </ul>
       </div>
 
-      {list.isPending && (
-        <p className="mt-10 text-sm text-[var(--muted-foreground)]">Loading…</p>
-      )}
+      {list.isPending && <p className="mt-10 text-sm text-[var(--muted-foreground)]">Loading…</p>}
       {list.isError && (
-        <p className="mt-10 text-sm text-destructive">
-          Could not load the docs list.
-        </p>
+        <p className="mt-10 text-sm text-destructive">Could not load the docs list.</p>
       )}
 
       {groups.map(({ group, docs }) => (

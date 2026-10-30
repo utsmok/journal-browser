@@ -9,12 +9,7 @@ import { EditToolbar } from "@/components/docs/edit-toolbar";
 import { BlockContent, TableMarkup } from "@/components/docs/markdown";
 import { Button } from "@/components/ui/button";
 import { useInstitution } from "@/hooks/use-institution";
-import {
-  AdminError,
-  adminDelete,
-  adminPut,
-  useAdminToken,
-} from "@/lib/admin";
+import { AdminError, adminDelete, adminPut, useAdminToken } from "@/lib/admin";
 import { errorMessage } from "@/lib/api";
 import {
   GROUP_LABEL,
@@ -50,8 +45,7 @@ export default function DocPage() {
   const prev = pos > 0 ? ordered[pos - 1] : null;
   const next = pos >= 0 && pos < ordered.length - 1 ? ordered[pos + 1] : null;
 
-  const editedCount =
-    doc.data?.blocks.filter((b) => b.edited).length ?? 0;
+  const editedCount = doc.data?.blocks.filter((b) => b.edited).length ?? 0;
   const canEdit = editing && !!token;
 
   function handleAuthFailure() {
@@ -66,35 +60,24 @@ export default function DocPage() {
       return null;
     }
     console.error(err);
-    return err instanceof AdminError
-      ? `Admin request failed (${err.message})`
-      : String(err);
+    return err instanceof AdminError ? `Admin request failed (${err.message})` : String(err);
   }
 
-  async function saveBlock(
-    block: DocBlock,
-    replacement: string,
-  ): SaveResult {
+  async function saveBlock(block: DocBlock, replacement: string): SaveResult {
     try {
-      await adminPut(
-        `/docs/${slug}/edits`,
-        token!,
-        {
-          block_key: block.key,
-          // Hash of the text the editor saw, per contract.
-          original_hash: await sha256Hex(block.text),
-          replacement,
-        },
-      );
+      await adminPut(`/docs/${slug}/edits`, token!, {
+        block_key: block.key,
+        // Hash of the text the editor saw, per contract.
+        original_hash: await sha256Hex(block.text),
+        replacement,
+      });
       // Swap the edited block in place; the list refetch refreshes counts.
       qc.setQueryData<DocDetail>(["docs", inst, slug], (d) =>
         d
           ? {
               ...d,
               blocks: d.blocks.map((b) =>
-                b.key === block.key
-                  ? { ...b, text: replacement, edited: true }
-                  : b,
+                b.key === block.key ? { ...b, text: replacement, edited: true } : b,
               ),
             }
           : d,
@@ -108,10 +91,7 @@ export default function DocPage() {
 
   async function revertBlock(block: DocBlock): SaveResult {
     try {
-      await adminDelete(
-        `/docs/${slug}/edits/${encodeURIComponent(block.key)}`,
-        token!,
-      );
+      await adminDelete(`/docs/${slug}/edits/${encodeURIComponent(block.key)}`, token!);
       // The server restores the original text; refetch to see it.
       qc.invalidateQueries({ queryKey: ["docs", inst] });
       return null;
@@ -151,9 +131,7 @@ export default function DocPage() {
       </div>
 
       <div className="docs-page-column mx-auto max-w-[72ch] space-y-6 px-4 py-10 text-[15px] leading-relaxed">
-        {doc.isPending && (
-          <p className="text-[var(--muted-foreground)]">Loading…</p>
-        )}
+        {doc.isPending && <p className="text-[var(--muted-foreground)]">Loading…</p>}
         {doc.isError && (
           <p className="text-destructive">
             {errorMessage(doc.error)}{" "}
@@ -336,9 +314,7 @@ function EditableTextBlock({
         <BlockContent block={block} />
       </div>
       {block.edited && <EditedDot />}
-      {canEdit && block.edited && (
-        <RevertButton block={block} onRevert={onRevert} busy={busy} />
-      )}
+      {canEdit && block.edited && <RevertButton block={block} onRevert={onRevert} busy={busy} />}
     </div>
   );
 }
@@ -413,11 +389,7 @@ function EditableTable({
               <Button size="sm" disabled={busy} onClick={() => void saveCell()}>
                 Save cell
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setCell(null)}
-              >
+              <Button size="sm" variant="outline" onClick={() => setCell(null)}>
                 Cancel
               </Button>
               <span className="text-xs text-[var(--muted-foreground)]">
@@ -429,9 +401,7 @@ function EditableTable({
         </TableMarkup>
       </div>
       {block.edited && <EditedDot />}
-      {canEdit && block.edited && (
-        <RevertButton block={block} onRevert={onRevert} busy={busy} />
-      )}
+      {canEdit && block.edited && <RevertButton block={block} onRevert={onRevert} busy={busy} />}
     </div>
   );
 }

@@ -10,10 +10,9 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { issn_l } = await params;
   try {
-    const res = await fetch(
-      `${API}/api/v1/journals/${encodeURIComponent(issn_l)}`,
-      { cache: "no-store" },
-    );
+    const res = await fetch(`${API}/api/v1/journals/${encodeURIComponent(issn_l)}`, {
+      cache: "no-store",
+    });
     if (res.ok) {
       const data = (await res.json()) as {
         journal?: { title?: string | null };
@@ -26,10 +25,6 @@ export async function generateMetadata({
   return {};
 }
 
-export default function JournalLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function JournalLayout({ children }: { children: React.ReactNode }) {
   return children;
 }

@@ -110,12 +110,7 @@ export function EditToolbar({
               Edit
             </Button>
           )}
-          <Button
-            size="sm"
-            variant="outline"
-            className="shadow"
-            onClick={() => window.print()}
-          >
+          <Button size="sm" variant="outline" className="shadow" onClick={() => window.print()}>
             Save as PDF
           </Button>
         </div>

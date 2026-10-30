@@ -4,10 +4,6 @@ export const metadata: Metadata = {
   title: "Deals",
 };
 
-export default function DealsLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function DealsLayout({ children }: { children: React.ReactNode }) {
   return children;
 }

@@ -81,8 +81,7 @@ export function SourceNote({ source, url, codes, className }: SourceNoteProps) {
               rel="noopener noreferrer"
               className="mt-2 flex items-center gap-0.5 border-t border-[var(--border)] pt-2 text-[var(--primary-text)] underline-offset-2 hover:underline"
             >
-              {url.replace(/^https?:\/\//, "")}{" "}
-              <ExternalLink aria-hidden className="size-3" />
+              {url.replace(/^https?:\/\//, "")} <ExternalLink aria-hidden className="size-3" />
             </a>
           )}
         </span>

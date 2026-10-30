@@ -23,11 +23,7 @@ import {
 } from "@/components/ui/table";
 import { usePublisher } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
-import {
-  errorMessage,
-  type DealOut,
-  type PublisherListItem,
-} from "@/lib/api";
+import { errorMessage, type DealOut, type PublisherListItem } from "@/lib/api";
 import { formatEur, journalApcText } from "@/lib/format";
 import { dealLinkLabel, orderedDealLinks } from "@/lib/deal-links";
 
@@ -46,19 +42,15 @@ function DealRow({ deal }: { deal: DealOut }) {
         <span className="font-medium">{deal.publisher_name ?? "Open access deal"}</span>
         {deal.covers_in_group != null && (
           <span className="text-xs text-[var(--muted-foreground)]">
-            covers {deal.covers_in_group}{" "}
-            {deal.covers_in_group === 1 ? "journal" : "journals"} in this group
+            covers {deal.covers_in_group} {deal.covers_in_group === 1 ? "journal" : "journals"} in
+            this group
           </span>
         )}
         {deal.duration_text && (
-          <span className="text-xs text-[var(--muted-foreground)]">
-            {deal.duration_text}
-          </span>
+          <span className="text-xs text-[var(--muted-foreground)]">{deal.duration_text}</span>
         )}
         {deal.corresponding_authors_only && (
-          <span className="text-xs text-[var(--muted-foreground)]">
-            corresponding authors only
-          </span>
+          <span className="text-xs text-[var(--muted-foreground)]">corresponding authors only</span>
         )}
         {conditionsUrl && (
           <a
@@ -67,9 +59,7 @@ function DealRow({ deal }: { deal: DealOut }) {
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline"
           >
-            {deal.links?.length
-              ? dealLinkLabel(orderedDealLinks(deal.links)[0])
-              : "Contract"}{" "}
+            {deal.links?.length ? dealLinkLabel(orderedDealLinks(deal.links)[0]) : "Contract"}{" "}
             <ExternalLink aria-hidden className="size-3.5 shrink-0" />
           </a>
         )}
@@ -134,9 +124,8 @@ function AggregateCards({ publisher }: { publisher: PublisherListItem }) {
                 : `${formatEur(max ?? (min as number))} €`}
             </p>
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-              APC known for {n_journals}{" "}
-              {n_journals === 1 ? "journal" : "journals"}; publisher list prices
-              and OpenAPC ranges combined.
+              APC known for {n_journals} {n_journals === 1 ? "journal" : "journals"}; publisher list
+              prices and OpenAPC ranges combined.
             </p>
           </>
         )}
@@ -169,13 +158,9 @@ export default function PublisherPage() {
       />
     );
 
-  const { publisher, journals, deals, deal_discrepancies, n_discrepancies, works_by_year } =
-    data;
+  const { publisher, journals, deals, deal_discrepancies, n_discrepancies, works_by_year } = data;
   const journalPages = Math.max(1, Math.ceil(journals.length / PAGE_SIZE));
-  const journalRows = journals.slice(
-    (journalPage - 1) * PAGE_SIZE,
-    journalPage * PAGE_SIZE,
-  );
+  const journalRows = journals.slice((journalPage - 1) * PAGE_SIZE, journalPage * PAGE_SIZE);
 
   return (
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
@@ -189,8 +174,7 @@ export default function PublisherPage() {
           </span>
           <span aria-hidden>·</span>
           <span>
-            {publisher.n_works.toLocaleString("en")}{" "}
-            {publisher.n_works === 1 ? "work" : "works"}
+            {publisher.n_works.toLocaleString("en")} {publisher.n_works === 1 ? "work" : "works"}
           </span>
           {publisher.deal_journals > 0 && (
             <>
@@ -208,11 +192,7 @@ export default function PublisherPage() {
 
       <div className="mt-6 space-y-6">
         {(deals.length > 0 || n_discrepancies > 0) && (
-          <CollapsibleCard
-            id="deals"
-            title="Open access deals"
-            contentClassName="text-sm"
-          >
+          <CollapsibleCard id="deals" title="Open access deals" contentClassName="text-sm">
             {deals.length > 0 && (
               <ul className="divide-y divide-[var(--border)]">
                 {deals.map((deal) => (
@@ -222,11 +202,9 @@ export default function PublisherPage() {
             )}
             {n_discrepancies > 0 && (
               <p className="mt-3 border-t border-[var(--border)] pt-3 text-xs text-[var(--muted-foreground)]">
-                {n_discrepancies}{" "}
-                {n_discrepancies === 1 ? "journal" : "journals"} in this group{" "}
-                {n_discrepancies === 1 ? "is" : "are"} covered by another
-                publisher&apos;s deal — likely a publisher flip since the
-                contract was signed:
+                {n_discrepancies} {n_discrepancies === 1 ? "journal" : "journals"} in this group{" "}
+                {n_discrepancies === 1 ? "is" : "are"} covered by another publisher&apos;s deal —
+                likely a publisher flip since the contract was signed:
                 <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
                   {deal_discrepancies.map((d) => (
                     <li key={d.title ?? d.publisher_name}>
@@ -241,9 +219,7 @@ export default function PublisherPage() {
                     </li>
                   ))}
                   {n_discrepancies > deal_discrepancies.length && (
-                    <li>
-                      and {n_discrepancies - deal_discrepancies.length} more
-                    </li>
+                    <li>and {n_discrepancies - deal_discrepancies.length} more</li>
                   )}
                 </ul>
               </p>
@@ -252,11 +228,7 @@ export default function PublisherPage() {
         )}
 
         {publisher.topics.length > 0 && (
-          <CollapsibleCard
-            id="topics"
-            title="Topics"
-            contentClassName="flex flex-wrap gap-1.5"
-          >
+          <CollapsibleCard id="topics" title="Topics" contentClassName="flex flex-wrap gap-1.5">
             {publisher.topics.map((t) => (
               <Badge
                 key={t.name}
@@ -277,15 +249,9 @@ export default function PublisherPage() {
         )}
 
         {journals.length > 0 && (
-          <CollapsibleCard
-            id="journals"
-            title="Journals"
-            contentClassName="text-sm"
-          >
+          <CollapsibleCard id="journals" title="Journals" contentClassName="text-sm">
             <Table>
-              <caption className="sr-only">
-                Journals of this publisher
-              </caption>
+              <caption className="sr-only">Journals of this publisher</caption>
               <TableHeader>
                 <TableRow>
                   <TableHead>Journal</TableHead>
@@ -318,9 +284,7 @@ export default function PublisherPage() {
                         <QuartileBadge quartile={j.quartile ?? null} />
                       </TableCell>
                       <TableCell className="whitespace-nowrap tabular-nums">
-                        {apc ?? (
-                          <span className="text-[var(--muted-foreground)]">—</span>
-                        )}
+                        {apc ?? <span className="text-[var(--muted-foreground)]">—</span>}
                       </TableCell>
                     </TableRow>
                   );

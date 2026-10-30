@@ -38,16 +38,12 @@ export type FacetGroupDef = {
 };
 
 /** Top 8 by count, with the active value kept visible even outside the top 8. */
-function topValues(
-  counts: Record<string, number> | undefined,
-  active: string,
-): FacetValue[] {
+function topValues(counts: Record<string, number> | undefined, active: string): FacetValue[] {
   const values: FacetValue[] = Object.entries(counts ?? {})
     .sort((a, b) => b[1] - a[1])
     .slice(0, 8)
     .map(([value, count]) => ({ value, count }));
-  if (active && !values.some((t) => t.value === active))
-    values.unshift({ value: active });
+  if (active && !values.some((t) => t.value === active)) values.unshift({ value: active });
   return values;
 }
 
@@ -149,9 +145,11 @@ const TINTS = {
     "border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-400/40 dark:bg-amber-400/15 dark:text-amber-200",
   cyan: "border-cyan-300 bg-cyan-100 text-cyan-900 dark:border-cyan-400/40 dark:bg-cyan-400/15 dark:text-cyan-200",
   blue: "border-blue-300 bg-blue-100 text-blue-900 dark:border-blue-400/40 dark:bg-blue-400/15 dark:text-blue-200",
-  slate: "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-500/40 dark:bg-slate-500/15 dark:text-slate-200",
+  slate:
+    "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-500/40 dark:bg-slate-500/15 dark:text-slate-200",
   teal: "border-teal-300 bg-teal-100 text-teal-900 dark:border-teal-400/40 dark:bg-teal-400/15 dark:text-teal-200",
-  brand: "border-[#f06e00]/50 bg-[#f06e00]/10 text-[var(--primary-text)] dark:border-[#f06e00]/40 dark:bg-[#f06e00]/15 dark:text-[#ffa25e]",
+  brand:
+    "border-[#f06e00]/50 bg-[#f06e00]/10 text-[var(--primary-text)] dark:border-[#f06e00]/40 dark:bg-[#f06e00]/15 dark:text-[#ffa25e]",
 };
 
 /** Idle-state icon colors: same hues as the results-list lockups. */
@@ -207,8 +205,7 @@ function facetLook(key: string, value: string): { icon: ReactNode; tint: string 
     default:
       // The deal facet's negative value is backend-defined; anything that is
       // not "covered" is a no-deal option.
-      if (key === "deal")
-        return { icon: <NoDealGlyph />, tint: TINTS.slate };
+      if (key === "deal") return { icon: <NoDealGlyph />, tint: TINTS.slate };
       if (key === "quartile")
         return {
           icon: <QuartileGlyph />,
@@ -221,10 +218,13 @@ function facetLook(key: string, value: string): { icon: ReactNode; tint: string 
 /** How each facet group behaves; shown as hover text on the group header. */
 const GROUP_HINTS: Record<string, string> = {
   oa: "Is the journal open access as a whole (any OA type)? One choice; click it again to clear.",
-  oa_type: "How the journal makes content open access. You can combine several types; click a selected type to remove it.",
+  oa_type:
+    "How the journal makes content open access. You can combine several types; click a selected type to remove it.",
   doaj: "Is the journal listed in DOAJ, the quality-controlled open access directory? One choice; click it again to clear.",
-  quartile: "SCImago impact quartile of the journal in its subject category. One choice; click it again to clear.",
-  has_apc: "Is any APC known for this journal — a list price (OpenAlex) or costs reported to OpenAPC? One choice; click it again to clear.",
+  quartile:
+    "SCImago impact quartile of the journal in its subject category. One choice; click it again to clear.",
+  has_apc:
+    "Is any APC known for this journal — a list price (OpenAlex) or costs reported to OpenAPC? One choice; click it again to clear.",
   topic: "OpenAlex topic of the journal's works. One choice; click it again to clear.",
   publisher: "The journal's publisher. One choice; click it again to clear.",
 };
@@ -236,15 +236,18 @@ const FACET_TITLES: Record<string, string> = {
   "oa_type:gold": "Every article is published open access on the journal's own site.",
   "oa_type:diamond": "Fully open access journal without fees for readers or authors.",
   "oa_type:hybrid": "Subscription journal where individual articles can be made open access.",
-  "oa_type:generic": "Open access journal whose business model could not be determined: it is open access, but no source shows whether it charges authors.",
+  "oa_type:generic":
+    "Open access journal whose business model could not be determined: it is open access, but no source shows whether it charges authors.",
   "oa_type:subscription": "No open access; reading the published version requires a subscription.",
-  "doaj:true": "Listed in DOAJ, the Directory of Open Access Journals, a quality-controlled registry for open access journals.",
+  "doaj:true":
+    "Listed in DOAJ, the Directory of Open Access Journals, a quality-controlled registry for open access journals.",
   "doaj:false": "Not listed in DOAJ; hybrid and subscription journals usually are not.",
   "quartile:Q1": "Top 25% of its SCImago subject category by citation metrics.",
   "quartile:Q2": "Second quarter (25-50%) of its SCImago subject category.",
   "quartile:Q3": "Third quarter (50-75%) of its SCImago subject category.",
   "quartile:Q4": "Last quarter (75%) of its SCImago subject category by citation metrics.",
-  "has_apc:true": "APCs are known for this journal: a list price (OpenAlex) or costs reported to OpenAPC.",
+  "has_apc:true":
+    "APCs are known for this journal: a list price (OpenAlex) or costs reported to OpenAPC.",
   "has_apc:false": "No APC is known for this journal from either source.",
 };
 
@@ -257,13 +260,7 @@ function groupHint(key: string, name: string, windowStart: number) {
   return GROUP_HINTS[key];
 }
 
-function facetTitle(
-  key: string,
-  value: string,
-  name: string,
-  short: string,
-  windowStart: number,
-) {
+function facetTitle(key: string, value: string, name: string, short: string, windowStart: number) {
   const k = `${key}:${value}`;
   if (k === "deal:covered")
     return `APCs for corresponding ${short} authors are covered, fully or partly, by a deal.`;
@@ -307,9 +304,7 @@ function FacetGroup({
         <span>{label}</span>
         <span className="flex items-center gap-1.5">
           <span className="tabular-nums">
-            {activeValues.length > 0
-              ? `${activeValues.length}/${values.length}`
-              : values.length}
+            {activeValues.length > 0 ? `${activeValues.length}/${values.length}` : values.length}
           </span>
           <ChevronDown
             aria-hidden
@@ -319,9 +314,7 @@ function FacetGroup({
       </summary>
       <div
         className={
-          chips
-            ? "mt-2 flex flex-wrap items-center gap-1.5"
-            : "mt-1.5 flex flex-col gap-1"
+          chips ? "mt-2 flex flex-wrap items-center gap-1.5" : "mt-1.5 flex flex-col gap-1"
         }
       >
         {values.map((f) => {
@@ -344,7 +337,7 @@ function FacetGroup({
               aria-hidden
               viewBox="0 0 16 16"
               className={`h-4 w-auto shrink-0 overflow-visible ${
-                active ? "" : FACET_ICON_TEXT[`${key}:${f.value}`] ?? ""
+                active ? "" : (FACET_ICON_TEXT[`${key}:${f.value}`] ?? "")
               }`}
             >
               {look.icon}
@@ -353,11 +346,7 @@ function FacetGroup({
           const labelText = f.label ?? f.value;
           const countNode =
             f.count !== undefined ? (
-              <span
-                className={`shrink-0 tabular-nums ${
-                  chips ? "ml-0.5 opacity-80" : ""
-                }`}
-              >
+              <span className={`shrink-0 tabular-nums ${chips ? "ml-0.5 opacity-80" : ""}`}>
                 {f.count.toLocaleString("en")}
               </span>
             ) : null;
@@ -414,12 +403,7 @@ export function FacetGroupList({
   return (
     <div className="space-y-2.5">
       {groups.map((group) => (
-        <FacetGroup
-          key={group.key}
-          group={group}
-          onToggle={onToggle}
-          variant={variant}
-        />
+        <FacetGroup key={group.key} group={group} onToggle={onToggle} variant={variant} />
       ))}
     </div>
   );
@@ -449,13 +433,11 @@ export function FilterPanel({
       key: "deal",
       label: "Deal",
       defaultOpen: true,
-      values: Object.entries(facets.deal_coverage ?? {}).map(
-        ([value, count]) => ({
-          value,
-          count,
-          label: value === "covered" ? "Covered by a deal" : "No deal",
-        }),
-      ),
+      values: Object.entries(facets.deal_coverage ?? {}).map(([value, count]) => ({
+        value,
+        count,
+        label: value === "covered" ? "Covered by a deal" : "No deal",
+      })),
       activeValues: selection.deal ? [selection.deal] : [],
     },
     {

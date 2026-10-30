@@ -22,9 +22,7 @@ export function Pagination({
         {/* Announce only settled counts: while a fetch runs the live
             region keeps its previous text, so typing never chatters. */}
         <span aria-live="polite">
-          {data
-            ? `${data.total.toLocaleString("en")} journal${data.total === 1 ? "" : "s"}`
-            : ""}
+          {data ? `${data.total.toLocaleString("en")} journal${data.total === 1 ? "" : "s"}` : ""}
         </span>
         {isFetching && data ? " · updating…" : ""}
       </p>

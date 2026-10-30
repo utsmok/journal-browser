@@ -8,10 +8,8 @@ export default function NotFound() {
       <h1 className="text-3xl font-bold">Page not found</h1>
       <p className="mx-auto mt-2 max-w-prose text-[var(--muted-foreground)]">
         This address does not exist. Journal pages live at
-        <code className="mx-1 rounded bg-[var(--muted)] px-1 py-0.5">
-          /journals/&lt;issn&gt;
-        </code>
-        — search for the journal by title, ISSN, or topic instead.
+        <code className="mx-1 rounded bg-[var(--muted)] px-1 py-0.5">/journals/&lt;issn&gt;</code>—
+        search for the journal by title, ISSN, or topic instead.
       </p>
       <Link href="/" className={buttonVariants({ className: "mt-6" })}>
         Back to search

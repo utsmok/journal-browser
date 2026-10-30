@@ -26,8 +26,7 @@ export function OaCompositionBar({
   total: number;
   className?: string;
 }) {
-  if (total <= 0)
-    return <span className="text-[var(--muted-foreground)]">—</span>;
+  if (total <= 0) return <span className="text-[var(--muted-foreground)]">—</span>;
   const parts = OA_TYPE_ORDER.map((type) => ({
     type,
     n: counts[type] ?? 0,
@@ -63,9 +62,7 @@ export function OaCompositionLegend({ counts }: { counts: OaTypeCounts }) {
             className={`inline-block size-2.5 rounded-full ${OA_TYPE_BARS[type].bar}`}
           />
           {OA_TYPE_BARS[type].label}
-          {counts[type] != null && (
-            <span className="tabular-nums">{counts[type]}</span>
-          )}
+          {counts[type] != null && <span className="tabular-nums">{counts[type]}</span>}
         </li>
       ))}
     </ul>

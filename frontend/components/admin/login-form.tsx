@@ -15,8 +15,8 @@ export function LoginForm({ onToken }: { onToken: (token: string) => void }) {
     <div className="mx-auto mt-20 max-w-sm space-y-4">
       <h1 className="text-xl font-semibold">Admin</h1>
       <p className="text-sm text-muted-foreground">
-        Harvest runs and configuration. Password via JB_ADMIN_PASSWORD; the
-        panel is disabled when it is unset.
+        Harvest runs and configuration. Password via JB_ADMIN_PASSWORD; the panel is disabled when
+        it is unset.
       </p>
       <form
         className="space-y-2"

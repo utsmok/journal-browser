@@ -38,17 +38,15 @@ export function SiteFooter() {
                   : { target: "_blank", rel: "noopener noreferrer" })}
                 className="inline-flex items-center gap-1 underline-offset-2 hover:underline"
               >
-                {l.icon === "github" && (
-                  <Github aria-hidden className="size-4" />
-                )}
+                {l.icon === "github" && <Github aria-hidden className="size-4" />}
                 <span className={l.icon ? "sr-only" : undefined}>{l.label}</span>
               </a>
             </li>
           ))}
         </ul>
         <p className="mt-3 text-xs text-white/70">
-          Data: OpenAlex, cOAlition S Journal Checker Tool, openaccess.nl, OpenAPC,
-          Scimago. Links on every page lead to the upstream source.
+          Data: OpenAlex, cOAlition S Journal Checker Tool, openaccess.nl, OpenAPC, Scimago. Links
+          on every page lead to the upstream source.
         </p>
       </div>
     </footer>

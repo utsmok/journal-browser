@@ -5,11 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
-import {
-  FacetGroupList,
-  type FacetGroupDef,
-  type FacetValue,
-} from "@/components/filter-panel";
+import { FacetGroupList, type FacetGroupDef, type FacetValue } from "@/components/filter-panel";
 import { ListSkeletonRows } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -50,42 +46,27 @@ const SELECT_CLASS =
   "h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2";
 
 /** Comma-joined multi-select param → list of values (journal-search convention). */
-function paramValues(
-  sp: { get(key: string): string | null },
-  key: string,
-): string[] {
+function paramValues(sp: { get(key: string): string | null }, key: string): string[] {
   return (sp.get(key) ?? "").split("|").filter(Boolean);
 }
 
 /** Top 8 buckets of a facet record, with active values kept visible. */
-function facetValues(
-  counts: Record<string, number> | undefined,
-  active: string[],
-): FacetValue[] {
+function facetValues(counts: Record<string, number> | undefined, active: string[]): FacetValue[] {
   const list: FacetValue[] = Object.entries(counts ?? {})
     .sort((a, b) => b[1] - a[1])
     .slice(0, 8)
     .map(([value, count]) => ({ value, count }));
-  for (const value of active)
-    if (!list.some((v) => v.value === value)) list.unshift({ value });
+  for (const value of active) if (!list.some((v) => v.value === value)) list.unshift({ value });
   return list;
 }
 
 /** Deal-covered works as "12 (18%)"; the share needs a nonzero denominator. */
 function DealWorksCell({ unit }: { unit: OrgUnitItem }) {
-  const share =
-    unit.n_works > 0
-      ? Math.round((unit.deal_works / unit.n_works) * 100)
-      : 0;
+  const share = unit.n_works > 0 ? Math.round((unit.deal_works / unit.n_works) * 100) : 0;
   return (
-    <span
-      className="tabular-nums"
-      title="Works in journals covered by an open access deal"
-    >
+    <span className="tabular-nums" title="Works in journals covered by an open access deal">
       {unit.deal_works.toLocaleString("en")}
-      {unit.n_works > 0 && (
-        <span className="text-[var(--muted-foreground)]"> ({share}%)</span>
-      )}
+      {unit.n_works > 0 && <span className="text-[var(--muted-foreground)]"> ({share}%)</span>}
     </span>
   );
 }
@@ -130,8 +111,7 @@ function OrgUnitsView() {
   const limitParam = parseInt(sp.get("limit") ?? "", 10);
   const pageSize = PAGE_SIZES.includes(limitParam) ? limitParam : 50;
   const offsetParam = parseInt(sp.get("offset") ?? "", 10);
-  const offset =
-    Number.isFinite(offsetParam) && offsetParam > 0 ? offsetParam : 0;
+  const offset = Number.isFinite(offsetParam) && offsetParam > 0 ? offsetParam : 0;
 
   const setParams = React.useCallback(
     (patch: Record<string, string | undefined>) => {
@@ -194,9 +174,7 @@ function OrgUnitsView() {
       return;
     }
     if (key === "works") {
-      const next = works.includes(value)
-        ? works.filter((v) => v !== value)
-        : [...works, value];
+      const next = works.includes(value) ? works.filter((v) => v !== value) : [...works, value];
       setParams({ works: next.join("|") || undefined });
       return;
     }
@@ -250,8 +228,8 @@ function OrgUnitsView() {
         <section className="order-1 mb-8 min-[960px]:col-start-2 min-[960px]:row-start-1 min-[960px]:mb-6">
           <h1 className="mb-3 text-3xl font-bold text-balance">Faculties</h1>
           <p className="mb-6 max-w-2xl text-[var(--muted-foreground)]">
-            Browse the organisational units of {site.name}: faculties and their
-            research groups, with publishing output, deal usage, and APC spend.
+            Browse the organisational units of {site.name}: faculties and their research groups,
+            with publishing output, deal usage, and APC spend.
           </p>
           <form
             className="flex max-w-2xl gap-2"
@@ -268,11 +246,7 @@ function OrgUnitsView() {
                 onKeyDown={(event) => {
                   if (event.key === "Escape") event.currentTarget.blur();
                 }}
-                placeholder={
-                  level === "group"
-                    ? "Search research groups"
-                    : "Search faculties"
-                }
+                placeholder={level === "group" ? "Search research groups" : "Search faculties"}
                 aria-label={level === "group" ? "Search research groups" : "Search faculties"}
               />
               {input === "" && (
@@ -291,22 +265,14 @@ function OrgUnitsView() {
         {/* Stacked filter card: the only filter UI below 960px. */}
         {data != null && (
           <section className="order-2 mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
-            <FacetGroupList
-              groups={groups}
-              onToggle={toggleFacet}
-              variant="chips"
-            />
+            <FacetGroupList groups={groups} onToggle={toggleFacet} variant="chips" />
           </section>
         )}
 
         {/* Wide-screen sidebar: sticky, scrolls on its own when long. */}
         {data != null && (
           <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:col-start-1 min-[960px]:row-span-2 min-[960px]:row-start-1 min-[960px]:block">
-            <FacetGroupList
-              groups={groups}
-              onToggle={toggleFacet}
-              variant="rows"
-            />
+            <FacetGroupList groups={groups} onToggle={toggleFacet} variant="rows" />
           </aside>
         )}
 
@@ -347,19 +313,14 @@ function OrgUnitsView() {
               value={sort ?? "default"}
               onChange={(event) =>
                 setParams({
-                  sort:
-                    event.target.value === "default"
-                      ? undefined
-                      : event.target.value,
+                  sort: event.target.value === "default" ? undefined : event.target.value,
                 })
               }
               className={SELECT_CLASS}
             >
               {/* The backend default is relevance with a query, works count
                 without; say so instead of guessing one label. */}
-              <option value="default">
-                {q ? "Relevance" : "Works (high→low)"}
-              </option>
+              <option value="default">{q ? "Relevance" : "Works (high→low)"}</option>
               {(
                 [
                   ["name", "Name (A→Z)"],
@@ -382,8 +343,7 @@ function OrgUnitsView() {
               value={pageSize}
               onChange={(event) =>
                 setParams({
-                  limit:
-                    event.target.value === "50" ? undefined : event.target.value,
+                  limit: event.target.value === "50" ? undefined : event.target.value,
                 })
               }
               className={SELECT_CLASS}
@@ -435,8 +395,7 @@ function OrgUnitsView() {
                       <ChevronLeft aria-hidden className="size-4" /> Prev
                     </Button>
                     <span className="whitespace-nowrap text-sm tabular-nums text-[var(--muted-foreground)]">
-                      Page {page.toLocaleString("en")} of{" "}
-                      {pageCount.toLocaleString("en")}
+                      Page {page.toLocaleString("en")} of {pageCount.toLocaleString("en")}
                     </span>
                     <Button
                       variant="outline"
@@ -453,15 +412,8 @@ function OrgUnitsView() {
 
               {isError ? (
                 <div className="py-10 text-center">
-                  <p className="text-[var(--destructive)]">
-                    {errorMessage(error)}
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-3"
-                    onClick={() => refetch()}
-                  >
+                  <p className="text-[var(--destructive)]">{errorMessage(error)}</p>
+                  <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
                     Retry
                   </Button>
                 </div>
@@ -470,19 +422,17 @@ function OrgUnitsView() {
               ) : rows.length === 0 ? (
                 <div className="py-10 text-center text-[var(--muted-foreground)]">
                   {q && !anyFilter ? (
-                    <>No {level === "group" ? "research groups" : "faculties"} match &ldquo;{q}&rdquo;.</>
+                    <>
+                      No {level === "group" ? "research groups" : "faculties"} match &ldquo;{q}
+                      &rdquo;.
+                    </>
                   ) : (
                     <>
-                      No{" "}
-                      {level === "group" ? "research groups" : "faculties"}{" "}
-                      match{anyFilter ? " these filters" : ""}.
+                      No {level === "group" ? "research groups" : "faculties"} match
+                      {anyFilter ? " these filters" : ""}.
                       {anyFilter && (
                         <div className="mt-3">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={clearFilters}
-                          >
+                          <Button variant="outline" size="sm" onClick={clearFilters}>
                             Clear filters
                           </Button>
                         </div>
@@ -495,9 +445,7 @@ function OrgUnitsView() {
                   {/* Stacked cards on narrow viewports: seven columns would
                     push the counts off-screen behind horizontal scrolling. */}
                   <ul
-                    className={
-                      isFetching ? "opacity-60 md:hidden" : "md:hidden"
-                    }
+                    className={isFetching ? "opacity-60 md:hidden" : "md:hidden"}
                     aria-label="Organisational unit results"
                   >
                     {rows.map((u) => (
@@ -520,44 +468,34 @@ function OrgUnitsView() {
                             {u.n_authors === 1 ? "author" : "authors"}
                           </span>
                           <span>
-                            {u.n_works.toLocaleString("en")}{" "}
-                            {u.n_works === 1 ? "work" : "works"}
+                            {u.n_works.toLocaleString("en")} {u.n_works === 1 ? "work" : "works"}
                           </span>
                           {u.deal_works > 0 && (
                             <span>{u.deal_works.toLocaleString("en")} deal-covered</span>
                           )}
-                          {u.apc_n > 0 && (
-                            <span>APC {formatEur(u.apc_euro_total)} €</span>
-                          )}
+                          {u.apc_n > 0 && <span>APC {formatEur(u.apc_euro_total)} €</span>}
                         </div>
                         {u.topics.length > 0 && (
                           <div className="mt-1 text-xs text-[var(--muted-foreground)]">
-                            {u.topics.slice(0, 2).map((t) => t.name).join(" · ")}
+                            {u.topics
+                              .slice(0, 2)
+                              .map((t) => t.name)
+                              .join(" · ")}
                           </div>
                         )}
                       </li>
                     ))}
                   </ul>
-                  <div
-                    className={
-                      isFetching
-                        ? "hidden opacity-60 md:block"
-                        : "hidden md:block"
-                    }
-                  >
+                  <div className={isFetching ? "hidden opacity-60 md:block" : "hidden md:block"}>
                     <Table>
-                      <caption className="sr-only">
-                        Organisational unit search results
-                      </caption>
+                      <caption className="sr-only">Organisational unit search results</caption>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Name</TableHead>
                           {level === "group" && <TableHead>Faculty</TableHead>}
                           <TableHead className="text-right">Authors</TableHead>
                           <TableHead className="text-right">Works</TableHead>
-                          <TableHead className="text-right">
-                            Deal-covered
-                          </TableHead>
+                          <TableHead className="text-right">Deal-covered</TableHead>
                           <TableHead className="text-right">APC</TableHead>
                           <TableHead>Topics</TableHead>
                         </TableRow>
@@ -570,10 +508,7 @@ function OrgUnitsView() {
                                 href={unitHref(u)}
                                 className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
                               >
-                                <span
-                                  className="block max-w-56 truncate"
-                                  title={u.name}
-                                >
+                                <span className="block max-w-56 truncate" title={u.name}>
                                   {u.name}
                                 </span>
                               </Link>
@@ -585,9 +520,7 @@ function OrgUnitsView() {
                                   title={u.faculty ?? undefined}
                                 >
                                   {u.faculty || (
-                                    <span className="text-[var(--muted-foreground)]">
-                                      —
-                                    </span>
+                                    <span className="text-[var(--muted-foreground)]">—</span>
                                   )}
                                 </span>
                               </TableCell>
@@ -614,9 +547,7 @@ function OrgUnitsView() {
                                   </span>
                                 </span>
                               ) : (
-                                <span className="text-[var(--muted-foreground)]">
-                                  —
-                                </span>
+                                <span className="text-[var(--muted-foreground)]">—</span>
                               )}
                             </TableCell>
                             <TableCell>
@@ -625,17 +556,16 @@ function OrgUnitsView() {
                                   className="block max-w-40 truncate"
                                   title={u.topics
                                     .slice(0, 2)
-                                    .map(
-                                      (t) => `${t.name} (${Math.round(t.n)})`,
-                                    )
+                                    .map((t) => `${t.name} (${Math.round(t.n)})`)
                                     .join(" · ")}
                                 >
-                                  {u.topics.slice(0, 2).map((t) => t.name).join(" · ")}
+                                  {u.topics
+                                    .slice(0, 2)
+                                    .map((t) => t.name)
+                                    .join(" · ")}
                                 </span>
                               ) : (
-                                <span className="text-[var(--muted-foreground)]">
-                                  —
-                                </span>
+                                <span className="text-[var(--muted-foreground)]">—</span>
                               )}
                             </TableCell>
                           </TableRow>

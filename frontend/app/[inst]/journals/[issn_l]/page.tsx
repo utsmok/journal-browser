@@ -5,12 +5,7 @@ import Link from "next/link";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
-import {
-  DealBadge,
-  OaStatusChip,
-  OaTypeBadge,
-  QuartileBadge,
-} from "@/components/badges";
+import { DealBadge, OaStatusChip, OaTypeBadge, QuartileBadge } from "@/components/badges";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { CardPager } from "@/components/card-pager";
 import { OaTrend } from "@/components/oa-trend";
@@ -58,7 +53,17 @@ function External({
   );
 }
 
-function Metric({ label, value, note, hint }: { label: string; value: string; note?: React.ReactNode; hint?: string }) {
+function Metric({
+  label,
+  value,
+  note,
+  hint,
+}: {
+  label: string;
+  value: string;
+  note?: React.ReactNode;
+  hint?: string;
+}) {
   return (
     // Focusable so keyboard users can raise the title-tooltip too.
     <div title={hint} tabIndex={hint ? 0 : undefined}>
@@ -83,8 +88,7 @@ function CopyButton({ text, label }: { text: string; label: string }) {
     }
     timer.current = window.setTimeout(() => setState("idle"), 1500);
   };
-  const title =
-    state === "copied" ? "Copied" : state === "failed" ? "Copy failed" : "Copy";
+  const title = state === "copied" ? "Copied" : state === "failed" ? "Copy failed" : "Copy";
   return (
     <button
       type="button"
@@ -114,28 +118,26 @@ function CitationCard({ data }: { data: JournalDetailResponse }) {
   });
   const title = data.journal.title ?? data.journal.issn_l;
   const citation = `${title}. ${data.journal.publisher_name ?? "Unknown publisher"}. ISSN-L ${data.journal.issn_l}. Available at: ${process.env.NEXT_PUBLIC_SITE_URL ?? "https://journalbrowser.samuelmok.cc"}/${inst}/journals/${data.journal.issn_l} (accessed ${today})`;
-  const issns = Array.from(new Set([`ISSN-L ${data.journal.issn_l}`, ...data.issns.map((i) => `ISSN ${i}`)]));
+  const issns = Array.from(
+    new Set([`ISSN-L ${data.journal.issn_l}`, ...data.issns.map((i) => `ISSN ${i}`)]),
+  );
 
   return (
-    <CollapsibleCard
-      id="cite"
-      title="Cite this journal"
-      contentClassName="space-y-2 text-sm"
-    >
-        <div className="flex items-start gap-2">
-          {/* anywhere (not break-words): only `anywhere` lets the long canonical URL
+    <CollapsibleCard id="cite" title="Cite this journal" contentClassName="space-y-2 text-sm">
+      <div className="flex items-start gap-2">
+        {/* anywhere (not break-words): only `anywhere` lets the long canonical URL
               count as breakable for the grid column's min-content, so mobile stays 390px. */}
-          <p className="min-w-0 flex-1 text-pretty [overflow-wrap:anywhere]">{citation}</p>
-          <CopyButton text={citation} label="citation" />
-        </div>
-        <ul className="space-y-1 border-t border-[var(--border)] pt-2">
-          {issns.map((issn) => (
-            <li key={issn} className="flex items-center justify-between gap-2">
-              <span className="tabular-nums text-[var(--muted-foreground)]">{issn}</span>
-              <CopyButton text={issn.replace(/^ISSN(-L)? /, "")} label={issn} />
-            </li>
-          ))}
-        </ul>
+        <p className="min-w-0 flex-1 text-pretty [overflow-wrap:anywhere]">{citation}</p>
+        <CopyButton text={citation} label="citation" />
+      </div>
+      <ul className="space-y-1 border-t border-[var(--border)] pt-2">
+        {issns.map((issn) => (
+          <li key={issn} className="flex items-center justify-between gap-2">
+            <span className="tabular-nums text-[var(--muted-foreground)]">{issn}</span>
+            <CopyButton text={issn.replace(/^ISSN(-L)? /, "")} label={issn} />
+          </li>
+        ))}
+      </ul>
     </CollapsibleCard>
   );
 }
@@ -150,8 +152,8 @@ function DealPanel({
   attribution: Partial<Attribution>;
 }) {
   const site = useSiteMeta();
-  const capNumbers = Object.entries(deal.cap_numbers ?? {}).sort((a, b) =>
-    (parseInt(a[0], 10) || 0) - (parseInt(b[0], 10) || 0),
+  const capNumbers = Object.entries(deal.cap_numbers ?? {}).sort(
+    (a, b) => (parseInt(a[0], 10) || 0) - (parseInt(b[0], 10) || 0),
   );
   return (
     <CollapsibleCard
@@ -186,82 +188,76 @@ function DealPanel({
       }
       contentClassName="space-y-4 text-sm"
     >
-        {deal.summary && (
-          <p className="max-w-prose text-pretty">{cleanProse(deal.summary)}</p>
-        )}
-        {deal.conditions_text && (
-          <div>
-            <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-              Cost implication & conditions
-            </h3>
-            <p className="max-w-prose whitespace-pre-line text-pretty">
-              {cleanProse(deal.conditions_text)}
-            </p>
-          </div>
-        )}
-        {(deal.cap_text || capNumbers.length > 0) && (
-          <div>
-            <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-              Article caps
-            </h3>
-            {deal.cap_text && <p className="whitespace-pre-line text-pretty">{cleanProse(deal.cap_text)}</p>}
-            {capNumbers.length > 0 && (
-              <ul className="mt-1.5 flex flex-wrap gap-1.5">
-                {capNumbers.map(([year, count]) => (
-                  <li
-                    key={year}
-                    className="rounded-full bg-[var(--muted)] px-2.5 py-0.5 text-xs tabular-nums"
-                  >
-                    {year}: {String(count)}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-        {deal.article_types_text && (
-          <div>
-            <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-              Included article types
-            </h3>
-            <p className="text-pretty">{cleanProse(deal.article_types_text)}</p>
-          </div>
-        )}
-        {deal.workflow_text && (
-          <div>
-            <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-              Workflow
-            </h3>
-            <p className="text-pretty">{cleanProse(deal.workflow_text)}</p>
-          </div>
-        )}
-        <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-[var(--border)] pt-3">
-          {deal.links?.length
-            ? orderedDealLinks(deal.links)
-                .filter((link): link is DealLink & { url: string } => !!link.url)
-                .map((link) => (
-                  <External key={`${link.category}-${link.url}`} href={link.url}>
-                    {dealLinkLabel(link)}
-                  </External>
-                ))
-            : (
-              // Old backend: no links[] yet; fall back to the flat URL fields.
-              <>
-                {deal.openaccess_nl_url && (
-                  <External href={deal.openaccess_nl_url}>
-                    openaccess.nl deal page
-                  </External>
-                )}
-                {deal.contract_url && (
-                  <External href={deal.contract_url}>Contract</External>
-                )}
-                {deal.jct_data_url && (
-                  <External href={deal.jct_data_url}>JCT data</External>
-                )}
-              </>
-            )}
-          <SourceNote {...attribution} codes={attribution.caveat_codes} />
+      {deal.summary && <p className="max-w-prose text-pretty">{cleanProse(deal.summary)}</p>}
+      {deal.conditions_text && (
+        <div>
+          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+            Cost implication & conditions
+          </h3>
+          <p className="max-w-prose whitespace-pre-line text-pretty">
+            {cleanProse(deal.conditions_text)}
+          </p>
         </div>
+      )}
+      {(deal.cap_text || capNumbers.length > 0) && (
+        <div>
+          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+            Article caps
+          </h3>
+          {deal.cap_text && (
+            <p className="whitespace-pre-line text-pretty">{cleanProse(deal.cap_text)}</p>
+          )}
+          {capNumbers.length > 0 && (
+            <ul className="mt-1.5 flex flex-wrap gap-1.5">
+              {capNumbers.map(([year, count]) => (
+                <li
+                  key={year}
+                  className="rounded-full bg-[var(--muted)] px-2.5 py-0.5 text-xs tabular-nums"
+                >
+                  {year}: {String(count)}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+      {deal.article_types_text && (
+        <div>
+          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+            Included article types
+          </h3>
+          <p className="text-pretty">{cleanProse(deal.article_types_text)}</p>
+        </div>
+      )}
+      {deal.workflow_text && (
+        <div>
+          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+            Workflow
+          </h3>
+          <p className="text-pretty">{cleanProse(deal.workflow_text)}</p>
+        </div>
+      )}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-[var(--border)] pt-3">
+        {deal.links?.length ? (
+          orderedDealLinks(deal.links)
+            .filter((link): link is DealLink & { url: string } => !!link.url)
+            .map((link) => (
+              <External key={`${link.category}-${link.url}`} href={link.url}>
+                {dealLinkLabel(link)}
+              </External>
+            ))
+        ) : (
+          // Old backend: no links[] yet; fall back to the flat URL fields.
+          <>
+            {deal.openaccess_nl_url && (
+              <External href={deal.openaccess_nl_url}>openaccess.nl deal page</External>
+            )}
+            {deal.contract_url && <External href={deal.contract_url}>Contract</External>}
+            {deal.jct_data_url && <External href={deal.jct_data_url}>JCT data</External>}
+          </>
+        )}
+        <SourceNote {...attribution} codes={attribution.caveat_codes} />
+      </div>
     </CollapsibleCard>
   );
 }
@@ -325,18 +321,18 @@ function PublicationsCard({
       }
       contentClassName="space-y-3 text-sm"
     >
-        {isPending && !data ? (
-          <p className="text-[var(--muted-foreground)]">Loading publications…</p>
-        ) : works.length === 0 ? (
-          // Also the pre-integration state: old backends 404 on /works.
-          <p className="text-[var(--muted-foreground)]">
-            No {site.name} publications in the university corpus for this journal.
-          </p>
-        ) : (
-          <ul className="divide-y divide-[var(--border)]">
-            {works.map((w) => {
-              const href = doiHref(w.doi ?? null) ?? w.url;
-              return (
+      {isPending && !data ? (
+        <p className="text-[var(--muted-foreground)]">Loading publications…</p>
+      ) : works.length === 0 ? (
+        // Also the pre-integration state: old backends 404 on /works.
+        <p className="text-[var(--muted-foreground)]">
+          No {site.name} publications in the university corpus for this journal.
+        </p>
+      ) : (
+        <ul className="divide-y divide-[var(--border)]">
+          {works.map((w) => {
+            const href = doiHref(w.doi ?? null) ?? w.url;
+            return (
               <li
                 key={w.id}
                 className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 py-2 first:pt-0 last:pb-0"
@@ -356,9 +352,7 @@ function PublicationsCard({
                   </span>
                 )}
                 {w.year != null && (
-                  <span className="tabular-nums text-[var(--muted-foreground)]">
-                    {w.year}
-                  </span>
+                  <span className="tabular-nums text-[var(--muted-foreground)]">{w.year}</span>
                 )}
                 <OaStatusChip status={w.oa_status} />
                 <span
@@ -384,35 +378,35 @@ function PublicationsCard({
                   </Badge>
                 )}
               </li>
-              );
-            })}
-          </ul>
-        )}
-        {pages > 1 && (
-          <CardPager
-            page={page}
-            pages={pages}
-            total={total}
-            onPage={setPage}
-            isFetching={isFetching}
-            label="publications"
-          />
-        )}
-        <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-[var(--border)] pt-3">
-          {openalex?.id && (
-            <External
-              href={`https://openalex.org/works?filter=primary_location.source.id:${openalex.id}`}
-            >
-              All works on OpenAlex
-            </External>
-          )}
+            );
+          })}
+        </ul>
+      )}
+      {pages > 1 && (
+        <CardPager
+          page={page}
+          pages={pages}
+          total={total}
+          onPage={setPage}
+          isFetching={isFetching}
+          label="publications"
+        />
+      )}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-[var(--border)] pt-3">
+        {openalex?.id && (
           <External
-            href={`https://explore.openaire.eu/search/find?keyword=%22${encodeURIComponent(title)}%22`}
+            href={`https://openalex.org/works?filter=primary_location.source.id:${openalex.id}`}
           >
-            Search on OpenAIRE
+            All works on OpenAlex
           </External>
-          <SourceNote {...worksNote} codes={worksNote.caveat_codes} />
-        </div>
+        )}
+        <External
+          href={`https://explore.openaire.eu/search/find?keyword=%22${encodeURIComponent(title)}%22`}
+        >
+          Search on OpenAIRE
+        </External>
+        <SourceNote {...worksNote} codes={worksNote.caveat_codes} />
+      </div>
     </CollapsibleCard>
   );
 }
@@ -487,15 +481,11 @@ function SectionNav({ sections }: { sections: { id: string; label: string }[] })
                 aria-current={active === s.id ? "true" : undefined}
                 onClick={(e) => {
                   e.preventDefault();
-                  document
-                    .getElementById(s.id)
-                    ?.scrollIntoView({ behavior: "smooth" });
+                  document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth" });
                 }}
                 className={cn(
                   "inline-block whitespace-nowrap rounded px-2 py-1 text-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white",
-                  active === s.id
-                    ? "font-medium text-white underline"
-                    : "text-white/80",
+                  active === s.id ? "font-medium text-white underline" : "text-white/80",
                 )}
               >
                 {s.label}
@@ -523,8 +513,7 @@ function JournalPageInner() {
     (similar.all.length === 0 && similar.institution.length === 0 && similar.deals.length === 0);
 
   if (isPending) return <DetailSkeleton />;
-  if (isError || !data)
-    return <ErrorPanel message={errorMessage(error)} backHref={backHref} />;
+  if (isError || !data) return <ErrorPanel message={errorMessage(error)} backHref={backHref} />;
 
   const { journal, stats, deals, attribution, summary_stats, stats_totals: totals } = data;
   const recent = stats.filter((s) => s.year >= site.windowStart);
@@ -533,8 +522,7 @@ function JournalPageInner() {
   const metrics = data.institution_metrics ?? null;
 
   const ss = (summary_stats ?? {}) as Record<string, unknown>;
-  const num = (key: string) =>
-    typeof ss[key] === "number" ? (ss[key] as number) : null;
+  const num = (key: string) => (typeof ss[key] === "number" ? (ss[key] as number) : null);
   const latestSjr = data.scimagojr.at(-1);
   const topics = Array.from(
     new Set(
@@ -544,12 +532,10 @@ function JournalPageInner() {
     ),
   );
   const oaTopics = (openalex?.topics ?? []).filter(
-    (t): t is OpenalexTopic & { display_name: string } =>
-      Boolean(t?.display_name),
+    (t): t is OpenalexTopic & { display_name: string } => Boolean(t?.display_name),
   );
   const maxTopicCount = oaTopics[0]?.count ?? 1;
-  const hasApc =
-    data.apc_aggregates.length > 0 || data.apc_evidence.length > 0;
+  const hasApc = data.apc_aggregates.length > 0 || data.apc_evidence.length > 0;
   // One nav entry per rendered section, in DOM order.
   const sections = [
     ...(deals.length > 0
@@ -558,9 +544,7 @@ function JournalPageInner() {
           label: "Open access deal",
         }))
       : [{ id: "deal", label: "Open access deal" }]),
-    ...(topics.length > 0 || oaTopics.length > 0
-      ? [{ id: "topics", label: "Topics" }]
-      : []),
+    ...(topics.length > 0 || oaTopics.length > 0 ? [{ id: "topics", label: "Topics" }] : []),
     { id: "publications", label: "Publications" },
     { id: "cite", label: "Cite this journal" },
     { id: "oa-per-year", label: "Open access per year" },
@@ -573,117 +557,94 @@ function JournalPageInner() {
     <>
       <SectionNav sections={sections} />
       <div className="mx-auto max-w-screen-2xl px-4 py-10">
-      <header className="mb-8">
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-3xl font-bold">
-            {data.homepage_url ? (
-              <a
-                href={data.homepage_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={`${journal.title ?? journal.issn_l} — opens the journal website in a new tab`}
-                className="inline-flex items-center gap-1.5 underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-              >
-                {journal.title ?? journal.issn_l}
-                <ExternalLink
-                  aria-hidden
-                  className="size-5 text-[var(--muted-foreground)]"
-                />
-              </a>
-            ) : (
-              journal.title ?? journal.issn_l
-            )}
-          </h1>
-          <OaTypeBadge oaType={journal.oa_type} isOa={journal.is_oa} />
-          <QuartileBadge quartile={journal.quartile ?? null} />
-        </div>
-        {data.alternate_titles.length > 0 && (
-          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            Also published as {data.alternate_titles.join("; ")}
+        <header className="mb-8">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-3xl font-bold">
+              {data.homepage_url ? (
+                <a
+                  href={data.homepage_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`${journal.title ?? journal.issn_l} — opens the journal website in a new tab`}
+                  className="inline-flex items-center gap-1.5 underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                >
+                  {journal.title ?? journal.issn_l}
+                  <ExternalLink aria-hidden className="size-5 text-[var(--muted-foreground)]" />
+                </a>
+              ) : (
+                (journal.title ?? journal.issn_l)
+              )}
+            </h1>
+            <OaTypeBadge oaType={journal.oa_type} isOa={journal.is_oa} />
+            <QuartileBadge quartile={journal.quartile ?? null} />
+          </div>
+          {data.alternate_titles.length > 0 && (
+            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+              Also published as {data.alternate_titles.join("; ")}
+            </p>
+          )}
+          <p className="mt-1.5 text-[var(--muted-foreground)]">
+            {journal.publisher_canonical ?? journal.publisher_name ?? "Unknown publisher"}
+            {journal.publisher_canonical &&
+              journal.publisher_name &&
+              journal.publisher_canonical !== journal.publisher_name && (
+                <span className="text-sm"> · imprint: {journal.publisher_name}</span>
+              )}
+            {data.type ? ` · ${data.type.charAt(0).toUpperCase()}${data.type.slice(1)}` : ""} ·{" "}
+            <span title="ISSN-L links the print and online ISSNs of one journal into a single identifier">
+              ISSN-L {journal.issn_l}
+            </span>
+            {data.issns.length > 1 && ` (${data.issns.join(", ")})`}
           </p>
-        )}
-        <p className="mt-1.5 text-[var(--muted-foreground)]">
-          {(journal.publisher_canonical ?? journal.publisher_name) ?? "Unknown publisher"}
-          {journal.publisher_canonical &&
-            journal.publisher_name &&
-            journal.publisher_canonical !== journal.publisher_name && (
-              <span className="text-sm">
-                {" "}
-                · imprint: {journal.publisher_name}
-              </span>
-            )}
-          {data.type
-            ? ` · ${data.type.charAt(0).toUpperCase()}${data.type.slice(1)}`
-            : ""}{" "}
-          ·{" "}
-          <span title="ISSN-L links the print and online ISSNs of one journal into a single identifier">
-            ISSN-L {journal.issn_l}
-          </span>
-          {data.issns.length > 1 && ` (${data.issns.join(", ")})`}
-        </p>
-        {(data.homepage_url || openalex?.url) && (
-          <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-            {data.homepage_url && (
-              <External href={data.homepage_url}>Homepage</External>
-            )}
-            {data.doaj_homepage_url && (
-              <SourceNote
-                source="via DOAJ"
-                url="https://doaj.org"
-                codes={["doaj-canon"]}
-              />
-            )}
-            {openalex?.url && <External href={openalex.url}>OpenAlex</External>}
+          {(data.homepage_url || openalex?.url) && (
+            <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+              {data.homepage_url && <External href={data.homepage_url}>Homepage</External>}
+              {data.doaj_homepage_url && (
+                <SourceNote source="via DOAJ" url="https://doaj.org" codes={["doaj-canon"]} />
+              )}
+              {openalex?.url && <External href={openalex.url}>OpenAlex</External>}
+            </p>
+          )}
+          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+            <SourceNote source="Metadata: OpenAlex" url={attribution.title?.url ?? undefined} />
           </p>
-        )}
-        <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-          <SourceNote
-            source="Metadata: OpenAlex"
-            url={attribution.title?.url ?? undefined}
-          />
-        </p>
-      </header>
+        </header>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="space-y-6">
-          {deals.length > 0 ? (
-            deals.map((deal) => (
-              <DealPanel
-                key={deal.id}
-                id={`deal-${deal.id}`}
-                deal={deal}
-                attribution={attribution.deals ?? {}}
-              />
-            ))
-          ) : (
-            <CollapsibleCard
-              id="deal"
-              title="Open access deal"
-              contentClassName="text-sm text-[var(--muted-foreground)]"
-            >
-                No current open access deal covering this journal for{" "}
-                {site.name} authors. Check{" "}
-                <External href="https://www.openaccess.nl">openaccess.nl</External>{" "}
-                and the{" "}
-                <External href="https://journalcheckertool.org">
-                  Journal Checker Tool
-                </External>{" "}
-                to double-check; for green open access routes (self-archiving),
-                see the library&apos;s open access guide linked in the footer.
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div className="space-y-6">
+            {deals.length > 0 ? (
+              deals.map((deal) => (
+                <DealPanel
+                  key={deal.id}
+                  id={`deal-${deal.id}`}
+                  deal={deal}
+                  attribution={attribution.deals ?? {}}
+                />
+              ))
+            ) : (
+              <CollapsibleCard
+                id="deal"
+                title="Open access deal"
+                contentClassName="text-sm text-[var(--muted-foreground)]"
+              >
+                No current open access deal covering this journal for {site.name} authors. Check{" "}
+                <External href="https://www.openaccess.nl">openaccess.nl</External> and the{" "}
+                <External href="https://journalcheckertool.org">Journal Checker Tool</External> to
+                double-check; for green open access routes (self-archiving), see the library&apos;s
+                open access guide linked in the footer.
                 <div className="mt-2">
                   <SourceNote
                     {...(attribution.deals ?? {})}
                     codes={attribution.deals?.caveat_codes}
                   />
                 </div>
-            </CollapsibleCard>
-          )}
+              </CollapsibleCard>
+            )}
 
-          {oaTopics.length > 0 ? (
-            <CollapsibleCard id="topics" title="Topics" contentClassName="space-y-4">
+            {oaTopics.length > 0 ? (
+              <CollapsibleCard id="topics" title="Topics" contentClassName="space-y-4">
                 <p className="text-xs text-[var(--muted-foreground)]">
-                  Topics assigned by OpenAlex; N = works in this journal
-                  classified under the topic.
+                  Topics assigned by OpenAlex; N = works in this journal classified under the topic.
                 </p>
                 <ul className="space-y-3.5">
                   {oaTopics.map((topic) => (
@@ -726,43 +687,39 @@ function JournalPageInner() {
                   {...(attribution.openalex ?? {})}
                   codes={attribution.openalex?.caveat_codes}
                 />
-            </CollapsibleCard>
-          ) : topics.length > 0 ? (
-            <CollapsibleCard
-              id="topics"
-              title="Topics"
-              contentClassName="flex flex-wrap gap-1.5"
-            >
+              </CollapsibleCard>
+            ) : topics.length > 0 ? (
+              <CollapsibleCard id="topics" title="Topics" contentClassName="flex flex-wrap gap-1.5">
                 {topics.map((topic) => (
                   <Badge key={topic} variant="muted" className="font-normal normal-case">
                     {topic}
                   </Badge>
                 ))}
-            </CollapsibleCard>
-          ) : null}
+              </CollapsibleCard>
+            ) : null}
 
-          <PublicationsCard
-            key={journal.issn_l}
-            issnL={journal.issn_l}
-            title={journal.title ?? journal.issn_l}
-            openalex={openalex}
-            worksNote={attribution.works ?? {}}
-          />
-          <CitationCard data={data} />
-        </div>
+            <PublicationsCard
+              key={journal.issn_l}
+              issnL={journal.issn_l}
+              title={journal.title ?? journal.issn_l}
+              openalex={openalex}
+              worksNote={attribution.works ?? {}}
+            />
+            <CitationCard data={data} />
+          </div>
 
-        <div className="space-y-6">
-          <CollapsibleCard
-            id="oa-per-year"
-            title={
-              <>
-                Open access per year{" "}
-                <span className="text-sm font-normal text-[var(--muted-foreground)]">
-                  ({site.short}, {site.windowStart}+)
-                </span>
-              </>
-            }
-          >
+          <div className="space-y-6">
+            <CollapsibleCard
+              id="oa-per-year"
+              title={
+                <>
+                  Open access per year{" "}
+                  <span className="text-sm font-normal text-[var(--muted-foreground)]">
+                    ({site.short}, {site.windowStart}+)
+                  </span>
+                </>
+              }
+            >
               {recent.length > 0 ? (
                 <OaTrend stats={recent} />
               ) : (
@@ -772,13 +729,11 @@ function JournalPageInner() {
               )}
               <p className="mt-3 text-sm">
                 {totals.pure_canon.toLocaleString("en")} {site.short} works total since{" "}
-                {site.windowStart} <span className="text-[var(--muted-foreground)]">(Pure)</span>{" "}
-                · OpenAlex institution filter:{" "}
+                {site.windowStart} <span className="text-[var(--muted-foreground)]">(Pure)</span> ·
+                OpenAlex institution filter:{" "}
                 <span className="whitespace-nowrap">
                   {totals.openalex_institution_filter.toLocaleString("en")}{" "}
-                  <span className="text-[var(--muted-foreground)]">
-                    (cross-check)
-                  </span>
+                  <span className="text-[var(--muted-foreground)]">(cross-check)</span>
                 </span>
                 .
               </p>
@@ -792,13 +747,9 @@ function JournalPageInner() {
                   codes={attribution.oa_status?.caveat_codes}
                 />
               </div>
-          </CollapsibleCard>
+            </CollapsibleCard>
 
-          <CollapsibleCard
-            id="metrics"
-            title="Metrics"
-            contentClassName="space-y-4 text-sm"
-          >
+            <CollapsibleCard id="metrics" title="Metrics" contentClassName="space-y-4 text-sm">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <Metric
                   label="2-year mean citedness"
@@ -932,25 +883,39 @@ function JournalPageInner() {
                   </div>
                 </div>
               )}
-          </CollapsibleCard>
+            </CollapsibleCard>
 
-          {hasApc && (
-            <CollapsibleCard
-              id="apc"
-              title="APC cost evidence"
-              contentClassName="text-sm"
-            >
+            {hasApc && (
+              <CollapsibleCard id="apc" title="APC cost evidence" contentClassName="text-sm">
                 {data.apc_aggregates.length > 0 && (
                   <table className="w-full text-xs">
                     <caption className="sr-only">
-                      OpenAPC cost evidence per publishing year: number of recorded APCs, mean, and observed range in euros
+                      OpenAPC cost evidence per publishing year: number of recorded APCs, mean, and
+                      observed range in euros
                     </caption>
                     <thead>
                       <tr className="text-left text-[var(--muted-foreground)]">
-                        <th className="py-1 pr-2 font-medium" title="Publishing year of the articles with recorded APCs">Year</th>
-                        <th className="py-1 pr-2 font-medium" title="Articles with an APC recorded in OpenAPC for this journal and year">APCs</th>
-                        <th className="py-1 pr-2 font-medium" title="Average APC paid, in euros">Mean €</th>
-                        <th className="py-1 font-medium" title="Lowest to highest APC recorded, in euros">Range €</th>
+                        <th
+                          className="py-1 pr-2 font-medium"
+                          title="Publishing year of the articles with recorded APCs"
+                        >
+                          Year
+                        </th>
+                        <th
+                          className="py-1 pr-2 font-medium"
+                          title="Articles with an APC recorded in OpenAPC for this journal and year"
+                        >
+                          APCs
+                        </th>
+                        <th className="py-1 pr-2 font-medium" title="Average APC paid, in euros">
+                          Mean €
+                        </th>
+                        <th
+                          className="py-1 font-medium"
+                          title="Lowest to highest APC recorded, in euros"
+                        >
+                          Range €
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -959,7 +924,9 @@ function JournalPageInner() {
                           <td className="py-1 pr-2 tabular-nums">{a.period}</td>
                           <td className="py-1 pr-2 tabular-nums">{a.article_count}</td>
                           <td className="py-1 pr-2 tabular-nums">
-                            {a.euro_mean !== null ? Math.round(a.euro_mean).toLocaleString("en") : "—"}
+                            {a.euro_mean !== null
+                              ? Math.round(a.euro_mean).toLocaleString("en")
+                              : "—"}
                           </td>
                           <td className="py-1 tabular-nums">
                             {a.euro_min !== null && a.euro_max !== null
@@ -974,8 +941,7 @@ function JournalPageInner() {
                 {data.apc_evidence.length > 0 && (
                   <p className="mt-3 text-xs text-[var(--muted-foreground)]">
                     {data.apc_evidence.length} {site.short} APC{" "}
-                    {data.apc_evidence.length === 1 ? "record" : "records"}{" "}
-                    (latest{" "}
+                    {data.apc_evidence.length === 1 ? "record" : "records"} (latest{" "}
                     {data.apc_evidence[0].period ?? "—"}:{" "}
                     {data.apc_evidence[0].euro !== null
                       ? `€${Math.round(data.apc_evidence[0].euro!)}`
@@ -989,96 +955,90 @@ function JournalPageInner() {
                     codes={attribution.apc_evidence?.caveat_codes}
                   />
                 </div>
-            </CollapsibleCard>
-          )}
-
-        </div>
-      </div>
-
-      {similar && !similarEmpty && (
-        <CollapsibleCard id="similar" title="Similar journals" className="mt-6">
-          <div className="space-y-5">
-            {(
-              [
-                {
-                  key: "institution",
-                  heading: `${site.short} publishes here`,
-                  note: `Nearest neighbors that carry at least one ${site.name} publication.`,
-                },
-                {
-                  key: "deals",
-                  heading: "Covered by a publication deal",
-                  note: `Nearest neighbors with a current open access deal for ${site.short} authors.`,
-                },
-                {
-                  key: "all",
-                  heading: "Most similar overall",
-                  note: `Nearest neighbors by research-profile similarity alone, regardless of deals or ${site.short} output.`,
-                },
-              ] as const
-            ).map(
-              (group) =>
-                similar[group.key].length > 0 && (
-                  <div key={group.key}>
-                    <h3 className="text-sm font-semibold">{group.heading}</h3>
-                    {group.note && (
-                      <p className="mb-1 text-xs text-[var(--muted-foreground)]">
-                        {group.note}
-                      </p>
-                    )}
-                    <ul className="divide-y divide-[var(--border)]">
-                      {similar[group.key].map((s) => (
-                        <li
-                          key={s.issn_l}
-                          className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-2 text-sm first:pt-0 last:pb-0"
-                        >
-                          <Link
-                            href={`/${inst}/journals/${s.issn_l}`}
-                            className="font-medium underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-                          >
-                            {s.title ?? s.issn_l}
-                          </Link>
-                          <span className="text-xs text-[var(--muted-foreground)]">
-                            {s.publisher_canonical ?? s.publisher_name ?? "Unknown publisher"}
-                          </span>
-                          <span className="ml-auto flex flex-wrap items-center gap-2">
-                            <DealBadge covered={s.deal_covered} />
-                            {s.works > 0 && (
-                              <span
-                                className="text-xs text-[var(--muted-foreground)]"
-                                title={`Known ${site.name} publications in this journal`}
-                              >
-                                {s.works.toLocaleString("en")} {site.short}{" "}
-                                {s.works === 1 ? "publication" : "publications"}
-                              </span>
-                            )}
-                            <QuartileBadge quartile={s.quartile ?? null} />
-                            <span
-                              className="text-xs text-[var(--muted-foreground)]"
-                              title="Embedding similarity between the journals' research profiles"
-                            >
-                              {s.similarity != null
-                                ? `${Math.round(s.similarity * 100)}% match`
-                                : `${s.shared_topics} shared ${
-                                    s.shared_topics === 1 ? "topic" : "topics"
-                                  }`}
-                              {s.similarity != null && (
-                                <span className="sr-only">
-                                  {" "}
-                                  (embedding similarity)
-                                </span>
-                              )}
-                            </span>
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ),
+              </CollapsibleCard>
             )}
           </div>
-        </CollapsibleCard>
-      )}
+        </div>
+
+        {similar && !similarEmpty && (
+          <CollapsibleCard id="similar" title="Similar journals" className="mt-6">
+            <div className="space-y-5">
+              {(
+                [
+                  {
+                    key: "institution",
+                    heading: `${site.short} publishes here`,
+                    note: `Nearest neighbors that carry at least one ${site.name} publication.`,
+                  },
+                  {
+                    key: "deals",
+                    heading: "Covered by a publication deal",
+                    note: `Nearest neighbors with a current open access deal for ${site.short} authors.`,
+                  },
+                  {
+                    key: "all",
+                    heading: "Most similar overall",
+                    note: `Nearest neighbors by research-profile similarity alone, regardless of deals or ${site.short} output.`,
+                  },
+                ] as const
+              ).map(
+                (group) =>
+                  similar[group.key].length > 0 && (
+                    <div key={group.key}>
+                      <h3 className="text-sm font-semibold">{group.heading}</h3>
+                      {group.note && (
+                        <p className="mb-1 text-xs text-[var(--muted-foreground)]">{group.note}</p>
+                      )}
+                      <ul className="divide-y divide-[var(--border)]">
+                        {similar[group.key].map((s) => (
+                          <li
+                            key={s.issn_l}
+                            className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-2 text-sm first:pt-0 last:pb-0"
+                          >
+                            <Link
+                              href={`/${inst}/journals/${s.issn_l}`}
+                              className="font-medium underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                            >
+                              {s.title ?? s.issn_l}
+                            </Link>
+                            <span className="text-xs text-[var(--muted-foreground)]">
+                              {s.publisher_canonical ?? s.publisher_name ?? "Unknown publisher"}
+                            </span>
+                            <span className="ml-auto flex flex-wrap items-center gap-2">
+                              <DealBadge covered={s.deal_covered} />
+                              {s.works > 0 && (
+                                <span
+                                  className="text-xs text-[var(--muted-foreground)]"
+                                  title={`Known ${site.name} publications in this journal`}
+                                >
+                                  {s.works.toLocaleString("en")} {site.short}{" "}
+                                  {s.works === 1 ? "publication" : "publications"}
+                                </span>
+                              )}
+                              <QuartileBadge quartile={s.quartile ?? null} />
+                              <span
+                                className="text-xs text-[var(--muted-foreground)]"
+                                title="Embedding similarity between the journals' research profiles"
+                              >
+                                {s.similarity != null
+                                  ? `${Math.round(s.similarity * 100)}% match`
+                                  : `${s.shared_topics} shared ${
+                                      s.shared_topics === 1 ? "topic" : "topics"
+                                    }`}
+                                {s.similarity != null && (
+                                  <span className="sr-only"> (embedding similarity)</span>
+                                )}
+                              </span>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ),
+              )}
+            </div>
+          </CollapsibleCard>
+        )}
       </div>
     </>
   );

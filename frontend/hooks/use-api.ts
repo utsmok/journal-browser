@@ -95,14 +95,7 @@ export function useFacets(
   // Facet counts ignore the free-text query (and scope): a zero-hit query
   // must still show which filter values exist to pivot to, Scopus-style.
   const inst = useInstitution();
-  const {
-    cursor: _c,
-    sort: _s,
-    limit: _l,
-    q: _q,
-    search_in: _si,
-    ...filters
-  } = params;
+  const { cursor: _c, sort: _s, limit: _l, q: _q, search_in: _si, ...filters } = params;
   return useQuery({
     queryKey: qk.facets(inst, filters),
     queryFn: () =>
@@ -150,8 +143,7 @@ export function useJournalWorks(issnL: string | undefined, page: number) {
   const inst = useInstitution();
   return useQuery({
     queryKey: qk.works(inst, issnL ?? "", page),
-    queryFn: () =>
-      apiGet<WorksPage>(`/${inst}/journals/${issnL}/works`, { page, page_size: 20 }),
+    queryFn: () => apiGet<WorksPage>(`/${inst}/journals/${issnL}/works`, { page, page_size: 20 }),
     enabled: Boolean(issnL),
     placeholderData: keepPreviousData,
     retry: false,
@@ -227,10 +219,7 @@ export function useOrgUnits(params: OrgUnitSearchParams) {
   });
 }
 
-export function useOrgUnit(
-  level: OrgUnitLevel | undefined,
-  name: string | undefined,
-) {
+export function useOrgUnit(level: OrgUnitLevel | undefined, name: string | undefined) {
   const inst = useInstitution();
   return useQuery({
     queryKey: qk.orgunit(inst, level ?? "faculty", name ?? ""),

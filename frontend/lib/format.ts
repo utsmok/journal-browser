@@ -7,18 +7,14 @@ export function formatEur(n: number): string {
 
 /** Round a displayed APC sensibly: nearest 10 euros at realistic prices. */
 export function formatApc(euro: number) {
-  const rounded =
-    Math.abs(euro) >= 100 ? Math.round(euro / 10) * 10 : Math.round(euro);
+  const rounded = Math.abs(euro) >= 100 ? Math.round(euro / 10) * 10 : Math.round(euro);
   return rounded.toLocaleString("en");
 }
 
 /** Symbol for OpenAlex list-price currencies; ISO-code fallback for the rest. */
 const APC_SYMBOLS: Record<string, string> = { EUR: "€", USD: "$", GBP: "£" };
 
-export function apcAmount(
-  currency: string | null | undefined,
-  price: number,
-): string {
+export function apcAmount(currency: string | null | undefined, price: number): string {
   return `${(currency && APC_SYMBOLS[currency]) || `${currency ?? ""} `}${formatApc(price)}`;
 }
 
@@ -38,8 +34,7 @@ export function apcStatsText(stats: JournalListItem["apc_stats"]): string {
 
 /** APC display for one journal: OpenAlex list price, else OpenAPC range. */
 export function journalApcText(j: JournalListItem): string | null {
-  if (j.apc_source === "openalex" && j.apc_price != null)
-    return `${formatEur(j.apc_price)} €`;
+  if (j.apc_source === "openalex" && j.apc_price != null) return `${formatEur(j.apc_price)} €`;
   if (j.apc_source === "openapc" && j.apc_low != null)
     return j.apc_high != null && j.apc_high !== j.apc_low
       ? `${formatEur(j.apc_low)}–${formatEur(j.apc_high)} €`

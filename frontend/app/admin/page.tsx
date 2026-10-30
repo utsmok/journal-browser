@@ -6,10 +6,7 @@ import { LoginForm } from "@/components/admin/login-form";
 import { CreateDealForm, DealEditor, DealsTable } from "@/components/admin/deal-editor";
 import { FeedbackSection } from "@/components/admin/feedback-table";
 import { RunsTable, StatusBadge } from "@/components/admin/runs-table";
-import {
-  GlobalSettingsForm,
-  InstitutionSettingsForm,
-} from "@/components/admin/settings-forms";
+import { GlobalSettingsForm, InstitutionSettingsForm } from "@/components/admin/settings-forms";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -53,8 +50,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    const instQ =
-      instFilter === "all" ? "" : `&institution=${encodeURIComponent(instFilter)}`;
+    const instQ = instFilter === "all" ? "" : `&institution=${encodeURIComponent(instFilter)}`;
     Promise.all([
       adminGet<AdminRun[]>(`/runs?limit=100${instQ}`, token),
       adminGet<FlaggedDeal[]>("/flagged", token),
@@ -184,9 +180,7 @@ export default function AdminPage() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">
-          Deals flagged for curation ({flagged.length})
-        </h2>
+        <h2 className="text-lg font-semibold">Deals flagged for curation ({flagged.length})</h2>
         <Table>
           <TableHeader>
             <TableRow>

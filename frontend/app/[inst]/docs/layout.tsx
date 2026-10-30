@@ -4,10 +4,6 @@ export const metadata: Metadata = {
   title: "Docs",
 };
 
-export default function DocsLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function DocsLayout({ children }: { children: React.ReactNode }) {
   return children;
 }

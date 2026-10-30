@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-  type ColumnDef,
-} from "@tanstack/react-table";
+import { flexRender, getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
 import { Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -65,8 +60,7 @@ function SearchView() {
   // sensible default order.
   const sort = (sp.get("sort") ?? (spQ ? "relevance" : "institution_works")) as SortKey;
   const dirParam = sp.get("dir");
-  const dir: "asc" | "desc" | null =
-    dirParam === "asc" || dirParam === "desc" ? dirParam : null;
+  const dir: "asc" | "desc" | null = dirParam === "asc" || dirParam === "desc" ? dirParam : null;
   const deal = sp.get("deal") ?? "";
   const oa = sp.get("oa");
   const doaj = sp.get("doaj");
@@ -169,15 +163,11 @@ function SearchView() {
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      if (
-        event.key === "Escape" &&
-        target?.id === SEARCH_INPUT_ID
-      ) {
+      if (event.key === "Escape" && target?.id === SEARCH_INPUT_ID) {
         target.blur();
         return;
       }
-      if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey)
-        return;
+      if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey) return;
       if (
         target &&
         (target.tagName === "INPUT" ||
@@ -211,8 +201,7 @@ function SearchView() {
     limit: 40,
     include_facets: false,
   };
-  const { data, isPending, isFetching, isError, error, refetch } =
-    useJournals(query, semantic);
+  const { data, isPending, isFetching, isError, error, refetch } = useJournals(query, semantic);
   const facetsQuery = useFacets(query, { enabled: !semantic });
 
   const facets = facetsQuery.data?.facets ?? {};
@@ -235,9 +224,7 @@ function SearchView() {
 
   // The oa_type group ORs values: toggle membership instead of clearing.
   const toggleOaType = (value: string) => {
-    const next = oaTypes.includes(value)
-      ? oaTypes.filter((v) => v !== value)
-      : [...oaTypes, value];
+    const next = oaTypes.includes(value) ? oaTypes.filter((v) => v !== value) : [...oaTypes, value];
     update({ oa_type: next.join(",") || undefined });
   };
   const handleFacetToggle = (key: string, value: string) =>
@@ -271,13 +258,7 @@ function SearchView() {
       {
         accessorKey: "title",
         meta: { columnId: "title" },
-        header: () => (
-          <SortHead
-            columnId="title"
-            label="Journal"
-            state={sortRef.current}
-          />
-        ),
+        header: () => <SortHead columnId="title" label="Journal" state={sortRef.current} />,
         cell: (info) => (
           <div className="max-w-md">
             <Link
@@ -292,13 +273,7 @@ function SearchView() {
       {
         id: "publisher",
         meta: { columnId: "publisher" },
-        header: () => (
-          <SortHead
-            columnId="publisher"
-            label="Publisher"
-            state={sortRef.current}
-          />
-        ),
+        header: () => <SortHead columnId="publisher" label="Publisher" state={sortRef.current} />,
         cell: (info) => {
           const row = info.row.original;
           const v = row.publisher_canonical ?? row.publisher_name;
@@ -340,9 +315,7 @@ function SearchView() {
             state={sortRef.current}
           />
         ),
-        cell: (info) => (
-          <span className="tabular-nums">{info.getValue<number>()}</span>
-        ),
+        cell: (info) => <span className="tabular-nums">{info.getValue<number>()}</span>,
       },
       {
         accessorKey: "quartile",
@@ -355,9 +328,7 @@ function SearchView() {
             state={sortRef.current}
           />
         ),
-        cell: (info) => (
-          <QuartileBadge quartile={info.getValue<string | null>()} />
-        ),
+        cell: (info) => <QuartileBadge quartile={info.getValue<string | null>()} />,
       },
       {
         accessorKey: "apc_low",
@@ -445,8 +416,7 @@ function SearchView() {
   };
 
   const pParam = parseInt(sp.get("p") ?? "", 10);
-  const page =
-    Number.isFinite(pParam) && pParam > 0 ? pParam : stack.length + 1;
+  const page = Number.isFinite(pParam) && pParam > 0 ? pParam : stack.length + 1;
   const pageStart = (page - 1) * (query.limit ?? 40) + 1;
   const hasFilters = Boolean(
     spQ ||
@@ -488,8 +458,7 @@ function SearchView() {
 
   // Detail pages offer a "Back to search" that restores this exact URL.
   React.useEffect(() => {
-    if (hasFilters)
-      sessionStorage.setItem("jb-last-search", `${pathname}?${sp.toString()}`);
+    if (hasFilters) sessionStorage.setItem("jb-last-search", `${pathname}?${sp.toString()}`);
   }, [hasFilters, pathname, sp]);
 
   return (
@@ -500,79 +469,78 @@ function SearchView() {
       <div className="flex flex-col min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[960px]:gap-6 min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
         {/* Hero and search: first in stacked flow, top of the results column from 960px. */}
         <section className="order-1 mb-8 min-[960px]:col-start-2 min-[960px]:row-start-1 min-[960px]:mb-6">
-        <h1 className="mb-3 text-3xl font-bold text-balance">
-          Find the best home for your next article
-        </h1>
-        <p className="mb-6 max-w-2xl text-[var(--muted-foreground)]">
-          Search journals to see whether they are covered by an open access
-          deal, what publishing there costs, and how the {site.name}{" "}
-          publishes in them.
-        </p>
-        <form
-          className="flex max-w-2xl flex-wrap gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            update({ q: input || undefined });
-          }}
-        >
-          <div className="relative w-full min-[560px]:w-auto min-[560px]:flex-1">
-            <Input
-              id={SEARCH_INPUT_ID}
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") event.currentTarget.blur();
-              }}
-              placeholder={
-                semanticMode
-                  ? "Describe your topic, or paste an abstract"
-                  : "Search by title, ISSN, publisher, or topic"
-              }
-              aria-label="Search journals"
-              className="pr-8"
-            />
-            {input === "" && (
-              <kbd
-                aria-hidden
-                className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-[var(--border)] bg-[var(--muted)] px-1.5 py-0.5 text-[11px] text-[var(--muted-foreground)] [@media(hover:hover)_and_(pointer:fine)]:block"
-              >
-                /
-              </kbd>
-            )}
-          </div>
-          {!semanticMode && (
-            <select
-              aria-label="Search scope"
-              title="Which field the query matches: everything, journal title, publisher, or topic"
-              value={searchIn}
-              onChange={(event) => update({ search_in: event.target.value })}
-              className="h-10 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
-            >
-              {SEARCH_IN_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          )}
-          <label
-            className="flex h-10 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2.5 text-sm select-none"
-            title="Rank journals by meaning instead of exact words; filters and sorting are off in this mode"
+          <h1 className="mb-3 text-3xl font-bold text-balance">
+            Find the best home for your next article
+          </h1>
+          <p className="mb-6 max-w-2xl text-[var(--muted-foreground)]">
+            Search journals to see whether they are covered by an open access deal, what publishing
+            there costs, and how the {site.name} publishes in them.
+          </p>
+          <form
+            className="flex max-w-2xl flex-wrap gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              update({ q: input || undefined });
+            }}
           >
-            <input
-              type="checkbox"
-              className="size-4 accent-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
-              checked={sp.get("mode") === "semantic"}
-              onChange={(event) =>
-                update({ mode: event.target.checked ? "semantic" : undefined })
-              }
-            />
-            Match by meaning
-          </label>
-          <Button type="submit" className="flex-1 min-[560px]:flex-none">
-            <Search aria-hidden className="size-4" /> Search
-          </Button>
-        </form>
+            <div className="relative w-full min-[560px]:w-auto min-[560px]:flex-1">
+              <Input
+                id={SEARCH_INPUT_ID}
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") event.currentTarget.blur();
+                }}
+                placeholder={
+                  semanticMode
+                    ? "Describe your topic, or paste an abstract"
+                    : "Search by title, ISSN, publisher, or topic"
+                }
+                aria-label="Search journals"
+                className="pr-8"
+              />
+              {input === "" && (
+                <kbd
+                  aria-hidden
+                  className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-[var(--border)] bg-[var(--muted)] px-1.5 py-0.5 text-[11px] text-[var(--muted-foreground)] [@media(hover:hover)_and_(pointer:fine)]:block"
+                >
+                  /
+                </kbd>
+              )}
+            </div>
+            {!semanticMode && (
+              <select
+                aria-label="Search scope"
+                title="Which field the query matches: everything, journal title, publisher, or topic"
+                value={searchIn}
+                onChange={(event) => update({ search_in: event.target.value })}
+                className="h-10 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
+              >
+                {SEARCH_IN_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            )}
+            <label
+              className="flex h-10 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2.5 text-sm select-none"
+              title="Rank journals by meaning instead of exact words; filters and sorting are off in this mode"
+            >
+              <input
+                type="checkbox"
+                className="size-4 accent-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
+                checked={sp.get("mode") === "semantic"}
+                onChange={(event) =>
+                  update({ mode: event.target.checked ? "semantic" : undefined })
+                }
+              />
+              Match by meaning
+            </label>
+            <Button type="submit" className="flex-1 min-[560px]:flex-none">
+              <Search aria-hidden className="size-4" /> Search
+            </Button>
+          </form>
         </section>
 
         {/* Stacked filter card: the only filter UI below 960px. */}
@@ -604,7 +572,9 @@ function SearchView() {
           <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
             {!semanticMode && (
               <>
-                <label htmlFor="sort" className="whitespace-nowrap">Sort by</label>
+                <label htmlFor="sort" className="whitespace-nowrap">
+                  Sort by
+                </label>
                 <select
                   id="sort"
                   title="Order of the results. Match by meaning always ranks by similarity instead"
@@ -614,9 +584,7 @@ function SearchView() {
                 >
                   {SORTS.map((s) => (
                     <option key={s.value} value={s.value}>
-                      {s.value === "institution_works"
-                        ? `${site.short} works`
-                        : s.label}
+                      {s.value === "institution_works" ? `${site.short} works` : s.label}
                     </option>
                   ))}
                 </select>
@@ -642,205 +610,191 @@ function SearchView() {
             )}
           </div>
 
-      <Card>
-        <CardContent className="pt-6">
-          <Pagination
-            data={data}
-            isFetching={isFetching}
-            stack={stack}
-            moveTo={moveTo}
-          />
+          <Card>
+            <CardContent className="pt-6">
+              <Pagination data={data} isFetching={isFetching} stack={stack} moveTo={moveTo} />
 
-          {isError ? (
-            <div className="py-10 text-center">
-              <p className="text-[var(--destructive)]">{errorMessage(error)}</p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-3"
-                onClick={() => refetch()}
-              >
-                Retry
-              </Button>
-              {(cursor || sp.get("p")) && (
-                // A stale or hand-edited cursor 400s forever; Retry re-sends
-                // it. This drops cursor/page and restarts at page 1.
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-3 ml-2"
-                  onClick={() => update({})}
-                >
-                  Back to page 1
-                </Button>
-              )}
-            </div>
-          ) : isPending ? (
-            <ListSkeletonRows rows={8} />
-          ) : rows.length === 0 ? (
-            <div className="py-10 text-center text-[var(--muted-foreground)]">
-              {spQ && !hasNonQueryFilters ? (
-                <>No journals match &ldquo;{spQ}&rdquo;.</>
+              {isError ? (
+                <div className="py-10 text-center">
+                  <p className="text-[var(--destructive)]">{errorMessage(error)}</p>
+                  <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
+                    Retry
+                  </Button>
+                  {(cursor || sp.get("p")) && (
+                    // A stale or hand-edited cursor 400s forever; Retry re-sends
+                    // it. This drops cursor/page and restarts at page 1.
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 ml-2"
+                      onClick={() => update({})}
+                    >
+                      Back to page 1
+                    </Button>
+                  )}
+                </div>
+              ) : isPending ? (
+                <ListSkeletonRows rows={8} />
+              ) : rows.length === 0 ? (
+                <div className="py-10 text-center text-[var(--muted-foreground)]">
+                  {spQ && !hasNonQueryFilters ? (
+                    <>No journals match &ldquo;{spQ}&rdquo;.</>
+                  ) : (
+                    <>
+                      No journals match
+                      {hasNonQueryFilters ? " these filters" : ""}.
+                    </>
+                  )}
+                  {/* Zero hits still leaves pivots: facets stay query-free (see
+                  useFacets) and meaning-based ranking skips the exact words. */}
+                  {spQ && !semanticMode && (
+                    <div className="mt-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => update({ mode: "semantic" })}
+                      >
+                        Try match by meaning
+                      </Button>
+                    </div>
+                  )}
+                  {hasNonQueryFilters && (
+                    <div className="mt-3">
+                      <Button variant="outline" size="sm" onClick={clearFilters}>
+                        Clear filters
+                      </Button>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <>
-                  No journals match
-                  {hasNonQueryFilters ? " these filters" : ""}.
-                </>
-              )}
-              {/* Zero hits still leaves pivots: facets stay query-free (see
-                  useFacets) and meaning-based ranking skips the exact words. */}
-              {spQ && !semanticMode && (
-                <div className="mt-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => update({ mode: "semantic" })}
-                  >
-                    Try match by meaning
-                  </Button>
-                </div>
-              )}
-              {hasNonQueryFilters && (
-                <div className="mt-3">
-                  <Button variant="outline" size="sm" onClick={clearFilters}>
-                    Clear filters
-                  </Button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <>
-              {/* Stacked cards on narrow viewports: the six-column table would
+                  {/* Stacked cards on narrow viewports: the six-column table would
                   push the decision columns off-screen behind horizontal
                   scrolling. */}
-              <ul
-                className={
-                  isFetching ? "opacity-60 md:hidden" : "md:hidden"
-                }
-                aria-label="Journal results"
-              >
-                {rows.map((row) => {
-                  const pub = row.publisher_canonical ?? row.publisher_name;
-                  return (
-                  <li
-                    key={row.issn_l}
-                    className="relative border-b border-[var(--border)] py-3 first:pt-0 last:border-0 last:pb-0"
+                  <ul
+                    className={isFetching ? "opacity-60 md:hidden" : "md:hidden"}
+                    aria-label="Journal results"
                   >
-                    <Link
-                      href={`/${inst}/journals/${row.issn_l}`}
-                      className="font-medium text-[var(--foreground)] underline-offset-2 after:absolute after:inset-0 after:content-[''] hover:text-[var(--primary-text)] hover:underline"
-                    >
-                      {row.title ?? row.issn_l}
-                    </Link>
-                    <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-                      {pub ? (
-                        <Link
-                          href={`/${inst}/publisher/${encodeNamePath(pub)}`}
-                          className="relative z-10 underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-                        >
-                          {pub}
-                        </Link>
-                      ) : (
-                        "Unknown publisher"
-                      )}
-                      {row.primary_topic && ` · ${row.primary_topic}`}
-                    </div>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                      <DealBadge covered={row.deal_covered} />
-                      <OaTypeBadge oaType={row.oa_type} isOa={row.is_oa} />
-                      <QuartileBadge quartile={row.quartile ?? null} />
-                    </div>
-                    <div className="mt-1 text-xs tabular-nums text-[var(--muted-foreground)]">
-                      {row.works.toLocaleString("en")} {site.short} works
-                      {row.apc_source === "openalex" && row.apc_price != null &&
-                        ` · APC ${apcAmount(row.apc_currency, row.apc_price)}`}
-                      {row.apc_source === "openapc" && row.apc_low != null &&
-                        ` · APC €${row.apc_low !== row.apc_high
-                          ? `${formatApc(row.apc_low)} to ${formatApc(row.apc_high ?? row.apc_low)}`
-                          : formatApc(row.apc_low)}`}
-                    </div>
-                  </li>
-                  );
-                })}
-              </ul>
-              <div className={isFetching ? "hidden opacity-60 md:block" : "hidden md:block"}>
-                <Table>
-                  <caption className="sr-only">Journal search results</caption>
-                  <TableHeader>
-                    {table.getHeaderGroups().map((group) => (
-                      <TableRow key={group.id}>
-                        {group.headers.map((header) => (
-                          <TableHead
-                            key={header.id}
-                            aria-sort={ariaSortFor(header.column.columnDef.meta)}
-                          >
-                            {flexRender(
-                              header.column.columnDef.header,
-                              header.getContext(),
-                            )}
-                          </TableHead>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableHeader>
-                  <TableBody>
-                    {table.getRowModel().rows.map((row) => {
-                      // Whole-row click target; ctrl/cmd-click opens a tab.
-                      const href = `/${inst}/journals/${row.original.issn_l}`;
+                    {rows.map((row) => {
+                      const pub = row.publisher_canonical ?? row.publisher_name;
                       return (
-                        <TableRow
-                          key={row.id}
-                          className={[
-                            "cursor-pointer",
-                            row.original.deal_covered
-                              ? "bg-emerald-50/80 hover:bg-emerald-100 dark:bg-emerald-400/[0.08] dark:hover:bg-emerald-400/[0.12]"
-                              : "",
-                          ].join(" ")}
-                          onClick={(event) => {
-                            if (event.metaKey || event.ctrlKey)
-                              window.open(href, "_blank", "noopener");
-                            else router.push(href);
-                          }}
+                        <li
+                          key={row.issn_l}
+                          className="relative border-b border-[var(--border)] py-3 first:pt-0 last:border-0 last:pb-0"
                         >
-                          {row.getVisibleCells().map((cell) => (
-                            <TableCell key={cell.id}>
-                              {flexRender(
-                                cell.column.columnDef.cell,
-                                cell.getContext(),
-                              )}
-                            </TableCell>
-                          ))}
-                        </TableRow>
+                          <Link
+                            href={`/${inst}/journals/${row.issn_l}`}
+                            className="font-medium text-[var(--foreground)] underline-offset-2 after:absolute after:inset-0 after:content-[''] hover:text-[var(--primary-text)] hover:underline"
+                          >
+                            {row.title ?? row.issn_l}
+                          </Link>
+                          <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                            {pub ? (
+                              <Link
+                                href={`/${inst}/publisher/${encodeNamePath(pub)}`}
+                                className="relative z-10 underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                              >
+                                {pub}
+                              </Link>
+                            ) : (
+                              "Unknown publisher"
+                            )}
+                            {row.primary_topic && ` · ${row.primary_topic}`}
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                            <DealBadge covered={row.deal_covered} />
+                            <OaTypeBadge oaType={row.oa_type} isOa={row.is_oa} />
+                            <QuartileBadge quartile={row.quartile ?? null} />
+                          </div>
+                          <div className="mt-1 text-xs tabular-nums text-[var(--muted-foreground)]">
+                            {row.works.toLocaleString("en")} {site.short} works
+                            {row.apc_source === "openalex" &&
+                              row.apc_price != null &&
+                              ` · APC ${apcAmount(row.apc_currency, row.apc_price)}`}
+                            {row.apc_source === "openapc" &&
+                              row.apc_low != null &&
+                              ` · APC €${
+                                row.apc_low !== row.apc_high
+                                  ? `${formatApc(row.apc_low)} to ${formatApc(row.apc_high ?? row.apc_low)}`
+                                  : formatApc(row.apc_low)
+                              }`}
+                          </div>
+                        </li>
                       );
                     })}
-                  </TableBody>
-                </Table>
-              </div>
-            </>
-          )}
+                  </ul>
+                  <div className={isFetching ? "hidden opacity-60 md:block" : "hidden md:block"}>
+                    <Table>
+                      <caption className="sr-only">Journal search results</caption>
+                      <TableHeader>
+                        {table.getHeaderGroups().map((group) => (
+                          <TableRow key={group.id}>
+                            {group.headers.map((header) => (
+                              <TableHead
+                                key={header.id}
+                                aria-sort={ariaSortFor(header.column.columnDef.meta)}
+                              >
+                                {flexRender(header.column.columnDef.header, header.getContext())}
+                              </TableHead>
+                            ))}
+                          </TableRow>
+                        ))}
+                      </TableHeader>
+                      <TableBody>
+                        {table.getRowModel().rows.map((row) => {
+                          // Whole-row click target; ctrl/cmd-click opens a tab.
+                          const href = `/${inst}/journals/${row.original.issn_l}`;
+                          return (
+                            <TableRow
+                              key={row.id}
+                              className={[
+                                "cursor-pointer",
+                                row.original.deal_covered
+                                  ? "bg-emerald-50/80 hover:bg-emerald-100 dark:bg-emerald-400/[0.08] dark:hover:bg-emerald-400/[0.12]"
+                                  : "",
+                              ].join(" ")}
+                              onClick={(event) => {
+                                if (event.metaKey || event.ctrlKey)
+                                  window.open(href, "_blank", "noopener");
+                                else router.push(href);
+                              }}
+                            >
+                              {row.getVisibleCells().map((cell) => (
+                                <TableCell key={cell.id}>
+                                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
+              )}
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--muted-foreground)]">
-            {/* Only render a range while real rows exist; "0–-1 of 0" is noise. */}
-            <span>
-              {data && rows.length > 0
-                ? `Showing ${pageStart}–${pageStart + rows.length - 1} of ${data.total.toLocaleString("en")}`
-                : ""}
-            </span>
-            <SourceNote
-              source="OpenAlex · DOAJ · Scimago · JCT · openaccess.nl"
-              url="https://doaj.org"
-              codes={[
-                "window-2020",
-                "openalex-coverage",
-                "institution-affiliation",
-                "doaj-canon",
-                "jct-coverage",
-                "issn-mapping",
-              ]}
-            />
-          </div>
-        </CardContent>
-      </Card>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--muted-foreground)]">
+                {/* Only render a range while real rows exist; "0–-1 of 0" is noise. */}
+                <span>
+                  {data && rows.length > 0
+                    ? `Showing ${pageStart}–${pageStart + rows.length - 1} of ${data.total.toLocaleString("en")}`
+                    : ""}
+                </span>
+                <SourceNote
+                  source="OpenAlex · DOAJ · Scimago · JCT · openaccess.nl"
+                  url="https://doaj.org"
+                  codes={[
+                    "window-2020",
+                    "openalex-coverage",
+                    "institution-affiliation",
+                    "doaj-canon",
+                    "jct-coverage",
+                    "issn-mapping",
+                  ]}
+                />
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
