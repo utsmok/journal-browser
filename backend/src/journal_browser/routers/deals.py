@@ -9,7 +9,7 @@ when its relation sets journal_override.
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import case, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
@@ -17,6 +17,7 @@ from ..models import Deal, DealInstitution, DealJournal, Publisher
 from ..routers.institutions import InstitutionDep
 from ..routers.journals import DEAL_FIELDS
 from ..schemas import DealOut
+from ..services.deal_coverage import deal_institution_join, dj_scope
 
 router = APIRouter(prefix="/deals", tags=["deals"])
 
@@ -25,24 +26,17 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 def _covered_join(institution_id: int):
     """JOIN clauses: participation row + effective (override-aware) list."""
-    dj_scope = DealJournal.institution_id.is_not_distinct_from(
-        case((DealInstitution.journal_override.is_(True), institution_id), else_=None)
-    )
 
     def covered(q):
         return (
-            q.join(
-                DealInstitution,
-                (DealInstitution.deal_id == Deal.id)
-                & (DealInstitution.institution_id == institution_id),
-            )
+            q.join(DealInstitution, deal_institution_join(institution_id))
             # LEFT JOIN: a participating deal shows even when its
             # effective journal list is empty (count 0). Admin-excluded
             # journals stay out of counts and membership everywhere.
             .outerjoin(
                 DealJournal,
                 (DealJournal.deal_id == Deal.id)
-                & dj_scope
+                & dj_scope(institution_id)
                 & DealJournal.excluded.is_not(True),
             )
         )

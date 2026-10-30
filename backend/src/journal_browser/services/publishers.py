@@ -39,6 +39,7 @@ from ..models import (
     JournalFlags,
     Publisher,
 )
+from .deal_coverage import deal_institution_join, dj_scope
 from .search import APC_SHOWN, OA_TYPES, _oa_type, _order, attach_apc_display, base_query
 
 DEFAULT_LIMIT = 20
@@ -536,9 +537,6 @@ async def publisher_detail(
         await attach_apc_display(session, journals)
 
     # Same participation/override semantics as the journal detail deals.
-    dj_scope = DealJournal.institution_id.is_not_distinct_from(
-        case((DealInstitution.journal_override.is_(True), iid), else_=None)
-    )
     # Latest-known deal attribution: a deal belongs to the canonical
     # publisher dominating its coverage list. Flipped/stale journal
     # attributions otherwise surface foreign deals on this page (Wolters
@@ -588,14 +586,11 @@ async def publisher_detail(
             )
             .select_from(DealJournal)
             .join(Deal, Deal.id == DealJournal.deal_id)
-            .join(
-                DealInstitution,
-                (DealInstitution.deal_id == Deal.id) & (DealInstitution.institution_id == iid),
-            )
+            .join(DealInstitution, deal_institution_join(iid))
             .join(Journal, Journal.issn_l == DealJournal.issn_l)
             .outerjoin(Publisher, Publisher.id == Deal.publisher_id)
             .outerjoin(top_attr, top_attr.c.deal_id == Deal.id)
-            .where(Deal.status == "current", dj_scope)
+            .where(Deal.status == "current", dj_scope(iid))
         )
     ).all()
     issn_set = set(issns)

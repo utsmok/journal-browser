@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BeforeValidator
-from sqlalchemy import case, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
@@ -41,6 +41,7 @@ from ..schemas import (
 from ..services import detail_enrichment
 from ..services import search as search_service
 from ..services import ut_metadata as ut_metadata_service
+from ..services.deal_coverage import deal_institution_join, dj_scope
 from ..vocab import OaType
 
 router = APIRouter(prefix="/journals", tags=["journals"])
@@ -270,24 +271,17 @@ async def journal_detail(
 
     # Effective coverage: a shared deal_journals row applies unless the
     # institution's relation opts into a scoped override list.
-    dj_scope = DealJournal.institution_id.is_not_distinct_from(
-        case((DealInstitution.journal_override.is_(True), institution.id), else_=None)
-    )
     deal_rows = (
         await session.execute(
             select(Deal, Publisher.name)
             .select_from(Deal)
             # Relation first: the DealJournal ON clause reads
             # journal_override from it.
-            .join(
-                DealInstitution,
-                (DealInstitution.deal_id == Deal.id)
-                & (DealInstitution.institution_id == institution.id),
-            )
+            .join(DealInstitution, deal_institution_join(institution.id))
             .join(
                 DealJournal,
                 (DealJournal.deal_id == Deal.id)
-                & dj_scope
+                & dj_scope(institution.id)
                 & DealJournal.excluded.is_not(True)
                 & (DealJournal.issn_l == journal.issn_l),
             )
