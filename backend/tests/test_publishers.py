@@ -9,7 +9,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from conftest import requires_db
+from conftest import journal_factory, requires_db
 from journal_browser.db import get_session
 from journal_browser.main import app
 from journal_browser.models import (
@@ -25,21 +25,6 @@ from journal_browser.models import (
     Publisher,
     SourceRecord,
 )
-
-
-def _journal(issn_l: str, **kw) -> Journal:
-    base = dict(
-        issn_l=issn_l,
-        title=f"Journal {issn_l}",
-        type="journal",
-        is_oa=False,
-        is_in_doaj=False,
-        in_scimago=False,
-        works_2020_plus=10,
-        search_text=f"Journal {issn_l}",
-    )
-    base.update(kw)
-    return Journal(**base)
 
 
 @pytest.fixture
@@ -61,7 +46,7 @@ async def publishers_api(db, institution_factory):
     session = db
     session.add_all(
         [
-            _journal(
+            journal_factory(
                 "1234-5678",
                 publisher_name="Elsevier BV",
                 latest_quartile="Q1",
@@ -75,22 +60,23 @@ async def publishers_api(db, institution_factory):
                     {"display_name": "Nanotech", "count": 10, "subfield": "Materials Science"},
                 ],
             ),  # J1: covered hybrid
-            _journal(
-                "2222-2221", publisher_name="Elsevier BV", is_in_doaj=True, doaj_in_doaj=True, doaj_has_apc=False, latest_quartile="Q2"
+            journal_factory(
+                "2222-2221", publisher_name="Elsevier BV", is_in_doaj=True,
+                doaj_in_doaj=True, doaj_has_apc=False, latest_quartile="Q2",
             ),
-            _journal(
+            journal_factory(
                 "3333-3331",
                 publisher_name="Springer",
                 latest_quartile="Q1",
                 apc_prices=[{"currency": "EUR", "price": 1500}],
                 latest_apc_euro=1500,
             ),
-            _journal("4444-4441", publisher_name=None),  # NULL publisher: excluded
-            _journal("5555-5551", publisher_name="Springer"),  # below cutoff (flags)
-            _journal("6666-6661", publisher_name="Small Press"),  # browse-excluded
-            _journal("7777-7771", publisher_name="Springer"),
-            _journal("8888-8881", publisher_name="Wiley", latest_quartile="Q3"),
-            _journal("9999-9991", publisher_name="Alpha/Beta Press"),
+            journal_factory("4444-4441", publisher_name=None),  # NULL publisher: excluded
+            journal_factory("5555-5551", publisher_name="Springer"),  # below cutoff (flags)
+            journal_factory("6666-6661", publisher_name="Small Press"),  # browse-excluded
+            journal_factory("7777-7771", publisher_name="Springer"),
+            journal_factory("8888-8881", publisher_name="Wiley", latest_quartile="Q3"),
+            journal_factory("9999-9991", publisher_name="Alpha/Beta Press"),
         ]
     )
     await session.flush()
@@ -379,7 +365,7 @@ async def canonical_api(publishers_api, db):
     client, ids = publishers_api
     session = db
     session.add(
-        _journal(
+        journal_factory(
             "1010-1010",
             publisher_name="Nature Research",
             publisher_canonical="Springer Nature",
@@ -395,7 +381,7 @@ async def canonical_api(publishers_api, db):
     # Zero-count topics (rows stored before `count` was persisted): all
     # works pile onto the first entry's label.
     session.add(
-        _journal(
+        journal_factory(
             "1212-1212",
             publisher_name="Legacy Press",
             topics=[{"display_name": "Zoology"}],
@@ -434,7 +420,9 @@ async def test_publisher_canonical_merges_subbrands(canonical_api):
     assert merged["n_journals"] == 3
     assert merged["n_works"] == 13  # 10 + 2 + 1
     assert merged["deal_journals"] == 1
-    assert merged["oa_types"] == {"gold": 0, "diamond": 0, "generic": 0, "hybrid": 1, "subscription": 2}
+    assert merged["oa_types"] == {
+        "gold": 0, "diamond": 0, "generic": 0, "hybrid": 1, "subscription": 2,
+    }
     assert merged["quartiles"] == {"q1": 1, "q2": 0, "q3": 0, "q4": 0, "none": 2}
     assert merged["apc"] == {"n_journals": 1, "eur_min": 1500.0, "eur_max": 1500.0}
     # J10's single work lands whole on its topic label.
@@ -583,9 +571,9 @@ async def test_harvest_backfill_canonical(db):
     )
     session.add_all(
         [
-            _journal("1111-1111", openalex_id="S1", publisher_name="Comms Society"),
-            _journal("2222-2222", openalex_id="S2", publisher_name="Inst Journal"),
-            _journal("3333-3339", openalex_id="S3", publisher_name="No Host Journal"),
+            journal_factory("1111-1111", openalex_id="S1", publisher_name="Comms Society"),
+            journal_factory("2222-2222", openalex_id="S2", publisher_name="Inst Journal"),
+            journal_factory("3333-3339", openalex_id="S3", publisher_name="No Host Journal"),
         ]
     )
     session.add(
