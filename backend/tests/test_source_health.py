@@ -1,12 +1,9 @@
 """Degraded-source registry: round-trip, freshness surfacing, currency swallow."""
 
 import pytest
-from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from conftest import requires_db
-from journal_browser.db import get_session
-from journal_browser.main import app
 from journal_browser.models import Institution
 from journal_browser.services import source_health
 from journal_browser.services.search import _year_rate
@@ -30,22 +27,13 @@ def test_registry_round_trip():
 
 @requires_db
 @pytest.fixture
-async def health_api(db_engine):
+async def health_api(client, db_engine):
     maker = async_sessionmaker(db_engine, expire_on_commit=False)
 
-    async def _override():
-        async with maker() as session:
-            yield session
-
-    app.dependency_overrides[get_session] = _override
     async with maker() as session:
         session.add(Institution(name="University of Twente", code="ut", active=True))
         await session.commit()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        yield client
-    app.dependency_overrides.pop(get_session, None)
+    return client
 
 
 @requires_db
