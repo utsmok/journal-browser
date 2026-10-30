@@ -241,7 +241,7 @@ async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
                 deal.needs_curation = False
                 deal.needs_curation_reason = None
             continue
-        pname = (publisher_names.get(deal.publisher_id or 0) or "").strip()
+        pname = (publisher_names.get(deal.publisher_id) or "").strip()
         # openaccess.nl names carry parenthetical sigla ("... (ACS)") that
         # OpenAlex publisher names lack; match on the bare name.
         base = re.sub(r"\s*\([^)]*\)\s*$", "", pname).strip()
@@ -345,14 +345,14 @@ async def reconcile_deals(session: AsyncSession) -> dict[str, int]:
             await session.delete(jct)
             matched += 1
             continue
-        name = _canonical_name(_code_of(jct.esac_id), publisher_names.get(jct.publisher_id or 0))
+        name = _canonical_name(_code_of(jct.esac_id), publisher_names.get(jct.publisher_id))
         target = None
         for deal in oanl_deals:
             if target or deal.id in consumed or deal.esac_id:
                 # esac set means this canonical already absorbed another
                 # agreement; a second match would collide on journal rows.
                 continue
-            deal_name = publisher_names.get(deal.publisher_id or 0, "")
+            deal_name = publisher_names.get(deal.publisher_id, "")
             if not deal_name or not name:
                 continue
             if deal_name.casefold().strip() == name.casefold().strip() and durations_overlap(
@@ -630,7 +630,7 @@ async def render_curation_report(
 
     def deal_row(d: Deal) -> str:
         return (
-            f"<li>#{d.id} <strong>{_esc(publisher_names.get(d.publisher_id or 0, '?'))}</strong> "
+            f"<li>#{d.id} <strong>{_esc(publisher_names.get(d.publisher_id, '?'))}</strong> "
             f"[{_esc(d.status)}] {_esc(d.duration_text)} — "
             f"{_esc(d.needs_curation_reason or '')} "
             f"<a href='{_esc(d.openaccess_nl_url)}'>openaccess.nl</a> "
@@ -671,7 +671,7 @@ async def render_curation_report(
             f"<h2>{_esc(get_settings().institution_name)}-relevant JCT agreements "
             "with no openaccess.nl deal (publisher/duration unmatched)</h2><ul>"
             + "".join(
-                f"<li>#{d.id} {_esc(publisher_names.get(d.publisher_id or 0, '?'))} "
+                f"<li>#{d.id} {_esc(publisher_names.get(d.publisher_id, '?'))} "
                 f"{_esc(d.esac_id)} [{_esc(d.status)}] {_esc(d.duration_text)}</li>"
                 for d in relevant
             )
