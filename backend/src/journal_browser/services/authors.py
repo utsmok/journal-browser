@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import get_settings
 from ..harvest.authors import topic_mass
 from ..models import Author, AuthorWork, Institution, Journal, JournalFlags, Work
+from .facets import author_facets
 from .search import _like, _oa_type, base_query
 from .works_query import (
     YEAR_BUCKETS,
@@ -80,50 +81,6 @@ def _filter_conds(
     if has_orcid:
         conds["has_orcid"] = _has_orcid_cond(has_orcid)
     return conds
-
-
-def _works_expr() -> Any:
-    return case(
-        (Author.n_works >= 50, "50+"),
-        (Author.n_works >= 20, "20-49"),
-        (Author.n_works >= 5, "5-19"),
-        (Author.n_works >= 1, "1-4"),
-    )
-
-
-def _last_pub_expr() -> Any:
-    return case(
-        (Author.last_pub_year.is_(None), "none"),
-        (Author.last_pub_year >= 2025, "2025-2026"),
-        (Author.last_pub_year >= 2022, "2022-2024"),
-        (Author.last_pub_year >= 2020, "2020-2021"),
-    )
-
-
-async def _facets(session: AsyncSession, base: list[Any], conds: dict[str, Any]) -> dict[str, Any]:
-    """Per-dimension {value, count} lists under every filter except the
-    facet's own (has_orcid is a plain boolean, no facet list). ~3.6k authors,
-    so query-time counts; no cache."""
-    exprs: dict[str, Any] = {
-        "faculty": Author.faculty,
-        "org": Author.research_group,
-        "works": _works_expr(),
-        "last_pub": _last_pub_expr(),
-        "topic": Author.primary_topic,
-    }
-    out: dict[str, Any] = {}
-    for name, expr in exprs.items():
-        others = [cond for key, cond in conds.items() if key != name]
-        rows = (
-            await session.execute(
-                select(expr, func.count().label("n"))
-                .where(*base, *others, expr.is_not(None))
-                .group_by(expr)
-                .order_by(func.count().desc(), expr)
-            )
-        ).all()
-        out[name] = [{"value": value, "count": n} for value, n in rows if value is not None]
-    return out
 
 
 #: Author search sort keys (works_desc default).
@@ -196,7 +153,7 @@ async def search_authors(
         await session.execute(query.order_by(*order).offset(offset).limit(min(limit, MAX_LIMIT)))
     ).scalars().all()
     facet_base = list(base) + ([q_cond] if q_cond is not None else [])
-    facets = await _facets(session, facet_base, conds)
+    facets = await author_facets(session, facet_base, conds)
     return {
         "enabled": True,
         "total": total,

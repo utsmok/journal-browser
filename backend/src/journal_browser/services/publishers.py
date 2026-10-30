@@ -13,11 +13,10 @@ single SQL statement aggregates the browsable join per publisher (counts,
 quartiles, APC range) and explodes the topics jsonb into works-weighted
 topic mass (harvest.authors.topic_mass semantics) plus the topic label
 set. Filters, sorting, pagination and the drop-own-dimension facets then
-run in Python over the snapshot; the ~5-min TTL mirrors
-services/search.py's _FACET_CACHE.
+run in Python over the snapshot (facets module); the ~5-min TTL matches
+the facet cache in services/cache.py.
 """
 
-import time
 import warnings
 from dataclasses import dataclass
 from typing import Any
@@ -39,7 +38,9 @@ from ..models import (
     JournalFlags,
     Publisher,
 )
+from .cache import SNAPSHOT_CACHE, cache_get, cache_put
 from .deal_coverage import deal_institution_join, dj_scope
+from .facets import passes, publisher_facets, publisher_predicates, publisher_topic_facet
 from .search import APC_SHOWN, OA_TYPES, _oa_type, _order, attach_apc_display, base_query
 
 DEFAULT_LIMIT = 20
@@ -55,9 +56,6 @@ SNAPSHOT_WORK_MEM = "128MB"  # cold-build-only, see _snapshot
 QUARTILES = ("Q1", "Q2", "Q3", "Q4")
 SIZE_BUCKETS = ("1", "2-4", "5-9", "10+")
 SORT_KEYS = ("relevance", "name", "journals", "works", "deals", "apc")
-
-# institution_id + ignored-issns hash -> (monotonic time, publisher rows)
-_SNAPSHOT_CACHE: dict[tuple, tuple[float, dict[str, "_Pub"]]] = {}
 
 
 def grouping_key() -> Any:
@@ -264,9 +262,9 @@ async def _snapshot(session: AsyncSession, institution_id: int) -> dict[str, _Pu
         hash(tuple(sorted(get_settings().ignored_issns))),
         await cache_epoch(session),
     )
-    hit = _SNAPSHOT_CACHE.get(cache_key)
-    if hit and time.monotonic() - hit[0] < SNAPSHOT_TTL:
-        return hit[1]
+    hit = cache_get(SNAPSHOT_CACHE, cache_key, SNAPSHOT_TTL)
+    if hit is not None:
+        return hit
     snap: dict[str, _Pub] = {}
     # The entries CTE's set-returning join is implicitly lateral in
     # Postgres; SQLAlchemy mistakes it for a cartesian product.
@@ -300,53 +298,8 @@ async def _snapshot(session: AsyncSession, institution_id: int) -> dict[str, _Pu
             labels_lower=frozenset(lab.lower() for lab in labels),
             members_lower=frozenset(m.lower() for m in (r.members or ())),
         )
-    _SNAPSHOT_CACHE[cache_key] = (time.monotonic(), snap)
+    cache_put(SNAPSHOT_CACHE, cache_key, snap)
     return snap
-
-
-def _predicates(
-    *,
-    oa_types: list[str] | None,
-    deal: str,
-    quartiles: list[str] | None,
-    topic: list[str] | None,
-    sizes: list[str] | None,
-    has_apc: bool | None,
-    has_works: bool | None,
-) -> dict[str, Any]:
-    """One predicate per active publisher-level dimension, keyed so a
-    facet's counts can drop its own while keeping all others."""
-    preds: dict[str, Any] = {}
-    if oa_types:
-        preds["oa_type"] = lambda p: any(p.oa_counts[t] > 0 for t in oa_types)
-    if deal == "covered":
-        preds["deal"] = lambda p: p.deal_journals > 0
-    elif deal == "none":
-        preds["deal"] = lambda p: p.deal_journals == 0
-    if quartiles:
-        preds["quartile"] = lambda p: any(p.quartile_counts[q.lower()] > 0 for q in quartiles)
-    if topic:
-        wanted = {t.lower() for t in topic}
-        preds["topic"] = lambda p: any(lab in wanted for lab in p.labels_lower)
-    if sizes:
-        buckets = {
-            "1": lambda p: p.n_journals == 1,
-            "2-4": lambda p: 2 <= p.n_journals <= 4,
-            "5-9": lambda p: 5 <= p.n_journals <= 9,
-            "10+": lambda p: p.n_journals >= 10,
-        }
-        preds["size"] = lambda p: any(buckets[s](p) for s in sizes)
-    if has_apc is not None:
-        preds["has_apc"] = (
-            (lambda p: p.apc_journals > 0) if has_apc else (lambda p: p.apc_journals == 0)
-        )
-    if has_works is not None:
-        preds["has_works"] = (lambda p: p.n_works > 0) if has_works else (lambda p: p.n_works == 0)
-    return preds
-
-
-def _passes(p: _Pub, preds: dict[str, Any], skip: str | None = None) -> bool:
-    return all(fn(p) for key, fn in preds.items() if key != skip)
 
 
 def _order_pubs(pubs: list[_Pub], sort: str, q: str | None, dir: str | None) -> list[_Pub]:
@@ -400,48 +353,6 @@ def _item(p: _Pub, topics: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _facets(pubs: list[_Pub], preds: dict[str, Any]) -> dict[str, dict[str, int]]:
-    """Drop-own-dimension publisher counts per facet (topic separate)."""
-
-    def _count(skip: str | None, *flags: Any) -> list[int]:
-        rows = [p for p in pubs if _passes(p, preds, skip)]
-        return [sum(1 for p in rows if flag(p)) for flag in flags]
-
-    out: dict[str, dict[str, int]] = {}
-    counts = _count("oa_type", *[lambda p, t=t: p.oa_counts[t] > 0 for t in OA_TYPES])
-    out["oa_type"] = dict(zip(OA_TYPES, counts, strict=True))
-    covered, none = _count("deal", lambda p: p.deal_journals > 0, lambda p: p.deal_journals == 0)
-    out["deal"] = {"covered": covered, "none": none}
-    counts = _count(
-        "quartile", *[lambda p, q=q: p.quartile_counts[q.lower()] > 0 for q in QUARTILES]
-    )
-    out["quartile"] = dict(zip(QUARTILES, counts, strict=True))
-    yes, no = _count("has_apc", lambda p: p.apc_journals > 0, lambda p: p.apc_journals == 0)
-    out["has_apc"] = {"yes": yes, "no": no}
-    counts = _count(
-        "size",
-        lambda p: p.n_journals == 1,
-        lambda p: 2 <= p.n_journals <= 4,
-        lambda p: 5 <= p.n_journals <= 9,
-        lambda p: p.n_journals >= 10,
-    )
-    out["size"] = dict(zip(SIZE_BUCKETS, counts, strict=True))
-    return out
-
-
-def _topic_facet(pubs: list[_Pub], preds: dict[str, Any]) -> dict[str, int]:
-    """Publishers (under every filter except topic) with >=1 journal per
-    topic label; top 10 by publisher count."""
-    counts: dict[str, int] = {}
-    for p in pubs:
-        if not _passes(p, preds, "topic"):
-            continue
-        for label in p.labels:
-            counts[label] = counts.get(label, 0) + 1
-    top = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:TOPIC_FACET_LIMIT]
-    return dict(top)
-
-
 async def search_publishers(
     session: AsyncSession,
     *,
@@ -475,7 +386,7 @@ async def search_publishers(
     q_base = (
         [p for p in snap.values() if q_hit(p)] if q_lower else list(snap.values())
     )
-    preds = _predicates(
+    preds = publisher_predicates(
         oa_types=oa_types,
         deal=deal,
         quartiles=quartiles,
@@ -484,7 +395,7 @@ async def search_publishers(
         has_apc=has_apc,
         has_works=has_works,
     )
-    matches = [p for p in q_base if _passes(p, preds)]
+    matches = [p for p in q_base if passes(p, preds)]
 
     if sort is None:
         sort = "relevance" if q else "works"
@@ -492,8 +403,8 @@ async def search_publishers(
     items = [_item(p, p.topics[:TOPICS_PER_ITEM]) for p in page]
     facets: dict[str, dict[str, int]] = {}
     if include_facets:
-        facets = _facets(q_base, preds)
-        facets["topic"] = _topic_facet(q_base, preds)
+        facets = publisher_facets(q_base, preds, quartiles=QUARTILES, oa_types=OA_TYPES)
+        facets["topic"] = publisher_topic_facet(q_base, preds, TOPIC_FACET_LIMIT)
     return {"items": items, "total": len(matches), "facets": facets}
 
 

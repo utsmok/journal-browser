@@ -4,7 +4,6 @@ import asyncio
 import base64
 import json
 import logging
-import time
 import warnings
 from datetime import date
 from typing import Any
@@ -32,6 +31,7 @@ from ..config import get_settings
 from ..harvest.common import cache_epoch
 from ..models import IssnMap, Journal, JournalApcAggregate, JournalFlags
 from ..vocab import OaType
+from .cache import FACET_CACHE, cache_get, cache_put
 from .source_health import record_degraded
 
 logger = logging.getLogger(__name__)
@@ -80,9 +80,6 @@ def _to_eur(price: float, currency: str) -> tuple[str, float]:
     if rate is None or rate <= 0:
         return currency, price
     return "EUR", round(price * rate, 2)
-
-# institution_id -> (monotonic time, facets, total); unfiltered browse facets only
-_FACET_CACHE: dict[tuple, tuple[float, dict[str, dict[str, int]], int]] = {}
 
 # Sort keys: relevance | title | publisher | institution_works | quartile |
 # topic | apc | 2yr_mean_citedness
@@ -659,9 +656,9 @@ async def facet_counts(
         await cache_epoch(session),
     )
     if cacheable:
-        hit = _FACET_CACHE.get(cache_key)
-        if hit and time.monotonic() - hit[0] < 86400:
-            return hit[1], hit[2]
+        hit = cache_get(FACET_CACHE, cache_key, 86400)
+        if hit is not None:
+            return hit
     defaults = dict(
         institution_id=institution_id,
         q=q,
@@ -867,7 +864,7 @@ async def facet_counts(
         wk_total, (wk_true,) = await _flag_counts(wk, wk.c.works > 0)
         facets["works"] = {"true": wk_true, "false": wk_total - wk_true}
     if cacheable:
-        _FACET_CACHE[cache_key] = (time.monotonic(), facets, total)
+        cache_put(FACET_CACHE, cache_key, (facets, total))
     return facets, total
 
 

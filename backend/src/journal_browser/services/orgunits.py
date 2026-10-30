@@ -21,12 +21,11 @@ from ..models import (
     JournalFlags,
     Work,
 )
+from .facets import orgunit_facets
 from .search import _like, _oa_type
 from .works_query import (
-    WORKS_STRATA,
     YEAR_BUCKETS,
     empty_year_buckets,
-    strata_bound,
     strata_cond,
     unit_author_join,
     unit_work_join,
@@ -294,49 +293,7 @@ async def search_orgunits(
 
     facets: dict[str, dict[str, int]] = {}
     if include_facets:
-        others = [c for key_, c in conds.items() if key_ != "faculty"] + (
-            [q_cond] if q_cond is not None else []
-        )
-        if level == "group":
-            rows_ = (
-                await session.execute(
-                    select(units.c.faculty, func.count())
-                    .where(*others, units.c.faculty.is_not(None))
-                    .group_by(units.c.faculty)
-                    .order_by(func.count().desc(), units.c.faculty)
-                )
-            ).all()
-            facets["faculty"] = {r.faculty: int(r[1]) for r in rows_}
-        others = [c for key_, c in conds.items() if key_ != "works"] + (
-            [q_cond] if q_cond is not None else []
-        )
-        row = (
-            await session.execute(
-                select(
-                    *[
-                        func.count().filter(strata_bound(units.c.n_works, stratum))
-                        for stratum in WORKS_STRATA
-                    ]
-                )
-                .select_from(units)
-                .where(*others)
-            )
-        ).one()
-        facets["size"] = dict(zip(WORKS_STRATA, (int(v or 0) for v in row), strict=True))
-        others = [c for key_, c in conds.items() if key_ != "uses_deals"] + (
-            [q_cond] if q_cond is not None else []
-        )
-        row = (
-            await session.execute(
-                select(
-                    func.count().filter(units.c.deal_works > 0),
-                    func.count().filter(units.c.deal_works == 0),
-                )
-                .select_from(units)
-                .where(*others)
-            )
-        ).one()
-        facets["uses_deals"] = {"yes": int(row[0] or 0), "no": int(row[1] or 0)}
+        facets = await orgunit_facets(session, units, conds, q_cond, level)
     return {"level": level, "items": items, "total": int(total), "facets": facets}
 
 
