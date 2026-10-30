@@ -39,6 +39,10 @@ class Author(Base):
     faculty: Mapped[str | None] = mapped_column(Text, nullable=True)
     research_group: Mapped[str | None] = mapped_column(Text, nullable=True)
     orgs: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, server_default=text("'[]'"))
+    # All known openalex author A-ids (primary + merged alternates) for the
+    # author; the openalex-only live merge (services.authors) matches
+    # authorships against this list.
+    openalex_ids: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, server_default=text("'[]'"))
     n_works: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     confirmed: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")

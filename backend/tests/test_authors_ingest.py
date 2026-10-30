@@ -237,6 +237,8 @@ def _fixture_source() -> SourceData:
         ("a111", "w1"),  # b: empty payload, faculty via canonical person
         ("ghost", "w1"),
     ]
+    # Pure's own author list gives Bob w2 even though OpenAlex never did.
+    data.pure_edges = [("b-uuid", "w2")]
     return data
 
 
@@ -288,7 +290,7 @@ async def test_ingest_idempotent(db, institution_factory, monkeypatch):
     stats = await run_ingest(db, inst.id, None, inst.ror)
     await db.commit()
     assert stats == {
-        "authors": 2, "edges": 3, "with_faculty": 2, "with_research_group": 1, "confirmed": 2,
+        "authors": 2, "edges": 4, "with_faculty": 2, "with_research_group": 1, "confirmed": 2,
     }
 
     a_rows = {row.pure_uuid: row for row in (await db.execute(select(Author))).scalars()}
@@ -296,6 +298,7 @@ async def test_ingest_idempotent(db, institution_factory, monkeypatch):
     assert a_rows["a-uuid"].research_group == DEPT
     assert a_rows["a-uuid"].n_works == 2
     assert a_rows["a-uuid"].orgs == [DEPT, "University of Twente"]
+    assert a_rows["a-uuid"].openalex_ids == ["a5038098443", "a999"]
     # a: dept -> TNW -> UT root closure reaches the institution ROR.
     assert a_rows["a-uuid"].confirmed is True
     assert a_rows["a-uuid"].last_pub_year == 2023
@@ -304,23 +307,26 @@ async def test_ingest_idempotent(db, institution_factory, monkeypatch):
     # b: no CERIF affiliations, faculty + confirmation via canonical-person
     # fallback (person_orgs[12] resolves to the UT root).
     assert a_rows["b-uuid"].faculty == TNW
-    assert a_rows["b-uuid"].n_works == 1
+    assert a_rows["b-uuid"].n_works == 2
+    assert a_rows["b-uuid"].openalex_ids == ["a111"]
     assert a_rows["b-uuid"].confirmed is True
     assert a_rows["b-uuid"].last_pub_year == 2023
-    assert a_rows["b-uuid"].primary_topic == "Physics"
+    assert a_rows["b-uuid"].primary_topic == "Chemistry"
 
     edges = {
         (row.author_pure_uuid, row.work_pure_uuid)
         for row in (await db.execute(select(AuthorWork))).scalars()
     }
-    assert edges == {("a-uuid", "w1"), ("a-uuid", "w2"), ("b-uuid", "w1")}
+    assert edges == {
+        ("a-uuid", "w1"), ("a-uuid", "w2"), ("b-uuid", "w1"), ("b-uuid", "w2"),
+    }
 
     # Rerun: identical end state (upsert + full edge replace, no dupes).
     await run_ingest(db, inst.id, None, inst.ror)
     await db.commit()
     rows = {row.pure_uuid: row for row in (await db.execute(select(Author))).scalars()}
     assert len(rows) == 2
-    assert len((await db.execute(select(AuthorWork))).scalars().all()) == 3
+    assert len((await db.execute(select(AuthorWork))).scalars().all()) == 4
     assert rows["a-uuid"].confirmed is True
     assert rows["a-uuid"].last_pub_year == 2023
     assert rows["a-uuid"].primary_topic == "Chemistry"
@@ -335,12 +341,11 @@ async def test_ingest_idempotent(db, institution_factory, monkeypatch):
         (row.author_pure_uuid, row.work_pure_uuid)
         for row in (await db.execute(select(AuthorWork))).scalars()
     }
-    # w1 was both authors' shared edge; only Alice's w2 survives.
-    assert remaining == {("a-uuid", "w2")}
+    # w1 was both authors' shared edge; each author's w2 survives.
+    assert remaining == {("a-uuid", "w2"), ("b-uuid", "w2")}
     final = {row.pure_uuid: row for row in (await db.execute(select(Author))).scalars()}
     assert final["a-uuid"].n_works == 1
     assert final["a-uuid"].last_pub_year == 2022
     assert final["a-uuid"].primary_topic == "Chemistry"  # single venue, 1 work
-    assert final["b-uuid"].n_works == 0
-    assert final["b-uuid"].last_pub_year is None
-    assert final["b-uuid"].primary_topic is None
+    assert final["b-uuid"].n_works == 1
+    assert final["b-uuid"].last_pub_year == 2022

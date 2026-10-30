@@ -9,11 +9,12 @@ from typing import Any
 from sqlalchemy import case, false, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..config import get_settings
+from ..config import get_settings, work_type_excluded
 from ..harvest.authors import topic_mass
 from ..models import Author, AuthorWork, Institution, Journal, JournalFlags, Work
 from .facets import author_facets
 from .search import _like, _oa_type, base_query
+from .ut_metadata import normalize_doi, ut_openalex_only_works_for_author
 from .works_query import (
     YEAR_BUCKETS,
     author_works_join,
@@ -332,6 +333,54 @@ async def _similar_sections(
     return similar, alternatives
 
 
+async def _openalex_only_items(
+    institution: Institution, author: Author, work_rows: Any
+) -> list[dict[str, Any]]:
+    """OpenAlex-attributed works the Pure population does not hold, as
+    profile work items with in_pure False, appended after the local ones.
+
+    Quality gates keep the merge honest: the institution's publication-year
+    window applies, excluded work types (preprints/books) drop out, and a
+    DOI that matches a local work is skipped (same publication; the Pure
+    copy stays the display record). Unreachable source degrades to a
+    Pure-only page."""
+    rows = await ut_openalex_only_works_for_author(
+        [a for a in (author.openalex_ids or []) if a]
+    )
+    if not rows:
+        return []
+    year_end = institution.data_window_end if institution.data_window_end is not None else 9999
+    seen_dois = {doi for row in work_rows if (doi := normalize_doi(row.doi_normalized))}
+    items: list[dict[str, Any]] = []
+    for row in sorted(
+        rows,
+        key=lambda r: (r["year"] is None, -(r["year"] or 0), (r["title"] or "").lower()),
+    ):
+        year = row["year"]
+        if year is None or not institution.data_window_start <= year <= year_end:
+            continue
+        if work_type_excluded(row["work_type"]):
+            continue
+        doi = normalize_doi(row["doi"])
+        if doi is not None:
+            if doi in seen_dois:
+                continue
+            seen_dois.add(doi)
+        items.append(
+            {
+                "pure_uuid": None,
+                "title": row["title"] or "Untitled",
+                "year": year,
+                "doi": row["doi"],
+                "oa_status": row["oa_status"] or "unknown",
+                "journal_issn_l": row["issn_l"],
+                "journal_title": row["venue_name"],
+                "in_pure": False,
+            }
+        )
+    return items[: max(WORKS_CAP - len(work_rows), 0)]
+
+
 async def author_profile(
     session: AsyncSession, institution: Institution, pure_uuid: str
 ) -> dict[str, Any] | None:
@@ -454,7 +503,8 @@ async def author_profile(
                 "oa_status": row.oa_status,
                 "journal_issn_l": row.journal_issn_l,
                 "journal_title": row.journal_title,
+                "in_pure": True,
             }
             for row in work_rows
-        ],
+        ] + await _openalex_only_items(institution, author, work_rows),
     }

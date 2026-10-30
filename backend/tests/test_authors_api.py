@@ -265,6 +265,64 @@ async def test_profile_works_sorted_and_joined(authors_api):
     assert works[0]["journal_title"] == "Journal 1234-5678"
     assert works[0]["doi"] is None
     assert works[2]["journal_title"] == "Journal 2222-2221"
+    assert all(w["in_pure"] for w in works)
+
+
+@requires_db
+async def test_profile_openalex_only_merge(authors_api, db, monkeypatch):
+    """OpenAlex-attributed works absent from Pure append after the local
+    ones with in_pure False; window, excluded-type, and DOI-duplicate gates
+    drop the rest."""
+    from sqlalchemy import update
+
+    await db.execute(
+        update(Author)
+        .where(Author.pure_uuid == "alice-uuid")
+        .values(openalex_ids=["a5038098443"])
+    )
+    await db.execute(
+        update(Work).where(Work.pure_uuid == "w-2024").values(doi_normalized="10.1000/local")
+    )
+    await db.commit()
+
+    async def _fake(_aids, dsn=None):
+        return [
+            # Duplicate of the local w-2024 by DOI: dropped (prefix noise on
+            # purpose — normalize_doi must fold it).
+            {"title": "Dup", "year": 2024, "doi": "https://doi.org/10.1000/LOCAL",
+             "oa_status": "gold", "work_type": "article", "venue_name": None,
+             "issn_l": None},
+            # Outside the institution's data window: dropped.
+            {"title": "Old", "year": 1999, "doi": "10.1000/old", "oa_status": "closed",
+             "work_type": "article", "venue_name": None, "issn_l": None},
+            # Excluded work type: dropped.
+            {"title": "Pre", "year": 2021, "doi": None, "oa_status": None,
+             "work_type": "preprint", "venue_name": None, "issn_l": None},
+            # Kept: new DOI, in window.
+            {"title": "Only OA", "year": 2022, "doi": "10.1000/oa-only",
+             "oa_status": None, "work_type": None, "venue_name": "Outside Journal",
+             "issn_l": "9999-9991"},
+            # Kept: no DOI to dedupe on.
+            {"title": "No Doi", "year": 2020, "doi": None, "oa_status": "green",
+             "work_type": "article", "venue_name": None, "issn_l": None},
+        ]
+
+    monkeypatch.setattr(
+        "journal_browser.services.authors.ut_openalex_only_works_for_author", _fake
+    )
+    body = (await authors_api.get("/api/v1/ut/authors/alice-uuid")).json()
+    works = body["works"]
+    assert [w["pure_uuid"] for w in works if w["in_pure"]] == [
+        "w-2024", "w-2023a", "w-2023b", "w-2021"
+    ]
+    merged = [w for w in works if not w["in_pure"]]
+    assert [(w["title"], w["doi"]) for w in merged] == [
+        ("Only OA", "10.1000/oa-only"),
+        ("No Doi", None),
+    ]
+    assert merged[0]["oa_status"] == "unknown"
+    assert merged[0]["journal_title"] == "Outside Journal"
+    assert merged[0]["journal_issn_l"] == "9999-9991"
 
 
 @requires_db

@@ -923,7 +923,7 @@ export interface components {
         /** AuthorWorkItem */
         AuthorWorkItem: {
             /** Pure Uuid */
-            pure_uuid: string;
+            pure_uuid?: string | null;
             /** Title */
             title: string;
             /** Year */
@@ -936,6 +936,11 @@ export interface components {
             journal_issn_l: string | null;
             /** Journal Title */
             journal_title: string | null;
+            /**
+             * In Pure
+             * @default true
+             */
+            in_pure: boolean;
         };
         /** AuthorYearRow */
         AuthorYearRow: {

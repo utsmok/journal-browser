@@ -405,13 +405,16 @@ class AuthorAlternative(BaseModel):
 
 
 class AuthorWorkItem(BaseModel):
-    pure_uuid: str
+    # None for OpenAlex-only works: attributed via OpenAlex authorships but
+    # absent from the Pure population, so no JB work row exists.
+    pure_uuid: str | None = None
     title: str
     year: int
     doi: str | None
     oa_status: str | None
     journal_issn_l: str | None
     journal_title: str | None
+    in_pure: bool = True
 
 
 class AuthorProfileResponse(BaseModel):

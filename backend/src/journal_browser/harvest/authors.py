@@ -11,6 +11,11 @@ Source side (all names verified live 2026-10-26):
                                 maps to the Pure uuid. core_work_link has NO
                                 canonical id (its id is a surrogate), so it
                                 must not sit between these two.
+    work_pure_authors           Pure's own CERIF author lists as (author
+                                pure person uuid, canonical work id); the
+                                complement of OpenAlex authorship. Matched
+                                directly by author pure_uuid — no identity
+                                resolution needed.
     person / person_org / source_identity (persons)  canonical-person path
 
 Faculty rule (mirrors the source repo's reconcile/org_tree.py): walking org
@@ -74,6 +79,9 @@ class SourceData:
     tree: dict[int, list[tuple[int, int]]] = field(default_factory=dict)
     # work_authors edges resolved onto canonical Pure work uuids.
     edges: list[tuple[str, str]] = field(default_factory=list)
+    # work_pure_authors edges (author pure person uuid, work pure uuid):
+    # Pure's own CERIF author lists, the complement of OpenAlex authorship.
+    pure_edges: list[tuple[str, str]] = field(default_factory=list)
     # orcid -> person id (canonical-person path, orcid branch).
     person_orcids: dict[str, int] = field(default_factory=dict)
     # lower(openalex author id) -> canonical person id.
@@ -85,7 +93,7 @@ class SourceData:
 
 
 async def fetch_source(engine: AsyncEngine) -> SourceData:
-    """Pull every author-relevant table in six round trips."""
+    """Pull every author-relevant table in seven round trips."""
     data = SourceData()
     async with engine.connect() as conn:
         data.authors = [
@@ -124,6 +132,15 @@ async def fetch_source(engine: AsyncEngine) -> SourceData:
                 text(
                     "SELECT wa.author_a_id, pop.uuid FROM work_authors wa "
                     "JOIN pure_item_population pop ON pop.canonical_id = wa.work_id"
+                )
+            )
+        ]
+        data.pure_edges = [
+            (p, w)
+            for p, w in await conn.execute(
+                text(
+                    "SELECT wpa.person_uuid, pop.uuid FROM work_pure_authors wpa "
+                    "JOIN pure_item_population pop ON pop.canonical_id = wpa.work_id"
                 )
             )
         ]
@@ -407,6 +424,14 @@ async def ingest_authors(
     }
     index = author_id_index(data.authors)
     edge_map = build_edge_map(data.edges, index, set(local_works))
+    # Pure's own author lists attach by the author's pure uuid directly
+    # (work_pure_authors): they cover works OpenAlex never attributed and
+    # survive author-profile identity loss. Roster-gated — Pure's CERIF
+    # author lists also name non-roster persons (external co-authors).
+    roster = {author["pure_uuid"] for author in data.authors}
+    for author_uuid, work_uuid in data.pure_edges:
+        if author_uuid in roster and work_uuid in local_works:
+            edge_map.setdefault(author_uuid, set()).add(work_uuid)
 
     # One pass over the new edge set: last publication year and per-venue
     # work counts (primary_topic weighting input).
@@ -455,6 +480,16 @@ async def ingest_authors(
                 "name": author["name"] or "",
                 "orcid": author["orcid"],
                 "openalex_author_id": author["openalex_author_id"],
+                "openalex_ids": sorted(
+                    {
+                        value.lower()
+                        for value in (
+                            author["openalex_author_id"],
+                            *(author.get("openalex_alt_ids") or []),
+                        )
+                        if value
+                    }
+                ),
                 "openaire_person_id": author["openaire_person_id"],
                 "crossref_orcid": author["crossref_orcid"],
                 "faculty": faculty,

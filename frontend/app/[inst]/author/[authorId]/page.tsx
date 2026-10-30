@@ -448,10 +448,10 @@ export default function AuthorPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {workRows.map((w) => {
+                  {workRows.map((w, idx) => {
                     const href = doiHref(w.doi);
                     return (
-                      <TableRow key={w.pure_uuid}>
+                      <TableRow key={w.pure_uuid ?? w.doi ?? `oa-${idx}`}>
                         <TableCell className="whitespace-nowrap tabular-nums">
                           {w.year}
                         </TableCell>
@@ -460,6 +460,15 @@ export default function AuthorPage() {
                             <External href={href}>{w.title}</External>
                           ) : (
                             w.title
+                          )}
+                          {!w.in_pure && (
+                            <Badge
+                              variant="outline"
+                              className="ml-2 font-normal text-[11px] text-[var(--muted-foreground)]"
+                              title="Attributed by OpenAlex only; not in the university's Pure research information system"
+                            >
+                              OpenAlex only
+                            </Badge>
                           )}
                         </TableCell>
                         <TableCell>
