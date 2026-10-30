@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..db import get_session
+from ..deps import InstitutionDep
 from ..models import (
     ApcEvidence,
     Deal,
@@ -20,7 +21,6 @@ from ..models import (
     Publisher,
     ScimagojrMetric,
 )
-from ..routers.institutions import InstitutionDep
 from ..schemas import (
     ApcAggregateOut,
     ApcEvidenceOut,
@@ -43,6 +43,7 @@ from ..services import search as search_service
 from ..services import ut_metadata as ut_metadata_service
 from ..services.deal_coverage import deal_institution_join, dj_scope
 from ..vocab import OaType
+from .deals import DEAL_FIELDS
 
 router = APIRouter(prefix="/journals", tags=["journals"])
 
@@ -69,30 +70,6 @@ OaTypeFilter = Annotated[
 def _is_ignored(issn_l: str) -> bool:
     """Admin ignore-list: an ignored journal is treated as nonexistent."""
     return issn_l.upper() in set(get_settings().ignored_issns)
-
-#: DealOut fields that map 1:1 onto Deal columns.
-DEAL_FIELDS = [
-    "id",
-    "esac_id",
-    "status",
-    "start_year",
-    "end_year",
-    "duration_text",
-    "corresponding_authors_only",
-    "summary",
-    "conditions_text",
-    "workflow_text",
-    "article_types_text",
-    "cap_text",
-    "cap_numbers",
-    "contract_url",
-    "openaccess_nl_url",
-    "jct_data_url",
-    "links",
-    "per_year_oa_counts",
-    "needs_curation",
-    "needs_curation_reason",
-]
 
 #: Per-field source attribution (structural; caveat codes resolve against
 #: the limitations registry served at /api/v1/meta/limitations).

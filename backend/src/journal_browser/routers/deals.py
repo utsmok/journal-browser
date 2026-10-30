@@ -13,13 +13,18 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
+from ..deps import InstitutionDep
 from ..models import Deal, DealInstitution, DealJournal, Publisher
-from ..routers.institutions import InstitutionDep
-from ..routers.journals import DEAL_FIELDS
 from ..schemas import DealOut
 from ..services.deal_coverage import deal_institution_join, dj_scope
 
 router = APIRouter(prefix="/deals", tags=["deals"])
+
+#: DealOut fields that map 1:1 onto Deal columns (the detail path getattrs
+#: them); excludes the computed register extras. Set-equal to the column
+#: list, verified against Deal.__table__.columns 2026-10-30.
+_DEAL_OUT_EXTRAS = {"publisher_name", "covers_in_group", "journal_count"}
+DEAL_FIELDS = [k for k in DealOut.model_fields if k not in _DEAL_OUT_EXTRAS]
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 

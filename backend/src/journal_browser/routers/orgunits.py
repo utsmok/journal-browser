@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
-from ..routers.institutions import InstitutionDep
+from ..deps import InstitutionDep
 from ..schemas import OrgUnitDetailResponse, OrgUnitSearchResponse
 from ..services import orgunits as orgunits_service
 

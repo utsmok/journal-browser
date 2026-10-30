@@ -7,7 +7,7 @@ from pydantic import BeforeValidator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
-from ..routers.institutions import InstitutionDep
+from ..deps import InstitutionDep
 from ..schemas import (
     DealDiscrepancyRow,
     DealOut,

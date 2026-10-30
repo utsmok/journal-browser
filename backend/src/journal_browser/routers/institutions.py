@@ -1,19 +1,13 @@
-"""/api/v1/institutions: hosted-institution directory, plus the shared
-path-scope dependency every /{code}/... router resolves through."""
+"""/api/v1/institutions: hosted-institution directory."""
 
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db import get_session
-from ..harvest.common import get_active_institutions, get_institution_by_code
-from ..models import Institution
+from ..deps import SessionDep
+from ..harvest.common import get_active_institutions
 
 router = APIRouter(prefix="/institutions", tags=["institutions"])
-
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
 class InstitutionOut(BaseModel):
@@ -46,16 +40,3 @@ async def list_institutions(session: SessionDep) -> list[InstitutionOut]:
         )
         for inst in await get_active_institutions(session)
     ]
-
-
-async def get_scoped_institution(
-    institution_code: str, session: SessionDep
-) -> Institution:
-    """Resolve /{institution_code}/... path scopes; 404 for unknown codes."""
-    inst = await get_institution_by_code(session, institution_code)
-    if inst is None:
-        raise HTTPException(status_code=404, detail=f"unknown institution: {institution_code}")
-    return inst
-
-
-InstitutionDep = Annotated[Institution, Depends(get_scoped_institution)]

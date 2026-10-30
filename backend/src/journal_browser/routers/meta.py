@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
+from ..deps import InstitutionDep
 from ..models import (
     ApcEvidence,
     Deal,
@@ -18,7 +19,6 @@ from ..models import (
     Limitation,
     ScimagojrMetric,
 )
-from ..routers.institutions import InstitutionDep
 from ..schemas import DegradedSource, FreshnessEntry, FreshnessResponse, LimitationOut
 from ..services import source_health
 
