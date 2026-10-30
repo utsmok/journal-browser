@@ -1,27 +1,28 @@
-"""ut-metadata authors ingest: identities, org-derived attributes, work edges.
+"""Author ingest: identities, org-derived attributes, work edges.
 
-Source side (all names verified live 2026-10-26):
-    core_author_link            person roster (Pure uuid keyed)
-    source_records persons      latest CERIF payload per person (version
-                                order by id; no created_at)
-    org / org_tree              org display names + closure (depth 0 = self)
-    work_authors                author_a_id is an OpenAlex author id in
-                                LOWERCASE form; work_authors.work_id is the
-                                canonical work id, which pure_item_population
-                                maps to the Pure uuid. core_work_link has NO
-                                canonical id (its id is a surrogate), so it
-                                must not sit between these two.
-    work_pure_authors           Pure's own CERIF author lists as (author
-                                pure person uuid, canonical work id); the
-                                complement of OpenAlex authorship. Matched
-                                directly by author pure_uuid — no identity
-                                resolution needed.
-    person / person_org / source_identity (persons)  canonical-person path
+Source adapter (the standalone author path, decision 27): one SourceData
+contract, two backends —
 
-Faculty rule (mirrors the source repo's reconcile/org_tree.py): walking org
-names self -> root, the first name in the faculty set wins, canonicalized to
-the full faculty name. Author-native path first; authors without a faculty
-there fall back to the canonical-person path (person_org)."""
+- ``fetch_local_source`` (default) builds the identical shape from
+  journal-browser's own tables: roster from pure_persons (org-tree
+  closure on the institution root), org tree from pure_orgs(+parents),
+  pure edges from work_pure_authors, OpenAlex edges from openalex_works
+  authorships DOI-joined onto local works, external ids from the resolved
+  author_identities rows.
+- ``fetch_source`` (the ut-metadata DSN accelerator) pulls the same
+  shapes from the external canonical-works DB.
+
+Local org keys are pure uuids (the local store has no integer org ids);
+every consumer treats org ids as opaque keys. Confirmation rides the
+resolved root: live CERIF orgunits carry Scopus ids, not ROR identifiers,
+so the adapter stamps the institution's bare ROR on the resolved root org
+and the closure check runs unchanged.
+
+Faculty rule (mirrors ut-metadata's reconcile/org_tree.py): walking org
+names self -> root, the first name in the faculty set wins, canonicalized
+to the full faculty name. Author-native path first; authors without a
+faculty there fall back to the canonical-person path (person_org —
+locally, the merged profile + work-level affiliation arms)."""
 
 import logging
 from dataclasses import dataclass, field
@@ -31,7 +32,18 @@ from sqlalchemy import delete, insert, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from ..config import work_type_excluded
-from ..models import Author, AuthorWork, Institution, Journal
+from ..models import (
+    Author,
+    AuthorIdentity,
+    AuthorWork,
+    Institution,
+    Journal,
+    OpenalexWork,
+    PurePerson,
+    Work,
+    WorkPureAuthor,
+)
+from .author_names import bare_ror
 
 logger = logging.getLogger(__name__)
 
@@ -65,31 +77,36 @@ def canonical_faculty(name: str) -> str:
 
 @dataclass
 class SourceData:
-    """One full pull of the author-relevant ut-metadata tables."""
+    """One full pull of the author-relevant tables (either backend).
 
-    # core_author_link rows.
+    Org keys are opaque: integers on the ut-metadata path, pure uuids on
+    the local path."""
+
+    # Roster rows: pure_uuid, orcid, name, openalex_author_id,
+    # openalex_alt_ids, openaire_person_id, crossref_orcid.
     authors: list[dict[str, Any]] = field(default_factory=list)
-    # latest pure person payload per person uuid (split off source_pk).
+    # latest pure person payload per person uuid.
     persons: dict[str, dict[str, Any]] = field(default_factory=dict)
-    # org id -> (pure_uuid, display_name).
-    orgs: dict[int, tuple[str, str]] = field(default_factory=dict)
-    # org id -> bare ROR id (None when the org has none).
-    org_rors: dict[int, str | None] = field(default_factory=dict)
-    # org_tree closure: org_id -> [(depth, ancestor_id)].
-    tree: dict[int, list[tuple[int, int]]] = field(default_factory=dict)
-    # work_authors edges resolved onto canonical Pure work uuids.
+    # org key -> (pure_uuid, display_name).
+    orgs: dict[Any, tuple[str, str]] = field(default_factory=dict)
+    # org key -> bare ROR id (None when the org has none).
+    org_rors: dict[Any, str | None] = field(default_factory=dict)
+    # org_tree closure: org key -> [(depth, ancestor_key)].
+    tree: dict[Any, list[tuple[int, Any]]] = field(default_factory=dict)
+    # OpenAlex authorship edges resolved onto local work pure uuids.
     edges: list[tuple[str, str]] = field(default_factory=list)
-    # work_pure_authors edges (author pure person uuid, work pure uuid):
-    # Pure's own CERIF author lists, the complement of OpenAlex authorship.
+    # pure authorship edges (author pure person uuid, work pure uuid):
+    # Pure's own CERIF author lists, the complement of OpenAlex
+    # authorship.
     pure_edges: list[tuple[str, str]] = field(default_factory=list)
-    # orcid -> person id (canonical-person path, orcid branch).
-    person_orcids: dict[str, int] = field(default_factory=dict)
-    # lower(openalex author id) -> canonical person id.
-    person_by_openalex: dict[str, int] = field(default_factory=dict)
-    # lower(pure person uuid) -> canonical person id (pure identities).
-    person_by_pure: dict[str, int] = field(default_factory=dict)
-    # person_org: person id -> [org ids].
-    person_orgs: dict[int, list[int]] = field(default_factory=dict)
+    # orcid -> person key (canonical-person path, orcid branch).
+    person_orcids: dict[str, Any] = field(default_factory=dict)
+    # lower(openalex author id) -> person key.
+    person_by_openalex: dict[str, Any] = field(default_factory=dict)
+    # lower(pure person uuid) -> person key (pure identities).
+    person_by_pure: dict[str, Any] = field(default_factory=dict)
+    # person_org: person key -> [org keys] (profile + work-level arms).
+    person_orgs: dict[Any, list[Any]] = field(default_factory=dict)
 
 
 async def fetch_source(engine: AsyncEngine) -> SourceData:
@@ -167,6 +184,132 @@ async def fetch_source(engine: AsyncEngine) -> SourceData:
             text("SELECT person_id, org_id FROM person_org ORDER BY person_id, org_id")
         ):
             data.person_orgs.setdefault(person_id, []).append(org_id)
+    return data
+
+
+async def fetch_local_source(session: AsyncSession, institution: Institution) -> SourceData:
+    """Build SourceData from journal-browser's own tables (the standalone
+    adapter, Phase 1-4 stores). Same contract as the ut-metadata pull, so
+    the ingest transforms run unchanged.
+
+    Roster: pure persons whose profile affiliations OR work-level
+    affiliations close on the institution root (the two pure arms). OpenAlex
+    ids come from the resolved identity rows (confirmed only — candidates
+    never silently become facts)."""
+    from .author_cascade import METHOD_RANK
+    from .org_closure import load_org_tree
+
+    data = SourceData()
+    tree = await load_org_tree(session, institution)
+    data.orgs = {uuid: (uuid, row.name) for uuid, row in tree.orgs.items()}
+    data.tree = {
+        uuid: [(depth, ancestor) for depth, ancestor in enumerate(chain)]
+        for uuid, chain in tree.closure.items()
+    }
+    # Confirmation rides the resolved root (see module docstring): the
+    # root org carries the institution's bare ROR in the local adapter.
+    if tree.root is not None and institution.ror:
+        data.org_rors = {tree.root: bare_ror(institution.ror)}
+
+    # Pure persons: payloads + orcid index + profile-affiliation arm.
+    orcid_by_person: dict[str, str] = {}
+    for row in (
+        await session.execute(select(PurePerson).where(PurePerson.institution_id == institution.id))
+    ).scalars():
+        data.persons[row.uuid] = row.payload
+        if row.orcid:
+            data.person_orcids[row.orcid] = row.uuid
+            orcid_by_person[row.uuid] = row.orcid
+        data.person_by_pure[row.uuid.lower()] = row.uuid
+
+    # Pure's own authorship edges + the work-level affiliation arm.
+    work_orgs: dict[str, list[str]] = {}
+    for row in (
+        await session.execute(
+            select(WorkPureAuthor).where(WorkPureAuthor.institution_id == institution.id)
+        )
+    ).scalars():
+        data.pure_edges.append((row.person_uuid, row.work_pure_uuid))
+        work_orgs.setdefault(row.person_uuid, []).extend(
+            ref for ref in (row.affiliations or []) if ref
+        )
+
+    # person_org: merged profile + work-level arms (known orgs only).
+    for person_key, payload in data.persons.items():
+        known = [
+            org_id for org_id in _affiliation_org_ids(payload, data.orgs) if org_id in data.orgs
+        ]
+        known.extend(ref for ref in work_orgs.get(person_key, []) if ref in data.orgs)
+        if known:
+            data.person_orgs[person_key] = known
+
+    # Roster: profile arm OR work-level arm closes on the root.
+    roster = {key for key in data.persons if tree.resolves(data.person_orgs.get(key, []))}
+
+    # OpenAlex ids from the resolved identity rows (confirmed only).
+    rank_of = METHOD_RANK
+    ids_by_author: dict[str, list[AuthorIdentity]] = {}
+    for row in (
+        await session.execute(
+            select(AuthorIdentity).where(
+                AuthorIdentity.institution_id == institution.id,
+                AuthorIdentity.status == "confirmed",
+            )
+        )
+    ).scalars():
+        ids_by_author.setdefault(row.author_pure_uuid, []).append(row)
+
+    data.authors = []
+    for uuid in sorted(roster):
+        cerif = data.persons[uuid].get("cerif") or {}
+        rows = ids_by_author.get(uuid, [])
+        primary = (
+            min(
+                rows,
+                key=lambda r: (-rank_of.get(r.method, 0), -r.n_works, r.external_id),
+            )
+            if rows
+            else None
+        )
+        alts = sorted({r.external_id for r in rows} - {primary.external_id}) if primary else []
+        data.authors.append(
+            {
+                "pure_uuid": uuid,
+                "orcid": orcid_by_person.get(uuid),
+                "name": " ".join(
+                    part for part in (cerif.get("first_names"), cerif.get("family_names")) if part
+                ),
+                "openalex_author_id": primary.external_id if primary else None,
+                "openalex_alt_ids": alts,
+                "openaire_person_id": None,
+                "crossref_orcid": None,
+            }
+        )
+
+    # OpenAlex authorship edges: openalex_works authorships DOI-joined onto
+    # local works (the work_authors replacement; ids lower-cased).
+    works_dois: dict[str, str] = {}
+    for uuid, doi in (
+        await session.execute(
+            select(Work.pure_uuid, Work.doi_normalized).where(
+                Work.institution_id == institution.id, Work.retired_at.is_(None)
+            )
+        )
+    ).all():
+        if doi:
+            works_dois[doi] = uuid
+    for row in (
+        await session.execute(
+            select(OpenalexWork).where(OpenalexWork.institution_id == institution.id)
+        )
+    ).scalars():
+        work_uuid = works_dois.get(row.doi_normalized or "")
+        if work_uuid is None:
+            continue
+        for sh in row.authorships or []:
+            aid = sh.get("a") if isinstance(sh, dict) else None
+            if aid:
+                data.edges.append((aid.lower(), work_uuid))
     return data
 
 
@@ -382,9 +525,9 @@ def build_edge_map(
 
 
 async def ingest_authors(
-    session: AsyncSession, institution_id: int, engine: AsyncEngine, inst_ror: str | None
+    session: AsyncSession, institution_id: int, data: SourceData, inst_ror: str | None
 ) -> dict:
-    """Full pull + full-replace upsert for one institution.
+    """Full-replace upsert for one institution from a pulled SourceData.
 
     authors upserts in place (identity fields + derived attributes);
     author_works is deleted and rebuilt, so works retired since the last
@@ -394,7 +537,6 @@ async def ingest_authors(
     checks the person payload's affiliations against the institution ROR.
     Edges to preprint/book works (config.EXCLUDED_WORK_TYPES) are not
     stored, so no author count, list, or topic sees them."""
-    data = await fetch_source(engine)
     # The institution row carries the publication-year window; edges to
     # works outside it drop out of every derived count below.
     institution = await session.get(Institution, institution_id)

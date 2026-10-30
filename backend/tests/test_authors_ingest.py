@@ -252,15 +252,10 @@ def _fixture_source() -> SourceData:
 
 
 @requires_db
-async def test_ingest_idempotent(db, institution_factory, monkeypatch):
+async def test_ingest_idempotent(db, institution_factory):
     from datetime import UTC, datetime
 
     from sqlalchemy import select
-
-    async def _source(_engine):
-        return _fixture_source()
-
-    monkeypatch.setattr("journal_browser.harvest.authors.fetch_source", _source)
 
     inst = await institution_factory(code="ut", ror=UT_ROR)
     run = HarvestRun(source="pure", entity_type="works", status="completed", config_fingerprint="t")
@@ -296,7 +291,7 @@ async def test_ingest_idempotent(db, institution_factory, monkeypatch):
     )
     await db.flush()
 
-    stats = await run_ingest(db, inst.id, None, inst.ror)
+    stats = await run_ingest(db, inst.id, _fixture_source(), inst.ror)
     await db.commit()
     assert stats == {
         "authors": 2,
@@ -338,7 +333,7 @@ async def test_ingest_idempotent(db, institution_factory, monkeypatch):
     }
 
     # Rerun: identical end state (upsert + full edge replace, no dupes).
-    await run_ingest(db, inst.id, None, inst.ror)
+    await run_ingest(db, inst.id, _fixture_source(), inst.ror)
     await db.commit()
     rows = {row.pure_uuid: row for row in (await db.execute(select(Author))).scalars()}
     assert len(rows) == 2
@@ -351,7 +346,7 @@ async def test_ingest_idempotent(db, institution_factory, monkeypatch):
     w1 = await db.scalar(select(Work).where(Work.pure_uuid == "w1"))
     w1.retired_at = datetime.now(UTC)
     await db.commit()
-    await run_ingest(db, inst.id, None, inst.ror)
+    await run_ingest(db, inst.id, _fixture_source(), inst.ror)
     await db.commit()
     remaining = {
         (row.author_pure_uuid, row.work_pure_uuid)

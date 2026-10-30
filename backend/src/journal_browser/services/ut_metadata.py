@@ -21,6 +21,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ..config import get_settings
+from ..harvest.common import normalize_doi
 from .source_health import record_degraded
 
 logger = logging.getLogger(__name__)
@@ -150,17 +151,6 @@ async def ut_openalex_only_works_for_author(
         record_degraded("ut-metadata", "author works query failed; serving pure-only")
         return None
     return [dict(row) for row in rows]
-
-
-def normalize_doi(doi: str | None) -> str | None:
-    """Lower-cased bare DOI form for cross-source dedupe ('', None -> None)."""
-    if not doi:
-        return None
-    value = doi.strip().lower()
-    for prefix in ("https://doi.org/", "http://doi.org/", "doi.org/", "doi:"):
-        if value.startswith(prefix):
-            value = value[len(prefix) :]
-    return value or None
 
 
 def oa_buckets(rows: list[dict[str, Any]]) -> dict[str, int]:
