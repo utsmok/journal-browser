@@ -6,20 +6,15 @@ import {
   useReactTable,
   type ColumnDef,
 } from "@tanstack/react-table";
-import {
-  ArrowDown,
-  ArrowUp,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsUpDown,
-  Search,
-} from "lucide-react";
+import { Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { DealBadge, OaTypeBadge, QuartileBadge } from "@/components/badges";
 import { FilterPanel } from "@/components/filter-panel";
+import { Pagination } from "@/components/search/pagination";
+import { SortHead } from "@/components/search/sort-head";
 import { SourceNote } from "@/components/source-note";
 import { ListSkeletonRows } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -44,79 +39,7 @@ import {
   type SortKey,
 } from "@/lib/api";
 import { apcAmount, apcStatsText, formatApc } from "@/lib/format";
-
-const SORTS: { value: SortKey; label: string }[] = [
-  { value: "relevance", label: "Relevance" },
-  { value: "title", label: "Title A–Z" },
-  { value: "publisher", label: "Publisher A–Z" },
-  { value: "institution_works", label: "Institution works" },
-  { value: "quartile", label: "Quartile" },
-  { value: "topic", label: "Topic A–Z" },
-  { value: "apc", label: "APC (high–low)" },
-];
-
-// Sortable columns: backend key + natural direction. The header button
-// cycles natural → reversed → off (back to the mode's default sort).
-const COLUMN_SORTS: Record<string, { key: SortKey; natural: "asc" | "desc" }> = {
-  title: { key: "title", natural: "asc" },
-  publisher: { key: "publisher", natural: "asc" },
-  works: { key: "institution_works", natural: "desc" },
-  quartile: { key: "quartile", natural: "asc" },
-  apc: { key: "apc", natural: "desc" },
-  topic: { key: "topic", natural: "asc" },
-};
-
-function SortHead({
-  columnId,
-  label,
-  state,
-  title,
-}: {
-  columnId: string;
-  label: string;
-  state: {
-    sort: SortKey;
-    dir: "asc" | "desc" | null;
-    cycleSort: (columnId: string) => void;
-    disabled?: boolean;
-  };
-  title?: string;
-}) {
-  // Semantic ranking ignores sort params, so the buttons would lie.
-  if (state.disabled)
-    return <span className="inline-flex items-center gap-1 opacity-60">{label}</span>;
-  const spec = COLUMN_SORTS[columnId];
-  const active = !!spec && state.sort === spec.key;
-  const current = active ? (state.dir ?? spec!.natural) : null;
-  const atNatural = active && current === spec!.natural;
-  const Icon = !active ? ChevronsUpDown : current === "asc" ? ArrowUp : ArrowDown;
-  return (
-    <button
-      type="button"
-      onClick={() => state.cycleSort(columnId)}
-      title={
-        title ??
-        (active
-          ? `Sorted ${current === "asc" ? "A–Z, low–high" : "Z–A, high–low"}; click to ${atNatural ? "reverse" : "reset"}`
-          : `Sort by ${label}`)
-      }
-      className="inline-flex items-center gap-1 hover:text-[var(--foreground)]"
-    >
-      {label}
-      <Icon
-        aria-hidden
-        className={`size-3 ${active ? "text-[var(--primary-text)]" : "opacity-50"}`}
-      />
-    </button>
-  );
-}
-
-const SEARCH_IN_OPTIONS: { value: SearchIn; label: string }[] = [
-  { value: "all", label: "Everything" },
-  { value: "title", label: "Title" },
-  { value: "publisher", label: "Publisher" },
-  { value: "topic", label: "Topic" },
-];
+import { COLUMN_SORTS, SEARCH_IN_OPTIONS, SORTS } from "@/lib/search-config";
 
 const SEARCH_INPUT_ID = "journal-search";
 
@@ -721,42 +644,12 @@ function SearchView() {
 
       <Card>
         <CardContent className="pt-6">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-[var(--muted-foreground)]">
-              {/* Announce only settled counts: while a fetch runs the live
-                  region keeps its previous text, so typing never chatters. */}
-              <span aria-live="polite">
-                {data
-                  ? `${data.total.toLocaleString("en")} journal${data.total === 1 ? "" : "s"}`
-                  : ""}
-              </span>
-              {isFetching && data ? " · updating…" : ""}
-            </p>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={stack.length === 0}
-                onClick={() => {
-                  const next = stack.slice(0, -1);
-                  moveTo(next, next[next.length - 1]);
-                }}
-              >
-                <ChevronLeft aria-hidden className="size-4" /> Prev
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!data?.next_cursor}
-                onClick={() => {
-                  if (!data?.next_cursor) return;
-                  moveTo([...stack, data.next_cursor], data.next_cursor);
-                }}
-              >
-                Next <ChevronRight aria-hidden className="size-4" />
-              </Button>
-            </div>
-          </div>
+          <Pagination
+            data={data}
+            isFetching={isFetching}
+            stack={stack}
+            moveTo={moveTo}
+          />
 
           {isError ? (
             <div className="py-10 text-center">
