@@ -9,6 +9,7 @@ from journal_browser.harvest.authors import (
     author_id_index,
     build_edge_map,
     canonical_confirmed,
+    canonical_person_ids,
     derive_identity,
     is_confirmed,
     primary_topic_from_venues,
@@ -126,6 +127,18 @@ def test_canonical_confirmed_via_person_orgs():
     assert canonical_confirmed(author, data, UT_ROR) is False
     data.person_orgs = {}
     assert canonical_confirmed(author, data, UT_ROR) is False
+
+
+def test_canonical_person_ids_pure_uuid_branch():
+    data = _data()
+    author = {"pure_uuid": "b-uuid", "orcid": None, "openalex_author_id": None}
+    data.person_by_pure = {"b-uuid": 21}
+    assert canonical_person_ids(author, data) == [21]
+    # Or plus the other branches, deduped.
+    author |= {"orcid": "0000-0002-1234", "openalex_author_id": "A5038098443"}
+    data.person_orcids = {"0000-0002-1234": 11}
+    data.person_by_openalex = {"a5038098443": 21}
+    assert canonical_person_ids(author, data) == [11, 21]
 
 
 def test_is_confirmed_branches():

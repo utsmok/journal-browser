@@ -78,12 +78,14 @@ class SourceData:
     person_orcids: dict[str, int] = field(default_factory=dict)
     # lower(openalex author id) -> canonical person id.
     person_by_openalex: dict[str, int] = field(default_factory=dict)
+    # lower(pure person uuid) -> canonical person id (pure identities).
+    person_by_pure: dict[str, int] = field(default_factory=dict)
     # person_org: person id -> [org ids].
     person_orgs: dict[int, list[int]] = field(default_factory=dict)
 
 
 async def fetch_source(engine: AsyncEngine) -> SourceData:
-    """Pull every author-relevant table in five round trips."""
+    """Pull every author-relevant table in six round trips."""
     data = SourceData()
     async with engine.connect() as conn:
         data.authors = [
@@ -136,6 +138,14 @@ async def fetch_source(engine: AsyncEngine) -> SourceData:
             )
         ):
             data.person_by_openalex[source_pk] = canonical_id
+        for pure_uuid, canonical_id in await conn.execute(
+            text(
+                "SELECT lower(regexp_replace(source_pk, '^.*/', '')), canonical_id "
+                "FROM source_identity WHERE entity_type = 'persons' AND source = 'pure' "
+                "AND canonical_id IS NOT NULL AND status <> 'rejected'"
+            )
+        ):
+            data.person_by_pure[pure_uuid] = canonical_id
         for person_id, org_id in await conn.execute(
             text("SELECT person_id, org_id FROM person_org ORDER BY person_id, org_id")
         ):
@@ -225,14 +235,19 @@ def derive_identity(
 
 
 def canonical_person_ids(author: dict[str, Any], data: SourceData) -> list[int]:
-    """Canonical person ids for an author: orcid branch, then the OpenAlex
-    source_identity branch (lower-cased comparison on both sides)."""
+    """Canonical person ids for an author: orcid branch, the OpenAlex
+    source_identity branch (lower-cased comparison on both sides), then the
+    pure person identity branch (author pure_uuid = pure source_pk tail)."""
     found: list[int] = []
     orcid = author.get("orcid")
     if orcid and (person_id := data.person_orcids.get(orcid)):
         found.append(person_id)
     openalex_id = author.get("openalex_author_id")
     person_id = data.person_by_openalex.get(openalex_id.lower()) if openalex_id else None
+    if person_id is not None and person_id not in found:
+        found.append(person_id)
+    pure_uuid = author.get("pure_uuid")
+    person_id = data.person_by_pure.get(pure_uuid.lower()) if pure_uuid else None
     if person_id is not None and person_id not in found:
         found.append(person_id)
     return found
