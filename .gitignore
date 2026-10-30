@@ -22,6 +22,11 @@ next-env.d.ts
 # Tooling
 .DS_Store
 uv.lock.bak
+.ruff_cache/
+
+# IDEs
+.idea/
+.vscode/
 
 # Raw landing zone (downloaded source artifacts)
 backend/landing/

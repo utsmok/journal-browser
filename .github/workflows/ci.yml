@@ -31,10 +31,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - run: uv sync
-      - run: uv run ruff check src tests jobs
-      - run: uv run ruff format --check src tests jobs
+      - run: uv run ruff check src tests jobs scripts
+      - run: uv run ruff format --check src tests jobs scripts
+      - run: uv run ty check src jobs tests scripts --exit-zero-on-warning
       - run: uv run alembic upgrade head
       - run: uv run pytest -m "not live"
+      # The committed openapi.json must match the routes; regenerating it
+      # must be a no-op (refresh via scripts/dump_openapi.py when it isn't).
+      - run: uv run python scripts/dump_openapi.py
+      - run: git diff --exit-code -- openapi.json
 
   frontend:
     runs-on: ubuntu-latest
@@ -47,5 +52,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - run: npm run lint
+      - run: npm run format:check
       - run: npm run build
