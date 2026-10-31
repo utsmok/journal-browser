@@ -172,11 +172,6 @@ async def test_resolve_statuses_and_gates(db, institution_factory):
     # alice sees two ids across her works (a-alice + the a-alice2
     # fragmentation) — the conflict counter flags exactly her.
     assert stats["conflicted_authors"] == 1
-
-    assert stats["matched"] == 3  # alice, bob, dave
-    # alice sees two ids across her works (a-alice + the a-alice2
-    # fragmentation) — the conflict counter flags exactly her.
-    assert stats["conflicted_authors"] == 1
     rows = {
         (r.author_pure_uuid, r.external_id): r
         for r in (await db.execute(select(AuthorIdentity))).scalars()
@@ -192,7 +187,7 @@ async def test_resolve_statuses_and_gates(db, institution_factory):
     assert alice_primary.n_works == 1  # w1 only (w2's entry is another id)
 
     alice_alt = rows[("p-alice", "a-alice2")]
-    assert alice_alt.status == "candidate"  # fragmentation, uncorroborated
+    assert alice_alt.status == "confirmed"  # work-matched twin rides along
     assert alice_alt.method == "fragmentation"
 
     bob = rows[("p-bob", "a-bob")]

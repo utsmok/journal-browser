@@ -4,10 +4,13 @@ Per local work, the org-tree-filtered pure author list (work_pure_authors
 with work-entry name spellings) meets the matched OpenAlex work's
 authorships (openalex_works, DOI-keyed). The ported cascade decides per
 work; aggregation across a person's works ranks methods and counts
-conflicting ids. ORCID corroboration gates alternate ids. Results land in
-author_identities (confirmed/candidate/rejected — candidates never
-auto-promote; admin decisions are sticky). The authors ingest reads this
-table additively: confirmed rows feed authors.openalex_ids.
+conflicting ids. The primary id follows the rung ladder
+(confirmed/candidate/rejected — candidates never auto-promote; admin
+decisions are sticky). Work-matched alternate ids ("fragmentation
+twins", e.g. merged or split OpenAlex profiles) are confirmed too:
+each entered the person's outcomes through a match on their own works.
+The authors ingest reads this table additively: confirmed rows feed
+authors.openalex_ids.
 
 Runs with no DSN; the only API spend is the authors listing sweep
 (filter affiliations.institution.ror, verified live 2026-10-30 — the
@@ -386,7 +389,16 @@ async def resolve_author_ids(
                     "author_pure_uuid": uuid,
                     "source": SOURCE,
                     "external_id": aid,
-                    "status": "confirmed" if corroborated else "candidate",
+                    # Alternates are confirmed (owner decision 2026-10-31,
+                    # "autoconfirm zero-conflict twins"): each one entered
+                    # this author's outcomes through a work-level match on
+                    # the author's own works — the same evidence bar as a
+                    # primary — so the twin rides along as an alternate
+                    # id instead of waiting in the review queue. The
+                    # author-works sweeps can still surface a wrong twin
+                    # on the author page's openalex-only section; rejects
+                    # stay the correction path.
+                    "status": "confirmed",
                     "method": "orcid-corroboration" if corroborated else "fragmentation",
                     "confidence": 0.9 if corroborated else CONFIDENCE.get(METHOD_FUZZY),
                     "n_works": len(id_works[uuid][aid]),
