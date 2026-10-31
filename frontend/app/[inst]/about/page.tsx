@@ -361,7 +361,7 @@ export default function AboutPage() {
         <div className="mt-4">
           <SourceNote
             source="Limitation registry"
-            codes={["window-2020", "corpus-cutoff", "pure-canon-primary"]}
+            codes={["stats-window", "corpus-cutoff", "pure-canon-primary"]}
           />
         </div>
       </section>

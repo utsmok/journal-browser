@@ -88,7 +88,7 @@ ATTRIBUTION = {
         source="pure (primary) + openalex (cross-check)",
         # per-institution research portal; substituted at response time
         url="",
-        caveat_codes=["window-2020", "pure-canon-primary", "institution-affiliation"],
+        caveat_codes=["stats-window", "pure-canon-primary", "institution-affiliation"],
     ),
     "deals": Attribution(
         source="owner-curated register (openaccess.nl + JCT)",

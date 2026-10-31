@@ -784,7 +784,7 @@ function SearchView() {
                   source="OpenAlex · DOAJ · Scimago · JCT · openaccess.nl"
                   url="https://doaj.org"
                   codes={[
-                    "window-2020",
+                    "stats-window",
                     "openalex-coverage",
                     "institution-affiliation",
                     "doaj-canon",
