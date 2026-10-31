@@ -617,7 +617,11 @@ async def ingest_authors(
                 "pure_uuid": uuid,
                 "name": author["name"] or "",
                 "orcid": author["orcid"],
-                "openalex_author_id": author["openalex_author_id"],
+                # Canonical lower-cased form (openalex_ids already is): the
+                # matching layer keys on lower(), OpenAlex resolves ids
+                # case-insensitively, and one casing keeps the review-UI
+                # SQL (openalex_author_id = external_id) usable.
+                "openalex_author_id": (author["openalex_author_id"] or "").lower() or None,
                 "openalex_ids": sorted(
                     {
                         value.lower()

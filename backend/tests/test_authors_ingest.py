@@ -307,6 +307,8 @@ async def test_ingest_idempotent(db, institution_factory):
     assert a_rows["a-uuid"].n_works == 2
     assert a_rows["a-uuid"].orgs == [DEPT, "University of Twente"]
     assert a_rows["a-uuid"].openalex_ids == ["a5038098443", "a999"]
+    # Canonical lower-cased form even though the source carries "A...".
+    assert a_rows["a-uuid"].openalex_author_id == "a5038098443"
     # a: dept -> TNW -> UT root closure reaches the institution ROR.
     assert a_rows["a-uuid"].confirmed is True
     assert a_rows["a-uuid"].last_pub_year == 2023
