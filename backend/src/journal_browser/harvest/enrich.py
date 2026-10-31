@@ -36,6 +36,36 @@ def _chunk(items: list[str], size: int) -> list[list[str]]:
     return [items[i : i + size] for i in range(0, len(items), size)]
 
 
+async def _batch_by_doi_resilient(fetch: Any, chunk: list[str], stats: dict[str, int]) -> dict:
+    """fetch(chunk) with API-side rejection isolated to the offending DOI.
+
+    One malformed/unknown-to-the-filter DOI in a 50-DOI batch makes Crossref
+    (and OpenAlex) reject the whole request with a 400, which used to fail
+    the entire enrichment run. Bisect client-error batches until the bad DOI
+    stands alone, then skip + count it. Transient/systemic failures (5xx,
+    429, network) re-raise: retry logic lives upstream.
+    """
+    from bibliofabric.exceptions import APIError, RateLimitError
+
+    try:
+        return await fetch(chunk)
+    except RateLimitError:
+        raise
+    except APIError as exc:
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        if status is not None and (status < 400 or status >= 500 or status == 429):
+            raise
+        if len(chunk) == 1:
+            logger.warning("enrichment: API rejected doi %s; skipped (%s)", chunk[0], exc)
+            stats["dois_rejected"] = stats.get("dois_rejected", 0) + 1
+            return {}
+        mid = len(chunk) // 2
+        found: dict = {}
+        for half in (chunk[:mid], chunk[mid:]):
+            found.update(await _batch_by_doi_resilient(fetch, half, stats))
+        return found
+
+
 def _norm_doi_key(key: Any) -> str:
     """Client result keys may be bare DOIs or https://doi.org/ URLs."""
     return str(key).lower().removeprefix("https://doi.org/")
@@ -176,7 +206,7 @@ async def enrich_openalex(
     async with AlethecaClient(**client_kwargs) as client:
         for chunk in _chunk(list(by_doi), BATCH_SIZE):
             await asyncio.sleep(CHUNK_PAUSE_S)
-            found = await client.works.batch_get_by_doi(chunk)
+            found = await _batch_by_doi_resilient(client.works.batch_get_by_doi, chunk, stats)
             found_dois = set()
             for key, work in found.items():
                 doi = _norm_doi_key(key)
@@ -310,7 +340,7 @@ async def enrich_crossref(
     )
     async with StavrophoraClient(mailto=_settings().contact_email) as client:
         for chunk in _chunk(list(by_doi), BATCH_SIZE):
-            found = await client.works.batch_get_by_doi(chunk)
+            found = await _batch_by_doi_resilient(client.works.batch_get_by_doi, chunk, stats)
             for key, work in found.items():
                 ut = by_doi.get(_norm_doi_key(key))
                 if ut is None:
