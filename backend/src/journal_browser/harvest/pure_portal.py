@@ -46,6 +46,7 @@ ORGANISATIONS_URL = "https://research.utwente.nl/en/organisations/"
 
 #: Portal classification → pure_orgs.org_type; unknown → None (no write).
 CLASSIFICATION_TYPES = {
+    "university": "university",
     "faculty": "faculty",
     "department": "department",
     "school": "department",
