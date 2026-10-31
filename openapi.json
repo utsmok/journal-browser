@@ -2553,6 +2553,15 @@
         "operationId": "list_limitations_api_v1__institution_code__meta_limitations_get",
         "parameters": [
           {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
             "name": "source",
             "in": "query",
             "required": false,
@@ -3518,6 +3527,10 @@
       },
       "AuthorIdentityAdminOut": {
         "properties": {
+          "institution_id": {
+            "type": "integer",
+            "title": "Institution Id"
+          },
           "institution_code": {
             "anyOf": [
               {
@@ -3605,6 +3618,7 @@
         },
         "type": "object",
         "required": [
+          "institution_id",
           "institution_code",
           "author_pure_uuid",
           "author_name",

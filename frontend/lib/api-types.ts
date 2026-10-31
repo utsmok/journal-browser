@@ -829,6 +829,8 @@ export interface components {
          * @description One identity-cascade row for the admin review list.
          */
         AuthorIdentityAdminOut: {
+            /** Institution Id */
+            institution_id: number;
             /** Institution Code */
             institution_code: string | null;
             /** Author Pure Uuid */
@@ -3447,7 +3449,9 @@ export interface operations {
                 source?: string | null;
             };
             header?: never;
-            path?: never;
+            path: {
+                institution_code: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
