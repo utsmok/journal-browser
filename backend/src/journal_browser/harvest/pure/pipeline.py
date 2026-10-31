@@ -4,10 +4,12 @@ import logging
 import xml.etree.ElementTree as ET
 from typing import Any
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...config import get_settings
 from ...ingest import IngestSession
+from ...models import Work
 from .store import backfill_cerif, retire_absent, store_pure_work_authors, upsert_work
 from .transport import (
     CRIS_PUBLICATIONS_SET,
@@ -256,6 +258,26 @@ async def harvest_pure_years(
         if set(years) != expected:
             raise ValueError(
                 f"full_sweep requires every window year {sorted(expected)}, got {sorted(years)}"
+            )
+        # Retirement re-baselines last_seen_run against exactly these runs, so
+        # any active work older than the window would be stamped retired even
+        # though Pure still serves it. Imported pre-window corpora (UT: ~125k
+        # works back to 1965) made this a live landmine; refuse and say how
+        # to widen the window instead.
+        older = await session.scalar(
+            select(func.count())
+            .select_from(Work)
+            .where(
+                Work.institution_id == institution.id,
+                Work.retired_at.is_(None),
+                Work.year < min(expected),
+            )
+        )
+        if older:
+            raise ValueError(
+                f"full_sweep would retire {older} active works older than the window "
+                f"start {min(expected)} (retirement re-baselines last_seen_run). "
+                f"Lower JB_DATA_WINDOW_START to cover them first."
             )
     stats: dict[str, Any] = {"sets": {}}
     totals = {"records_seen": 0, "records_stored": 0, "parse_failures": 0}

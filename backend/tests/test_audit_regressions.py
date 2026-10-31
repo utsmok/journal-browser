@@ -44,6 +44,38 @@ async def test_full_sweep_with_partial_years_is_rejected(db):
         await harvest_pure_years(db, inst, [2024], full_sweep=True)
 
 
+async def test_full_sweep_refuses_to_retire_pre_window_works(db):
+    # Regression: retirement re-baselines last_seen_run against the sweep's
+    # runs, so a window-limited full sweep stamped every pre-window work
+    # retired — on live, the imported pre-2020 corpus (~125k works back to
+    # 1965). The sweep must refuse instead.
+    inst = await _institution(db)
+    inst.data_window_start = 2024
+    run = HarvestRun(
+        source="pure",
+        entity_type="work",
+        status="completed",
+        institution_id=inst.id,
+        config_fingerprint="import",
+    )
+    db.add(run)
+    await db.flush()
+    db.add(
+        Work(
+            institution_id=inst.id,
+            pure_uuid="old-work",
+            title="Imported 1965 paper",
+            norm_title="imported 1965 paper",
+            year=1965,
+            first_seen_run=run.id,
+            last_seen_run=run.id,
+        )
+    )
+    await db.flush()
+    with pytest.raises(ValueError, match="would retire 1 active works"):
+        await harvest_pure_years(db, inst, [2024, 2025, 2026], full_sweep=True)
+
+
 async def test_retire_absent_without_runs_is_a_noop(db):
     # `NOT IN ()` renders TRUE: an empty run list must retire nothing.
     inst = await _institution(db)
