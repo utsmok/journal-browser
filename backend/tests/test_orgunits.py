@@ -28,7 +28,8 @@ BMS = "Faculty of Behavioural, Management and Social Sciences"
 async def orgunits_api(db, institution_factory):
     """ut: TNW (Alice 40 works in group Quantum Matter, Bob 5 in Quantum
     Matter, Carol 5 without a group, Dan 4 in Nano Lab) and BMS (Eve 60 in
-    Policy Lab); Frank is unconfirmed (hidden by the gate). Works w1+w2 sit
+    Policy Lab); Frank is unconfirmed (hidden by the gate); Hank is
+    institute-only (TechMed, no faculty/group). Works w1+w2 sit
     in deal-covered J1 with APC evidence (latest period per doi), w3/w4 in
     uncovered J2. rug: one author, one APC row scoped to rug only."""
 
@@ -69,6 +70,7 @@ async def orgunits_api(db, institution_factory):
         confirmed: bool = True,
         topic: str | None = None,
         orcid: str | None = None,
+        institute: str | None = None,
     ) -> Author:
         return Author(
             institution_id=ut.id,
@@ -76,6 +78,7 @@ async def orgunits_api(db, institution_factory):
             name=name,
             faculty=faculty,
             research_group=group,
+            institute=institute,
             n_works=n_works,
             confirmed=confirmed,
             primary_topic=topic,
@@ -92,6 +95,7 @@ async def orgunits_api(db, institution_factory):
                 n_works=40,
                 topic="Physics",
                 orcid="0000-0002-1111",
+                institute="MESA+ Institute",
             ),
             _author(
                 "bob-uuid",
@@ -116,6 +120,16 @@ async def orgunits_api(db, institution_factory):
                 group="Nano Lab",
                 n_works=4,
                 topic="Materials",
+                institute="MESA+ Institute",
+            ),
+            _author(
+                "hank-uuid",
+                "Hank Institute",
+                faculty=None,
+                group=None,
+                institute="TechMed Centre",
+                n_works=3,
+                topic="Imaging",
             ),
             _author(
                 "eve-uuid",
@@ -416,6 +430,56 @@ async def test_orgunit_group_detail(orgunits_api):
     ]
     assert (await client.get("/api/v1/ut/orgunits/group/Nope")).status_code == 404
     assert (await client.get("/api/v1/ut/orgunits/faculty/Nope")).status_code == 404
+
+
+@requires_db
+async def test_orgunit_institute_list_and_detail(orgunits_api):
+    """Institute level: MESA+ (Alice + Dan) and TechMed (Hank, institute-only
+    with no faculty/group) — separate from faculties, own detail bundle."""
+    client, _ids = orgunits_api
+    body = (await client.get("/api/v1/ut/orgunits", params={"level": "institute"})).json()
+    assert body["level"] == "institute"
+    assert body["total"] == 2
+    assert [i["name"] for i in body["items"]] == ["MESA+ Institute", "TechMed Centre"]
+    mesa, techmed = body["items"]
+    assert mesa == {
+        "level": "institute",
+        "name": "MESA+ Institute",
+        "faculty": None,
+        "n_authors": 2,
+        "n_works": 44,  # Alice 40 + Dan 4
+        "n_groups": None,
+        "deal_works": 2,  # Alice's w-1, w-2
+        "apc_euro_total": 320.0,
+        "apc_n": 2,
+        "topics": [{"name": "Materials", "n": 1}, {"name": "Physics", "n": 1}],
+    }
+    assert techmed["n_authors"] == 1 and techmed["n_works"] == 3
+    assert techmed["faculty"] is None
+    # Size strata + deal usage only: no faculty facet at institute level.
+    assert body["facets"]["size"] == {"1-4": 1, "5-19": 0, "20-49": 1, "50+": 0}
+    assert body["facets"]["uses_deals"] == {"yes": 1, "no": 1}
+    assert "faculty" not in body["facets"]
+
+    detail = (
+        await client.get(f"/api/v1/ut/orgunits/institute/{quote('MESA+ Institute')}")
+    ).json()
+    assert detail["unit"]["name"] == "MESA+ Institute"
+    assert detail["groups"] is None
+    assert [(a["pure_uuid"], a["n_works"]) for a in detail["authors"]] == [
+        ("alice-uuid", 40),
+        ("dan-uuid", 4),
+    ]
+    assert [(j["issn_l"], j["n_works"]) for j in detail["journals"]] == [
+        ("1234-5678", 2),
+        ("2222-2221", 1),
+    ]
+    assert [y["year"] for y in detail["works_by_year"]] == [2024, 2023, 2021]
+    assert detail["deal_usage"] == [
+        {"label": "Elsevier Deal", "n_works": 1, "euro": 120.0},
+        {"label": "Springer", "n_works": 1, "euro": 200.0},
+    ]
+    assert (await client.get("/api/v1/ut/orgunits/institute/Nope")).status_code == 404
 
 
 @requires_db

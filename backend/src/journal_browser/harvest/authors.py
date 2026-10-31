@@ -107,6 +107,12 @@ class SourceData:
     person_by_pure: dict[str, Any] = field(default_factory=dict)
     # person_org: person key -> [org keys] (profile + work-level arms).
     person_orgs: dict[Any, list[Any]] = field(default_factory=dict)
+    # Org keys typed institute (MESA+ Institute, TechMed Centre, Digital
+    # Society Institute): separate from faculties — they never contribute
+    # faculty or research-group evidence, and instead fill the author's
+    # own institute attribute (owner ruling). Empty on the ut-metadata
+    # path (no org types there), where behavior is unchanged.
+    institute_orgs: set[Any] = field(default_factory=set)
 
 
 async def fetch_source(engine: AsyncEngine) -> SourceData:
@@ -202,6 +208,9 @@ async def fetch_local_source(session: AsyncSession, institution: Institution) ->
     data = SourceData()
     tree = await load_org_tree(session, institution)
     data.orgs = {uuid: (uuid, row.name) for uuid, row in tree.orgs.items()}
+    data.institute_orgs = {
+        uuid for uuid, row in tree.orgs.items() if (row.org_type or "") == "institute"
+    }
     data.tree = {
         uuid: [(depth, ancestor) for depth, ancestor in enumerate(chain)]
         for uuid, chain in tree.closure.items()
@@ -351,6 +360,22 @@ def chain(data: SourceData, org_id: int) -> list[tuple[int, str]]:
     )
 
 
+def _faculty_evidence(org_ids: list[Any], data: SourceData) -> list[Any]:
+    """Orgs whose chains carry faculty evidence.
+
+    Institutes are separate from faculties (owner ruling): an institute
+    itself — and any org nested under one — contributes neither faculty
+    nor research-group evidence. The org's own chain is checked (self at
+    depth 0), so a work-level MESA+ affiliation never decides a faculty."""
+    if not data.institute_orgs:
+        return org_ids
+    return [
+        org_id
+        for org_id in org_ids
+        if not any(a in data.institute_orgs for _depth, a in data.tree.get(org_id, []))
+    ]
+
+
 def faculty_from_chains(chains: list[list[tuple[int, str]]]) -> str | None:
     """First faculty-set name across the chains, canonicalized; None if none."""
     for chain_rows in chains:
@@ -376,15 +401,18 @@ def derive_identity(
 ) -> tuple[str | None, str | None, list[str]]:
     """(faculty, research_group, orgs) from one person's CERIF payload.
 
-    research_group: the first affiliation org (payload order) that is
-    neither a faculty nor the university root and whose closure reaches a
-    faculty. orgs: distinct affiliation display names, most specific first
-    (largest closure depth = furthest from the root)."""
+    faculty/research_group evidence ignores institute-blocked orgs (see
+    _faculty_evidence). research_group: the first evidence org (payload
+    order) that is neither a faculty nor the university root and whose
+    closure reaches a faculty. orgs: distinct affiliation display names,
+    most specific first (largest closure depth = furthest from the
+    root) — institutes stay in the display list."""
     org_ids = _affiliation_org_ids(payload, data.orgs)
-    chains = [chain(data, org_id) for org_id in org_ids]
+    evidence_ids = _faculty_evidence(org_ids, data)
+    chains = [chain(data, org_id) for org_id in evidence_ids]
     faculty = faculty_from_chains(chains)
     research_group = None
-    for org_id, chain_rows in zip(org_ids, chains, strict=True):
+    for org_id, chain_rows in zip(evidence_ids, chains, strict=True):
         name = data.orgs[org_id][1]
         if name in _FACULTY_SET or name == UNIVERSITY_ROOT_NAME:
             continue
@@ -403,6 +431,27 @@ def derive_identity(
             seen.add(name)
             org_names.append(name)
     return faculty, research_group, org_names
+
+
+def derive_institute(payload: dict[str, Any], data: SourceData) -> str | None:
+    """The person's institute from one CERIF payload: the first profile
+    affiliation (payload order) that is an institute-typed org."""
+    for org_id in _affiliation_org_ids(payload, data.orgs):
+        if org_id in data.institute_orgs:
+            return data.orgs[org_id][1]
+    return None
+
+
+def augment_institute(author: dict[str, Any], data: SourceData) -> str | None:
+    """Institute via the canonical-person path (profile + work-level
+    affiliation arms), reached when the author's own CERIF payload names
+    no institute — the mirror of augment_faculty for institute-only
+    members whose profiles are empty."""
+    for person_id in canonical_person_ids(author, data):
+        for org_id in data.person_orgs.get(person_id, []):
+            if org_id in data.institute_orgs:
+                return data.orgs[org_id][1]
+    return None
 
 
 def canonical_person_ids(author: dict[str, Any], data: SourceData) -> list[int]:
@@ -426,12 +475,13 @@ def canonical_person_ids(author: dict[str, Any], data: SourceData) -> list[int]:
 
 def augment_faculty(author: dict[str, Any], data: SourceData) -> str | None:
     """Faculty via the canonical-person path (only reached when the
-    author-native CERIF path resolved nothing)."""
+    author-native CERIF path resolved nothing). Institute-blocked orgs
+    carry no evidence (see _faculty_evidence)."""
     person_ids = canonical_person_ids(author, data)
     chains = [
         chain(data, org_id)
         for person_id in person_ids
-        for org_id in data.person_orgs.get(person_id, [])
+        for org_id in _faculty_evidence(data.person_orgs.get(person_id, []), data)
     ]
     return faculty_from_chains(chains)
 
@@ -602,16 +652,21 @@ async def ingest_authors(
         topics_by_issn = {issn: topics or [] for issn, topics in rows.all()}
 
     author_rows = []
-    stats = {"with_faculty": 0, "with_research_group": 0, "confirmed": 0}
+    stats = {"with_faculty": 0, "with_research_group": 0, "with_institute": 0, "confirmed": 0}
     for author in data.authors:
         payload = data.persons.get(author["pure_uuid"], {})
         faculty, research_group, org_names = derive_identity(payload, data)
         if faculty is None:
             faculty = augment_faculty(author, data)
+        institute = derive_institute(payload, data)
+        if institute is None:
+            institute = augment_institute(author, data)
         if faculty is not None:
             stats["with_faculty"] += 1
         if research_group is not None:
             stats["with_research_group"] += 1
+        if institute is not None:
+            stats["with_institute"] += 1
         uuid = author["pure_uuid"]
         confirmed = is_confirmed(payload, data, inst_ror)
         if not confirmed:
@@ -643,6 +698,7 @@ async def ingest_authors(
                 "crossref_orcid": author["crossref_orcid"],
                 "faculty": faculty,
                 "research_group": research_group,
+                "institute": institute,
                 "orgs": org_names,
                 "n_works": len(edge_map.get(uuid, ())),
                 "confirmed": confirmed,
@@ -656,7 +712,7 @@ async def ingest_authors(
         # Full-replace: authors that left the source roster must not linger
         # with stale n_works, so clear the institution's rows and reinsert.
         await session.execute(delete(Author).where(Author.institution_id == institution_id))
-        # asyncpg caps one statement at 32767 bound params; 14 per author row.
+        # asyncpg caps one statement at 32767 bound params; 15 per author row.
         for start in range(0, len(author_rows), 2000):
             await session.execute(insert(Author), author_rows[start : start + 2000])
     await session.execute(delete(AuthorWork).where(AuthorWork.institution_id == institution_id))

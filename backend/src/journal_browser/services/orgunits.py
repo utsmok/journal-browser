@@ -40,12 +40,16 @@ DEAL_USAGE_CAP = 8
 TOPICS_PER_ITEM = 3
 TOPICS_PER_DETAIL = 5
 
-LEVELS = ("faculty", "group")
+LEVELS = ("faculty", "group", "institute")
 SORT_KEYS = ("relevance", "name", "authors", "works", "deal_works")
 
 
 def _unit_key(level: str) -> Any:
-    return Author.research_group if level == "group" else Author.faculty
+    # Institutes are their own unit level (MESA+ / TechMed / DSI), not a
+    # faculty or a research group — the author's institute attribute.
+    if level == "group":
+        return Author.research_group
+    return Author.institute if level == "institute" else Author.faculty
 
 
 def _author_base(iid: int, require_confirmed: bool) -> list[Any]:

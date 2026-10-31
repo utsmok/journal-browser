@@ -19,11 +19,13 @@ class Author(Base):
     """Per-institution researcher, ingested from an external
     canonical-publications database (ut-metadata core_author_link).
 
-    Faculty / research_group / orgs are derived at ingest time (pure person
-    CERIF affiliations, canonical-person augmentation as fallback); n_works
-    counts stored edges to the institution's non-retired works. confirmed
-    marks a CERIF affiliation resolving to the institution's ROR;
-    last_pub_year and primary_topic derive from the stored work edges."""
+    Faculty / research_group / institute / orgs are derived at ingest time
+    (pure person CERIF affiliations, canonical-person augmentation as
+    fallback); institute carries the institute-typed org (MESA+, TechMed,
+    DSI) separately from faculty per the owner ruling. n_works counts
+    stored edges to the institution's non-retired works. confirmed marks a
+    CERIF affiliation resolving to the institution's ROR; last_pub_year
+    and primary_topic derive from the stored work edges."""
 
     __tablename__ = "authors"
 
@@ -38,6 +40,7 @@ class Author(Base):
     crossref_orcid: Mapped[str | None] = mapped_column(Text, nullable=True)
     faculty: Mapped[str | None] = mapped_column(Text, nullable=True)
     research_group: Mapped[str | None] = mapped_column(Text, nullable=True)
+    institute: Mapped[str | None] = mapped_column(Text, nullable=True)
     orgs: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, server_default=text("'[]'"))
     # All known openalex author A-ids (primary + merged alternates) for the
     # author; the openalex-only live merge (services.authors) matches

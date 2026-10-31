@@ -534,6 +534,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/{institution_code}/orgunits/institute/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Institute Detail */
+        get: operations["institute_detail_api_v1__institution_code__orgunits_institute__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/{institution_code}/deals": {
         parameters: {
             query?: never;
@@ -867,6 +884,8 @@ export interface components {
             faculty: string | null;
             /** Research Group */
             research_group: string | null;
+            /** Institute */
+            institute: string | null;
             /** N Works */
             n_works: number;
             /** Orcid */
@@ -907,6 +926,8 @@ export interface components {
             faculty: string | null;
             /** Research Group */
             research_group: string | null;
+            /** Institute */
+            institute: string | null;
             /** Orgs */
             orgs: string[];
             /** N Works */
@@ -1925,7 +1946,7 @@ export interface components {
              * Level
              * @enum {string}
              */
-            level: "faculty" | "group";
+            level: "faculty" | "group" | "institute";
             /** Name */
             name: string;
             /** Faculty */
@@ -3276,7 +3297,7 @@ export interface operations {
     search_orgunits_api_v1__institution_code__orgunits_get: {
         parameters: {
             query?: {
-                level?: "faculty" | "group";
+                level?: "faculty" | "group" | "institute";
                 q?: string | null;
                 faculty?: string | null;
                 works?: string | null;
@@ -3347,6 +3368,38 @@ export interface operations {
         };
     };
     group_detail_api_v1__institution_code__orgunits_group__name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgUnitDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    institute_detail_api_v1__institution_code__orgunits_institute__name__get: {
         parameters: {
             query?: never;
             header?: never;

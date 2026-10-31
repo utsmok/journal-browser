@@ -203,8 +203,9 @@ export type PublisherSearchParams = {
   include_facets?: boolean;
 };
 
-/** Org-unit hierarchy level; a unit is a faculty or a research group. */
-export type OrgUnitLevel = "faculty" | "group";
+/** Org-unit hierarchy level; institutes (MESA+, TechMed, DSI) are their
+ * own level, separate from faculties and research groups. */
+export type OrgUnitLevel = "faculty" | "group" | "institute";
 
 export type OrgUnitItem = Schemas["OrgUnitItem"];
 

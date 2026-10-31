@@ -25,7 +25,7 @@ def _split(raw: str | None) -> list[str] | None:
 async def search_orgunits(
     session: SessionDep,
     institution: InstitutionDep,
-    level: Literal["faculty", "group"] = "faculty",
+    level: Literal["faculty", "group", "institute"] = "faculty",
     q: Annotated[str | None, Query(max_length=200)] = None,
     faculty: Annotated[str | None, Query(max_length=200)] = None,
     works: Annotated[str | None, Query(max_length=60)] = None,
@@ -71,6 +71,16 @@ async def group_detail(
     name: str, session: SessionDep, institution: InstitutionDep
 ) -> OrgUnitDetailResponse:
     detail = await orgunits_service.orgunit_detail(session, institution, "group", name)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="orgunit not found")
+    return OrgUnitDetailResponse(**detail)
+
+
+@router.get("/institute/{name:path}", response_model=OrgUnitDetailResponse)
+async def institute_detail(
+    name: str, session: SessionDep, institution: InstitutionDep
+) -> OrgUnitDetailResponse:
+    detail = await orgunits_service.orgunit_detail(session, institution, "institute", name)
     if detail is None:
         raise HTTPException(status_code=404, detail="orgunit not found")
     return OrgUnitDetailResponse(**detail)

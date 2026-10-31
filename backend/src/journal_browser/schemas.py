@@ -330,6 +330,7 @@ class AuthorItem(BaseModel):
     name: str
     faculty: str | None
     research_group: str | None
+    institute: str | None
     n_works: int
     orcid: str | None
     confirmed: bool
@@ -357,6 +358,7 @@ class AuthorOut(BaseModel):
     crossref_orcid: str | None
     faculty: str | None
     research_group: str | None
+    institute: str | None
     orgs: list[str]
     n_works: int
 
@@ -483,7 +485,7 @@ class PublisherDetailResponse(BaseModel):
 
 
 class OrgUnitItem(BaseModel):
-    level: Literal["faculty", "group"]
+    level: Literal["faculty", "group", "institute"]
     name: str
     faculty: str | None = None
     n_authors: int

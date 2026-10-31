@@ -2185,7 +2185,8 @@
             "schema": {
               "enum": [
                 "faculty",
-                "group"
+                "group",
+                "institute"
               ],
               "type": "string",
               "default": "faculty",
@@ -2392,6 +2393,57 @@
         ],
         "summary": "Group Detail",
         "operationId": "group_detail_api_v1__institution_code__orgunits_group__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgUnitDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/orgunits/institute/{name}": {
+      "get": {
+        "tags": [
+          "orgunits"
+        ],
+        "summary": "Institute Detail",
+        "operationId": "institute_detail_api_v1__institution_code__orgunits_institute__name__get",
         "parameters": [
           {
             "name": "name",
@@ -3667,6 +3719,17 @@
             ],
             "title": "Research Group"
           },
+          "institute": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institute"
+          },
           "n_works": {
             "type": "integer",
             "title": "N Works"
@@ -3715,6 +3778,7 @@
           "name",
           "faculty",
           "research_group",
+          "institute",
           "n_works",
           "orcid",
           "confirmed"
@@ -3832,6 +3896,17 @@
             ],
             "title": "Research Group"
           },
+          "institute": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institute"
+          },
           "orgs": {
             "items": {
               "type": "string"
@@ -3854,6 +3929,7 @@
           "crossref_orcid",
           "faculty",
           "research_group",
+          "institute",
           "orgs",
           "n_works"
         ],
@@ -6779,7 +6855,8 @@
             "type": "string",
             "enum": [
               "faculty",
-              "group"
+              "group",
+              "institute"
             ],
             "title": "Level"
           },

@@ -184,6 +184,7 @@ async def test_search_ranked_and_filtered(authors_api):
         "name": "Alice Author",
         "faculty": "Faculty of Science and Technology",
         "research_group": "Quantum Transport in Matter",
+        "institute": None,
         "n_works": 4,
         "orcid": "0000-0002-1111",
         "confirmed": True,

@@ -6,11 +6,13 @@ from conftest import journal_factory, requires_db
 from journal_browser.harvest.authors import (
     SourceData,
     augment_faculty,
+    augment_institute,
     author_id_index,
     build_edge_map,
     canonical_confirmed,
     canonical_person_ids,
     derive_identity,
+    derive_institute,
     is_confirmed,
     primary_topic_from_venues,
 )
@@ -115,6 +117,50 @@ def test_augment_faculty_no_path():
     assert augment_faculty(author, data) is None
 
 
+def test_institute_never_decides_faculty():
+    """Institutes are separate from faculties (owner ruling): an institute
+    itself and any org under one carry no faculty/group evidence, but stay
+    in the display orgs list; the institute attribute takes their name."""
+    data = _data()
+    data.orgs[5] = ("mesa-uuid", "MESA+ Institute")
+    data.orgs[6] = ("mesa-lab-uuid", "BioLab")
+    data.tree[5] = [(0, 5), (1, 1)]
+    data.tree[6] = [(0, 6), (1, 5), (2, 1)]
+    data.institute_orgs = {5}
+
+    # Institute-subtree org: no faculty, no group, still displayed.
+    faculty, group, orgs = derive_identity(_payload("mesa-lab-uuid"), data)
+    assert faculty is None and group is None
+    assert orgs == ["BioLab"]
+
+    # Real faculty evidence alongside the institute: unaffected. Payload
+    # order is dept then institute; most specific first in the display list.
+    faculty, group, orgs = derive_identity(_payload("mesa-uuid", "dept-uuid"), data)
+    assert faculty == TNW
+    assert group == DEPT
+    assert orgs == [DEPT, "MESA+ Institute"]
+
+    assert derive_institute(_payload("mesa-uuid", "dept-uuid"), data) == "MESA+ Institute"
+    assert derive_institute(_payload("dept-uuid"), data) is None
+
+
+def test_augment_institute_and_faculty_block():
+    """Work-level institute arms fill augment_institute; institute-only
+    arms yield no faculty, real-department arms still do."""
+    data = _data()
+    data.orgs[5] = ("mesa-uuid", "MESA+ Institute")
+    data.tree[5] = [(0, 5), (1, 1)]
+    data.institute_orgs = {5}
+    author = {"pure_uuid": "b-uuid", "orcid": None, "openalex_author_id": "A501"}
+    data.person_by_openalex = {"a501": 12}
+    data.person_orgs = {12: [5]}
+    assert augment_institute(author, data) == "MESA+ Institute"
+    assert augment_faculty(author, data) is None
+    data.person_orgs = {12: [5, 3]}  # institute co-listed with a TNW dept
+    assert augment_faculty(author, data) == TNW
+    assert augment_institute(author, data) == "MESA+ Institute"
+
+
 def test_canonical_confirmed_via_person_orgs():
     data = _data()
     author = {"pure_uuid": "b-uuid", "orcid": "0000-0002-1234", "openalex_author_id": None}
@@ -212,6 +258,11 @@ def test_edge_map_lowercase_and_alt_ids():
 
 def _fixture_source() -> SourceData:
     data = _data()
+    # MESA+ Institute as a root child (org 5): Alice profile-affiliated,
+    # exercising the institute attribute end to end.
+    data.orgs[5] = ("mesa-uuid", "MESA+ Institute")
+    data.tree[5] = [(0, 5), (1, 1)]
+    data.institute_orgs = {5}
     data.authors = [
         {
             "pure_uuid": "a-uuid",
@@ -233,7 +284,7 @@ def _fixture_source() -> SourceData:
         },
     ]
     data.persons = {
-        "a-uuid": _payload("dept-uuid", UT_UUID),
+        "a-uuid": _payload("dept-uuid", "mesa-uuid", UT_UUID),
         "b-uuid": _payload(),
     }
     data.person_orcids = {"0000-0002-0001": 11}
@@ -298,14 +349,16 @@ async def test_ingest_idempotent(db, institution_factory):
         "edges": 4,
         "with_faculty": 2,
         "with_research_group": 1,
+        "with_institute": 1,
         "confirmed": 2,
     }
 
     a_rows = {row.pure_uuid: row for row in (await db.execute(select(Author))).scalars()}
     assert a_rows["a-uuid"].faculty == TNW
     assert a_rows["a-uuid"].research_group == DEPT
+    assert a_rows["a-uuid"].institute == "MESA+ Institute"
     assert a_rows["a-uuid"].n_works == 2
-    assert a_rows["a-uuid"].orgs == [DEPT, "University of Twente"]
+    assert a_rows["a-uuid"].orgs == [DEPT, "MESA+ Institute", "University of Twente"]
     assert a_rows["a-uuid"].openalex_ids == ["a5038098443", "a999"]
     # Canonical lower-cased form even though the source carries "A...".
     assert a_rows["a-uuid"].openalex_author_id == "a5038098443"
@@ -317,6 +370,7 @@ async def test_ingest_idempotent(db, institution_factory):
     # b: no CERIF affiliations, faculty + confirmation via canonical-person
     # fallback (person_orgs[12] resolves to the UT root).
     assert a_rows["b-uuid"].faculty == TNW
+    assert a_rows["b-uuid"].institute is None
     assert a_rows["b-uuid"].n_works == 2
     assert a_rows["b-uuid"].openalex_ids == ["a111"]
     assert a_rows["b-uuid"].confirmed is True
