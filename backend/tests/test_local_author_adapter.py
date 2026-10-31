@@ -22,8 +22,9 @@ async def test_adapter_roster_edges_and_ids(db, institution_factory):
     # carol's profile never resolves; dave rides the work-level arm;
     # eve is roster-admitted (dept profile) with no confirmed openalex id
     # (her namesake competitors stayed candidates); frank is rostered via
-    # the orcid-direct listing join
-    assert roster == {"p-alice", "p-bob", "p-dave", "p-eve", "p-frank"}
+    # the orcid-direct listing join; gina and karl via the weak-affiliation
+    # rung (confirmed identity substitutes for org closure)
+    assert roster == {"p-alice", "p-bob", "p-dave", "p-eve", "p-frank", "p-gina", "p-karl"}
 
     alice = next(a for a in data.authors if a["pure_uuid"] == "p-alice")
     assert alice["openalex_author_id"] == "a-alice"  # confirmed rows only
@@ -51,6 +52,14 @@ async def test_adapter_roster_edges_and_ids(db, institution_factory):
         ("a-eve", "w6"),
         ("a-eve2", "w6"),
         ("a-eve3", "w7"),
+        ("a-gina", "w8"),
+        ("a-hank", "w9"),
+        ("a-ivy", "w10"),
+        ("a-ivy", "w11"),
+        ("a-jack", "w12"),
+        ("a-eve", "w13"),
+        ("a-jack", "w13"),
+        ("a-karl", "w14"),
     }
     # pure's own author lists ride verbatim (roster-gated at ingest)
     assert set(data.pure_edges) == {
@@ -64,6 +73,13 @@ async def test_adapter_roster_edges_and_ids(db, institution_factory):
         ("p-eve", "w5"),
         ("p-eve", "w6"),
         ("p-eve", "w7"),
+        ("p-gina", "w8"),
+        ("p-hank", "w9"),
+        ("p-ivy1", "w10"),
+        ("p-ivy2", "w11"),
+        ("p-jack", "w12"),
+        ("p-eve", "w13"),
+        ("p-karl", "w14"),
     }
     # the resolved root carries the institution's bare ROR
     assert data.org_rors.get("root") == "006hf6230"
@@ -80,12 +96,20 @@ async def test_adapter_ingest_roundtrip(db, institution_factory):
     data = await fetch_local_source(db, inst)
 
     stats = await ingest_authors(db, inst.id, data, inst.ror)
-    assert stats["authors"] == 5
-    assert stats["confirmed"] == 5
+    assert stats["authors"] == 7
+    assert stats["confirmed"] == 5  # the weak rung rides identity evidence, not HR affiliation
     await db.commit()
 
     authors = {r.pure_uuid: r for r in (await db.execute(select(Author))).scalars()}
-    assert set(authors) == {"p-alice", "p-bob", "p-dave", "p-eve", "p-frank"}
+    assert set(authors) == {
+        "p-alice",
+        "p-bob",
+        "p-dave",
+        "p-eve",
+        "p-frank",
+        "p-gina",
+        "p-karl",
+    }
     alice = authors["p-alice"]
     assert alice.confirmed is True  # profile dept chain reaches the ROR root
     assert alice.openalex_ids == ["a-alice", "a-alice2"]  # primary + twin
@@ -95,3 +119,6 @@ async def test_adapter_ingest_roundtrip(db, institution_factory):
     assert authors["p-bob"].openalex_ids == ["a-bob"]
     assert authors["p-eve"].openalex_ids == []  # nothing confirmed, still rostered
     assert authors["p-frank"].openalex_ids == ["a-frank"]  # listing join
+    assert authors["p-gina"].openalex_ids == ["a-gina"]  # weak rung: admitted, unconfirmed
+    assert authors["p-gina"].confirmed is False
+    assert authors["p-karl"].openalex_ids == ["a-karl"]

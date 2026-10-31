@@ -24,6 +24,11 @@ from journal_browser.models import (
 
 ORCID_ALICE = "0000-0002-1825-0097"
 ORCID_FRANK = "0000-0002-4444-4444"
+ORCID_GINA = "0000-0009-0003-0003"
+ORCID_IVY = "0000-0009-0005-0005"
+ORCID_J1 = "0000-0009-0006-0006"
+ORCID_J2 = "0000-0009-0007-0007"
+ORCID_KARL = "0000-0009-0008-0008"
 
 
 async def _fixture(db, institution_factory):
@@ -43,7 +48,13 @@ async def _fixture(db, institution_factory):
     stays a candidate; a-eve3 contradicts on orcid and stays too.
     frank: profile-orcid person with no works — admitted via the
     orcid-direct listing join; eve's OpenAIRE authorship on w4 exercises
-    the openaire cascade arm (namespace kept out of openalex_ids)."""
+    the openaire cascade arm (namespace kept out of openalex_ids).
+    Weak-affiliation rung scenarios (flat org "flat" has NO parent edge,
+    so tree.resolves never closes for these persons): gina (name-exact,
+    single orcid) and karl (name-initials, single orcid) are admitted;
+    hank carries no orcid anywhere; jack's id appears with two different
+    orcids across the store (merged/impostor profile); ivy1 and ivy2 are
+    same-name persons whose works both select one shared id."""
     inst = await institution_factory(
         code="ut", name="University of Twente", ror="https://ror.org/006hf6230"
     )
@@ -58,6 +69,12 @@ async def _fixture(db, institution_factory):
             PureOrg(institution_id=inst.id, uuid="dept", name="Science", org_type="faculty"),
             PureOrg(
                 institution_id=inst.id, uuid="partner", name="Partner U", org_type="university"
+            ),
+            PureOrg(
+                institution_id=inst.id,
+                uuid="flat",
+                name="Stochastic Operations Research",
+                org_type="department",
             ),
             PureOrgParent(institution_id=inst.id, org_uuid="dept", parent_uuid="root"),
         ]
@@ -86,6 +103,12 @@ async def _fixture(db, institution_factory):
             _person("p-dave", "Dave", "Worker", ["partner"]),
             _person("p-eve", "Eve", "Namesake", ["dept"]),
             _person("p-frank", "Frank", "Listing", ["dept"], orcid=ORCID_FRANK),
+            _person("p-gina", "Gina", "Flat", ["flat"]),
+            _person("p-hank", "Hank", "Flat", ["flat"]),
+            _person("p-ivy1", "Ivy", "Twin", ["flat"]),
+            _person("p-ivy2", "Ivy", "Twin", ["flat"]),
+            _person("p-jack", "Jack", "Flat", ["flat"]),
+            _person("p-karl", "Karl", "Flat", ["flat"]),
         ]
     )
     run = HarvestRun(source="pure", entity_type="works", status="completed", config_fingerprint="t")
@@ -112,6 +135,13 @@ async def _fixture(db, institution_factory):
             _work("w5", "10.1000/w5"),
             _work("w6", "10.1000/w6"),
             _work("w7", "10.1000/w7"),
+            _work("w8", "10.1000/w8"),
+            _work("w9", "10.1000/w9"),
+            _work("w10", "10.1000/w10"),
+            _work("w11", "10.1000/w11"),
+            _work("w12", "10.1000/w12"),
+            _work("w13", "10.1000/w13"),
+            _work("w14", "10.1000/w14"),
         ]
     )
     db.add(journal_factory("1234-5678"))
@@ -140,6 +170,13 @@ async def _fixture(db, institution_factory):
             _cerif_author("w5", "p-eve", "Eve", "Namesake", ["dept"]),
             _cerif_author("w6", "p-eve", "Eve", "Namesake", ["dept"]),
             _cerif_author("w7", "p-eve", "Eve", "Namesake", ["dept"]),
+            _cerif_author("w8", "p-gina", "Gina", "Flat", ["flat"]),
+            _cerif_author("w9", "p-hank", "Hank", "Flat", ["flat"]),
+            _cerif_author("w10", "p-ivy1", "Ivy", "Twin", ["flat"]),
+            _cerif_author("w11", "p-ivy2", "Ivy", "Twin", ["flat"]),
+            _cerif_author("w12", "p-jack", "Jack", "Flat", ["flat"]),
+            _cerif_author("w13", "p-eve", "Eve", "Namesake", ["dept"]),
+            _cerif_author("w14", "p-karl", "K.", "Flat", ["flat"]),
         ]
     )
 
@@ -202,6 +239,20 @@ async def _fixture(db, institution_factory):
                 "10.1000/w7",
                 [{"a": "a-eve3", "n": "Eve Namesake", "o": "0000-0009-0002-0002"}],
             ),
+            _oa_work("W-h", "10.1000/w8", [{"a": "a-gina", "n": "Gina Flat", "o": ORCID_GINA}]),
+            _oa_work("W-i", "10.1000/w9", [{"a": "a-hank", "n": "Hank Flat", "o": None}]),
+            _oa_work("W-j", "10.1000/w10", [{"a": "a-ivy", "n": "Ivy Twin", "o": ORCID_IVY}]),
+            _oa_work("W-k", "10.1000/w11", [{"a": "a-ivy", "n": "Ivy Twin", "o": ORCID_IVY}]),
+            _oa_work("W-l", "10.1000/w12", [{"a": "a-jack", "n": "Jack Flat", "o": ORCID_J1}]),
+            _oa_work(
+                "W-m",
+                "10.1000/w13",
+                [
+                    {"a": "a-eve", "n": "Eve Namesake", "o": None},
+                    {"a": "a-jack", "n": "J. Flat", "o": ORCID_J2},
+                ],
+            ),
+            _oa_work("W-n", "10.1000/w14", [{"a": "a-karl", "n": "Karl Flat", "o": ORCID_KARL}]),
         ]
     )
     oa_run = HarvestRun(
@@ -320,6 +371,51 @@ async def test_resolve_statuses_and_gates(db, institution_factory):
 
     dave = rows[("p-dave", "a-dave")]
     assert dave.status == "confirmed"  # admitted via the work-level arm
+
+
+@requires_db
+async def test_weak_affiliation_rung(db, institution_factory):
+    """Org-dead-end persons: deterministic name + single consistent orcid
+    admits; no orcid, merged-profile orcid clash, and namesake-shared ids
+    stay out. Flat-org persons never enter the strong cascade."""
+    inst = await _fixture(db, institution_factory)
+    stats = await resolve_author_ids(db, inst, run_sweeps=False)
+    await db.commit()
+
+    # the rung never perturbs the work-anchored cascade
+    assert stats["matched"] == 4
+    assert stats["weak_affiliation"] == {
+        "admitted": 2,
+        "methods": {"name-exact": 1, "name-initials": 1},
+        # carol (partner-org profile, no orcid) and hank both evaluated and
+        # declined for missing orcid evidence
+        "skipped_orcid_missing": 2,
+        "skipped_orcid_mismatch": 1,
+        "skipped_namesake_contested": 2,
+    }
+
+    rows = {
+        (r.author_pure_uuid, r.external_id): r
+        for r in (await db.execute(select(AuthorIdentity))).scalars()
+    }
+    gina = rows[("p-gina", "a-gina")]
+    assert gina.status == "confirmed"
+    assert gina.method == "name-exact"
+    assert gina.orcid_corroborated is True
+    assert gina.n_works == 1
+    assert gina.evidence.get("weak_affiliation") is True
+    assert gina.evidence.get("orcids") == [ORCID_GINA]
+
+    karl = rows[("p-karl", "a-karl")]
+    assert karl.status == "confirmed"  # initials-form evidence, same gate
+    assert karl.method == "name-initials"
+
+    # hank: no orcid anywhere; jack: the id carries two orcids across the
+    # store; the ivys: one shared id selected by two same-name persons
+    assert ("p-hank", "a-hank") not in rows
+    assert ("p-jack", "a-jack") not in rows
+    assert ("p-ivy1", "a-ivy") not in rows
+    assert ("p-ivy2", "a-ivy") not in rows
 
 
 @requires_db

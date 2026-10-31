@@ -243,9 +243,6 @@ async def fetch_local_source(session: AsyncSession, institution: Institution) ->
         if known:
             data.person_orgs[person_key] = known
 
-    # Roster: profile arm OR work-level arm closes on the root.
-    roster = {key for key in data.persons if tree.resolves(data.person_orgs.get(key, []))}
-
     # OpenAlex ids from the resolved identity rows (confirmed only).
     rank_of = METHOD_RANK
     ids_by_author: dict[str, list[AuthorIdentity]] = {}
@@ -262,6 +259,16 @@ async def fetch_local_source(session: AsyncSession, institution: Institution) ->
         )
     ).scalars():
         ids_by_author.setdefault(row.author_pure_uuid, []).append(row)
+
+    # Roster: profile arm OR work-level arm closes on the root — or the
+    # person holds a confirmed OpenAlex identity row (the weak-affiliation
+    # rung: identity evidence substitutes for org closure when Pure's OAI
+    # orgunits carry no parent edges; see author_ids._weak_affiliation_rung).
+    roster = {
+        key
+        for key in data.persons
+        if tree.resolves(data.person_orgs.get(key, [])) or key in ids_by_author
+    }
 
     data.authors = []
     for uuid in sorted(roster):

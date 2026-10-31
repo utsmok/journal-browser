@@ -42,6 +42,8 @@ from ..models import (
 )
 from .author_cascade import (
     METHOD_FUZZY,
+    METHOD_INITIALS,
+    METHOD_NAME,
     METHOD_ORCID,
     ExtEntry,
     PureAuthor,
@@ -208,6 +210,134 @@ async def sweep_author_works(
         await ingest.finish_run("completed", {})
         await session.commit()
     return stats
+
+
+def _weak_affiliation_rung(
+    institution_id: int,
+    by_work: dict[str, list[WorkPureAuthor]],
+    doi_of_work: dict[str, str | None],
+    by_doi: dict[str, list[dict[str, Any]]],
+    aid_orcids: dict[str, set[str]],
+    aid_names: dict[str, Counter],
+    person_orcid: dict[str, str],
+    person_name: dict[str, str],
+    *,
+    admitted_uuids: set[str],
+    confirmed_uuids: set[str],
+    claimed_ids: dict[str, str],
+    proposed: set[tuple[str, str]],
+) -> dict[str, Any]:
+    """Identity admission for org-dead-end corpus members (owner decision
+    2026-10-31). Pure's OAI orgunits set serves no parent edges for
+    sub-departments, so a person whose every authorship edge and profile
+    affiliation lands on such flat orgs never passes tree.resolves — they
+    never enter the cascade and stay off the author browse entirely (43
+    live authors as of 2026-10-31; a non-OAI hierarchy source remains the
+    full fix). Admit a confirmed id when the person's own works bind
+    exactly one external id through BOTH deterministic name evidence
+    (orcid-exact / name-exact / name-initials — family-unique and fuzzy
+    stay out: 55% of edges carry empty affiliations, and soft name
+    evidence on unaffiliated works is the namesake trap the org gate
+    exists for) and a single consistent ORCID: the set of orcids on the
+    person's matched entries (plus their profile orcid) must be exactly
+    one value and equal the id's global orcid set in our store — impostor
+    namesakes carry their own orcid, and a merged OpenAlex profile fails
+    the equality. Persons without any orcid evidence stay unadmitted.
+    Two same-name persons selecting the same id cancel out."""
+    rows_out: list[dict[str, Any]] = []
+    skipped: Counter = Counter()
+    strong_methods = (METHOD_ORCID, METHOD_NAME, METHOD_INITIALS)
+
+    works_by_person: dict[str, set[str]] = defaultdict(set)
+    for work_uuid, edge_rows in by_work.items():
+        for row in edge_rows:
+            works_by_person[row.person_uuid].add(work_uuid)
+
+    for uuid in sorted(works_by_person):
+        if uuid in admitted_uuids or uuid in confirmed_uuids:
+            continue
+        weak_outcomes: list[tuple[ExtEntry, str, str]] = []
+        for work_uuid in sorted(works_by_person[uuid]):
+            doi = doi_of_work.get(work_uuid)
+            if not doi:
+                continue
+            entries = openalex_entries(by_doi.get(doi, []))
+            if not entries:
+                continue
+            edge = next(r for r in by_work[work_uuid] if r.person_uuid == uuid)
+            peers = {
+                decompose_parts(r.first_names or "", r.family_names or "").family_only
+                for r in by_work[work_uuid]
+                if r.person_uuid != uuid
+            }
+            author = PureAuthor(uuid, edge.first_names or "", edge.family_names or "")
+            entry, method = match(author, entries, person_orcid.get(uuid), peers)
+            if entry is None or not entry.id or method not in strong_methods:
+                continue
+            weak_outcomes.append((entry, method, work_uuid))
+        if not weak_outcomes:
+            continue
+        agg = aggregate([(e, m) for e, m, _w in weak_outcomes])
+        if agg is None:
+            continue
+        primary, method, conflicts = agg
+        if not primary.id:
+            continue
+        if conflicts:
+            skipped["conflicted"] += 1
+            continue
+        if primary.id in claimed_ids and claimed_ids[primary.id] != uuid:
+            skipped["id_claimed_elsewhere"] += 1
+            continue
+        person_orcids = {e.orcid for e, _m, _w in weak_outcomes if e.orcid}
+        if person_orcid.get(uuid):
+            person_orcids.add(person_orcid[uuid])
+        if not person_orcids:
+            skipped["orcid_missing"] += 1
+            continue
+        if aid_orcids.get(primary.id, set()) != person_orcids:
+            skipped["orcid_mismatch"] += 1
+            continue
+        rows_out.append(
+            {
+                "institution_id": institution_id,
+                "author_pure_uuid": uuid,
+                "source": SOURCE,
+                "external_id": primary.id,
+                "status": "confirmed",
+                "method": method,
+                "confidence": CONFIDENCE.get(method),
+                "n_works": len({w for e, _m, w in weak_outcomes if e.id == primary.id}),
+                "orcid_corroborated": True,
+                "evidence": {
+                    "weak_affiliation": True,
+                    "author_name": person_name.get(uuid),
+                    "orcids": sorted(person_orcids),
+                    "names": aid_names.get(primary.id, Counter()).most_common(3),
+                },
+            }
+        )
+        proposed.add((uuid, primary.id))
+
+    # Same id chosen by two different unaffiliated persons = an OpenAlex
+    # namesake merge; admit neither.
+    by_id: dict[str, set[str]] = defaultdict(set)
+    for row in rows_out:
+        by_id[row["external_id"]].add(row["author_pure_uuid"])
+    contested = [r for r in rows_out if len(by_id[r["external_id"]]) > 1]
+    if contested:
+        skipped["namesake_contested"] += len(contested)
+        rows_out = [r for r in rows_out if len(by_id[r["external_id"]]) == 1]
+    methods = Counter(r["method"] for r in rows_out)
+
+    return {
+        "rows": rows_out,
+        "stats": {
+            "admitted": len(rows_out),
+            "methods": dict(methods),
+            **{f"skipped_{k}": v for k, v in skipped.items()},
+        },
+    }
 
 
 async def resolve_author_ids(
@@ -541,8 +671,32 @@ async def resolve_author_ids(
             }
         )
         proposed.add((uuid, aid))
+        confirmed_uuids.add(uuid)
         listing_rows += 1
     per_arm["orcid-listing"] = {"rows": listing_rows}
+
+    # ── weak-affiliation rung (org-dead-end recovery) ────────────────────
+    weak = _weak_affiliation_rung(
+        institution.id,
+        by_work,
+        doi_of_work,
+        by_doi,
+        aid_orcids,
+        aid_names,
+        person_orcid,
+        person_name,
+        admitted_uuids={u for src in outcomes for u in outcomes[src]},
+        confirmed_uuids=confirmed_uuids,
+        claimed_ids={
+            aid: uuid
+            for src in id_works
+            for uuid, by_aid in id_works[src].items()
+            for aid in by_aid
+        },
+        proposed=proposed,
+    )
+    updates.extend(weak["rows"])
+    per_arm["weak-affiliation"] = weak["stats"]
 
     # Identities without an external id are noise (nothing collectable).
     updates = [u for u in updates if u["external_id"]]
@@ -633,6 +787,7 @@ async def resolve_author_ids(
             "corroborated_alts": corroborated_alts,
             "openaire": per_arm[SOURCE_OPENAIRE],
             "orcid_listing": per_arm["orcid-listing"]["rows"],
+            "weak_affiliation": per_arm["weak-affiliation"],
             "sweeps": sweep_stats,
             "seconds": round(time.monotonic() - started, 1),
         }
