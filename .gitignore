@@ -34,6 +34,9 @@ backend/landing-test/
 backend/landing-groningen/
 backend/logs/
 
+# Database dumps taken before deploys/repairs
+backups/
+
 # Live settings overlay (admin panel writes here; may hold secrets)
 backend/settings.yaml
 
