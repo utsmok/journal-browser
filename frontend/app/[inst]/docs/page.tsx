@@ -29,6 +29,8 @@ const LIVE_SURFACES = [
     blurb: "where colleagues publish and what covers them",
   },
   { path: "publisher", label: "Publishers", blurb: "agreements and output per publisher" },
+  { path: "orgunit", label: "Faculties and units", blurb: "output per organisational unit" },
+  { path: "deals", label: "Deals", blurb: "the full open access agreement register" },
   { path: "", label: "Journal search", blurb: "the main search over all titles" },
 ] as const;
 

@@ -426,17 +426,21 @@ function OrgUnitsView() {
                       No {level === "group" ? "research groups" : "faculties"} match &ldquo;{q}
                       &rdquo;.
                     </>
+                  ) : !anyFilter ? (
+                    // Unfiltered empty: for an institution whose orgunit
+                    // corpus was never harvested (e.g. rug) this is a data
+                    // gap, not a filter problem.
+                    <>
+                      No organisational data is available for {site.name || "this institution"} yet.
+                    </>
                   ) : (
                     <>
-                      No {level === "group" ? "research groups" : "faculties"} match
-                      {anyFilter ? " these filters" : ""}.
-                      {anyFilter && (
-                        <div className="mt-3">
-                          <Button variant="outline" size="sm" onClick={clearFilters}>
-                            Clear filters
-                          </Button>
-                        </div>
-                      )}
+                      No {level === "group" ? "research groups" : "faculties"} match these filters.
+                      <div className="mt-3">
+                        <Button variant="outline" size="sm" onClick={clearFilters}>
+                          Clear filters
+                        </Button>
+                      </div>
                     </>
                   )}
                 </div>

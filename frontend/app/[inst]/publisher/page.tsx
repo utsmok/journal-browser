@@ -293,7 +293,9 @@ function PublishersView() {
       key: "size",
       label: "Journal count",
       defaultOpen: false,
-      values: facetValues(facets?.size, sizes),
+      values: facetValues(facets?.size, sizes, (v) =>
+        v === "10+" ? "10+ journals" : `${v.replace("-", "–")} journals`,
+      ),
       activeValues: sizes,
     },
     {

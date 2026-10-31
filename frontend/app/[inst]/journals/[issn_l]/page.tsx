@@ -315,8 +315,8 @@ function PublicationsCard({
       title={`Publications (${site.short})`}
       description={
         <p className="text-pretty text-sm text-[var(--muted-foreground)]">
-          {site.short} works from Pure merged with OpenAlex venue works, {site.windowStart}{" "}
-          onwards. Citations and FWCI come from OpenAlex; works not matched there are marked.
+          {site.short} works from Pure merged with OpenAlex venue works, {site.windowStart} onwards.
+          Citations and FWCI come from OpenAlex; works not matched there are marked.
         </p>
       }
       contentClassName="space-y-3 text-sm"

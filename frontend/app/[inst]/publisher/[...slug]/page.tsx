@@ -291,6 +291,18 @@ export default function PublisherPage() {
                 })}
               </TableBody>
             </Table>
+            {publisher.n_journals > journals.length && (
+              <p className="mt-3 text-xs text-[var(--muted-foreground)]">
+                Showing the {journals.length} most publishing of{" "}
+                {publisher.n_journals.toLocaleString("en")} journals.{" "}
+                <Link
+                  href={`/${inst}/journals?publisher=${encodeURIComponent(publisher.name)}`}
+                  className="text-[var(--primary-text)] hover:underline"
+                >
+                  Search all journals of this publisher
+                </Link>
+              </p>
+            )}
             {journalPages > 1 && (
               <CardPager
                 page={journalPage}

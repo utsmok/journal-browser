@@ -263,10 +263,22 @@ function SearchView() {
           <div className="max-w-md">
             <Link
               href={`/${inst}/journals/${info.row.original.issn_l}`}
+              // The row handles plain clicks; swallow the event here so a
+              // ctrl/cmd-click on the link opens exactly one new tab via
+              // the browser's native handling instead of two.
+              onClick={(event) => event.stopPropagation()}
               className="font-medium text-[var(--foreground)] underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
             >
               {info.row.original.title ?? info.row.original.issn_l}
             </Link>
+            {info.row.original.is_in_doaj && (
+              <span
+                className="ml-2 cursor-help align-middle text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]"
+                title="Listed in DOAJ, the authoritative registry for gold and diamond open access journals"
+              >
+                DOAJ
+              </span>
+            )}
           </div>
         ),
       },
@@ -316,6 +328,28 @@ function SearchView() {
           />
         ),
         cell: (info) => <span className="tabular-nums">{info.getValue<number>()}</span>,
+      },
+      {
+        accessorKey: "twoyr_mean_citedness",
+        meta: { columnId: "citedness" },
+        header: () => (
+          <SortHead
+            columnId="citedness"
+            label="2yr cited"
+            title="2-year mean citedness (OpenAlex): average citations that the journal's last two years of works have received. Click to sort, again to reverse, again to reset"
+            state={sortRef.current}
+          />
+        ),
+        cell: (info) => {
+          const v = info.getValue<number | null>();
+          return v == null ? (
+            <span className="text-[var(--muted-foreground)]">—</span>
+          ) : (
+            <span className="tabular-nums" title="2-year mean citedness (OpenAlex)">
+              {v.toFixed(2)}
+            </span>
+          );
+        },
       },
       {
         accessorKey: "quartile",
@@ -388,15 +422,26 @@ function SearchView() {
         ),
         cell: (info) => {
           const v = info.getValue<string | null>();
+          if (!v) return <span className="text-[var(--muted-foreground)]">—</span>;
           return (
-            <span className="block max-w-44 truncate" title={v ?? undefined}>
-              {v || "—"}
-            </span>
+            // Click-through to the topic facet; the row's own click must
+            // not fire underneath it.
+            <button
+              type="button"
+              className="block max-w-44 truncate text-left underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+              title={`Filter the search by topic "${v}"`}
+              onClick={(event) => {
+                event.stopPropagation();
+                update({ topic: v });
+              }}
+            >
+              {v}
+            </button>
           );
         },
       },
     ],
-    [site, inst],
+    [site, inst, update],
   );
 
   // Backend fields the generated types trail (see lib/api.ts).
@@ -579,7 +624,11 @@ function SearchView() {
                   id="sort"
                   title="Order of the results. Match by meaning always ranks by similarity instead"
                   value={sort}
-                  onChange={(event) => update({ sort: event.target.value })}
+                  onChange={(event) =>
+                    // A sort change invalidates the old direction: keeping
+                    // `dir` would flip the freshly chosen A–Z label to Z–A.
+                    update({ sort: event.target.value, dir: undefined })
+                  }
                   className="h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
                 >
                   {SORTS.map((s) => (

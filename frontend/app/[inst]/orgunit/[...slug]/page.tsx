@@ -9,6 +9,7 @@ import { BackLink } from "@/components/back-link";
 import { CardPager } from "@/components/card-pager";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { OaTrend } from "@/components/oa-trend";
+import { OrcidLink } from "@/components/orcid-link";
 import { DetailSkeleton, ErrorPanel } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -222,6 +223,11 @@ function OrgUnitDetail({
                       >
                         {a.name}
                       </Link>
+                      {a.orcid && (
+                        <span className="ml-2">
+                          <OrcidLink orcid={a.orcid} />
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {a.n_works.toLocaleString("en")}
@@ -322,7 +328,11 @@ function OrgUnitDetail({
                     <TableCell className="text-right tabular-nums">
                       {d.n_works.toLocaleString("en")}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{formatEur(d.euro)} €</TableCell>
+                    {/* euro 0 with no evidence rows means "no amount data",
+                        not "free": sibling surfaces gate on apc_n > 0. */}
+                    <TableCell className="text-right tabular-nums">
+                      {d.euro ? `${formatEur(d.euro)} €` : "—"}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

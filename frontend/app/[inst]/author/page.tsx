@@ -1,13 +1,14 @@
 "use client";
 
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { FacetGroupList, type FacetGroupDef, type FacetValue } from "@/components/filter-panel";
+import { OrcidLink } from "@/components/orcid-link";
 import { ListSkeletonRows } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -565,21 +566,5 @@ function AuthorsView() {
         </div>
       </div>
     </div>
-  );
-}
-
-/** Small external-link affordance to the author's ORCID record. */
-function OrcidLink({ orcid }: { orcid: string }) {
-  return (
-    <a
-      href={`https://orcid.org/${orcid}`}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline"
-      title={orcid}
-      aria-label={`ORCID profile ${orcid}`}
-    >
-      ORCID <ExternalLink aria-hidden className="size-3.5 shrink-0" />
-    </a>
   );
 }

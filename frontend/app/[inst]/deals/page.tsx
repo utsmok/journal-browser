@@ -1,6 +1,7 @@
 "use client";
 
 import { ExternalLink } from "lucide-react";
+import Link from "next/link";
 import type { UseQueryResult } from "@tanstack/react-query";
 
 import { SourceNote } from "@/components/source-note";
@@ -8,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { Button } from "@/components/ui/button";
 import { useDeals } from "@/hooks/use-api";
+import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { errorMessage, type DealLink, type DealOut } from "@/lib/api";
 import { dealLinkLabel, orderedDealLinks } from "@/lib/deal-links";
@@ -15,9 +17,36 @@ import { cleanProse } from "@/lib/utils";
 
 function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
   const site = useSiteMeta();
+  const inst = useInstitution();
   const capNumbers = Object.entries(deal.cap_numbers ?? {}).sort(
     (a, b) => (parseInt(a[0], 10) || 0) - (parseInt(b[0], 10) || 0),
   );
+  const oaPerYear = Object.entries(deal.per_year_oa_counts ?? {}).sort(
+    (a, b) => (parseInt(a[0], 10) || 0) - (parseInt(b[0], 10) || 0),
+  );
+  const prose = (
+    <>
+      {deal.conditions_text && (
+        <div>
+          <p className="font-medium">Conditions</p>
+          <p className="mt-0.5 max-w-prose text-pretty">{cleanProse(deal.conditions_text)}</p>
+        </div>
+      )}
+      {deal.workflow_text && (
+        <div>
+          <p className="font-medium">Workflow</p>
+          <p className="mt-0.5 max-w-prose text-pretty">{cleanProse(deal.workflow_text)}</p>
+        </div>
+      )}
+      {deal.article_types_text && (
+        <div>
+          <p className="font-medium">Article types</p>
+          <p className="mt-0.5 max-w-prose text-pretty">{cleanProse(deal.article_types_text)}</p>
+        </div>
+      )}
+    </>
+  );
+  const hasProse = deal.conditions_text || deal.workflow_text || deal.article_types_text;
   // Collapsible like the detail page's deal panels: the scraped prose runs
   // long, and a 16-card page should not force all of it on the reader.
   return (
@@ -63,18 +92,54 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
         </p>
       )}
       {capNumbers.length > 0 && (
-        <ul className="flex flex-wrap gap-1.5">
-          {capNumbers.map(([year, count]) => (
-            <li
-              key={year}
-              className="rounded-full bg-[var(--muted)] px-2.5 py-0.5 text-xs tabular-nums"
-            >
-              {year}: {String(count)}
-            </li>
-          ))}
-        </ul>
+        <div>
+          <p className="mb-1 text-xs text-[var(--muted-foreground)]">Cap usage per year</p>
+          <ul className="flex flex-wrap gap-1.5">
+            {capNumbers.map(([year, count]) => (
+              <li
+                key={year}
+                className="rounded-full bg-[var(--muted)] px-2.5 py-0.5 text-xs tabular-nums"
+              >
+                {year}: {Number(count).toLocaleString("en")}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {oaPerYear.length > 0 && (
+        <div>
+          <p className="mb-1 text-xs text-[var(--muted-foreground)]">
+            OA articles per year (JCT output)
+          </p>
+          <ul className="flex flex-wrap gap-1.5">
+            {oaPerYear.map(([year, count]) => (
+              <li
+                key={year}
+                className="rounded-full bg-[var(--muted)] px-2.5 py-0.5 text-xs tabular-nums"
+              >
+                {year}: {Number(count).toLocaleString("en")}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {hasProse && (
+        <details className="text-sm">
+          <summary className="cursor-pointer text-[var(--primary-text)] hover:underline">
+            Conditions, workflow, and article types
+          </summary>
+          <div className="mt-2 space-y-2">{prose}</div>
+        </details>
       )}
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+        {!archived && (
+          <Link
+            href={`/${inst}/journals?deal=covered`}
+            className="inline-flex items-center gap-1 text-[var(--primary-text)] hover:underline"
+          >
+            Covered journals (search)
+          </Link>
+        )}
         {deal.links?.length ? (
           orderedDealLinks(deal.links)
             .filter((link): link is DealLink & { url: string } => !!link.url)
