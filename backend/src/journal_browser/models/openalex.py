@@ -125,7 +125,7 @@ class AuthorIdentity(Base):
             "status IN ('confirmed', 'candidate', 'rejected')",
             name="ck_author_identities_status",
         ),
-        CheckConstraint("source IN ('openalex')", name="ck_author_identities_source"),
+        CheckConstraint("source IN ('openalex', 'openaire')", name="ck_author_identities_source"),
         Index(
             "ix_author_identities_inst_author",
             "institution_id",

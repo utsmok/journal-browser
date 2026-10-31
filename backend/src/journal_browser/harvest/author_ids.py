@@ -43,6 +43,7 @@ from ..models import (
 from .author_cascade import (
     METHOD_FUZZY,
     METHOD_ORCID,
+    ExtEntry,
     PureAuthor,
     aggregate,
     match,
@@ -55,6 +56,7 @@ from .org_closure import load_org_tree
 logger = logging.getLogger(__name__)
 
 SOURCE = "openalex"
+SOURCE_OPENAIRE = "openaire"
 AUTHOR_ENTITY = "authors"
 SWEEP_FILTER_PREFIX = "author-sweep"
 BATCH_SIZE = 50  # OpenAlex pipe-OR ceiling (ut-metadata gap-fetch size)
@@ -286,11 +288,60 @@ async def resolve_author_ids(
     for aid, orcid in listing_orcids.items():
         if orcid:
             aid_orcids[aid].add(orcid)
+    aid_orcids_oa: dict[str, set[str]] = defaultdict(set)
+    aid_names_oa: dict[str, Counter] = defaultdict(Counter)
+
+    # OpenAIRE work store: the same work-anchored cascade against a second
+    # external corpus (authorship names arrive inverted "Family, First";
+    # decompose_name parses both orders). Ids are OpenAIRE person keys —
+    # mostly orcid-derived — stored as separate source='openaire'
+    # identity rows so the namespace never mixes with OpenAlex A-ids.
+    by_doi_oa: dict[str, list[ExtEntry]] = defaultdict(list)
+    oa_dois = sorted({d for d in doi_of_work.values() if d})
+    for start in range(0, len(oa_dois), 20000):
+        chunk = oa_dois[start : start + 20000]
+        doi_expr = func.lower(SourceRecord.payload.op("->>")("doi"))
+        for doi, payload in (
+            await session.execute(
+                select(doi_expr, SourceRecord.payload).where(
+                    SourceRecord.source == "openaire",
+                    SourceRecord.entity_type == "work",
+                    doi_expr.in_(chunk),
+                )
+            )
+        ).all():
+            for a in payload.get("authors") or []:
+                if not isinstance(a, dict):
+                    continue
+                name = a.get("fullName") or " ".join(
+                    p for p in (a.get("name"), a.get("surname")) if p
+                )
+                pid = a.get("pid")
+                inner = pid.get("id") if isinstance(pid, dict) else None
+                orcid = bare_orcid(inner.get("value") if isinstance(inner, dict) else None)
+                entry_id = (a.get("id") or "").rsplit("/", 1)[-1] or None
+                if not name and not orcid:
+                    continue
+                if entry_id:
+                    if orcid:
+                        aid_orcids_oa[entry_id].add(orcid)
+                    if name:
+                        aid_names_oa[entry_id][name] += 1
+                by_doi_oa[doi].append(ExtEntry(entry_id, name or None, orcid))
 
     # ── the work-anchored cascade ────────────────────────────────────────
-    outcomes: dict[str, list[tuple[Any, str]]] = defaultdict(list)
-    id_works: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
-    work_ids: dict[str, list[set[str]]] = defaultdict(list)
+    outcomes: dict[str, dict[str, list[tuple[Any, str]]]] = {
+        SOURCE: defaultdict(list),
+        SOURCE_OPENAIRE: defaultdict(list),
+    }
+    id_works: dict[str, dict[str, dict[str, set[str]]]] = {
+        SOURCE: defaultdict(lambda: defaultdict(set)),
+        SOURCE_OPENAIRE: defaultdict(lambda: defaultdict(set)),
+    }
+    work_ids: dict[str, dict[str, list[set[str]]]] = {
+        SOURCE: defaultdict(list),
+        SOURCE_OPENAIRE: defaultdict(list),
+    }
     works = 0
     works_matched = 0
     works_without_doi = 0
@@ -330,105 +381,159 @@ async def resolve_author_ids(
             continue
         works_matched += 1
         fams = [decompose_parts(a.first, a.family).family_only for a in authors]
-        work_hit = False
-        for i, a in enumerate(authors):
-            peer = {f for j, f in enumerate(fams) if j != i}
-            entry, method = match(a, entries, person_orcid.get(a.uuid), peer)
-            if entry is None:
+        ext_lists = (
+            (SOURCE, entries),
+            (SOURCE_OPENAIRE, by_doi_oa.get(doi, [])),
+        )
+        for src, ext in ext_lists:
+            if not ext:
                 continue
-            outcomes[a.uuid].append((entry, method))
-            work_hit = True
-            if entry.id:
-                id_works[a.uuid][entry.id].add(work_uuid)
-        if work_hit:
-            # every id present on a work the person matched on: the
-            # twin gate checks primary/alternate co-occurrence here
-            work_ids[a.uuid].append({e.id for e in entries if e.id})
+            for i, a in enumerate(authors):
+                peer = {f for j, f in enumerate(fams) if j != i}
+                entry, method = match(a, ext, person_orcid.get(a.uuid), peer)
+                if entry is None:
+                    continue
+                outcomes[src][a.uuid].append((entry, method))
+                # every id present on a work the person matched on: the
+                # twin gate checks primary/alternate co-occurrence here
+                work_ids[src][a.uuid].append({e.id for e in ext if e.id})
+                if entry.id:
+                    id_works[src][a.uuid][entry.id].add(work_uuid)
 
     # ── aggregation + corroboration + identity rows ─────────────────────
     updates: list[dict[str, Any]] = []
-    matched = 0
-    methods: Counter = Counter()
-    conflicted_authors = 0
+    arm_evidence = {
+        SOURCE: (aid_orcids, aid_names),
+        SOURCE_OPENAIRE: (aid_orcids_oa, aid_names_oa),
+    }
     corroborated_alts = 0
-    for uuid, outs in sorted(outcomes.items()):
-        agg = aggregate(outs)
-        if agg is None:
-            continue
-        primary, method, conflicts = agg
-        matched += 1
-        methods[method] += 1
-        if conflicts:
-            conflicted_authors += 1
-        porcid = person_orcid.get(uuid)
-        ids_seen = {e.id for e, _m in outs if e.id}
-        alternates = sorted(ids_seen - {primary.id}) if primary.id else sorted(ids_seen)
-        author_evidence = {
-            "conflicts": conflicts,
-            "author_name": person_name.get(uuid),
+    per_arm: dict[str, dict[str, Any]] = {}
+    for src, (arm_orcids, arm_names) in arm_evidence.items():
+        matched = 0
+        methods: Counter = Counter()
+        conflicted_authors = 0
+        rows = 0
+        for uuid, outs in sorted(outcomes[src].items()):
+            agg = aggregate(outs)
+            if agg is None:
+                continue
+            primary, method, conflicts = agg
+            matched += 1
+            methods[method] += 1
+            if conflicts:
+                conflicted_authors += 1
+            porcid = person_orcid.get(uuid)
+            ids_seen = {e.id for e, _m in outs if e.id}
+            alternates = sorted(ids_seen - {primary.id}) if primary.id else sorted(ids_seen)
+
+            if primary.id:
+                primary_corroborated = bool(porcid) and porcid in arm_orcids.get(primary.id, set())
+                updates.append(
+                    {
+                        "institution_id": institution.id,
+                        "author_pure_uuid": uuid,
+                        "source": src,
+                        "external_id": primary.id,
+                        "status": _derived_status(method, conflicts),
+                        "method": method,
+                        "confidence": CONFIDENCE.get(method),
+                        "n_works": len(id_works[src][uuid][primary.id]),
+                        "orcid_corroborated": primary_corroborated,
+                        "evidence": {
+                            "conflicts": conflicts,
+                            "author_name": person_name.get(uuid),
+                            "names": arm_names.get(primary.id, Counter()).most_common(3),
+                        },
+                    }
+                )
+            for aid in alternates:
+                corroborated = bool(porcid) and porcid in arm_orcids.get(aid, set())
+                if corroborated:
+                    corroborated_alts += 1
+                # Zero-conflict twins ride along (owner decision 2026-10-31):
+                # an alternate is a twin of the person — not a competing
+                # namesake — when its id never appears on a work where the
+                # primary id also appears (one human is never two authorships
+                # of one work, modulo merge artifacts), and the ORCID evidence
+                # across primary and alternates names at most one human. A
+                # co-occurring or orcid-contradicted id is a competitor and
+                # stays a candidate for the review queue; rejects remain the
+                # correction path.
+                co_occur = primary.id is not None and any(
+                    primary.id in idset and aid in idset for idset in work_ids[src].get(uuid, [])
+                )
+                ids_all = ([primary.id] if primary.id else []) + alternates
+                seen_orcids = (
+                    set().union(*(arm_orcids.get(i, set()) for i in ids_all)) if ids_all else set()
+                )
+                orcid_consistent = len(seen_orcids) <= 1
+                is_twin = not co_occur and orcid_consistent
+                updates.append(
+                    {
+                        "institution_id": institution.id,
+                        "author_pure_uuid": uuid,
+                        "source": src,
+                        "external_id": aid,
+                        "status": "confirmed" if is_twin else "candidate",
+                        "method": "orcid-corroboration" if corroborated else "fragmentation",
+                        "confidence": 0.9 if corroborated else CONFIDENCE.get(METHOD_FUZZY),
+                        "n_works": len(id_works[src][uuid][aid]),
+                        "orcid_corroborated": corroborated,
+                        "evidence": {
+                            "primary_id": primary.id,
+                            "orcids_seen": sorted(arm_orcids.get(aid, set()))[:3],
+                            "names": arm_names.get(aid, Counter()).most_common(3),
+                            "author_name": person_name.get(uuid),
+                            **({"co_occurs_with_primary": True} if co_occur else {}),
+                        },
+                    }
+                )
+        per_arm[src] = {
+            "matched": matched,
+            "methods": dict(methods),
+            "conflicted_authors": conflicted_authors,
         }
 
-        if primary.id:
-            primary_corroborated = bool(porcid) and porcid in aid_orcids.get(primary.id, set())
-            updates.append(
-                {
-                    "institution_id": institution.id,
-                    "author_pure_uuid": uuid,
-                    "source": SOURCE,
-                    "external_id": primary.id,
-                    "status": _derived_status(method, conflicts),
-                    "method": method,
-                    "confidence": CONFIDENCE.get(method),
-                    "n_works": len(id_works[uuid][primary.id]),
-                    "orcid_corroborated": primary_corroborated,
-                    "evidence": {
-                        **author_evidence,
-                        "names": aid_names.get(primary.id, Counter()).most_common(3),
-                    },
-                }
-            )
-        for aid in alternates:
-            corroborated = bool(porcid) and porcid in aid_orcids.get(aid, set())
-            if corroborated:
-                corroborated_alts += 1
-            # Zero-conflict twins ride along (owner decision 2026-10-31):
-            # an alternate is a twin of the person — not a competing
-            # namesake — when its id never appears on a work where the
-            # primary id also appears (one human is never two authorships
-            # of one work, modulo merge artifacts), and the ORCID evidence
-            # across primary and alternates names at most one human. A
-            # co-occurring or orcid-contradicted id is a competitor and
-            # stays a candidate for the review queue; rejects remain the
-            # correction path.
-            co_occur = primary.id is not None and any(
-                primary.id in idset and aid in idset for idset in work_ids.get(uuid, [])
-            )
-            ids_all = ([primary.id] if primary.id else []) + alternates
-            seen_orcids = (
-                set().union(*(aid_orcids.get(i, set()) for i in ids_all)) if ids_all else set()
-            )
-            orcid_consistent = len(seen_orcids) <= 1
-            is_twin = not co_occur and orcid_consistent
-            updates.append(
-                {
-                    "institution_id": institution.id,
-                    "author_pure_uuid": uuid,
-                    "source": SOURCE,
-                    "external_id": aid,
-                    "status": "confirmed" if is_twin else "candidate",
-                    "method": "orcid-corroboration" if corroborated else "fragmentation",
-                    "confidence": 0.9 if corroborated else CONFIDENCE.get(METHOD_FUZZY),
-                    "n_works": len(id_works[uuid][aid]),
-                    "orcid_corroborated": corroborated,
-                    "evidence": {
-                        "primary_id": primary.id,
-                        "orcids_seen": sorted(aid_orcids.get(aid, set()))[:3],
-                        "names": aid_names.get(aid, Counter()).most_common(3),
-                        "author_name": person_name.get(uuid),
-                        **({"co_occurs_with_primary": True} if co_occur else {}),
-                    },
-                }
-            )
+    # ── profile-orcid ↔ author-listing join ──────────────────────────────
+    # Deterministic identity join, no name matching involved: an OpenAlex
+    # author profile that carries the pure person's own ORCID is that
+    # person (ut-metadata admitted its roster this way). Only authors with
+    # no confirmed OpenAlex row from the work-anchored cascade are
+    # extended — the work-level pass stays the primary evidence.
+    listing_by_orcid = {orcid: aid for aid, orcid in listing_orcids.items() if orcid}
+    confirmed_uuids = {
+        r["author_pure_uuid"]
+        for r in updates
+        if r["source"] == SOURCE and r["status"] == "confirmed"
+    }
+    proposed = {(r["author_pure_uuid"], r["external_id"]) for r in updates}
+    listing_rows = 0
+    for uuid, porcid in sorted(person_orcid.items()):
+        if uuid in confirmed_uuids:
+            continue
+        aid = listing_by_orcid.get(porcid)
+        if not aid or (uuid, aid) in proposed:
+            continue
+        updates.append(
+            {
+                "institution_id": institution.id,
+                "author_pure_uuid": uuid,
+                "source": SOURCE,
+                "external_id": aid,
+                "status": "confirmed",
+                "method": METHOD_ORCID,
+                "confidence": CONFIDENCE[METHOD_ORCID],
+                "n_works": 0,
+                "orcid_corroborated": True,
+                "evidence": {
+                    "source": "author-listing",
+                    "author_name": person_name.get(uuid),
+                },
+            }
+        )
+        proposed.add((uuid, aid))
+        listing_rows += 1
+    per_arm["orcid-listing"] = {"rows": listing_rows}
 
     # Identities without an external id are noise (nothing collectable).
     updates = [u for u in updates if u["external_id"]]
@@ -484,6 +589,7 @@ async def resolve_author_ids(
                         select(AuthorIdentity.external_id)
                         .where(
                             AuthorIdentity.institution_id == institution.id,
+                            AuthorIdentity.source == SOURCE,
                             AuthorIdentity.status == "confirmed",
                         )
                         .distinct()
@@ -507,14 +613,17 @@ async def resolve_author_ids(
             "works_matched": works_matched,
             "works_without_doi": works_without_doi,
             "works_without_openalex": works_without_openalex,
-            "authors_walked": len(outcomes),
-            "matched": matched,
-            "methods": dict(methods),
-            "conflicted_authors": conflicted_authors,
+            "authors_walked": len(outcomes[SOURCE]),
+            # openalex arm stays the headline keys (job output compat)
+            "matched": per_arm[SOURCE]["matched"],
+            "methods": per_arm[SOURCE]["methods"],
+            "conflicted_authors": per_arm[SOURCE]["conflicted_authors"],
             "identity_rows": len(updates),
             "confirmed_rows": confirmed_rows,
             "candidate_rows": candidate_rows,
             "corroborated_alts": corroborated_alts,
+            "openaire": per_arm[SOURCE_OPENAIRE],
+            "orcid_listing": per_arm["orcid-listing"]["rows"],
             "sweeps": sweep_stats,
             "seconds": round(time.monotonic() - started, 1),
         }

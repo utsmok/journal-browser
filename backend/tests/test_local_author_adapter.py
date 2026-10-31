@@ -20,8 +20,10 @@ async def test_adapter_roster_edges_and_ids(db, institution_factory):
     data = await fetch_local_source(db, inst)
     roster = {a["pure_uuid"] for a in data.authors}
     # carol's profile never resolves; dave rides the work-level arm;
-    # eve is roster-admitted (dept profile) but has no confirmed id yet
-    assert roster == {"p-alice", "p-bob", "p-dave", "p-eve"}
+    # eve is roster-admitted (dept profile) with no confirmed openalex id
+    # (her namesake competitors stayed candidates); frank is rostered via
+    # the orcid-direct listing join
+    assert roster == {"p-alice", "p-bob", "p-dave", "p-eve", "p-frank"}
 
     alice = next(a for a in data.authors if a["pure_uuid"] == "p-alice")
     assert alice["openalex_author_id"] == "a-alice"  # confirmed rows only
@@ -33,7 +35,10 @@ async def test_adapter_roster_edges_and_ids(db, institution_factory):
     assert eve["openalex_author_id"] is None  # namesake competitors stayed candidates
     assert eve["openalex_alt_ids"] == []
 
-    # OpenAlex authorships DOI-joined onto local works, ids lower-cased
+    frank = next(a for a in data.authors if a["pure_uuid"] == "p-frank")
+    assert frank["openalex_author_id"] == "A-frank"  # listing join, confirmed
+
+    # the openaire identity row never leaks into openalex ids
     assert set(data.edges) == {
         ("a-alice", "w1"),
         ("a-bob", "w1"),
@@ -75,12 +80,12 @@ async def test_adapter_ingest_roundtrip(db, institution_factory):
     data = await fetch_local_source(db, inst)
 
     stats = await ingest_authors(db, inst.id, data, inst.ror)
-    assert stats["authors"] == 4
-    assert stats["confirmed"] == 4
+    assert stats["authors"] == 5
+    assert stats["confirmed"] == 5
     await db.commit()
 
     authors = {r.pure_uuid: r for r in (await db.execute(select(Author))).scalars()}
-    assert set(authors) == {"p-alice", "p-bob", "p-dave", "p-eve"}
+    assert set(authors) == {"p-alice", "p-bob", "p-dave", "p-eve", "p-frank"}
     alice = authors["p-alice"]
     assert alice.confirmed is True  # profile dept chain reaches the ROR root
     assert alice.openalex_ids == ["a-alice", "a-alice2"]  # primary + twin
@@ -89,3 +94,4 @@ async def test_adapter_ingest_roundtrip(db, institution_factory):
     assert authors["p-dave"].confirmed is True  # work-level arm confirmation
     assert authors["p-bob"].openalex_ids == ["a-bob"]
     assert authors["p-eve"].openalex_ids == []  # nothing confirmed, still rostered
+    assert authors["p-frank"].openalex_ids == ["a-frank"]  # listing join

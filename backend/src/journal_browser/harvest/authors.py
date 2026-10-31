@@ -254,6 +254,10 @@ async def fetch_local_source(session: AsyncSession, institution: Institution) ->
             select(AuthorIdentity).where(
                 AuthorIdentity.institution_id == institution.id,
                 AuthorIdentity.status == "confirmed",
+                # OpenAlex A-ids only: the openaire cascade arm stores
+                # OpenAIRE person keys in the same table — a different
+                # namespace that must never feed authors.openalex_ids.
+                AuthorIdentity.source == "openalex",
             )
         )
     ).scalars():

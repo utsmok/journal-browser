@@ -17,11 +17,13 @@ from journal_browser.models import (
     PureOrg,
     PureOrgParent,
     PurePerson,
+    SourceRecord,
     Work,
     WorkPureAuthor,
 )
 
 ORCID_ALICE = "0000-0002-1825-0097"
+ORCID_FRANK = "0000-0002-4444-4444"
 
 
 async def _fixture(db, institution_factory):
@@ -38,7 +40,10 @@ async def _fixture(db, institution_factory):
     eve: namesake competitor scenario — a-eve matched on w4, a-eve2 on
     w5 (with its own orcid), a-eve3 on w7 (different orcid); w6 lists
     a-eve and a-eve2 together, so a-eve2 co-occurs with the primary and
-    stays a candidate; a-eve3 contradicts on orcid and stays too."""
+    stays a candidate; a-eve3 contradicts on orcid and stays too.
+    frank: profile-orcid person with no works — admitted via the
+    orcid-direct listing join; eve's OpenAIRE authorship on w4 exercises
+    the openaire cascade arm (namespace kept out of openalex_ids)."""
     inst = await institution_factory(
         code="ut", name="University of Twente", ror="https://ror.org/006hf6230"
     )
@@ -80,6 +85,7 @@ async def _fixture(db, institution_factory):
             _person("p-carol", "Carol", "Partner", ["partner"]),
             _person("p-dave", "Dave", "Worker", ["partner"]),
             _person("p-eve", "Eve", "Namesake", ["dept"]),
+            _person("p-frank", "Frank", "Listing", ["dept"], orcid=ORCID_FRANK),
         ]
     )
     run = HarvestRun(source="pure", entity_type="works", status="completed", config_fingerprint="t")
@@ -198,6 +204,57 @@ async def _fixture(db, institution_factory):
             ),
         ]
     )
+    oa_run = HarvestRun(
+        source="openaire",
+        entity_type="work",
+        institution_id=inst.id,
+        status="completed",
+        config_fingerprint="t",
+    )
+    listing_run = HarvestRun(
+        source="openalex",
+        entity_type="authors",
+        institution_id=inst.id,
+        status="completed",
+        config_fingerprint="t",
+    )
+    db.add_all([oa_run, listing_run])
+    await db.flush()
+    db.add_all(
+        [
+            # OpenAIRE authorship of w4: orcid-backed person key, inverted name
+            SourceRecord(
+                source="openaire",
+                entity_type="work",
+                source_pk="oa:w4",
+                payload={
+                    "doi": "10.1000/w4",
+                    "authors": [
+                        {
+                            "id": "orcid_______::eve1",
+                            "pid": {"id": {"value": "0000-0009-0004-0004", "scheme": "orcid"}},
+                            "fullName": "Namesake, Eve",
+                        }
+                    ],
+                },
+                content_hash="h-openaire-w4",
+                harvest_run_id=oa_run.id,
+            ),
+            # author listing row carrying frank's own orcid
+            SourceRecord(
+                source="openalex",
+                entity_type="authors",
+                source_pk="A-frank",
+                payload={
+                    "id": "https://openalex.org/A-frank",
+                    "orcid": ORCID_FRANK,
+                    "display_name": "Frank Listing",
+                },
+                content_hash="h-listing-frank",
+                harvest_run_id=listing_run.id,
+            ),
+        ]
+    )
     await db.flush()
     return inst
 
@@ -213,6 +270,9 @@ async def test_resolve_statuses_and_gates(db, institution_factory):
     # fragmentation); eve matches three namesake profiles — the conflict
     # counter flags exactly those two.
     assert stats["conflicted_authors"] == 2
+    # the openaire arm matched eve once on w4; frank rides the listing join
+    assert stats["openaire"]["matched"] == 1
+    assert stats["orcid_listing"] == 1
     rows = {
         (r.author_pure_uuid, r.external_id): r
         for r in (await db.execute(select(AuthorIdentity))).scalars()
@@ -238,6 +298,21 @@ async def test_resolve_statuses_and_gates(db, institution_factory):
     assert eve_co.status == "candidate"  # co-occurs with the primary on w6
     assert eve_co.evidence.get("co_occurs_with_primary") is True
     assert rows[("p-eve", "a-eve3")].status == "candidate"  # orcid contradiction
+
+    # openaire arm: eve matched via the inverted-name initials form (the
+    # raw name-exact rung compares display order, so "Namesake, Eve" runs
+    # one rung down — deterministic either way), own namespace
+    eve_oa = rows[("p-eve", "orcid_______::eve1")]
+    assert eve_oa.status == "confirmed"
+    assert eve_oa.source == "openaire"
+    assert eve_oa.method == "name-initials"
+
+    # orcid-direct: frank's listing profile carries his own orcid
+    frank = rows[("p-frank", "A-frank")]
+    assert frank.status == "confirmed"
+    assert frank.method == "orcid-exact"
+    assert frank.n_works == 0
+    assert frank.evidence.get("source") == "author-listing"
 
     bob = rows[("p-bob", "a-bob")]
     assert bob.status == "confirmed"  # non-fuzzy (initials/name), zero conflict
