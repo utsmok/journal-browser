@@ -48,4 +48,3 @@ psql "${LIVE_URL/postgresql+asyncpg:/postgresql:}" -tAc \
    SELECT 'weak_rows', count(*) FROM author_identities WHERE evidence->>'weak_affiliation' = 'true'
    UNION ALL
    SELECT 'van_doorn', count(*) FROM authors WHERE openalex_author_id = 'a5010733081'"
-echo "== done — now verify the frontend: /ut/authors count and van Doorn's page"

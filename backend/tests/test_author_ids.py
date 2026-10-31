@@ -142,6 +142,7 @@ async def _fixture(db, institution_factory):
             _work("w12", "10.1000/w12"),
             _work("w13", "10.1000/w13"),
             _work("w14", "10.1000/w14"),
+            _work("w15", "10.1000/w15"),
         ]
     )
     db.add(journal_factory("1234-5678"))
@@ -177,6 +178,7 @@ async def _fixture(db, institution_factory):
             _cerif_author("w12", "p-jack", "Jack", "Flat", ["flat"]),
             _cerif_author("w13", "p-eve", "Eve", "Namesake", ["dept"]),
             _cerif_author("w14", "p-karl", "K.", "Flat", ["flat"]),
+            _cerif_author("w15", "p-gina", "Gina", "Flat", ["flat"]),
         ]
     )
 
@@ -253,6 +255,9 @@ async def _fixture(db, institution_factory):
                 ],
             ),
             _oa_work("W-n", "10.1000/w14", [{"a": "a-karl", "n": "Karl Flat", "o": ORCID_KARL}]),
+            # gina's OpenAlex fragment: another id, no orcid, never
+            # co-listed with a-gina — rides along as a confirmed twin
+            _oa_work("W-o", "10.1000/w15", [{"a": "a-gina2", "n": "G. Flat", "o": None}]),
         ]
     )
     oa_run = HarvestRun(
@@ -385,8 +390,8 @@ async def test_weak_affiliation_rung(db, institution_factory):
     # the rung never perturbs the work-anchored cascade
     assert stats["matched"] == 4
     assert stats["weak_affiliation"] == {
-        "admitted": 2,
-        "methods": {"name-exact": 1, "name-initials": 1},
+        "admitted": 3,  # gina primary + gina twin + karl primary
+        "methods": {"name-exact": 1, "name-initials": 1, "fragmentation": 1},
         # carol (partner-org profile, no orcid) and hank both evaluated and
         # declined for missing orcid evidence
         "skipped_orcid_missing": 2,
@@ -405,6 +410,14 @@ async def test_weak_affiliation_rung(db, institution_factory):
     assert gina.n_works == 1
     assert gina.evidence.get("weak_affiliation") is True
     assert gina.evidence.get("orcids") == [ORCID_GINA]
+
+    # the orcid-less fragment id rides as a twin (cascade fragmentation
+    # rules: no co-occurrence with the primary, orcid-consistent)
+    gina_twin = rows[("p-gina", "a-gina2")]
+    assert gina_twin.status == "confirmed"
+    assert gina_twin.method == "fragmentation"
+    assert gina_twin.orcid_corroborated is False
+    assert gina_twin.evidence.get("twin_of") == "a-gina"
 
     karl = rows[("p-karl", "a-karl")]
     assert karl.status == "confirmed"  # initials-form evidence, same gate

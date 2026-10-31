@@ -60,6 +60,7 @@ async def test_adapter_roster_edges_and_ids(db, institution_factory):
         ("a-eve", "w13"),
         ("a-jack", "w13"),
         ("a-karl", "w14"),
+        ("a-gina2", "w15"),
     }
     # pure's own author lists ride verbatim (roster-gated at ingest)
     assert set(data.pure_edges) == {
@@ -80,6 +81,7 @@ async def test_adapter_roster_edges_and_ids(db, institution_factory):
         ("p-jack", "w12"),
         ("p-eve", "w13"),
         ("p-karl", "w14"),
+        ("p-gina", "w15"),
     }
     # the resolved root carries the institution's bare ROR
     assert data.org_rors.get("root") == "006hf6230"
@@ -119,6 +121,6 @@ async def test_adapter_ingest_roundtrip(db, institution_factory):
     assert authors["p-bob"].openalex_ids == ["a-bob"]
     assert authors["p-eve"].openalex_ids == []  # nothing confirmed, still rostered
     assert authors["p-frank"].openalex_ids == ["a-frank"]  # listing join
-    assert authors["p-gina"].openalex_ids == ["a-gina"]  # weak rung: admitted, unconfirmed
+    assert authors["p-gina"].openalex_ids == ["a-gina", "a-gina2"]  # primary + twin
     assert authors["p-gina"].confirmed is False
     assert authors["p-karl"].openalex_ids == ["a-karl"]

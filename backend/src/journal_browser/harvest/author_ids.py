@@ -224,7 +224,7 @@ def _weak_affiliation_rung(
     *,
     admitted_uuids: set[str],
     confirmed_uuids: set[str],
-    claimed_ids: dict[str, str],
+    claimed_ids: dict[str, set[str]],
     proposed: set[tuple[str, str]],
 ) -> dict[str, Any]:
     """Identity admission for org-dead-end corpus members (owner decision
@@ -243,7 +243,11 @@ def _weak_affiliation_rung(
     one value and equal the id's global orcid set in our store — impostor
     namesakes carry their own orcid, and a merged OpenAlex profile fails
     the equality. Persons without any orcid evidence stay unadmitted.
-    Two same-name persons selecting the same id cancel out."""
+    An extra matched id is a fragment twin (rides along confirmed) when
+    its global orcid set is empty or the same human's and it never sits
+    on one authorship list with the primary; carrying a different orcid
+    it is a namesake match and the person stays out. Two same-name
+    persons selecting the same id cancel out."""
     rows_out: list[dict[str, Any]] = []
     skipped: Counter = Counter()
     strong_methods = (METHOD_ORCID, METHOD_NAME, METHOD_INITIALS)
@@ -257,6 +261,7 @@ def _weak_affiliation_rung(
         if uuid in admitted_uuids or uuid in confirmed_uuids:
             continue
         weak_outcomes: list[tuple[ExtEntry, str, str]] = []
+        work_id_sets: dict[str, set[str]] = {}
         for work_uuid in sorted(works_by_person[uuid]):
             doi = doi_of_work.get(work_uuid)
             if not doi:
@@ -264,6 +269,7 @@ def _weak_affiliation_rung(
             entries = openalex_entries(by_doi.get(doi, []))
             if not entries:
                 continue
+            work_id_sets[work_uuid] = {e.id for e in entries if e.id}
             edge = next(r for r in by_work[work_uuid] if r.person_uuid == uuid)
             peers = {
                 decompose_parts(r.first_names or "", r.family_names or "").family_only
@@ -280,13 +286,11 @@ def _weak_affiliation_rung(
         agg = aggregate([(e, m) for e, m, _w in weak_outcomes])
         if agg is None:
             continue
-        primary, method, conflicts = agg
+        primary, method, _conflicts = agg
         if not primary.id:
             continue
-        if conflicts:
-            skipped["conflicted"] += 1
-            continue
-        if primary.id in claimed_ids and claimed_ids[primary.id] != uuid:
+        claimed_elsewhere = claimed_ids.get(primary.id, set()) - {uuid}
+        if claimed_elsewhere:
             skipped["id_claimed_elsewhere"] += 1
             continue
         person_orcids = {e.orcid for e, _m, _w in weak_outcomes if e.orcid}
@@ -297,6 +301,44 @@ def _weak_affiliation_rung(
             continue
         if aid_orcids.get(primary.id, set()) != person_orcids:
             skipped["orcid_mismatch"] += 1
+            continue
+        # OpenAlex profile fragmentation is the norm in this population
+        # (van Doorn: 50 works name-match A5010733081, one work a bare
+        # fragment). An extra matched id must not veto an otherwise
+        # perfect binding: it is a twin when its own global orcid set is
+        # empty or the same human's (⊆ person_orcids) and it never sits
+        # on one authorship list with the primary (the cascade's twin
+        # rule). A fragment carrying a DIFFERENT orcid is a namesake
+        # whose profile absorbed one of the person's authorships — OpenAlex
+        # split/merge noise; it does not veto when the orcid-perfect
+        # primary is dominant (≥3 works and strictly more votes), only
+        # lands in evidence.competing_ids. A person whose contradictory
+        # evidence rivals the primary stays out.
+        twins: list[ExtEntry] = []
+        competing: list[str] = []
+        other_ids = {e.id for e, _m, _w in weak_outcomes} - {primary.id}
+        n_primary = len({w for e, _m, w in weak_outcomes if e.id == primary.id})
+        vetoed = False
+        for other in sorted(other_ids):
+            other_orcids = aid_orcids.get(other, set())
+            if other_orcids - person_orcids:
+                competing.append(other)
+                continue
+            if claimed_ids.get(other, set()) - {uuid}:
+                skipped["id_claimed_elsewhere"] += 1
+                vetoed = True
+                break
+            co_occur = any(other in ids and primary.id in ids for ids in work_id_sets.values())
+            if not co_occur:
+                twins.append(next(e for e, _m, _w in weak_outcomes if e.id == other))
+        if not vetoed and competing:
+            n_competing = max(
+                len({w for e, _m, w in weak_outcomes if e.id == c}) for c in competing
+            )
+            if n_primary < 3 or n_primary <= n_competing:
+                skipped["orcid_contradiction"] += 1
+                vetoed = True
+        if vetoed:
             continue
         rows_out.append(
             {
@@ -314,10 +356,37 @@ def _weak_affiliation_rung(
                     "author_name": person_name.get(uuid),
                     "orcids": sorted(person_orcids),
                     "names": aid_names.get(primary.id, Counter()).most_common(3),
+                    **({"competing_ids": sorted(competing)} if competing else {}),
                 },
             }
         )
         proposed.add((uuid, primary.id))
+        # Orcid-less / orcid-consistent fragments ride along as confirmed
+        # twins (the cascade's fragmentation-twin rules, owner decision
+        # 2026-10-31); n_works counts the person's weak-matched works
+        # where the fragment was the matched id.
+        for twin in twins:
+            rows_out.append(
+                {
+                    "institution_id": institution_id,
+                    "author_pure_uuid": uuid,
+                    "source": SOURCE,
+                    "external_id": twin.id,
+                    "status": "confirmed",
+                    "method": "fragmentation",
+                    "confidence": CONFIDENCE.get(METHOD_FUZZY),
+                    "n_works": len({w for e, _m, w in weak_outcomes if e.id == twin.id}),
+                    "orcid_corroborated": False,
+                    "evidence": {
+                        "weak_affiliation": True,
+                        "twin_of": primary.id,
+                        "author_name": person_name.get(uuid),
+                        "orcids": sorted(aid_orcids.get(twin.id, set())),
+                        "names": aid_names.get(twin.id, Counter()).most_common(3),
+                    },
+                }
+            )
+            proposed.add((uuid, twin.id))
 
     # Same id chosen by two different unaffiliated persons = an OpenAlex
     # namesake merge; admit neither.
@@ -676,6 +745,11 @@ async def resolve_author_ids(
     per_arm["orcid-listing"] = {"rows": listing_rows}
 
     # ── weak-affiliation rung (org-dead-end recovery) ────────────────────
+    # Every id already bound by the cascade/listing rows (primaries AND
+    # fragmentation twins) blocks re-binding to another person.
+    claimed: dict[str, set[str]] = defaultdict(set)
+    for r in updates:
+        claimed[r["external_id"]].add(r["author_pure_uuid"])
     weak = _weak_affiliation_rung(
         institution.id,
         by_work,
@@ -687,12 +761,7 @@ async def resolve_author_ids(
         person_name,
         admitted_uuids={u for src in outcomes for u in outcomes[src]},
         confirmed_uuids=confirmed_uuids,
-        claimed_ids={
-            aid: uuid
-            for src in id_works
-            for uuid, by_aid in id_works[src].items()
-            for aid in by_aid
-        },
+        claimed_ids=claimed,
         proposed=proposed,
     )
     updates.extend(weak["rows"])
