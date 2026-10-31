@@ -10,14 +10,18 @@ units: Stochastic Operations Research, Discrete Mathematics and
 Mathematical Programming). They run through the same gap-fill-only,
 institute-pin, cycle-guard contract and are provenance-marked
 (curated=true) in source_records. --skip-portal runs curated edges alone.
+--feed-dir reads saved feed pages (feed-page-N.xml, fetched verbatim
+through the owner's browser via the omp relay — the portal WAF 403-bans
+scripted clients) instead of fetching the feed over HTTP.
 
 uv run python jobs/harvest_pure_portal.py [--institution ut] [--dry-run]
     [--max-pages 120] [--curated-parent "SOR=Faculty of EEMCS" ...]
-    [--skip-portal]
+    [--skip-portal] [--feed-dir data/portal-orgs]
 """
 
 import asyncio
 import json
+from pathlib import Path
 
 import httpx
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -34,7 +38,7 @@ from journal_browser.harvest.pure_portal import (
 from journal_browser.ingest import IngestSession
 
 
-async def fetch_page(page: int) -> bytes:
+async def fetch_http_page(page: int) -> bytes:
     url = f"{ORGANISATIONS_URL}?format=rss"
     if page > 1:
         url += f"&page={page}"
@@ -51,6 +55,15 @@ async def fetch_page(page: int) -> bytes:
         )
         response.raise_for_status()
         return response.content
+
+
+def load_feed_pages(directory: Path) -> list[bytes]:
+    """Saved feed pages in filename order (the walker stops at the first
+    empty page, so missing tail pages need no special casing)."""
+    paths = sorted(directory.glob("feed-page-*.xml"))
+    if not paths:
+        raise SystemExit(f"--feed-dir {directory}: no feed-page-*.xml files found")
+    return [path.read_bytes() for path in paths]
 
 
 def parse_curated_pairs(pairs: list[str] | None) -> list[PortalUnit]:
@@ -71,6 +84,8 @@ async def run(
     max_pages: int,
     curated: list[PortalUnit],
     skip_portal: bool,
+    fetch_page,  # async (page: int) -> bytes
+    feed_dir: str | None = None,
 ) -> bool:
     # Capture before the dry-run rollback expires the ORM object.
     code = institution.code
@@ -81,6 +96,10 @@ async def run(
             print("pure-portal: organisations feed returned no units; nothing to do")
             return True
         units = portal_units + curated
+
+    config = {"portal": ORGANISATIONS_URL, "max_pages": max_pages, "curated": len(curated)}
+    if feed_dir:
+        config["feed_dir"] = feed_dir
 
     if dry_run:
         # Read-only: compute the same stats without writing or ingesting
@@ -93,8 +112,8 @@ async def run(
         stats = await run_harvest(
             "pure-portal",
             "organisations",
-            f"inst:{institution.code}",
-            {"portal": ORGANISATIONS_URL, "max_pages": max_pages, "curated": len(curated)},
+            f"inst:{code}",
+            config,
             lambda ingest: apply_portal_tree(session, institution, units, ingest),
             session,
             institution_id=institution.id,
@@ -126,9 +145,24 @@ if __name__ == "__main__":
         action="store_true",
         help="run curated edges only (no feed fetch)",
     )
+    parser.add_argument(
+        "--feed-dir",
+        default=None,
+        metavar="DIR",
+        help="read saved feed pages (feed-page-N.xml) instead of fetching",
+    )
     args = parser.parse_args()
 
     async def main() -> None:
+        if args.feed_dir:
+            pages = load_feed_pages(Path(args.feed_dir))
+
+            async def fetch_page(page: int) -> bytes:
+                return pages[page - 1] if page <= len(pages) else b""
+
+        else:
+            fetch_page = fetch_http_page
+
         engine = create_async_engine(get_settings().database_url)
         maker = async_sessionmaker(engine, expire_on_commit=False)
         async with maker() as session:
@@ -140,6 +174,8 @@ if __name__ == "__main__":
                 max_pages=args.max_pages,
                 curated=parse_curated_pairs(args.curated_parent),
                 skip_portal=args.skip_portal,
+                fetch_page=fetch_page,
+                feed_dir=args.feed_dir,
             )
         await engine.dispose()
 
