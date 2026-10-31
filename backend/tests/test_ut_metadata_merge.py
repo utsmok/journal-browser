@@ -180,6 +180,17 @@ async def api(db_engine, monkeypatch):
             yield session
 
     app.dependency_overrides[get_session] = _override
+    # The DSN fallback serves the configured default institution only;
+    # this fixture's "tu" is that owner (the mocked DSN path must run).
+    from types import SimpleNamespace
+
+    from journal_browser.services import work_sources
+
+    monkeypatch.setattr(
+        work_sources,
+        "get_settings",
+        lambda: SimpleNamespace(institution_code="tu", author_source="local"),
+    )
     async with maker() as session:
         home = Institution(name="Test U", code="tu", active=True)
         session.add(home)

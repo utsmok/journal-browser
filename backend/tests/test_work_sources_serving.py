@@ -178,3 +178,28 @@ async def test_author_page_pure_only_without_store(db, client, institution_facto
     r = await client.get("/api/v1/ut/authors/solo-uuid")
     assert r.status_code == 200
     assert r.json()["works"] == []
+
+
+@requires_db
+async def test_foreign_institution_never_reads_dsn(
+    db, serving_api, institution_factory, monkeypatch
+):
+    """A second institution must not serve the DSN owner's works as its own.
+
+    Regression: /api/v1/rug/journals/{issn}/works fell through to the
+    ut-metadata DSN (one deployment's database) and rendered another
+    site's publications as RUG works."""
+    from journal_browser.services import work_sources
+
+    async def _boom(issn_l):
+        raise AssertionError("DSN works must not be read for a foreign institution")
+
+    monkeypatch.setattr(work_sources.ut_metadata, "ut_works_for_journal", _boom)
+    rug = await institution_factory(code="rug", data_window_start=2025)
+    await db.commit()  # the request runs in its own session
+    assert rug.active is True
+    r = await serving_api.get("/api/v1/rug/journals/1234-5678/works")
+    assert r.status_code == 200
+    # no local store, no DSN read -> honest empty tab, not foreign rows
+    assert r.json()["total"] == 0
+    assert r.json()["items"] == []

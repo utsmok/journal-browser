@@ -24,6 +24,15 @@ from . import ut_metadata
 logger = logging.getLogger(__name__)
 
 
+def _owns_utmd(institution: Institution) -> bool:
+    """True when this institution may read the ut-metadata DSN.
+
+    The DSN is one deployment's local database (the configured default
+    institution's). Any other institution serves works_stats-only instead
+    of another site's works."""
+    return institution.code == (get_settings().institution_code or "").strip().lower()
+
+
 async def _use_local(session: AsyncSession, institution: Institution) -> bool:
     """True when the local store serves this institution: the author-source
     setting is local (default) AND the openalex_works projection has run
@@ -82,7 +91,8 @@ async def works_for_journal(
                 by_doi[item["doi"]] = item
             out.append(item)
         return out
-    return await ut_metadata.ut_works_for_journal(issn_l)
+    # Foreign institutions must not read another deployment's works.
+    return await ut_metadata.ut_works_for_journal(issn_l) if _owns_utmd(institution) else None
 
 
 async def openalex_only_works_for_author(
@@ -96,7 +106,12 @@ async def openalex_only_works_for_author(
     institution's window/type/DOI quality gates."""
     aids = [a.lower() for a in (author.openalex_ids or []) if a]
     if not await _use_local(session, institution):
-        return await ut_metadata.ut_openalex_only_works_for_author(aids)
+        # Same ownership rule as works_for_journal.
+        return (
+            await ut_metadata.ut_openalex_only_works_for_author(aids)
+            if _owns_utmd(institution)
+            else None
+        )
     if not aids:
         return []
     conditions = [
