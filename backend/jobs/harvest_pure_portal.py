@@ -72,6 +72,8 @@ async def run(
     curated: list[PortalUnit],
     skip_portal: bool,
 ) -> bool:
+    # Capture before the dry-run rollback expires the ORM object.
+    code = institution.code
     units = curated
     if not skip_portal:
         portal_units = await walk_portal_orgs(fetch_page, max_pages=max_pages)
@@ -97,7 +99,7 @@ async def run(
             session,
             institution_id=institution.id,
         )
-    print(f"pure-portal[{institution.code}]: {json.dumps(stats)}")
+    print(f"pure-portal[{code}]: {json.dumps(stats)}")
     return True
 
 
