@@ -115,12 +115,14 @@ async def _seed_sweep(
     )
     base = datetime.now(UTC) - timedelta(hours=24)
     for i, (pk, payload) in enumerate(records):
+        year = payload.get("publication_year")
         db.add(
             SourceRecord(
                 source="openalex",
                 entity_type="works_stats",
                 source_pk=pk,
                 payload=payload,
+                publication_year=year if isinstance(year, int) else None,
                 content_hash=f"h-{pk}-{i}-{filter_set}",
                 harvested_at=base + timedelta(minutes=i),
                 harvest_run_id=run.id,

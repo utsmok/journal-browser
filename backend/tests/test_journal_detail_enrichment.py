@@ -134,6 +134,9 @@ async def api(client, db_engine):
                     entity_type="works_stats",
                     source_pk=pk,
                     payload=payload,
+                    # Mirror the ingest-time projection the serving query
+                    # now filters on.
+                    publication_year=payload.get("publication_year"),
                     content_hash=f"{pk}-v1",
                     harvest_run_id=run.id,
                     harvested_at=datetime(2026, 1, 2, tzinfo=UTC),

@@ -6,6 +6,7 @@ from sqlalchemy import (
     CheckConstraint,
     ForeignKey,
     Index,
+    Integer,
     Text,
     UniqueConstraint,
     text,
@@ -95,6 +96,11 @@ class SourceRecord(Base):
     entity_type: Mapped[str] = mapped_column(Text, nullable=False)
     source_pk: Mapped[str] = mapped_column(Text, nullable=False)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    # Mirrored projection of payload->publication_year (works_stats rows):
+    # the serving path filters per-institution year windows, and pushing
+    # the predicate onto a real column lets DISTINCT ON + window filtering
+    # run before any 8 KB payload is detoasted.
+    publication_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     content_hash: Mapped[str] = mapped_column(Text, nullable=False)
     harvested_at: Mapped[datetime] = _tstamp()
     harvest_run_id: Mapped[int] = mapped_column(

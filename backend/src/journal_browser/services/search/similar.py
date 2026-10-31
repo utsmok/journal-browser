@@ -45,7 +45,12 @@ async def similar_journals(
         "all": (None, SIMILAR_ALL_LIMIT),
     }
     out: dict[str, list[dict[str, Any]]] = {}
-    if self_row.embedding is not None:
+    # A zero embedding yields NaN cosine distances, which defeat the strict
+    # iterative scan's early termination; fall through to topic ranking.
+    degenerate = self_row.embedding is not None and not any(
+        abs(float(x)) > 1e-12 for x in self_row.embedding
+    )
+    if self_row.embedding is not None and not degenerate:
         # Same iterative HNSW scan as semantic search: the deal/institution
         # cuts filter most rows, exactly the case strict_order handles.
         await session.execute(text("SET LOCAL hnsw.iterative_scan = strict_order"))

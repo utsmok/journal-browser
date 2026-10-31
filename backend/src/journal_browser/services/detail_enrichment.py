@@ -38,10 +38,10 @@ def _journal_works(issn_l: str, institution_id: int, year_start: int, year_end: 
             # ix_source_records_works_issn_l.
             SourceRecord.payload.op("->")("primary_location").op("->")("source").op("->>")("issn_l")
             == issn_l,
-            # Publication-year window (NULL years fall outside it).
-            cast(SourceRecord.payload["publication_year"].astext, Integer).between(
-                year_start, year_end
-            ),
+            # Mirrored projection column (0040): the window predicate runs
+            # pre-detoast on the partial index instead of after extracting
+            # publication_year from each ~8 KB payload.
+            SourceRecord.publication_year.between(year_start, year_end),
         )
         .order_by(SourceRecord.source_pk, SourceRecord.harvested_at.desc())
         .subquery()

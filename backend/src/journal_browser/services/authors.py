@@ -259,7 +259,11 @@ def _candidate_subquery(institution_id: int, exclude_issns: list[str], vector: A
 
 
 def _weighted_mean(weighted: list[tuple[float, Any]]) -> list[float] | None:
-    """Works-weighted average embedding; None without usable vectors."""
+    """Works-weighted average embedding; None without usable vectors.
+
+    A zero (or numerically degenerate) vector is not usable: cosine distance
+    to it is NaN, and NaN distances defeat hnsw.iterative_scan=strict_order
+    early termination (measured 6.6 s scans with pgvector on live)."""
     usable = [(w, [float(x) for x in vec]) for w, vec in weighted if vec is not None]
     total = sum(w for w, _vec in usable)
     if not usable or total <= 0:
@@ -269,6 +273,12 @@ def _weighted_mean(weighted: list[tuple[float, Any]]) -> list[float] | None:
         for i, value in enumerate(vec):
             out[i] += w * value
     return [value / total for value in out]
+
+
+def _is_degenerate(vector: list[float]) -> bool:
+    """True when the vector's norm is ~0: every component underflows the
+    weighted mean (or the mean itself cancelled out)."""
+    return not any(abs(x) > 1e-12 for x in vector)
 
 
 async def _similar_sections(
@@ -289,7 +299,9 @@ async def _similar_sections(
     avg = _weighted_mean(weighted)
     similar: dict[str, list[dict[str, Any]]] = {"all": [], "deals": [], "diamond": []}
     alternatives: list[dict[str, Any]] = []
-    if avg is not None:
+    # NaN cosine distances (zero/degenerate query vector) defeat the strict
+    # iterative scan's early termination; skip HNSW entirely for them.
+    if avg is not None and not _is_degenerate(avg):
         # Same iterative HNSW scan as the journal similar endpoint: the
         # visibility cuts filter most rows.
         await session.execute(text("SET LOCAL hnsw.iterative_scan = strict_order"))
@@ -310,7 +322,9 @@ async def _similar_sections(
         sources = [
             row
             for row in journal_rows
-            if row.oa_type in ("hybrid", "subscription") and row.issn_l in embeddings
+            if row.oa_type in ("hybrid", "subscription")
+            and row.issn_l in embeddings
+            and not _is_degenerate([float(x) for x in embeddings[row.issn_l]])
         ]
         for row in sources:
             subq = _candidate_subquery(institution_id, author_issns, embeddings[row.issn_l])

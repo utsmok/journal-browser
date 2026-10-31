@@ -51,6 +51,7 @@ async def test_windowed_service_query_filters_bounded_end(db):
                     harvest_run_id=run.id,
                     content_hash=f"h-{inst.code}-{year}",
                     harvested_at=now,
+                    publication_year=year,
                     payload={
                         "publication_year": year,
                         "primary_location": {"source": {"issn_l": "0000-0000"}},

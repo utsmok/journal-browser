@@ -48,6 +48,20 @@ def _strip_nuls(value: Any) -> Any:
     return value
 
 
+def _publication_year(payload: dict[str, Any]) -> int | None:
+    """Projection column value: payload publication_year when it is an int
+    (or an int-shaped string). NULL rows drop out of serving windows just
+    like the old payload-text path."""
+    year = payload.get("publication_year")
+    if isinstance(year, bool):
+        return None
+    if isinstance(year, int):
+        return year
+    if isinstance(year, str) and year.isdigit():
+        return int(year)
+    return None
+
+
 class IngestSession:
     """One harvest run against one (source, entity_type, filter_set)."""
 
@@ -119,6 +133,7 @@ class IngestSession:
                 "entity_type": self.entity_type,
                 "source_pk": source_pk,
                 "payload": payload,
+                "publication_year": _publication_year(payload),
                 "content_hash": h,
                 "harvest_run_id": self.run_id,
             }
@@ -146,6 +161,7 @@ class IngestSession:
                 "entity_type": self.entity_type,
                 "source_pk": source_pk,
                 "payload": stripped,
+                "publication_year": _publication_year(stripped),
                 "content_hash": key[1],
                 "harvest_run_id": self.run_id,
             }
