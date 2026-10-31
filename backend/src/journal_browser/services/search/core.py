@@ -43,13 +43,21 @@ async def search_journals(
         "has_works": has_works,
         "oa_types": oa_types,
     }
-    subq = base_query(**filters).subquery()
-    total = await session.scalar(select(func.count()).select_from(subq)) or 0
     fuzzy = False
-    if not total and q and q.strip():
-        # Zero hits for a real query: retry once, fuzzily.
-        fuzzy = True
-        subq = base_query(**{**filters, "fuzzy": True}).subquery()
+    subq = base_query(**filters).subquery()
+    # The count is only needed when facets will not supply it (page turns)
+    # or the fuzzy fallback fired. Zero-hit detection is a LIMIT 1 probe:
+    # a full count to learn "empty" costs a whole base pass before the
+    # fuzzy retry even starts.
+    need_total = not include_facets
+    if q and q.strip():
+        hit = await session.scalar(select(1).select_from(subq).limit(1))
+        if hit is None:
+            fuzzy = True
+            subq = base_query(**{**filters, "fuzzy": True}).subquery()
+            need_total = True
+    total: int | None = None
+    if need_total:
         total = await session.scalar(select(func.count()).select_from(subq)) or 0
 
     order_col, direction = _order(sort, subq)
@@ -114,8 +122,10 @@ async def search_journals(
     return {
         "items": items,
         # The facet base aggregate counts the identical filter set; the only
-        # divergence is the fuzzy retry (facets reflect the exact query).
-        "total": int(total if fuzzy else facet_total),
+        # divergence is the fuzzy retry (facets reflect the exact query), so
+        # a fuzzy response reports the fuzzy subquery's own count. total is
+        # None exactly when the facets will supply the identical number.
+        "total": int(total if total is not None else facet_total),
         "next_cursor": next_cursor,
         "fuzzy": fuzzy,
         "facets": facets,
