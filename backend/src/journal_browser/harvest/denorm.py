@@ -21,7 +21,10 @@ from .common import bump_cache_epoch
 
 # Decision 16 (docs/decisions.md): proceedings-like titles with no deal and
 # no institution works are hidden from browse. Recomputed wholesale so deal
-# or works changes clear the flag too.
+# or works changes clear the flag too. The IS DISTINCT FROM guard skips the
+# row write when the value is unchanged: PostgreSQL versions EVERY update,
+# so an unguarded refresh of 352k flags rows writes ~2.1 GB of dead tuples
+# nightly (the journal_flags bloat reclaimed by migration 0039).
 BROWSE_EXCLUDED_SQL = text(
     """
     UPDATE journal_flags f SET browse_excluded =
@@ -31,6 +34,11 @@ BROWSE_EXCLUDED_SQL = text(
         AND f.works_count = 0
     FROM journals j
     WHERE j.issn_l = f.issn_l AND f.institution_id = :iid
+      AND f.browse_excluded IS DISTINCT FROM (
+          (coalesce(j.title, '') ~*
+           '\\y(conference|proceedings|symposium|workshop|abstracts|meetings)\\y')
+          AND NOT f.deal_covered
+          AND f.works_count = 0)
     """
 )
 
@@ -45,11 +53,14 @@ MATERIALIZE_SQL = text(
 )
 
 # Pure-canonical primary per year (phase 10): one row per (issn_l, year),
-# the pure_canon row when the year has one.
+# the pure_canon row when the year has one. The LEFT JOIN supplies 0 for
+# journals without stats rows (the former reset statement's job) so one
+# guarded write replaces two full-table rewrites.
 WORKS_COUNT_SQL = text(
     """
-    UPDATE journal_flags f SET works_count = s.n
-    FROM (
+    UPDATE journal_flags f SET works_count = coalesce(s.n, 0)
+    FROM journals j
+    LEFT JOIN (
         SELECT issn_l, sum(works_count) AS n
         FROM (
             SELECT DISTINCT ON (issn_l, year) issn_l, year, works_count
@@ -58,12 +69,11 @@ WORKS_COUNT_SQL = text(
             ORDER BY issn_l, year, (source = 'pure_canon') DESC
         ) per_year
         GROUP BY issn_l
-    ) s
-    WHERE f.issn_l = s.issn_l AND f.institution_id = :iid
+    ) s ON s.issn_l = j.issn_l
+    WHERE f.issn_l = j.issn_l AND f.institution_id = :iid
+      AND f.works_count IS DISTINCT FROM coalesce(s.n, 0)
     """
 )
-
-RESET_WORKS_COUNT_SQL = text("UPDATE journal_flags SET works_count = 0 WHERE institution_id = :iid")
 
 # Journal's own works inside THIS institution's data window (the >3 corpus
 # cutoff, owner decision 2026-10-23). Left-joined so journals with empty
@@ -82,11 +92,13 @@ WORKS_WINDOW_SQL = text(
         GROUP BY j2.issn_l
     ) p ON p.issn_l = j.issn_l
     WHERE f.issn_l = j.issn_l AND f.institution_id = :iid
+      AND f.works_window_plus IS DISTINCT FROM coalesce(p.total, 0)
     """
 )
 
-RESET_QUARTILES_SQL = text("UPDATE journals SET latest_quartile = NULL")
-
+# Same guard pattern on the shared journals columns: the RIGHT JOIN keeps
+# journals that dropped out of the source table so their column clears,
+# and unchanged rows skip the write entirely.
 QUARTILES_SQL = text(
     """
     UPDATE journals j SET latest_quartile = q.best
@@ -96,15 +108,15 @@ QUARTILES_SQL = text(
         WHERE best_quartile IS NOT NULL
         ORDER BY issn_l, year DESC
     ) q
-    WHERE j.issn_l = q.issn_l
+    RIGHT JOIN journals jj ON jj.issn_l = q.issn_l
+    WHERE j.issn_l = jj.issn_l
+      AND j.latest_quartile IS DISTINCT FROM q.best
     """
 )
 
 # Mirrors the OpenAPC fallback in attach_apc_display: the newest period with
 # a known cost wins, and the value is that period's highest single reported
 # APC (a real observed price — period means average multi-article years).
-RESET_APC_SQL = text("UPDATE journals SET latest_apc_euro = NULL")
-
 APC_SQL = text(
     """
     UPDATE journals j SET latest_apc_euro = a.euro_max
@@ -114,7 +126,9 @@ APC_SQL = text(
         WHERE euro_max IS NOT NULL
         ORDER BY issn_l, period DESC
     ) a
-    WHERE j.issn_l = a.issn_l
+    RIGHT JOIN journals jj ON jj.issn_l = a.issn_l
+    WHERE j.issn_l = jj.issn_l
+      AND j.latest_apc_euro IS DISTINCT FROM a.euro_max
     """
 )
 
@@ -136,15 +150,30 @@ DEAL_FLAGS_SQL = text(
               (CASE WHEN di.journal_override THEN di.institution_id ELSE NULL END)
     )
     WHERE f.institution_id = :iid
+      AND f.deal_covered IS DISTINCT FROM EXISTS (
+        SELECT 1
+        FROM deal_journals dj
+        JOIN deals d ON d.id = dj.deal_id
+        JOIN deal_institutions di ON di.deal_id = d.id
+             AND di.institution_id = f.institution_id
+        WHERE dj.issn_l = f.issn_l
+          AND d.status = 'current'
+          AND NOT dj.excluded
+          AND dj.institution_id IS NOT DISTINCT FROM
+              (CASE WHEN di.journal_override THEN di.institution_id ELSE NULL END)
+    )
     """
 )
 
 
 async def refresh_institution_stats(session: AsyncSession, institution: Institution) -> None:
-    """Recompute one institution's works_count + window cutoff + exclusion."""
+    """Recompute one institution's works_count + window cutoff + exclusion.
+
+    Every statement carries an IS DISTINCT FROM change guard, so an
+    unchanged corpus writes zero new row versions (the nightly refresh used
+    to churn every flags row non-HOT and bloat the table ~100x)."""
     iid = institution.id
     await session.execute(MATERIALIZE_SQL, {"iid": iid})
-    await session.execute(RESET_WORKS_COUNT_SQL, {"iid": iid})
     await session.execute(WORKS_COUNT_SQL, {"iid": iid})
     window_end = institution.data_window_end if institution.data_window_end is not None else 9999
     await session.execute(
@@ -156,13 +185,14 @@ async def refresh_institution_stats(session: AsyncSession, institution: Institut
 
 
 async def refresh_quartiles(session: AsyncSession) -> None:
-    await session.execute(RESET_QUARTILES_SQL)
+    # The guarded QUARTILES_SQL clears journals that dropped out of
+    # scimagojr_metrics via its RIGHT JOIN; the old blanket reset would
+    # rewrite all 144k journals every run.
     await session.execute(QUARTILES_SQL)
     await bump_cache_epoch(session)
 
 
 async def refresh_apcs(session: AsyncSession) -> None:
-    await session.execute(RESET_APC_SQL)
     await session.execute(APC_SQL)
     await bump_cache_epoch(session)
 
