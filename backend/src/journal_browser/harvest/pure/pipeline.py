@@ -261,9 +261,9 @@ async def harvest_pure_years(
             )
         # Retirement re-baselines last_seen_run against exactly these runs, so
         # any active work older than the window would be stamped retired even
-        # though Pure still serves it. Imported pre-window corpora (UT: ~125k
-        # works back to 1965) made this a live landmine; refuse and say how
-        # to widen the window instead.
+        # though Pure still serves it. Live UT carries ~78k imported works
+        # older than its 2010 window (imports reach back to 1965); refuse and
+        # say how to widen the window instead.
         older = await session.scalar(
             select(func.count())
             .select_from(Work)
