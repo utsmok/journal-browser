@@ -16,7 +16,7 @@ re-runs fold in new sweep data automatically.
 import logging
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import work_type_excluded
@@ -105,8 +105,22 @@ async def rebuild_openalex_works(session: AsyncSession, institution: Institution
     """Full-replace the institution's openalex_works from the latest stored
     works_stats payload per W-id (scoped to the institution's runs)."""
     # filter_set rides HarvestState (keyed by last_run_id), not the run row.
+    # DISTINCT ON keeps only each W-id's newest payload server-side and the
+    # result streams in partitions: materialising every payload at once
+    # (hundreds of MB of decoded JSON) pushed the live author-ids step past
+    # the host's memory during the rebuild phase.
     stmt = (
-        select(SourceRecord.source_pk, SourceRecord.payload, HarvestState.filter_set)
+        select(
+            SourceRecord.source_pk,
+            SourceRecord.payload,
+            func.coalesce(HarvestState.filter_set, ""),
+            func.row_number()
+            .over(
+                partition_by=SourceRecord.source_pk,
+                order_by=[SourceRecord.harvested_at.desc(), SourceRecord.id.desc()],
+            )
+            .label("rn"),
+        )
         .join(HarvestRun, HarvestRun.id == SourceRecord.harvest_run_id)
         .outerjoin(HarvestState, HarvestState.last_run_id == HarvestRun.id)
         .where(
@@ -114,34 +128,31 @@ async def rebuild_openalex_works(session: AsyncSession, institution: Institution
             SourceRecord.entity_type == ENTITY_TYPE,
             HarvestRun.institution_id == institution.id,
         )
-        .order_by(
-            SourceRecord.source_pk,
-            SourceRecord.harvested_at.desc(),
-            SourceRecord.id.desc(),
-        )
     )
-    latest: dict[str, tuple[dict[str, Any], str]] = {}
-    for pk, payload, filter_set in (await session.execute(stmt)).all():
-        latest.setdefault(pk, (payload, filter_set or ""))
     issn_by_source = await _issn_map(session)
     rows: dict[str, dict[str, Any]] = {}
     parse_failures = 0
     excluded_types = 0
-    for _source_pk, (payload, filter_set) in latest.items():
-        row = work_row(payload, issn_by_source)
-        if row is None:
-            # An excluded type (preprint/book, never journal output) is by
-            # design, not a parse failure; only the rest are anomalies.
-            if work_type_excluded(payload.get("type")):
-                excluded_types += 1
-            else:
-                parse_failures += 1
-            continue
-        if filter_set.startswith(AUTHOR_SWEEP_PREFIX):
-            row["source"] = AUTHOR_SWEEP_PREFIX
-        # One publication under two W-ids (merged profiles): first wins,
-        # which is the most-mentioned-at-first-sweep id — deterministic.
-        rows.setdefault(row["w_id"], row)
+    result = await session.stream(stmt.execution_options(stream_results=True, max_row_buffer=200))
+    async for partition in result.partitions(200):
+        for _source_pk, payload, filter_set, rn in partition:
+            if rn != 1:
+                continue
+            filter_set = filter_set or ""
+            row = work_row(payload, issn_by_source)
+            if row is None:
+                # An excluded type (preprint/book, never journal output) is by
+                # design, not a parse failure; only the rest are anomalies.
+                if work_type_excluded(payload.get("type")):
+                    excluded_types += 1
+                else:
+                    parse_failures += 1
+                continue
+            if filter_set.startswith(AUTHOR_SWEEP_PREFIX):
+                row["source"] = AUTHOR_SWEEP_PREFIX
+            # One publication under two W-ids (merged profiles): first wins,
+            # which is the most-mentioned-at-first-sweep id — deterministic.
+            rows.setdefault(row["w_id"], row)
     await session.execute(delete(OpenalexWork).where(OpenalexWork.institution_id == institution.id))
     values = list(rows.values())
     for start in range(0, len(values), INSERT_CHUNK):

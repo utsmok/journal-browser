@@ -265,18 +265,22 @@ async def resolve_author_ids(
 
     # OpenAlex works store: authorships combined per DOI (merged profiles
     # can carry one publication under two W-ids), plus the corroboration
-    # indexes (A-id -> orcids / display names).
+    # indexes (A-id -> orcids / display names). Column-select only the two
+    # fields the cascade needs: full ORM rows (title/year/...) plus the
+    # identity map OOM-killed the live run at 14.6 GB.
     by_doi: dict[str, list[dict[str, Any]]] = defaultdict(list)
     aid_orcids: dict[str, set[str]] = defaultdict(set)
     aid_names: dict[str, Counter] = defaultdict(Counter)
-    for row in (
+    for doi_normalized, authorships in (
         await session.execute(
-            select(OpenalexWork).where(OpenalexWork.institution_id == institution.id)
+            select(OpenalexWork.doi_normalized, OpenalexWork.authorships).where(
+                OpenalexWork.institution_id == institution.id
+            )
         )
-    ).scalars():
-        authorships = row.authorships or []
-        if row.doi_normalized:
-            by_doi[row.doi_normalized].extend(authorships)
+    ).all():
+        authorships = authorships or []
+        if doi_normalized:
+            by_doi[doi_normalized].extend(authorships)
         for sh in authorships:
             if isinstance(sh, dict) and sh.get("a"):
                 if sh.get("o"):
@@ -301,16 +305,21 @@ async def resolve_author_ids(
     for start in range(0, len(oa_dois), 20000):
         chunk = oa_dois[start : start + 20000]
         doi_expr = func.lower(SourceRecord.payload.op("->>")("doi"))
-        for doi, payload in (
+        # Project just the authors array server-side: fetching whole payloads
+        # decoded 500k+ OpenAIRE results in Python and OOM-killed the live run.
+        for doi, authors in (
             await session.execute(
-                select(doi_expr, SourceRecord.payload).where(
+                select(
+                    doi_expr,
+                    SourceRecord.payload.op("->")("authors").label("authors"),
+                ).where(
                     SourceRecord.source == "openaire",
                     SourceRecord.entity_type == "work",
                     doi_expr.in_(chunk),
                 )
             )
         ).all():
-            for a in payload.get("authors") or []:
+            for a in authors or []:
                 if not isinstance(a, dict):
                     continue
                 name = a.get("fullName") or " ".join(
