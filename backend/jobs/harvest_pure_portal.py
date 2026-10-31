@@ -30,7 +30,16 @@ async def fetch_page(page: int) -> bytes:
     if page > 1:
         url += f"&page={page}"
     async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
-        response = await client.get(url, headers={"Accept": "application/rss+xml"})
+        # Browser UA: the portal WAF rejects scripted default agents.
+        response = await client.get(
+            url,
+            headers={
+                "Accept": "application/rss+xml, application/xml;q=0.9, */*;q=0.8",
+                "User-Agent": (
+                    "Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0"
+                ),
+            },
+        )
         response.raise_for_status()
         return response.content
 

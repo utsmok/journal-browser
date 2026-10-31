@@ -461,9 +461,7 @@ async def test_orgunit_institute_list_and_detail(orgunits_api):
     assert body["facets"]["uses_deals"] == {"yes": 1, "no": 1}
     assert "faculty" not in body["facets"]
 
-    detail = (
-        await client.get(f"/api/v1/ut/orgunits/institute/{quote('MESA+ Institute')}")
-    ).json()
+    detail = (await client.get(f"/api/v1/ut/orgunits/institute/{quote('MESA+ Institute')}")).json()
     assert detail["unit"]["name"] == "MESA+ Institute"
     assert detail["groups"] is None
     assert [(a["pure_uuid"], a["n_works"]) for a in detail["authors"]] == [

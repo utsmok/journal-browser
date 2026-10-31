@@ -157,10 +157,12 @@ async def walk_portal_orgs(
     fetch_page,  # async (page: int) -> bytes
     *,
     max_pages: int = 120,
-    page_delay: float = 0.5,
+    page_delay: float = 2.0,
 ) -> list[PortalUnit]:
     """Walk the paginated organisations feed until an empty page; dedupe
-    by portal slug (stable across pages, but never trust it fully)."""
+    by portal slug (stable across pages, but never trust it fully). The
+    portal's WAF 403-bans bursty clients (observed live), so keep the
+    pacing polite."""
     units_by_slug: dict[str, PortalUnit] = {}
     for page in range(1, max_pages + 1):
         page_units = parse_portal_feed(await fetch_page(page))
