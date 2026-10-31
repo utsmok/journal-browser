@@ -315,8 +315,8 @@ function PublicationsCard({
       title={`Publications (${site.short})`}
       description={
         <p className="text-pretty text-sm text-[var(--muted-foreground)]">
-          {site.short} corpus (Pure), {site.windowStart} onwards; citations and FWCI from OpenAlex
-          where the title is matched there.
+          {site.short} works from Pure merged with OpenAlex venue works, {site.windowStart}{" "}
+          onwards. Citations and FWCI come from OpenAlex; works not matched there are marked.
         </p>
       }
       contentClassName="space-y-3 text-sm"
@@ -350,6 +350,15 @@ function PublicationsCard({
                   <span className="min-w-0 w-full min-[480px]:w-auto min-[480px]:flex-1 font-medium">
                     {w.title ?? "Untitled"}
                   </span>
+                )}
+                {!w.in_openalex && (
+                  <Badge
+                    variant="outline"
+                    className="font-normal text-[11px] text-[var(--muted-foreground)]"
+                    title="In the university's Pure research information system; not matched in OpenAlex, so citations and FWCI are unavailable"
+                  >
+                    Pure only
+                  </Badge>
                 )}
                 {w.year != null && (
                   <span className="tabular-nums text-[var(--muted-foreground)]">{w.year}</span>
