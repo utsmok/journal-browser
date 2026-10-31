@@ -30,12 +30,20 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 @router.get("/limitations", response_model=list[LimitationOut])
 async def list_limitations(
     session: SessionDep,
+    institution: InstitutionDep,
     source: Annotated[str | None, Query(max_length=50)] = None,
 ) -> list[LimitationOut]:
     query = select(Limitation).order_by(Limitation.source, Limitation.code)
     if source:
         query = query.where(Limitation.source == source)
-    return list((await session.execute(query)).scalars().all())
+    rows = list((await session.execute(query)).scalars().all())
+    # The registry is global but windows are per institution: hints written
+    # with the {window_start} placeholder render this institution's year.
+    window = str(institution.data_window_start or 2020)
+    for row in rows:
+        if "{window_start}" in row.hint:
+            row.hint = row.hint.replace("{window_start}", window)
+    return rows
 
 
 @router.get("/freshness", response_model=FreshnessResponse)
