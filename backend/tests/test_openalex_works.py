@@ -166,7 +166,8 @@ async def test_rebuild_latest_wins_and_sweep_marking(db, institution_factory):
 
     stats = await rebuild_openalex_works(db, inst)
     assert stats["works"] == 2  # W1 + W2; the preprint never lands
-    assert stats["parse_failures"] == 1
+    assert stats["excluded_types"] == 1
+    assert stats["parse_failures"] == 0
     assert stats["author_sweep_rows"] == 1
     rows = {r.w_id: r for r in (await db.execute(select(OpenalexWork))).scalars()}
     assert rows["W1"].title == "New Title"  # latest payload wins

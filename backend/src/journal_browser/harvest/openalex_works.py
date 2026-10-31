@@ -126,10 +126,16 @@ async def rebuild_openalex_works(session: AsyncSession, institution: Institution
     issn_by_source = await _issn_map(session)
     rows: dict[str, dict[str, Any]] = {}
     parse_failures = 0
+    excluded_types = 0
     for _source_pk, (payload, filter_set) in latest.items():
         row = work_row(payload, issn_by_source)
         if row is None:
-            parse_failures += 1
+            # An excluded type (preprint/book, never journal output) is by
+            # design, not a parse failure; only the rest are anomalies.
+            if work_type_excluded(payload.get("type")):
+                excluded_types += 1
+            else:
+                parse_failures += 1
             continue
         if filter_set.startswith(AUTHOR_SWEEP_PREFIX):
             row["source"] = AUTHOR_SWEEP_PREFIX
@@ -149,6 +155,7 @@ async def rebuild_openalex_works(session: AsyncSession, institution: Institution
     stats = {
         "works": len(values),
         "parse_failures": parse_failures,
+        "excluded_types": excluded_types,
         "author_sweep_rows": sum(1 for r in values if r["source"] == AUTHOR_SWEEP_PREFIX),
     }
     logger.info("openalex_works[%s]: %s", institution.code, stats)
