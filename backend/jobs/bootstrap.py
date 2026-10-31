@@ -224,6 +224,24 @@ async def run_parallel(steps: list, deps: dict) -> int:
     return 0
 
 
+def normalize_from(from_step: str, steps: list) -> str:
+    """Resolve --from to a plan step name, failing loudly instead of silently
+    skipping everything. Institution steps are qualified ("pure-cerif:ut");
+    accept the bare step name when it resolves to exactly one plan entry."""
+    if any(name == from_step for name, _ in steps):
+        return from_step
+    matches = [name for name, _ in steps if name.split(":")[0] == from_step]
+    if len(matches) == 1:
+        print(f"bootstrap: --from {from_step!r} resolved to {matches[0]!r}")
+        return matches[0]
+    print(
+        f"bootstrap: no step named {from_step!r} in this plan "
+        f"(institution steps are qualified, e.g. {from_step}:{'ut'})",
+        file=sys.stderr,
+    )
+    raise SystemExit(2)
+
+
 async def main() -> int:
     settings = get_settings()
     args = sys.argv[1:]
@@ -258,7 +276,7 @@ async def main() -> int:
     steps, deps = build_plan(codes, only_institution)
     # --from is repair mode: serial, in listed order
     if resume_from is not None:
-        return await run_serial(steps, deps, resume_from)
+        return await run_serial(steps, deps, normalize_from(resume_from, steps))
     return await run_parallel(steps, deps)
 
 
