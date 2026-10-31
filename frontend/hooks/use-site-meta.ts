@@ -36,7 +36,10 @@ export function useSiteMeta() {
       : (dir?.admin_contact ?? seed?.adminContact ?? null),
     researchPortalUrl:
       data?.research_portal_url ?? dir?.research_portal_url ?? seed?.researchPortalUrl ?? "",
-    /** First publication year this institution's statistics cover. */
-    windowStart: data?.data_window_start ?? dir?.data_window_start ?? 2020,
+    /** First publication year this institution's statistics cover. The
+     * directory row is required per the API contract; undefined only in
+     * the transient no-directory-yet render (no literal year guess here —
+     * the old `?? 2020` was wrong for every real institution). */
+    windowStart: data?.data_window_start ?? dir?.data_window_start,
   };
 }

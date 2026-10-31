@@ -323,7 +323,9 @@ function SearchView() {
           <SortHead
             columnId="works"
             label="Works"
-            title={`${site.name} publications in this journal, ${site.windowStart} onwards. Click to sort, again to reverse, again to reset`}
+            title={`${site.name} publications in this journal${
+              site.windowStart === undefined ? "" : `, ${site.windowStart} onwards`
+            }. Click to sort, again to reverse, again to reset`}
             state={sortRef.current}
           />
         ),
@@ -717,6 +719,11 @@ function SearchView() {
                 </div>
               ) : (
                 <>
+                  {data.fuzzy && spQ && (
+                    <p className="mb-3 text-sm text-[var(--muted-foreground)]" role="status">
+                      No exact matches for &ldquo;{spQ}&rdquo; &mdash; showing close name matches.
+                    </p>
+                  )}
                   {/* Stacked cards on narrow viewports: the six-column table would
                   push the decision columns off-screen behind horizontal
                   scrolling. */}
@@ -726,6 +733,7 @@ function SearchView() {
                   >
                     {rows.map((row) => {
                       const pub = row.publisher_canonical ?? row.publisher_name;
+                      const topic = row.primary_topic;
                       return (
                         <li
                           key={row.issn_l}
@@ -748,7 +756,24 @@ function SearchView() {
                             ) : (
                               "Unknown publisher"
                             )}
-                            {row.primary_topic && ` · ${row.primary_topic}`}
+                            {topic && (
+                              <>
+                                {" · "}
+                                {/* Click-through mirrors the table column: the
+                                row's own click must not fire underneath. */}
+                                <button
+                                  type="button"
+                                  className="relative z-10 text-left underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                                  title={`Filter the search by topic "${topic}"`}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    update({ topic });
+                                  }}
+                                >
+                                  {topic}
+                                </button>
+                              </>
+                            )}
                           </div>
                           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                             <DealBadge covered={row.deal_covered} />

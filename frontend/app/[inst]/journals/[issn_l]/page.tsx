@@ -315,8 +315,9 @@ function PublicationsCard({
       title={`Publications (${site.short})`}
       description={
         <p className="text-pretty text-sm text-[var(--muted-foreground)]">
-          {site.short} works from Pure merged with OpenAlex venue works, {site.windowStart} onwards.
-          Citations and FWCI come from OpenAlex; works not matched there are marked.
+          {site.short} works from Pure merged with OpenAlex venue works
+          {site.windowStart === undefined ? "" : `, ${site.windowStart} onwards`}. Citations and
+          FWCI come from OpenAlex; works not matched there are marked.
         </p>
       }
       contentClassName="space-y-3 text-sm"
@@ -525,7 +526,7 @@ function JournalPageInner() {
   if (isError || !data) return <ErrorPanel message={errorMessage(error)} backHref={backHref} />;
 
   const { journal, stats, deals, attribution, summary_stats, stats_totals: totals } = data;
-  const recent = stats.filter((s) => s.year >= site.windowStart);
+  const recent = stats.filter((s) => s.year >= (site.windowStart ?? 0));
   const openalex = data.openalex ?? null;
   const openaire = data.openaire ?? null;
   const metrics = data.institution_metrics ?? null;
@@ -724,7 +725,8 @@ function JournalPageInner() {
                 <>
                   Open access per year{" "}
                   <span className="text-sm font-normal text-[var(--muted-foreground)]">
-                    ({site.short}, {site.windowStart}+)
+                    ({site.short}
+                    {site.windowStart === undefined ? "" : `, ${site.windowStart}+`})
                   </span>
                 </>
               }
@@ -737,9 +739,10 @@ function JournalPageInner() {
                 </p>
               )}
               <p className="mt-3 text-sm">
-                {totals.pure_canon.toLocaleString("en")} {site.short} works total since{" "}
-                {site.windowStart} <span className="text-[var(--muted-foreground)]">(Pure)</span> ·
-                OpenAlex institution filter:{" "}
+                {totals.pure_canon.toLocaleString("en")} {site.short} works total
+                {site.windowStart === undefined ? "" : ` since ${site.windowStart}`}{" "}
+                <span className="text-[var(--muted-foreground)]">(Pure)</span> · OpenAlex
+                institution filter:{" "}
                 <span className="whitespace-nowrap">
                   {totals.openalex_institution_filter.toLocaleString("en")}{" "}
                   <span className="text-[var(--muted-foreground)]">(cross-check)</span>

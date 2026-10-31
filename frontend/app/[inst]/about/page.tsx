@@ -245,8 +245,8 @@ export default function AboutPage() {
               Harvest jobs run when the library refreshes the data, and per-run status is listed
               below. The deal register is maintained by hand, so a re-ingest can never overwrite
               reviewed deal information. Publication statistics cover works published in{" "}
-              {site.windowStart} or later, and the search lists journals with more than 3
-              publications in that window.
+              {site.windowStart === undefined ? "the institution's data window" : site.windowStart}{" "}
+              or later, and the search lists journals with more than 3 publications in that window.
             </p>
           </CardContent>
         </Card>

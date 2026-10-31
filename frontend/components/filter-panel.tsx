@@ -252,22 +252,34 @@ const FACET_TITLES: Record<string, string> = {
 };
 
 /** Hints that name the institution or window, resolved per render. */
-function groupHint(key: string, name: string, windowStart: number) {
+function groupHint(key: string, name: string, windowStart: number | undefined) {
   if (key === "deal")
     return `Does a ${name} open access deal cover APCs in this journal? One choice; click it again to clear.`;
   if (key === "has_works")
-    return `Has ${name} published in this journal (${windowStart} onwards)? One choice; click it again to clear.`;
+    return `Has ${name} published in this journal${
+      windowStart === undefined ? "" : ` (${windowStart} onwards)`
+    }? One choice; click it again to clear.`;
   return GROUP_HINTS[key];
 }
 
-function facetTitle(key: string, value: string, name: string, short: string, windowStart: number) {
+function facetTitle(
+  key: string,
+  value: string,
+  name: string,
+  short: string,
+  windowStart: number | undefined,
+) {
   const k = `${key}:${value}`;
   if (k === "deal:covered")
     return `APCs for corresponding ${short} authors are covered, fully or partly, by a deal.`;
   if (k === "has_works:true")
-    return `${name} has at least one publication in this journal since ${windowStart}.`;
+    return `${name} has at least one publication in this journal${
+      windowStart === undefined ? "" : ` since ${windowStart}`
+    }.`;
   if (k === "has_works:false")
-    return `No known ${name} publications in this journal since ${windowStart}.`;
+    return `No known ${name} publications in this journal${
+      windowStart === undefined ? "" : ` since ${windowStart}`
+    }.`;
   return FACET_TITLES[k];
 }
 
