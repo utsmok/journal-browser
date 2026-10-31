@@ -45,6 +45,20 @@ const WORKS_LABELS: Record<string, string> = {
 const SELECT_CLASS =
   "h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2";
 
+/** Unit noun per level ("12 research groups"), sentence-case singular. */
+const LEVEL_NOUN: Record<OrgUnitLevel, string> = {
+  faculty: "faculty",
+  group: "research group",
+  institute: "institute",
+};
+
+/** Lower-case plural for search placeholders and empty states. */
+const LEVEL_PLURAL: Record<OrgUnitLevel, string> = {
+  faculty: "faculties",
+  group: "research groups",
+  institute: "institutes",
+};
+
 /** Comma-joined multi-select param → list of values (journal-search convention). */
 function paramValues(sp: { get(key: string): string | null }, key: string): string[] {
   return (sp.get(key) ?? "").split("|").filter(Boolean);
@@ -90,7 +104,9 @@ function OrgUnitsView() {
   const q = sp.get("q") ?? "";
   const [input, setInput] = React.useState(q);
 
-  const level: OrgUnitLevel = sp.get("level") === "group" ? "group" : "faculty";
+  const levelParam = sp.get("level");
+  const level: OrgUnitLevel =
+    levelParam === "group" || levelParam === "institute" ? levelParam : "faculty";
   const faculty = paramValues(sp, "faculty");
   const works = paramValues(sp, "works");
   const usesDeals = sp.get("uses_deals") === "true";
@@ -228,8 +244,8 @@ function OrgUnitsView() {
         <section className="order-1 mb-8 min-[960px]:col-start-2 min-[960px]:row-start-1 min-[960px]:mb-6">
           <h1 className="mb-3 text-3xl font-bold text-balance">Faculties</h1>
           <p className="mb-6 max-w-2xl text-[var(--muted-foreground)]">
-            Browse the organisational units of {site.name}: faculties and their research groups,
-            with publishing output, deal usage, and APC spend.
+            Browse the organisational units of {site.name}: faculties, their research groups, and
+            the interdisciplinary institutes, with publishing output, deal usage, and APC spend.
           </p>
           <form
             className="flex max-w-2xl gap-2"
@@ -246,8 +262,8 @@ function OrgUnitsView() {
                 onKeyDown={(event) => {
                   if (event.key === "Escape") event.currentTarget.blur();
                 }}
-                placeholder={level === "group" ? "Search research groups" : "Search faculties"}
-                aria-label={level === "group" ? "Search research groups" : "Search faculties"}
+                placeholder={`Search ${LEVEL_PLURAL[level]}`}
+                aria-label={`Search ${LEVEL_PLURAL[level]}`}
               />
               {input === "" && (
                 <kbd
@@ -302,6 +318,15 @@ function OrgUnitsView() {
                 onClick={() => setParams({ level: "group", faculty: undefined })}
               >
                 Research groups
+              </Button>
+              <Button
+                variant={level === "institute" ? "secondary" : "ghost"}
+                size="sm"
+                className="rounded-none"
+                aria-pressed={level === "institute"}
+                onClick={() => setParams({ level: "institute", faculty: undefined })}
+              >
+                Institutes
               </Button>
             </div>
             <label htmlFor="orgunit-sort" className="whitespace-nowrap">
@@ -374,7 +399,7 @@ function OrgUnitsView() {
                     region keeps its previous text, so typing never chatters. */}
                   <span aria-live="polite">
                     {data
-                      ? `${data.total.toLocaleString("en")} ${level === "group" ? "research group" : "faculty"}${data.total === 1 ? "" : "s"}${q ? ` matching “${q}”` : ""}`
+                      ? `${data.total.toLocaleString("en")} ${LEVEL_NOUN[level]}${data.total === 1 ? "" : "s"}${q ? ` matching “${q}”` : ""}`
                       : ""}
                   </span>
                   {isFetching && data ? " · updating…" : ""}
@@ -423,8 +448,7 @@ function OrgUnitsView() {
                 <div className="py-10 text-center text-[var(--muted-foreground)]">
                   {q && !anyFilter ? (
                     <>
-                      No {level === "group" ? "research groups" : "faculties"} match &ldquo;{q}
-                      &rdquo;.
+                      No {LEVEL_PLURAL[level]} match &ldquo;{q}&rdquo;.
                     </>
                   ) : !anyFilter ? (
                     // Unfiltered empty: for an institution whose orgunit
@@ -435,7 +459,7 @@ function OrgUnitsView() {
                     </>
                   ) : (
                     <>
-                      No {level === "group" ? "research groups" : "faculties"} match these filters.
+                      No {LEVEL_PLURAL[level]} match these filters.
                       <div className="mt-3">
                         <Button variant="outline" size="sm" onClick={clearFilters}>
                           Clear filters

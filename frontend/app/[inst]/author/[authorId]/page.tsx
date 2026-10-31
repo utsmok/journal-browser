@@ -244,6 +244,11 @@ export default function AuthorPage() {
                 {author.research_group}
               </Badge>
             )}
+            {author.institute && (
+              <Badge variant="muted" className="font-normal">
+                {author.institute}
+              </Badge>
+            )}
             <span className="text-sm text-[var(--muted-foreground)]">
               {author.n_works.toLocaleString("en")} {author.n_works === 1 ? "work" : "works"}
             </span>

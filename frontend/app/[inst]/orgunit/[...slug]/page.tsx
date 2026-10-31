@@ -79,16 +79,20 @@ export default function OrgUnitPage() {
   const segments = params?.slug ?? [];
   const [levelSeg, ...nameSegs] = segments;
   const level: OrgUnitLevel | undefined =
-    levelSeg === "faculty" || levelSeg === "group" ? levelSeg : undefined;
+    levelSeg === "faculty" || levelSeg === "group" || levelSeg === "institute"
+      ? levelSeg
+      : undefined;
   const name = nameSegs.map(decodeURIComponent).join("/");
 
-  const backHref = level === "group" ? `/${inst}/orgunit?level=group` : `/${inst}/orgunit`;
+  const backHref = level === "faculty" ? `/${inst}/orgunit` : `/${inst}/orgunit?level=${level}`;
   const { data, isPending, isError, error } = useOrgUnit(level, level && name ? name : undefined);
 
   if (!level)
     return (
       <div className="mx-auto max-w-screen-2xl px-4 py-10">
-        <p className="text-[var(--destructive)]">Unknown unit type. Use a faculty or group page.</p>
+        <p className="text-[var(--destructive)]">
+          Unknown unit type. Use a faculty, group, or institute page.
+        </p>
         <div className="mt-2">
           <BackLink href={`/${inst}/orgunit`} label="Back to faculties" />
         </div>
@@ -130,13 +134,17 @@ function OrgUnitDetail({
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
       <BackLink
         href={backHref}
-        label={unit.level === "group" ? "Back to research groups" : "Back to faculties"}
+        label={unit.level === "group" ? "Back to research groups" : `Back to ${unit.level}s`}
       />
       <header className="mb-6 mt-4">
         <h1 className="text-3xl font-bold text-balance">{unit.name}</h1>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <Badge variant="muted" className="font-normal">
-            {unit.level === "group" ? "Research group" : "Faculty"}
+            {unit.level === "group"
+              ? "Research group"
+              : unit.level === "institute"
+                ? "Institute"
+                : "Faculty"}
           </Badge>
           {unit.faculty && (
             <Badge variant="muted" className="font-normal">
