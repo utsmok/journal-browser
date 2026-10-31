@@ -496,7 +496,10 @@ async def resolve_author_ids(
         from .openalex_works import rebuild_openalex_works
 
         sweep_stats["projection"] = await rebuild_openalex_works(session, institution)
-        await session.commit()
+    # commit unconditionally: without the sweeps the function is the only
+    # writer, and an uncommitted identity upsert vanishes with the session
+    # (a --no-sweeps re-run must persist its pass like any other).
+    await session.commit()
 
     stats.update(
         {
