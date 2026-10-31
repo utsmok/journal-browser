@@ -14,7 +14,7 @@ from .evidence import ApcEvidence, InstitutionTrend, InstitutionWorksStats, Jour
 from .harvest import HarvestRun, HarvestState, RawFile, SourceRecord
 from .journals import Journal, JournalFlags, ScimagojrMetric
 from .openalex import AuthorIdentity, OpenalexWork
-from .pure import PureOrg, PureOrgParent, PurePerson, WorkPureAuthor
+from .pure import PureOrg, PureOrgParent, PurePerson, PurePersonOrg, WorkPureAuthor
 from .reference import Institution, IssnMap, OpenalexPublisher, Publisher
 from .works import WORK_IDENTITY_UQ, Work, WorkIdentity
 
@@ -48,6 +48,7 @@ __all__ = [
     "PureOrg",
     "PureOrgParent",
     "PurePerson",
+    "PurePersonOrg",
     "RawFile",
     "ScimagojrMetric",
     "SourceRecord",

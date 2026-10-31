@@ -96,6 +96,43 @@ class PurePerson(Base):
     )
 
 
+class PurePersonOrg(Base):
+    """One person→org binding from the Pure portal persons listings
+    (research.utwente.nl, relay-harvested). Gap-fill evidence only: the
+    derive pipeline reads it through dedicated portal arms after native
+    CERIF resolution — profiles, work-level affiliations, the roster,
+    and ROR confirmation are untouched. listing_kinds records which
+    listing kinds ('faculty' / 'institute') carried the edge; role keeps
+    the latest role text seen."""
+
+    __tablename__ = "pure_person_orgs"
+
+    institution_id: Mapped[int] = mapped_column(
+        ForeignKey("institutions.id", ondelete="CASCADE"), primary_key=True
+    )
+    person_uuid: Mapped[str] = mapped_column(Text, primary_key=True)
+    org_uuid: Mapped[str] = mapped_column(Text, primary_key=True)
+    role: Mapped[str | None] = mapped_column(Text, nullable=True)
+    portal_person_slug: Mapped[str] = mapped_column(Text, nullable=False)
+    portal_org_slug: Mapped[str] = mapped_column(Text, nullable=False)
+    listing_kinds: Mapped[list[Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'")
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["institution_id", "person_uuid"],
+            ["pure_persons.institution_id", "pure_persons.uuid"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["institution_id", "org_uuid"],
+            ["pure_orgs.institution_id", "pure_orgs.uuid"],
+            ondelete="CASCADE",
+        ),
+    )
+
+
 class WorkPureAuthor(Base):
     """Pure's own author list of one local work: (work, person) edges over
     the stored CERIF Publication XML, with the person's work-level

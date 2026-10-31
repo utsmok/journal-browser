@@ -40,6 +40,7 @@ from ..models import (
     Journal,
     OpenalexWork,
     PurePerson,
+    PurePersonOrg,
     Work,
     WorkPureAuthor,
 )
@@ -107,6 +108,12 @@ class SourceData:
     person_by_pure: dict[str, Any] = field(default_factory=dict)
     # person_org: person key -> [org keys] (profile + work-level arms).
     person_orgs: dict[Any, list[Any]] = field(default_factory=dict)
+    # pure_person_orgs portal bindings: person key -> [org keys]. Kept
+    # separate from person_orgs: the gap-fill arms consult these only
+    # after native evidence fails — profiles, work-level affiliations,
+    # the roster, and ROR confirmation stay untouched (bind contract).
+    # Empty on the ut-metadata path (no portal harvest there).
+    portal_person_orgs: dict[Any, list[Any]] = field(default_factory=dict)
     # Org keys typed institute (MESA+ Institute, TechMed Centre, Digital
     # Society Institute): separate from faculties — they never contribute
     # faculty or research-group evidence, and instead fill the author's
@@ -251,6 +258,17 @@ async def fetch_local_source(session: AsyncSession, institution: Institution) ->
         known.extend(ref for ref in work_orgs.get(person_key, []) if ref in data.orgs)
         if known:
             data.person_orgs[person_key] = known
+
+    # Portal bindings arm (pure_person_orgs, relay-harvested listings):
+    # separate from person_orgs so the native arms, the roster, and
+    # confirmation stay untouched — only the gap-fill paths read this.
+    for row in (
+        await session.execute(
+            select(PurePersonOrg).where(PurePersonOrg.institution_id == institution.id)
+        )
+    ).scalars():
+        if row.org_uuid in data.orgs:
+            data.portal_person_orgs.setdefault(row.person_uuid, []).append(row.org_uuid)
 
     # OpenAlex ids from the resolved identity rows (confirmed only).
     rank_of = METHOD_RANK
@@ -444,11 +462,13 @@ def derive_institute(payload: dict[str, Any], data: SourceData) -> str | None:
 
 def augment_institute(author: dict[str, Any], data: SourceData) -> str | None:
     """Institute via the canonical-person path (profile + work-level
-    affiliation arms), reached when the author's own CERIF payload names
-    no institute — the mirror of augment_faculty for institute-only
-    members whose profiles are empty."""
+    affiliation arms + the portal-binding arm), reached when the author's
+    own CERIF payload names no institute — the mirror of augment_faculty
+    for institute-only members whose profiles are empty."""
     for person_id in canonical_person_ids(author, data):
-        for org_id in data.person_orgs.get(person_id, []):
+        for org_id in data.person_orgs.get(person_id, []) + data.portal_person_orgs.get(
+            person_id, []
+        ):
             if org_id in data.institute_orgs:
                 return data.orgs[org_id][1]
     return None
@@ -473,17 +493,46 @@ def canonical_person_ids(author: dict[str, Any], data: SourceData) -> list[int]:
     return found
 
 
+def portal_org_ids(author: dict[str, Any], data: SourceData) -> list[Any]:
+    """Portal-binding org ids for an author's canonical persons (the
+    pure_person_orgs arm — consulted only by the gap-fill paths)."""
+    return [
+        org_id
+        for person_id in canonical_person_ids(author, data)
+        for org_id in data.portal_person_orgs.get(person_id, [])
+    ]
+
+
 def augment_faculty(author: dict[str, Any], data: SourceData) -> str | None:
     """Faculty via the canonical-person path (only reached when the
     author-native CERIF path resolved nothing). Institute-blocked orgs
-    carry no evidence (see _faculty_evidence)."""
+    carry no evidence (see _faculty_evidence); the portal-binding arm
+    (pure_person_orgs) joins the person_org arms as last-resort
+    evidence and never overrides a native result."""
     person_ids = canonical_person_ids(author, data)
     chains = [
         chain(data, org_id)
         for person_id in person_ids
-        for org_id in _faculty_evidence(data.person_orgs.get(person_id, []), data)
+        for org_id in _faculty_evidence(
+            data.person_orgs.get(person_id, []) + data.portal_person_orgs.get(person_id, []),
+            data,
+        )
     ]
     return faculty_from_chains(chains)
+
+
+def augment_research_group(author: dict[str, Any], data: SourceData) -> str | None:
+    """Research group via the portal-binding arm (runs only after faculty
+    itself fell to the gap-fill and the native path resolved no group):
+    the first portal org (institute-blocked) that is neither a faculty
+    nor the university root and whose closure reaches a faculty."""
+    for org_id in _faculty_evidence(portal_org_ids(author, data), data):
+        name = data.orgs[org_id][1]
+        if name in _FACULTY_SET or name == UNIVERSITY_ROOT_NAME:
+            continue
+        if any(n in _FACULTY_SET for _depth, n in chain(data, org_id)):
+            return name
+    return None
 
 
 def _ror_id(ror: str | None) -> str | None:
@@ -658,6 +707,10 @@ async def ingest_authors(
         faculty, research_group, org_names = derive_identity(payload, data)
         if faculty is None:
             faculty = augment_faculty(author, data)
+            if faculty is not None and research_group is None:
+                # Faculty came from the portal arm; derive the group from
+                # the same bindings rather than leaving it empty.
+                research_group = augment_research_group(author, data)
         institute = derive_institute(payload, data)
         if institute is None:
             institute = augment_institute(author, data)
