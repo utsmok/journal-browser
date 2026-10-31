@@ -7,12 +7,13 @@ from conftest import requires_db
 from journal_browser.harvest.pure_portal import (
     apply_portal_tree,
     classification_to_type,
+    curated_unit,
     name_key,
     parse_portal_feed,
     walk_portal_orgs,
 )
 from journal_browser.ingest import IngestSession
-from journal_browser.models import PureOrg, PureOrgParent
+from journal_browser.models import PureOrg, PureOrgParent, SourceRecord
 
 EEMCS = "Faculty of Electrical Engineering, Mathematics and Computer Science"
 
@@ -231,3 +232,73 @@ async def test_apply_portal_tree_contract(db, institution_factory):
     assert orgs["dsi-uuid"] == "institute"
     assert orgs["mesa-uuid"] == "institute"
     assert orgs["delft-uuid"] == "university"
+
+
+@requires_db
+async def test_curated_edges(db, institution_factory):
+    """Curated assertions run the same contract: gap-fill only (no OAI
+    override), institutes pinned, provenance marked in the payload."""
+    inst = await institution_factory(
+        code="ut", name="University of Twente", ror="https://ror.org/006hf6230"
+    )
+    db.add_all(
+        [
+            PureOrg(
+                institution_id=inst.id,
+                uuid="ut-root",
+                name="University of Twente",
+                org_type="university",
+            ),
+            PureOrg(institution_id=inst.id, uuid="eemcs-uuid", name=EEMCS, org_type="faculty"),
+            PureOrg(institution_id=inst.id, uuid="sor-uuid", name="Stochastic Operations Research"),
+            # Already parented: the curated assertion must not override it.
+            PureOrg(
+                institution_id=inst.id,
+                uuid="dmmp-uuid",
+                name="Discrete Mathematics and Mathematical Programming",
+            ),
+            PureOrgParent(institution_id=inst.id, org_uuid="dmmp-uuid", parent_uuid="ut-root"),
+            # Curated parent pointing at an institute: must be pinned out.
+            PureOrg(institution_id=inst.id, uuid="lab-uuid", name="Some Lab", org_type="institute"),
+        ]
+    )
+    await db.flush()
+
+    curated = [
+        curated_unit("Stochastic Operations Research", EEMCS),
+        curated_unit("Discrete Mathematics and Mathematical Programming", "University of Twente"),
+        curated_unit("Some Lab", EEMCS),
+        curated_unit("Not In Our Tree", EEMCS),
+    ]
+    ingest = IngestSession(db)
+    await ingest.start_run("pure-portal", "organisations", "inst:ut", {"test": "curated"})
+    stats = await apply_portal_tree(db, inst, curated, ingest)
+    await ingest.commit()
+
+    assert stats["matched"] == 3
+    assert stats["unmatched"] == 1  # Not In Our Tree
+    assert stats["edges_added"] == 1  # SOR -> EEMCS
+    assert stats["already_parented"] == 1  # DMMP keeps its OAI edge
+    assert stats["institute_pinned"] == 1  # Some Lab
+
+    parents = {
+        row.org_uuid: row.parent_uuid for row in (await db.execute(select(PureOrgParent))).scalars()
+    }
+    assert parents["sor-uuid"] == "eemcs-uuid"
+    assert parents["dmmp-uuid"] == "ut-root"
+
+    stored = (
+        (
+            await db.execute(
+                select(SourceRecord).where(
+                    SourceRecord.source == "pure-portal",
+                    SourceRecord.entity_type == "organisations",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    by_slug = {r.source_pk: r.payload for r in stored}
+    assert by_slug["curated/stochasticoperationsresearch"]["curated"] is True
+    assert by_slug["curated/somelab"]["parent_name"] == EEMCS

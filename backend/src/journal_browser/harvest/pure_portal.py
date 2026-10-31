@@ -73,7 +73,8 @@ def classification_to_type(classification: str | None) -> str | None:
 
 @dataclass
 class PortalUnit:
-    """One parsed portal organisations-feed entry."""
+    """One parsed portal organisations-feed entry (or a curated edge
+    assertion, marked)."""
 
     name: str
     slug: str
@@ -82,6 +83,11 @@ class PortalUnit:
     classification: str | None = None
     successor_slug: str | None = None
     successor_name: str | None = None
+    # Owner-approved edge not present in the portal (e.g. the legacy
+    # standalone units SOR / DMMP carry no parent anywhere). Recorded in
+    # the source_records payload so a curated edge stays distinguishable
+    # from a portal-verbatim one.
+    curated: bool = False
 
     def payload(self) -> dict:
         """Verbatim feed content for source_records."""
@@ -93,7 +99,19 @@ class PortalUnit:
             "classification": self.classification,
             "successor_slug": self.successor_slug,
             "successor_name": self.successor_name,
+            "curated": self.curated,
         }
+
+
+def curated_unit(org_name: str, parent_name: str) -> PortalUnit:
+    """A curated parent assertion for the apply pipeline: runs through the
+    same gap-fill-only, institute-pin, cycle-guard contract."""
+    return PortalUnit(
+        name=org_name,
+        slug=f"curated/{name_key(org_name)}",
+        parent_name=parent_name,
+        curated=True,
+    )
 
 
 def _slug_of(url: str) -> str | None:
