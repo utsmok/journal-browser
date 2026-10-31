@@ -183,6 +183,17 @@ The landing page (`/`) lists every active institution and redirects to it
 when only one exists. `JB_*` env vars still configure the default
 institution; every other institution reads its config from its row.
 
+Institution-row config (`openaire_org_id`, `data_window_start`, ...) is
+seeded from the env only when migration 0019 inserts the row; an existing
+row never picks up later env changes. If a step skips with
+"has no openaire_org_id" (the OpenAIRE job finishes in seconds), set the
+column on the row — the env var will not propagate on its own:
+
+```sql
+UPDATE institutions SET openaire_org_id = 'openorgs____::...'
+WHERE code = 'ut' AND openaire_org_id IS NULL;
+```
+
 ## Maintenance
 
 - **Re-harvest on demand:** every job is a standalone script under
