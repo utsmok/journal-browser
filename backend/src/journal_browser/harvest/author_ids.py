@@ -6,11 +6,12 @@ authorships (openalex_works, DOI-keyed). The ported cascade decides per
 work; aggregation across a person's works ranks methods and counts
 conflicting ids. The primary id follows the rung ladder
 (confirmed/candidate/rejected — candidates never auto-promote; admin
-decisions are sticky). Work-matched alternate ids ("fragmentation
-twins", e.g. merged or split OpenAlex profiles) are confirmed too:
-each entered the person's outcomes through a match on their own works.
-The authors ingest reads this table additively: confirmed rows feed
-authors.openalex_ids.
+decisions are sticky). Work-matched alternate ids ride along as
+confirmed fragmentation twins only when the work-level evidence says
+they are the same human: never co-occurring with the primary id on one
+work, and no contradicting ORCID. Competing namesake ids stay
+candidates for the review queue. The authors ingest reads this table
+additively: confirmed rows feed authors.openalex_ids.
 
 Runs with no DSN; the only API spend is the authors listing sweep
 (filter affiliations.institution.ror, verified live 2026-10-30 — the
@@ -289,6 +290,7 @@ async def resolve_author_ids(
     # ── the work-anchored cascade ────────────────────────────────────────
     outcomes: dict[str, list[tuple[Any, str]]] = defaultdict(list)
     id_works: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+    work_ids: dict[str, list[set[str]]] = defaultdict(list)
     works = 0
     works_matched = 0
     works_without_doi = 0
@@ -328,14 +330,20 @@ async def resolve_author_ids(
             continue
         works_matched += 1
         fams = [decompose_parts(a.first, a.family).family_only for a in authors]
+        work_hit = False
         for i, a in enumerate(authors):
             peer = {f for j, f in enumerate(fams) if j != i}
             entry, method = match(a, entries, person_orcid.get(a.uuid), peer)
             if entry is None:
                 continue
             outcomes[a.uuid].append((entry, method))
+            work_hit = True
             if entry.id:
                 id_works[a.uuid][entry.id].add(work_uuid)
+        if work_hit:
+            # every id present on a work the person matched on: the
+            # twin gate checks primary/alternate co-occurrence here
+            work_ids[a.uuid].append({e.id for e in entries if e.id})
 
     # ── aggregation + corroboration + identity rows ─────────────────────
     updates: list[dict[str, Any]] = []
@@ -383,22 +391,31 @@ async def resolve_author_ids(
             corroborated = bool(porcid) and porcid in aid_orcids.get(aid, set())
             if corroborated:
                 corroborated_alts += 1
+            # Zero-conflict twins ride along (owner decision 2026-10-31):
+            # an alternate is a twin of the person — not a competing
+            # namesake — when its id never appears on a work where the
+            # primary id also appears (one human is never two authorships
+            # of one work, modulo merge artifacts), and the ORCID evidence
+            # across primary and alternates names at most one human. A
+            # co-occurring or orcid-contradicted id is a competitor and
+            # stays a candidate for the review queue; rejects remain the
+            # correction path.
+            co_occur = primary.id is not None and any(
+                primary.id in idset and aid in idset for idset in work_ids.get(uuid, [])
+            )
+            ids_all = ([primary.id] if primary.id else []) + alternates
+            seen_orcids = (
+                set().union(*(aid_orcids.get(i, set()) for i in ids_all)) if ids_all else set()
+            )
+            orcid_consistent = len(seen_orcids) <= 1
+            is_twin = not co_occur and orcid_consistent
             updates.append(
                 {
                     "institution_id": institution.id,
                     "author_pure_uuid": uuid,
                     "source": SOURCE,
                     "external_id": aid,
-                    # Alternates are confirmed (owner decision 2026-10-31,
-                    # "autoconfirm zero-conflict twins"): each one entered
-                    # this author's outcomes through a work-level match on
-                    # the author's own works — the same evidence bar as a
-                    # primary — so the twin rides along as an alternate
-                    # id instead of waiting in the review queue. The
-                    # author-works sweeps can still surface a wrong twin
-                    # on the author page's openalex-only section; rejects
-                    # stay the correction path.
-                    "status": "confirmed",
+                    "status": "confirmed" if is_twin else "candidate",
                     "method": "orcid-corroboration" if corroborated else "fragmentation",
                     "confidence": 0.9 if corroborated else CONFIDENCE.get(METHOD_FUZZY),
                     "n_works": len(id_works[uuid][aid]),
@@ -408,6 +425,7 @@ async def resolve_author_ids(
                         "orcids_seen": sorted(aid_orcids.get(aid, set()))[:3],
                         "names": aid_names.get(aid, Counter()).most_common(3),
                         "author_name": person_name.get(uuid),
+                        **({"co_occurs_with_primary": True} if co_occur else {}),
                     },
                 }
             )
