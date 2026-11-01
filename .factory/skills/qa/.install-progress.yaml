@@ -1,0 +1,36 @@
+# install-qa progress (auto-saved by the questionnaire)
+run_started: 2026-11-01
+categories_completed: [default_target, personas, flows, ci_required_optional, external_services, cleanup, imagemagick, video_evidence_compose, failure_learning]
+answers:
+  default_target: local-qa
+  environments:
+    local-qa:
+      url: http://127.0.0.1:3100
+      backend_url: http://127.0.0.1:8100
+      restrictions:
+        - never touch the live compose project or the journalbrowser database
+        - QA backend must set JB_SETTINGS_YAML to an isolated path
+      seed_dump: backups/live-pre-author-path-2026-10-31.dump
+      seed_database: journalbrowser_qa
+    live-readonly:
+      url: http://localhost:3000
+      restrictions:
+        - read-only GET flows only
+        - never POST feedback, never use admin on live
+  personas: [visitor, admin]
+  admin_credentials_source: env-var
+  admin_secret_name: QA_ADMIN_PASSWORD
+  flow_coverage: full
+  ci:
+    generate_workflow: true
+    required: false # user opted out of blocking merges on 2026-11-01
+pending_categories: []
+resolved:
+  video_evidence: false
+  droid_control_compose: false
+  imagemagick: install
+  failure_learning: suggest_in_report
+  cleanup:
+    auto_cleanup: true
+    strategy: none
+    instructions: QA writes land in the disposable journalbrowser_qa database only; re-seed from the dump when data drifts.

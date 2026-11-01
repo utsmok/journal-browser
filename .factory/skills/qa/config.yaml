@@ -1,0 +1,116 @@
+project: journal-browser
+platform: github
+imagemagick: true
+video_evidence: false # record interactive flows through droid-control
+droid_control:
+  plugin: droid-control@factory-plugins
+  compose: false # single runtime toggle for optional edited MP4 output
+
+environments:
+  local-qa:
+    url: http://127.0.0.1:3100 # frontend dev server (QA)
+    api_url: http://127.0.0.1:8100 # backend (QA)
+    restrictions:
+      - QA writes land only in the journalbrowser_qa database
+      - the QA backend must run with JB_SETTINGS_YAML on an isolated path,
+        never the repo's backend/settings.yaml (the live container mounts it)
+      - never stop, restart, or write to the live compose project journal-browser
+    seed:
+      database: journalbrowser_qa # on the existing cluster at 127.0.0.1:5433
+      full_dump: backups/live-pre-author-path-2026-10-31.dump
+      fixtures: backend/scripts/seed_fixtures.py
+  live-readonly:
+    url: http://localhost:3000
+    api_url: http://localhost:8000
+    restrictions:
+      - read-only GET flows only; this is the production deployment
+      - never POST feedback (writes the live database)
+      - never call admin endpoints or open the admin UI
+
+default_target: local-qa
+
+auth:
+  method: api-key
+  provider: custom
+  notes: >
+    No user accounts exist. The public surface is anonymous. The admin panel
+    exchanges the admin password for an HMAC bearer token (12 h TTL) via
+    POST /api/v1/admin/login; a wrong password is rejected with 403. With the
+    admin enabled, admin routes return 401 for a missing or invalid token.
+    An empty admin_password disables the entire admin surface: every admin
+    route then returns 403 ("admin disabled").
+
+personas:
+  - name: visitor
+    description: >
+      Anonymous public researcher browsing journals, deals, and docs; may
+      submit feedback about data problems.
+    credentials_source: none
+    test_focus: [search, facets, detail pages, deals, docs, feedback]
+    cannot_do:
+      - call any /api/v1/admin/* endpoint (must get 401 while admin is
+        enabled; 403 only means the admin surface is disabled)
+      - reach any admin UI state without a token
+  - name: admin
+    description: institution admin maintaining data quality through the admin panel
+    credentials_source: env-var
+    secret_name: QA_ADMIN_PASSWORD
+    test_focus:
+      - admin login
+      - settings editing with masked secrets
+      - deal curation
+      - author identity review
+      - feedback triage
+      - harvest run inspection
+    cannot_do:
+      - change the database connection (database_url is not runtime-editable)
+
+apps:
+  web:
+    path_patterns: ["frontend/**"]
+    skill: qa-web
+    test_tool: agent-browser
+    port: 3100
+    # Boot authority is qa-web/SKILL.md; keep this copy in sync. The wiki
+    # skill's visual-capture phase starts servers from dev_command.
+    dev_command: cd frontend && API_PROXY_URL=http://127.0.0.1:8100 npm run dev -- -p 3100
+  backend:
+    path_patterns: ["backend/**", "openapi.json", "docker-compose.yml", "compose.test.yml", "db/**"]
+    skill: qa-backend
+    test_tool: curl
+    port: 8100
+    # Boot authority is qa-backend/SKILL.md; keep this copy in sync. The
+    # wiki skill's visual-capture phase starts servers from dev_command.
+    # JB_UT_METADATA_DSN is emptied on purpose: see that skill's failure
+    # mode 7 (60s hang per journal-detail view when the live DSN leaks in).
+    dev_command: >-
+      cd backend &&
+      JB_DATABASE_URL=postgresql+asyncpg://journal:journal@127.0.0.1:5433/journalbrowser_qa
+      JB_SETTINGS_YAML=/tmp/qa-settings.yaml JB_UT_METADATA_DSN=
+      JB_ADMIN_PASSWORD=$QA_ADMIN_PASSWORD
+      uv run --no-dev alembic upgrade head &&
+      JB_DATABASE_URL=postgresql+asyncpg://journal:journal@127.0.0.1:5433/journalbrowser_qa
+      JB_SETTINGS_YAML=/tmp/qa-settings.yaml JB_UT_METADATA_DSN=
+      JB_ADMIN_PASSWORD=$QA_ADMIN_PASSWORD
+      uv run --no-dev uvicorn journal_browser.main:app --host 127.0.0.1 --port 8100
+
+feature_flags:
+  provider: none
+  dashboard_url: ''
+  how_to_override: >
+    JB_ENABLE_JOURNAL_CITATIONS and JB_ENABLE_JISC env vars flow through
+    backend/src/journal_browser/settings_schema.py and the admin settings
+    overlay. Scaffolds stay OFF by design (backend/tests/test_scaffolds.py);
+    QA must treat them as OFF and flag any run where they are on.
+
+integrations: {}
+
+cleanup:
+  auto_cleanup: true
+  strategy: none
+  instructions: >
+    QA writes land only in the disposable journalbrowser_qa database. No
+    cleanup pass is needed; re-seed (drop database, migrate, seed again) when
+    the data drifts or a run corrupts state.
+
+failure_learning: suggest_in_report
