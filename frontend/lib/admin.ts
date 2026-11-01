@@ -128,3 +128,6 @@ export type AdminDealDetail = Schemas["AdminDealDetail"];
 
 /** GET /admin/feedback: one user report with its page-data dump. */
 export type FeedbackAdmin = Schemas["FeedbackAdminOut"];
+
+/** GET/PUT /admin/author-identities: one resolution row for review. */
+export type AuthorIdentityAdmin = Schemas["AuthorIdentityAdminOut"];

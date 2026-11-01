@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { LoginForm } from "@/components/admin/login-form";
+import { IdentitiesPanel } from "@/components/admin/identities-table";
 import { RunsTable } from "@/components/admin/runs-table";
 import { InstitutionSettingsForm } from "@/components/admin/settings-forms";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,15 @@ export default function InstAdminPage() {
         <h2 className="text-lg font-semibold">Harvest runs (newest first)</h2>
         {error && <p className="text-sm text-destructive">{error}</p>}
         <RunsTable runs={runs} directory={uni ? [uni] : []} />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Author identity review</h2>
+        <p className="text-sm text-[var(--muted-foreground)]">
+          Resolution rows from the identity cascade. Confirming or rejecting is sticky across
+          re-runs; flips reach the public author pages at the next authors ingest.
+        </p>
+        <IdentitiesPanel token={token} inst={inst} onUnauthorized={() => setToken(null)} />
       </section>
 
       <section className="space-y-3">
