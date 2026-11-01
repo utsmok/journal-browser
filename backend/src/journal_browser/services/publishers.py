@@ -321,7 +321,10 @@ def _order_pubs(pubs: list[_Pub], sort: str, q: str | None, dir: str | None) -> 
             return 1 if prefix else 0
         return p.n_works  # works, and relevance without q
 
-    direction = dir if dir in ("asc", "desc") else "desc"
+    # Natural direction per key (name asc, every count desc); an explicit
+    # dir overrides. The sort select's labels assume these naturals.
+    natural = "asc" if sort == "name" else "desc"
+    direction = dir if dir in ("asc", "desc") else natural
     pubs.sort(key=lambda p: (p.name.lower(), p.name))
     pubs.sort(key=head, reverse=direction == "desc")
     return pubs

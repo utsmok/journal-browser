@@ -33,6 +33,7 @@ async def search_orgunits(
     sort: Annotated[
         str | None, Query(pattern="^(relevance|name|authors|works|deal_works)$")
     ] = None,
+    dir: Annotated[str | None, Query(pattern="^(asc|desc)$")] = None,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = orgunits_service.DEFAULT_LIMIT,
     include_facets: bool = True,
@@ -49,6 +50,7 @@ async def search_orgunits(
             works=_split(works),
             uses_deals=uses_deals,
             sort=sort,
+            dir=dir,
             offset=offset,
             limit=limit,
             include_facets=include_facets,

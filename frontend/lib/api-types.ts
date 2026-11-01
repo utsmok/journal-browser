@@ -3303,6 +3303,7 @@ export interface operations {
                 works?: string | null;
                 uses_deals?: boolean | null;
                 sort?: string | null;
+                dir?: string | null;
                 offset?: number;
                 limit?: number;
                 include_facets?: boolean;

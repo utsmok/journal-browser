@@ -251,6 +251,7 @@ async def search_orgunits(
     works: list[str] | None = None,
     uses_deals: bool | None = None,
     sort: str | None = None,
+    dir: str | None = None,
     offset: int = 0,
     limit: int = DEFAULT_LIMIT,
     include_facets: bool = True,
@@ -274,6 +275,9 @@ async def search_orgunits(
     if sort is None:
         sort = "relevance" if q_cond is not None else "works"
     order_col, direction = _order(units, sort, q)
+    # An explicit dir overrides the key's natural direction.
+    if dir in ("asc", "desc"):
+        direction = dir
     order_by = [order_col.desc(), func.lower(units.c.name), units.c.name]
     if direction == "asc":
         order_by[0] = order_col.asc()

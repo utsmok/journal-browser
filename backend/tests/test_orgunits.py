@@ -308,6 +308,9 @@ async def test_orgunit_filters_and_sorts(orgunits_api):
     assert await names({"sort": "deal_works"}) == [TNW, BMS]
     assert await names({"sort": "name"}) == [BMS, TNW]
     assert await names({"sort": "authors"}) == [TNW, BMS]  # 4 vs 1
+    # dir overrides the key's natural direction; ties stay name-ascending.
+    assert await names({"sort": "name", "dir": "desc"}) == [TNW, BMS]
+    assert await names({"sort": "authors", "dir": "asc"}) == [BMS, TNW]  # 1 vs 4
     # Pager.
     assert await names({"offset": 1, "limit": 1}) == [TNW]
 

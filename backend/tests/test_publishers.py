@@ -240,6 +240,15 @@ async def test_publisher_filters_and_multiselect(publishers_api):
     assert (await names({"q": "e"}))[0] == "Elsevier BV"
     # Offset/limit pages the sorted matches.
     assert await names({"offset": 1, "limit": 2}) == ["Elsevier BV", "Wiley"]
+    # Name sort defaults to its natural A→Z (the sort select's promise);
+    # an explicit dir still overrides.
+    assert await names({"sort": "name"}) == ["Alpha/Beta Press", "Elsevier BV", "Springer", "Wiley"]
+    assert await names({"sort": "name", "dir": "desc"}) == [
+        "Wiley",
+        "Springer",
+        "Elsevier BV",
+        "Alpha/Beta Press",
+    ]
 
 
 @requires_db

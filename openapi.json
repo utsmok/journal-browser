@@ -2278,6 +2278,23 @@
             }
           },
           {
+            "name": "dir",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(asc|desc)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dir"
+            }
+          },
+          {
             "name": "offset",
             "in": "query",
             "required": false,
