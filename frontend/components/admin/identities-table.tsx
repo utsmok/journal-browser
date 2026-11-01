@@ -193,7 +193,8 @@ export function IdentitiesPanel({
           {!loading && rows.length === 0 && (
             <TableRow>
               <TableCell colSpan={8} className="text-center text-[var(--muted-foreground)]">
-                No {filter === "all" ? "" : `${filter} `}identity rows for this institution.
+                No {filter === "all" ? "" : `${filter} `}identity rows
+                {inst ? " for this institution" : " across institutions"}.
               </TableCell>
             </TableRow>
           )}

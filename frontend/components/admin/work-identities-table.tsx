@@ -177,7 +177,8 @@ export function WorkIdentitiesPanel({
           {!loading && rows.length === 0 && (
             <TableRow>
               <TableCell colSpan={7} className="text-center text-[var(--muted-foreground)]">
-                No {filter === "all" ? "" : `${filter} `}work identity rows for this institution.
+                No {filter === "all" ? "" : `${filter} `}work identity rows
+                {inst ? " for this institution" : " across institutions"}.
               </TableCell>
             </TableRow>
           )}
