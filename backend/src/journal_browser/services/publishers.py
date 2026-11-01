@@ -330,7 +330,11 @@ def _order_pubs(pubs: list[_Pub], sort: str, q: str | None, dir: str | None) -> 
     return pubs
 
 
-def _item(p: _Pub, topics: list[dict[str, Any]]) -> dict[str, Any]:
+def _item(
+    p: _Pub,
+    topics: list[dict[str, Any]],
+    external_ids: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     q = p.quartile_counts
     return {
         "name": p.name,
@@ -351,6 +355,7 @@ def _item(p: _Pub, topics: list[dict[str, Any]]) -> dict[str, Any]:
             "eur_max": p.eur_max,
         },
         "topics": topics,
+        "external_ids": external_ids or {},
     }
 
 
@@ -417,6 +422,10 @@ async def publisher_detail(
     pub = (await _snapshot(session, iid)).get(name)
     if pub is None:
         return None
+
+    # External registry refs for the detail header (Open Access NL profile
+    # link); a missing Publishers row just leaves the slug None.
+    slug = await session.scalar(select(Publisher.openaccess_nl_slug).where(Publisher.name == name))
 
     # Same page assembly as search_journals (no facets, no cursor), scoped
     # to the canonical key so sub-brand publisher_names join the group.
@@ -589,7 +598,11 @@ async def publisher_detail(
         )
 
     return {
-        "publisher": _item(pub, pub.topics[:TOPICS_PER_DETAIL]),
+        "publisher": _item(
+            pub,
+            pub.topics[:TOPICS_PER_DETAIL],
+            external_ids={"openaccess_nl_slug": slug},
+        ),
         "journals": journals,
         "deals": [(row["deal"], row["publisher_name"], row["n_covered"]) for row in deals],
         "deal_discrepancies": [

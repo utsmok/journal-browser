@@ -444,6 +444,16 @@ class PublisherApcSummary(BaseModel):
     eur_max: float | None = None
 
 
+class PublisherExternalIds(BaseModel):
+    """External registry references for the publisher. Populated on the
+    detail payload only; search items leave the defaults in place."""
+
+    # Open Access NL publisher profile slug
+    # (openaccess.nl/en/publisher/{slug}); None when the publisher is not
+    # in their deals overview.
+    openaccess_nl_slug: str | None = None
+
+
 class PublisherListItem(BaseModel):
     name: str
     n_journals: int
@@ -454,6 +464,7 @@ class PublisherListItem(BaseModel):
     quartiles: dict[str, int]
     apc: PublisherApcSummary
     topics: list[TopicMassRow] = []
+    external_ids: PublisherExternalIds = PublisherExternalIds()
 
 
 class PublisherSearchResponse(BaseModel):

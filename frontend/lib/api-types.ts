@@ -2037,6 +2037,15 @@ export interface components {
              */
             works_by_year: components["schemas"]["StatsYear"][];
         };
+        /**
+         * PublisherExternalIds
+         * @description External registry references for the publisher. Populated on the
+         *     detail payload only; search items leave the defaults in place.
+         */
+        PublisherExternalIds: {
+            /** Openaccess Nl Slug */
+            openaccess_nl_slug?: string | null;
+        };
         /** PublisherListItem */
         PublisherListItem: {
             /** Name */
@@ -2061,6 +2070,8 @@ export interface components {
              * @default []
              */
             topics: components["schemas"]["TopicMassRow"][];
+            /** @default {} */
+            external_ids: components["schemas"]["PublisherExternalIds"];
         };
         /** PublisherSearchResponse */
         PublisherSearchResponse: {

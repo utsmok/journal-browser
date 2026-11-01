@@ -118,7 +118,7 @@ async def publishers_api(db, institution_factory):
             euro_mean=2200,
         )
     )
-    deal_publisher = Publisher(name="Elsevier BV")
+    deal_publisher = Publisher(name="Elsevier BV", openaccess_nl_slug="elsevier")
     session.add(deal_publisher)
     await session.flush()
     deal = Deal(publisher_id=deal_publisher.id, esac_id="elsevier2024", status="current")
@@ -194,6 +194,9 @@ async def test_publisher_list_aggregates(publishers_api):
         "quartiles": {"q1": 1, "q2": 0, "q3": 0, "q4": 0, "none": 1},
         "apc": {"n_journals": 1, "eur_min": 1500.0, "eur_max": 1500.0},
         "topics": [],
+        # Search items carry the default empty external_ids; the slug is
+        # detail-only.
+        "external_ids": {"openaccess_nl_slug": None},
     }
     assert elsevier == {
         "name": "Elsevier BV",
@@ -205,6 +208,7 @@ async def test_publisher_list_aggregates(publishers_api):
         "apc": {"n_journals": 1, "eur_min": 2400.0, "eur_max": 2400.0},
         # J1's 5 works spread over its topics by count (30/10).
         "topics": [{"name": "Physics", "n": 3.75}, {"name": "Materials Science", "n": 1.25}],
+        "external_ids": {"openaccess_nl_slug": None},  # search items: detail-only
     }
 
 
@@ -299,6 +303,8 @@ async def test_publisher_detail(publishers_api):
     assert r.status_code == 200
     body = r.json()
     assert body["publisher"]["name"] == "Elsevier BV"
+    # Open Access NL profile from the Publishers row (the deal-fixture one).
+    assert body["publisher"]["external_ids"] == {"openaccess_nl_slug": "elsevier"}
     assert body["publisher"]["topics"] == [
         {"name": "Physics", "n": 3.75},
         {"name": "Materials Science", "n": 1.25},
@@ -369,6 +375,7 @@ async def test_publisher_institution_isolation(publishers_api):
         # Journal topics are institution-neutral; rug's 2 J1 works spread
         # over them by count (30/10).
         "topics": [{"name": "Physics", "n": 1.5}, {"name": "Materials Science", "n": 0.5}],
+        "external_ids": {"openaccess_nl_slug": None},  # search items: detail-only
     }
     assert (await client.get("/api/v1/nonsense/publishers")).status_code == 404
 

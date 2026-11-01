@@ -7117,6 +7117,24 @@
         ],
         "title": "PublisherDetailResponse"
       },
+      "PublisherExternalIds": {
+        "properties": {
+          "openaccess_nl_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openaccess Nl Slug"
+          }
+        },
+        "type": "object",
+        "title": "PublisherExternalIds",
+        "description": "External registry references for the publisher. Populated on the\ndetail payload only; search items leave the defaults in place."
+      },
       "PublisherListItem": {
         "properties": {
           "name": {
@@ -7159,6 +7177,10 @@
             "type": "array",
             "title": "Topics",
             "default": []
+          },
+          "external_ids": {
+            "$ref": "#/components/schemas/PublisherExternalIds",
+            "default": {}
           }
         },
         "type": "object",

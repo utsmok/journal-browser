@@ -185,6 +185,20 @@ export default function PublisherPage() {
               </span>
             </>
           )}
+          {publisher.external_ids?.openaccess_nl_slug && (
+            <>
+              <span aria-hidden>·</span>
+              <a
+                href={`https://openaccess.nl/en/publisher/${publisher.external_ids.openaccess_nl_slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline"
+                title="Publisher profile on Open Access NL, the Dutch deals registry"
+              >
+                Open Access NL <ExternalLink aria-hidden className="size-3.5 shrink-0" />
+              </a>
+            </>
+          )}
         </div>
       </header>
 
