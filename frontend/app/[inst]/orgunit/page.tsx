@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { FacetGroupList, type FacetGroupDef, type FacetValue } from "@/components/filter-panel";
+import { SortHead } from "@/components/search/sort-head";
 import { ListSkeletonRows } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -29,6 +30,7 @@ import {
   type OrgUnitSearchSort,
 } from "@/lib/api";
 import { formatEur } from "@/lib/format";
+import { ORGUNIT_COLUMN_SORTS } from "@/lib/search-config";
 
 const SEARCH_INPUT_ID = "orgunit-search";
 
@@ -124,6 +126,8 @@ function OrgUnitsView() {
   ].includes(sortParam ?? "")
     ? (sortParam as OrgUnitSearchSort)
     : undefined;
+  const dirParam = sp.get("dir");
+  const dir: "asc" | "desc" | null = dirParam === "asc" || dirParam === "desc" ? dirParam : null;
   const limitParam = parseInt(sp.get("limit") ?? "", 10);
   const pageSize = PAGE_SIZES.includes(limitParam) ? limitParam : 50;
   const offsetParam = parseInt(sp.get("offset") ?? "", 10);
@@ -167,6 +171,7 @@ function OrgUnitsView() {
     works: works.length > 0 ? works : undefined,
     uses_deals: usesDeals || undefined,
     sort,
+    dir: dir ?? undefined,
     offset: offset > 0 ? offset : undefined,
     limit: pageSize === 50 ? undefined : pageSize,
     include_facets: true,
@@ -201,6 +206,30 @@ function OrgUnitsView() {
 
   const clearFilters = () =>
     setParams({ faculty: undefined, works: undefined, uses_deals: undefined });
+
+  // Tri-state column sort: natural → reversed → off (journal-table
+  // convention). Off removes both params so the backend default applies
+  // (relevance with a query, works high→low without).
+  const cycleSort = (columnId: string) => {
+    const spec = ORGUNIT_COLUMN_SORTS[columnId];
+    if (!spec) return;
+    if (sort !== spec.key) {
+      setParams({ sort: spec.key, dir: spec.natural });
+      return;
+    }
+    const atNatural = (dir ?? spec.natural) === spec.natural;
+    setParams(
+      atNatural
+        ? { sort: spec.key, dir: spec.natural === "asc" ? "desc" : "asc" }
+        : { sort: undefined, dir: undefined },
+    );
+  };
+  const sortHeadState = { sort, dir, cycleSort, specs: ORGUNIT_COLUMN_SORTS };
+  const ariaSortFor = (columnId: string): "ascending" | "descending" | undefined => {
+    const spec = ORGUNIT_COLUMN_SORTS[columnId];
+    if (!spec || sort !== spec.key) return undefined;
+    return (dir ?? spec.natural) === "asc" ? "ascending" : "descending";
+  };
 
   const groups: FacetGroupDef[] = [
     ...(level === "group"
@@ -339,6 +368,9 @@ function OrgUnitsView() {
               onChange={(event) =>
                 setParams({
                   sort: event.target.value === "default" ? undefined : event.target.value,
+                  // A sort change invalidates the old direction: keeping
+                  // `dir` would flip the freshly chosen label.
+                  dir: undefined,
                 })
               }
               className={SELECT_CLASS}
@@ -519,11 +551,23 @@ function OrgUnitsView() {
                       <caption className="sr-only">Organisational unit search results</caption>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Name</TableHead>
+                          <TableHead aria-sort={ariaSortFor("name")}>
+                            <SortHead columnId="name" label="Name" state={sortHeadState} />
+                          </TableHead>
                           {level === "group" && <TableHead>Faculty</TableHead>}
-                          <TableHead className="text-right">Authors</TableHead>
-                          <TableHead className="text-right">Works</TableHead>
-                          <TableHead className="text-right">Deal-covered</TableHead>
+                          <TableHead className="text-right" aria-sort={ariaSortFor("authors")}>
+                            <SortHead columnId="authors" label="Authors" state={sortHeadState} />
+                          </TableHead>
+                          <TableHead className="text-right" aria-sort={ariaSortFor("works")}>
+                            <SortHead columnId="works" label="Works" state={sortHeadState} />
+                          </TableHead>
+                          <TableHead className="text-right" aria-sort={ariaSortFor("deal_works")}>
+                            <SortHead
+                              columnId="deal_works"
+                              label="Deal-covered"
+                              state={sortHeadState}
+                            />
+                          </TableHead>
                           <TableHead className="text-right">APC</TableHead>
                           <TableHead>Topics</TableHead>
                         </TableRow>

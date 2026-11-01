@@ -223,6 +223,7 @@ export type OrgUnitSearchParams = {
   works?: string[];
   uses_deals?: boolean;
   sort?: OrgUnitSearchSort;
+  dir?: "asc" | "desc";
   offset?: number;
   limit?: number;
   include_facets?: boolean;
@@ -271,6 +272,7 @@ export async function fetchOrgUnits(
     works: params.works?.join("|"),
     uses_deals: params.uses_deals ? "true" : undefined,
     sort: params.sort,
+    dir: params.dir,
     offset: params.offset,
     limit: params.limit,
     include_facets: params.include_facets ? "true" : undefined,

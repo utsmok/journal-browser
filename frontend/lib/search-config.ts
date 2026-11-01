@@ -1,4 +1,4 @@
-import type { PublisherSearchSort, SearchIn, SortKey } from "@/lib/api";
+import type { OrgUnitSearchSort, PublisherSearchSort, SearchIn, SortKey } from "@/lib/api";
 
 export const SORTS: { value: SortKey; label: string }[] = [
   { value: "relevance", label: "Relevance" },
@@ -34,6 +34,17 @@ export const PUBLISHER_COLUMN_SORTS: Record<
   works: { key: "works", natural: "desc" },
   deals: { key: "deals", natural: "desc" },
   apc: { key: "apc", natural: "desc" },
+};
+
+// Org-unit directory columns: same convention; the backend has no APC sort.
+export const ORGUNIT_COLUMN_SORTS: Record<
+  string,
+  { key: OrgUnitSearchSort; natural: "asc" | "desc" }
+> = {
+  name: { key: "name", natural: "asc" },
+  authors: { key: "authors", natural: "desc" },
+  works: { key: "works", natural: "desc" },
+  deal_works: { key: "deal_works", natural: "desc" },
 };
 
 export const SEARCH_IN_OPTIONS: { value: SearchIn; label: string }[] = [
