@@ -216,6 +216,12 @@ WHERE code = 'ut' AND openaire_org_id IS NULL;
   rebuilds the OpenAlex per-journal/year OA stats window-bounded — so
   year charts and FWCI/citation metrics cover the whole data window, not
   just the years the live harvests ran.
+- **Logs and request tracing:** every API request carries an id — send an
+  `X-Request-ID` header (or read the one echoed back on each response) and
+  grep `docker compose logs` for it to follow a single request across log
+  lines. Set `JB_LOG_FORMAT=json` in `.env` for one JSON object per line
+  when shipping logs to a collector. Credential-looking substrings
+  (`password=`, `token=`, Bearer headers) are redacted from the output.
 - **Upgrading the stack:** `git pull && docker compose up -d --build`. The
   bootstrap service applies pending migrations before harvesting. Migration
   0020 (semantic-search index) builds an HNSW graph and needs a few minutes

@@ -1,14 +1,19 @@
+import logging
 import os
+import time
 
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.datastructures import MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from . import __version__
 from .config import get_settings
 from .db import get_session
+from .logging_setup import REQUEST_ID_HEADER, configure_logging, new_request_id, request_id_ctx
 from .routers import (
     admin,
     authors,
@@ -21,6 +26,8 @@ from .routers import (
     orgunits,
     publishers,
 )
+
+logger = logging.getLogger(__name__)
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(institutions.router)
@@ -49,6 +56,55 @@ async def healthz(session: AsyncSession = Depends(get_session)) -> dict:
     return {"status": "ok", "version": __version__}
 
 
+class RequestObservabilityMiddleware:
+    """Outermost ASGI middleware: adopt an inbound X-Request-ID (or mint
+    one), echo it on the response, and write one line per request with
+    method, path, status, and duration. configure_logging() puts the id on
+    every log line emitted while the request runs, so server errors and
+    harvest logs become greppable to the same id."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        rid = _inbound_request_id(scope) or new_request_id()
+        token = request_id_ctx.set(rid)
+        started = time.perf_counter()
+        status: int | None = None
+
+        async def send_with_request_id(message: Message) -> None:
+            nonlocal status
+            if message["type"] == "http.response.start":
+                status = message["status"]
+                MutableHeaders(scope=message).append(REQUEST_ID_HEADER, rid)
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_with_request_id)
+        finally:
+            elapsed_ms = round((time.perf_counter() - started) * 1000)
+            request_id_ctx.reset(token)
+            logger.info(
+                "%s %s -> %s (%s ms)",
+                scope.get("method", "-"),
+                scope.get("path", "-"),
+                status if status is not None else "no-response",
+                elapsed_ms,
+            )
+
+
+def _inbound_request_id(scope: Scope) -> str | None:
+    for key, value in scope.get("headers") or []:
+        if key == REQUEST_ID_HEADER.encode():
+            candidate = value.decode("latin-1").strip()
+            if candidate and len(candidate) <= 128:
+                return candidate
+    return None
+
+
 def _warm_embedding_model() -> None:
     """Load the ~130 MB ONNX query encoder off the request path, so the
     first semantic search after a restart does not pay the model load.
@@ -64,13 +120,19 @@ def _warm_embedding_model() -> None:
 
 def create_app() -> "FastAPI":
     settings = get_settings()
+    configure_logging()
     app = FastAPI(title="Journal Browser API", version=__version__)
+    # CORS first, observability second: add_middleware prepends, so the
+    # request-id middleware runs outermost and even CORS-rejected requests
+    # get a request id.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["X-Request-ID"],
     )
+    app.add_middleware(RequestObservabilityMiddleware)
     app.include_router(api_router)
 
     # parse_cursor and friends raise ValueError for malformed input; map it
