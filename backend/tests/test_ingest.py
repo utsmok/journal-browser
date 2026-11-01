@@ -2,7 +2,7 @@
 
 from conftest import requires_db
 from journal_browser.ingest import IngestSession, _strip_nuls, apply_overrides, content_hash
-from journal_browser.models import Deal, ManualOverride
+from journal_browser.models import Deal, HarvestRun, ManualOverride
 
 
 def test_content_hash_is_order_stable():
@@ -60,3 +60,55 @@ async def test_overrides_survive_reingestion(db):
 
     assert applied == 1
     assert deal.summary == "curated text"
+
+
+@requires_db
+async def test_start_run_supersedes_stale_running_rows(db):
+    """A crashed run's 'running' row closes when the same job starts again.
+
+    The key is (source, entity_type, institution): the runs table carries
+    no filter_set, and every job finishes one run before starting the
+    next, so a different filter_set never overlaps in practice.
+    """
+    stale = IngestSession(db)
+    stale_id = await stale.start_run("src", "ent", "f1", {})
+    await db.commit()
+
+    fresh = IngestSession(db)
+    fresh_id = await fresh.start_run("src", "ent", "f1", {})
+    await db.commit()
+
+    old = await db.get(HarvestRun, stale_id)
+    assert old.status == "failed"
+    assert old.finished_at is not None
+    assert old.stats == {"error": "stale: superseded by a newer run of the same job"}
+    new = await db.get(HarvestRun, fresh_id)
+    assert new.status == "running"
+
+    # A different entity_type or institution is a different key: untouched.
+    other = IngestSession(db)
+    other_id = await other.start_run("src", "ent2", "f1", {})
+    await db.commit()
+    third = IngestSession(db)
+    await third.start_run("src", "ent", "f1", {})
+    await db.commit()
+    untouched = await db.get(HarvestRun, other_id)
+    assert untouched.status == "running"
+
+
+@requires_db
+async def test_start_run_supersede_respects_institution_scope(db, institution_factory):
+    inst = await institution_factory(code="ut")
+    scoped = IngestSession(db)
+    scoped_id = await scoped.start_run("src", "ent", "f1", {}, institution_id=inst.id)
+    await db.commit()
+    # A global run of the same job must not close the institution-scoped one.
+    global_run = IngestSession(db)
+    await global_run.start_run("src", "ent", "f1", {})
+    await db.commit()
+    assert (await db.get(HarvestRun, scoped_id)).status == "running"
+    # ...but a same-scope run does.
+    again = IngestSession(db)
+    await again.start_run("src", "ent", "f1", {}, institution_id=inst.id)
+    await db.commit()
+    assert (await db.get(HarvestRun, scoped_id)).status == "failed"

@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import func, insert, select, text, tuple_
+from sqlalchemy import func, insert, select, text, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -89,6 +89,47 @@ class IngestSession:
         self.entity_type = entity_type
         self.filter_set = filter_set
         self.institution_id = institution_id
+        # Close stale 'running' rows for this key first. Only the
+        # in-process exception path can mark a run 'failed', so a crashed
+        # or killed process leaves its row running forever; a new start of
+        # the same job is the one moment that state is provably dead.
+        # Superseding also makes an accidental overlap visible: the older
+        # row reads 'failed' with the marker instead of pretending both
+        # completed.
+        #
+        # The runs table carries no filter_set, so the key here is
+        # (source, entity_type, institution). Every current job finishes
+        # one run before starting the next (harvest_state is
+        # last-writer-wins across filter_sets anyway), so this cannot
+        # close a sibling filter_set's row except in a same-instant
+        # overlap that already corrupts the state table.
+        stale = await self.session.execute(
+            update(HarvestRun)
+            .where(
+                HarvestRun.source == source,
+                HarvestRun.entity_type == entity_type,
+                (
+                    HarvestRun.institution_id.is_(None)
+                    if institution_id is None
+                    else HarvestRun.institution_id == institution_id
+                ),
+                HarvestRun.status == "running",
+            )
+            .values(
+                status="failed",
+                finished_at=datetime.now(UTC),
+                stats={"error": "stale: superseded by a newer run of the same job"},
+            )
+            .returning(HarvestRun.id)
+        )
+        superseded = list(stale.scalars().all())
+        if superseded:
+            logger.warning(
+                "Superseded stale running harvest run(s) %s for %s/%s",
+                superseded,
+                source,
+                entity_type,
+            )
         run = HarvestRun(
             source=source,
             entity_type=entity_type,
