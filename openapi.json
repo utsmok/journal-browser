@@ -1001,6 +1001,66 @@
         }
       }
     },
+    "/api/v1/admin/external-author/{external_id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Stored External Author",
+        "description": "The harvest's stored OpenAlex author profile + recent works.\n\nThe review drawer reads the verbatim source_records payload (the listing\nsweep lands every institutional author profile there) plus a recent-works\nsample from the openalex_works projection \u2014 no live API call. 404 when\nthis id was never swept; the UI falls back to an OpenAlex link.",
+        "operationId": "stored_external_author_api_v1_admin_external_author__external_id__get",
+        "parameters": [
+          {
+            "name": "external_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "External Id"
+            }
+          },
+          {
+            "name": "institution",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Institution"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminExternalAuthorOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/work-identities": {
       "get": {
         "tags": [
@@ -3398,6 +3458,109 @@
           "curation_resolved_reason"
         ],
         "title": "AdminDealOut"
+      },
+      "AdminExternalAuthorOut": {
+        "properties": {
+          "source_pk": {
+            "type": "string",
+            "title": "Source Pk"
+          },
+          "harvested_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harvested At"
+          },
+          "author": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Author"
+          },
+          "works": {
+            "items": {
+              "$ref": "#/components/schemas/AdminExternalWorkOut"
+            },
+            "type": "array",
+            "title": "Works"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_pk",
+          "harvested_at",
+          "author",
+          "works"
+        ],
+        "title": "AdminExternalAuthorOut",
+        "description": "Stored OpenAlex author profile (source_records) + recent works.\n\nServes the identity review drawer from the harvest's verbatim payloads\ninstead of the live API."
+      },
+      "AdminExternalWorkOut": {
+        "properties": {
+          "w_id": {
+            "type": "string",
+            "title": "W Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue"
+          }
+        },
+        "type": "object",
+        "required": [
+          "w_id",
+          "title",
+          "year",
+          "doi",
+          "venue"
+        ],
+        "title": "AdminExternalWorkOut",
+        "description": "One recent OpenAlex work of a candidate author, from the projection."
       },
       "AdminInstitutionOut": {
         "properties": {

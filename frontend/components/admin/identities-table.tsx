@@ -238,6 +238,7 @@ export function IdentitiesPanel({
         <AuthorIdentityDrawer
           key={rowKey(selected)}
           row={selected}
+          token={token}
           busy={busy}
           onClose={() => setSelectedKey(null)}
           onFlip={(row, status, note, changedBy) => void flip(row, status, note, changedBy)}

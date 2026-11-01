@@ -140,3 +140,6 @@ export type StatusChange = Schemas["StatusChangeOut"];
 
 /** GET /admin/summary: dashboard counters for the overview page. */
 export type AdminSummary = Schemas["AdminSummaryOut"];
+
+/** GET /admin/external-author/{id}: stored OpenAlex profile + recent works. */
+export type StoredExternalAuthor = Schemas["AdminExternalAuthorOut"];

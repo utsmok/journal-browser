@@ -619,6 +619,29 @@ class AuthorIdentityAdminOut(BaseModel):
     updated_at: datetime | None
 
 
+class AdminExternalWorkOut(BaseModel):
+    """One recent OpenAlex work of a candidate author, from the projection."""
+
+    w_id: str
+    title: str | None
+    year: int | None
+    doi: str | None
+    venue: str | None
+
+
+class AdminExternalAuthorOut(BaseModel):
+    """Stored OpenAlex author profile (source_records) + recent works.
+
+    Serves the identity review drawer from the harvest's verbatim payloads
+    instead of the live API.
+    """
+
+    source_pk: str
+    harvested_at: datetime | None
+    author: dict[str, Any]
+    works: list[AdminExternalWorkOut]
+
+
 class WorkIdentityAdminOut(BaseModel):
     """One cross-source work-identity row for the admin review list.
 

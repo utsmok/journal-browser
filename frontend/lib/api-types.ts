@@ -305,6 +305,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/external-author/{external_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stored External Author
+         * @description The harvest's stored OpenAlex author profile + recent works.
+         *
+         *     The review drawer reads the verbatim source_records payload (the listing
+         *     sweep lands every institutional author profile there) plus a recent-works
+         *     sample from the openalex_works projection — no live API call. 404 when
+         *     this id was never swept; the UI falls back to an OpenAlex link.
+         */
+        get: operations["stored_external_author_api_v1_admin_external_author__external_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/work-identities": {
         parameters: {
             query?: never;
@@ -806,6 +831,41 @@ export interface components {
             needs_curation_reason: string | null;
             /** Curation Resolved Reason */
             curation_resolved_reason: string | null;
+        };
+        /**
+         * AdminExternalAuthorOut
+         * @description Stored OpenAlex author profile (source_records) + recent works.
+         *
+         *     Serves the identity review drawer from the harvest's verbatim payloads
+         *     instead of the live API.
+         */
+        AdminExternalAuthorOut: {
+            /** Source Pk */
+            source_pk: string;
+            /** Harvested At */
+            harvested_at: string | null;
+            /** Author */
+            author: {
+                [key: string]: unknown;
+            };
+            /** Works */
+            works: components["schemas"]["AdminExternalWorkOut"][];
+        };
+        /**
+         * AdminExternalWorkOut
+         * @description One recent OpenAlex work of a candidate author, from the projection.
+         */
+        AdminExternalWorkOut: {
+            /** W Id */
+            w_id: string;
+            /** Title */
+            title: string | null;
+            /** Year */
+            year: number | null;
+            /** Doi */
+            doi: string | null;
+            /** Venue */
+            venue: string | null;
         };
         /** AdminInstitutionOut */
         AdminInstitutionOut: {
@@ -3115,6 +3175,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthorIdentityAdminOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stored_external_author_api_v1_admin_external_author__external_id__get: {
+        parameters: {
+            query?: {
+                institution?: string | null;
+            };
+            header?: never;
+            path: {
+                external_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminExternalAuthorOut"];
                 };
             };
             /** @description Validation Error */

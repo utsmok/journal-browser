@@ -7,7 +7,12 @@ import { CopyButton, RecordField, RecordJson, useReviewer } from "@/components/a
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { AuthorIdentityAdmin } from "@/lib/admin";
+import {
+  AdminError,
+  adminGet,
+  type AuthorIdentityAdmin,
+  type StoredExternalAuthor,
+} from "@/lib/admin";
 
 type LocalProfile = {
   author: {
@@ -26,19 +31,16 @@ type LocalProfile = {
   works: { title: string; year: number; doi: string | null }[];
 };
 
-type OpenAlexAuthor = {
-  id: string;
-  orcid: string | null;
-  display_name: string;
+type OpenAlexPayload = {
+  display_name?: string;
+  orcid?: string | null;
+  works_count?: number;
+  cited_by_count?: number;
   display_name_alternatives?: string[];
-  works_count: number;
-  cited_by_count: number;
-  last_known_institution?: { display_name: string } | null;
-  last_known_institutions?: { display_name: string }[] | null;
-  topics?: { display_name: string }[];
+  last_known_institution?: { display_name?: string } | null;
+  last_known_institutions?: { display_name?: string }[] | null;
+  topics?: { display_name?: string }[];
 };
-
-type OpenAlexWork = { display_name: string; publication_year: number | null; doi: string | null };
 
 function MatchBadge({ ok, yes, no }: { ok: boolean; yes: string; no: string }) {
   return <Badge variant={ok ? "secondary" : "outline"}>{ok ? `✓ ${yes}` : no}</Badge>;
@@ -46,16 +48,19 @@ function MatchBadge({ ok, yes, no }: { ok: boolean; yes: string; no: string }) {
 
 /**
  * Side-by-side decision view for one author identity candidate: the local
- * Pure profile (public author API) against the external OpenAlex record,
- * plus the cascade evidence, with confirm/reject actions.
+ * Pure profile (public author API) against the OpenAlex record from the
+ * harvest's stored source_records payloads, plus the cascade evidence, with
+ * confirm/reject actions. No live API calls.
  */
 export function AuthorIdentityDrawer({
   row,
+  token,
   onClose,
   onFlip,
   busy,
 }: {
   row: AuthorIdentityAdmin;
+  token: string;
   onClose: () => void;
   onFlip: (row: AuthorIdentityAdmin, status: string, note: string, changedBy: string) => void;
   busy: string | null;
@@ -64,9 +69,8 @@ export function AuthorIdentityDrawer({
   const [reviewer, setReviewer] = useReviewer();
   const [local, setLocal] = useState<LocalProfile | null>(null);
   const [localMissing, setLocalMissing] = useState(false);
-  const [external, setExternal] = useState<OpenAlexAuthor | null>(null);
-  const [externalWorks, setExternalWorks] = useState<OpenAlexWork[]>([]);
-  const [externalFailed, setExternalFailed] = useState(false);
+  const [external, setExternal] = useState<StoredExternalAuthor | null>(null);
+  const [externalMissing, setExternalMissing] = useState(false);
 
   const isOpenalex = row.source === "openalex";
 
@@ -91,39 +95,35 @@ export function AuthorIdentityDrawer({
   useEffect(() => {
     let cancelled = false;
     setExternal(null);
-    setExternalWorks([]);
-    setExternalFailed(false);
-    if (!isOpenalex) return;
-    void fetch(`https://api.openalex.org/authors/${row.external_id}`)
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
+    setExternalMissing(false);
+    if (!isOpenalex || !token) return;
+    const instQ = row.institution_code
+      ? `?institution=${encodeURIComponent(row.institution_code)}`
+      : "";
+    void adminGet<StoredExternalAuthor>(`/external-author/${row.external_id}${instQ}`, token)
       .then((data) => {
-        if (cancelled) return;
-        setExternal(data as OpenAlexAuthor);
-        return fetch(
-          `https://api.openalex.org/works?filter=author.id:${row.external_id}&sort=publication_date:desc&per-page=8&select=display_name,publication_year,doi`,
-        )
-          .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
-          .then((works) => {
-            if (!cancelled) setExternalWorks((works as { results: OpenAlexWork[] }).results ?? []);
-          })
-          .catch(() => undefined);
+        if (!cancelled) setExternal(data);
       })
-      .catch(() => {
-        if (!cancelled) setExternalFailed(true);
+      .catch((err) => {
+        if (!cancelled && !(err instanceof AdminError && err.status === 404)) {
+          // Transient failure — surface as "missing" too; the link fallback covers review.
+        }
+        if (!cancelled) setExternalMissing(true);
       });
     return () => {
       cancelled = true;
     };
-  }, [row, isOpenalex]);
+  }, [row, isOpenalex, token]);
 
+  const payload = (external?.author ?? {}) as OpenAlexPayload;
   const evidence = (row.evidence ?? {}) as Record<string, unknown>;
   const evidenceOrcids = Array.isArray(evidence.orcids) ? (evidence.orcids as string[]) : [];
   const nameMatch =
-    external != null &&
+    payload.display_name != null &&
     !!row.author_name &&
-    external.display_name.trim().toLowerCase() === row.author_name.trim().toLowerCase();
+    payload.display_name.trim().toLowerCase() === row.author_name.trim().toLowerCase();
   const localOrcid = local?.author.orcid ?? null;
-  const externalOrcid = external?.orcid ?? null;
+  const externalOrcid = payload.orcid ?? null;
   const orcidOverlap =
     (localOrcid != null && externalOrcid != null && localOrcid === externalOrcid) ||
     (externalOrcid != null && evidenceOrcids.includes(externalOrcid));
@@ -160,7 +160,7 @@ export function AuthorIdentityDrawer({
           <section className="rounded-[var(--radius)] border p-4">
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-sm font-semibold">Local — Pure</h3>
-              {local && external && (
+              {local && payload.display_name && (
                 <MatchBadge ok={nameMatch} yes="name matches" no="name differs" />
               )}
             </div>
@@ -210,12 +210,19 @@ export function AuthorIdentityDrawer({
               <h3 className="text-sm font-semibold">
                 External — {isOpenalex ? "OpenAlex" : "OpenAIRE"}
               </h3>
-              {local && external && orcidOverlap && <MatchBadge ok yes="ORCID in evidence" no="" />}
+              {external && (
+                <p className="text-[10px] text-muted-foreground">
+                  stored{" "}
+                  {external.harvested_at
+                    ? new Date(external.harvested_at).toLocaleDateString()
+                    : "—"}
+                </p>
+              )}
             </div>
             {isOpenalex ? (
               external ? (
                 <div className="space-y-0.5">
-                  <RecordField label="Display name" value={external.display_name} />
+                  <RecordField label="Display name" value={payload.display_name} />
                   <RecordField
                     label="OpenAlex id"
                     value={row.external_id}
@@ -223,53 +230,57 @@ export function AuthorIdentityDrawer({
                     href={`https://openalex.org/${row.external_id}`}
                   />
                   <RecordField label="ORCID" value={externalOrcid} mono />
-                  <RecordField label="Works (OpenAlex)" value={external.works_count} />
-                  <RecordField label="Citations" value={external.cited_by_count} />
+                  <RecordField label="Works (OpenAlex)" value={payload.works_count} />
+                  <RecordField label="Citations" value={payload.cited_by_count} />
                   <RecordField
                     label="Last known institution"
                     value={
-                      external.last_known_institutions?.[0]?.display_name ??
-                      external.last_known_institution?.display_name ??
+                      payload.last_known_institutions?.[0]?.display_name ??
+                      payload.last_known_institution?.display_name ??
                       null
                     }
                   />
                   <RecordField
                     label="Topics"
-                    value={(external.topics ?? [])
+                    value={(payload.topics ?? [])
                       .slice(0, 3)
                       .map((topic) => topic.display_name)
                       .join(", ")}
                   />
-                  {(external.display_name_alternatives ?? []).length > 0 && (
+                  {(payload.display_name_alternatives ?? []).length > 0 && (
                     <RecordField
                       label="Alternative names"
-                      value={(external.display_name_alternatives ?? []).slice(0, 4).join(", ")}
+                      value={(payload.display_name_alternatives ?? []).slice(0, 4).join(", ")}
                     />
                   )}
                   <div className="pt-2">
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      Recent OpenAlex works
+                      Recent works (from the works harvest)
                     </p>
                     <ul className="mt-1 space-y-1 text-sm">
-                      {externalWorks.map((work) => (
-                        <li
-                          key={`${work.display_name}-${work.publication_year}`}
-                          className="truncate"
-                          title={work.display_name}
-                        >
-                          <span className="text-muted-foreground">{work.publication_year}</span> ·{" "}
-                          {work.display_name}
+                      {external.works.map((work) => (
+                        <li key={work.w_id} className="truncate" title={work.title ?? ""}>
+                          <span className="text-muted-foreground">{work.year}</span> ·{" "}
+                          {work.title ?? work.w_id}
                         </li>
                       ))}
                     </ul>
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">
-                  {externalFailed
-                    ? "OpenAlex fetch failed (offline or rate-limited) — use the id link and evidence below."
-                    : "Loading OpenAlex record…"}
-                </p>
+                <div className="space-y-2 text-sm">
+                  <p className="text-muted-foreground">
+                    {externalMissing
+                      ? "No stored profile for this id — it fell outside the author sweep. Open it on OpenAlex instead:"
+                      : "Loading stored OpenAlex profile…"}
+                  </p>
+                  <RecordField
+                    label="OpenAlex id"
+                    value={row.external_id}
+                    mono
+                    href={`https://openalex.org/${row.external_id}`}
+                  />
+                </div>
               )
             ) : (
               <div className="space-y-2 text-sm">

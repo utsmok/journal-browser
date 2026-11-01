@@ -16,7 +16,9 @@ from journal_browser.models import (
     HarvestRun,
     Institution,
     Journal,
+    OpenalexWork,
     Publisher,
+    SourceRecord,
     StatusChangeLog,
     Work,
     WorkIdentity,
@@ -636,4 +638,67 @@ async def test_admin_summary_institution_scope(admin_api, db_engine):
     assert rug["flagged_deals"] == 1
 
     r = await admin_api.get("/api/v1/admin/summary?institution=nope", headers=headers)
+    assert r.status_code == 404
+
+
+@requires_db
+async def test_external_author_served_from_source_records(admin_api, db_engine):
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with maker() as session:
+        ut_id = (
+            await session.execute(select(Institution.id).where(Institution.code == "ut"))
+        ).scalar_one()
+        run_id = (await session.execute(select(HarvestRun.id).limit(1))).scalar_one()
+        session.add(
+            SourceRecord(
+                source="openalex",
+                entity_type="authors",
+                source_pk="A123",
+                payload={
+                    "id": "https://openalex.org/A123",
+                    "display_name": "Jane Doe",
+                    "works_count": 7,
+                    "orcid": "https://orcid.org/0000-0000-0000-0001",
+                },
+                content_hash="h1",
+                harvest_run_id=run_id,
+            )
+        )
+        session.add(
+            OpenalexWork(
+                institution_id=ut_id,
+                w_id="W1",
+                title="One",
+                year=2024,
+                doi_normalized="10.1/one",
+                authorships=[{"a": "A123", "n": "Jane Doe", "o": None}],
+            )
+        )
+        session.add(
+            OpenalexWork(
+                institution_id=ut_id,
+                w_id="W2",
+                title="Two",
+                year=2023,
+                doi_normalized=None,
+                authorships=[{"a": "A999", "n": "Other", "o": None}],
+            )
+        )
+        await session.commit()
+
+    headers = await _login(admin_api)
+    r = await admin_api.get("/api/v1/admin/external-author/A123", headers=headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["source_pk"] == "A123"
+    assert body["author"]["display_name"] == "Jane Doe"
+    assert [work["w_id"] for work in body["works"]] == ["W1"]
+    assert body["works"][0]["doi"] == "10.1/one"
+
+    scoped = await admin_api.get(
+        "/api/v1/admin/external-author/A123?institution=ut", headers=headers
+    )
+    assert scoped.status_code == 200
+
+    r = await admin_api.get("/api/v1/admin/external-author/A404", headers=headers)
     assert r.status_code == 404
