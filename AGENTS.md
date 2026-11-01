@@ -36,6 +36,7 @@ All commands run from the repo root unless noted.
 | Frontend format check (CI) | `cd frontend && npm run format:check` |
 | Frontend build | `cd frontend && npm run build` |
 | Refresh API types | `cd backend && uv run python scripts/dump_openapi.py && cd ../frontend && npm run generate` |
+| Setup git hooks | `pre-commit install` (ruff + format + eslint/biome + file-length gate on staged files) |
 
 ## Test setup
 
@@ -47,7 +48,12 @@ All commands run from the repo root unless noted.
   APIs and must be run deliberately.
 - CI (`.github/workflows/ci.yml`) runs: ruff check + format, ty, alembic
   upgrade, pytest, the openapi drift check, eslint, biome format:check, and
-  `next build`.
+  `next build`. The `deps-hygiene` job (deptry + depcheck) reports unused
+  or unlisted dependencies and is advisory: it never blocks a merge.
+- Logging: `logging_setup.configure_logging()` runs at app start; every
+  request gets an `X-Request-ID` (honored inbound, echoed out) that lands
+  on every log line, and credential-looking substrings are redacted.
+  `JB_LOG_FORMAT=json` switches to one-JSON-per-line output.
 
 ## API type pipeline
 
