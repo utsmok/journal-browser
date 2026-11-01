@@ -251,6 +251,7 @@ async def test_publisher_facets_drop_own_dimension(publishers_api):
         "deal": {"covered": 2, "none": 2},
         "quartile": {"Q1": 2, "Q2": 1, "Q3": 1, "Q4": 0},
         "has_apc": {"yes": 2, "no": 2},
+        "has_works": {"true": 3, "false": 1},
         "size": {"1": 2, "2-4": 2, "5-9": 0, "10+": 0},
         "topic": {"Condensed Matter Physics": 1, "Nanotech": 1},
     }
@@ -272,6 +273,11 @@ async def test_publisher_facets_drop_own_dimension(publishers_api):
     assert body["total"] == 2
     assert body["facets"]["deal"] == {"covered": 2, "none": 2}
     assert body["facets"]["quartile"] == {"Q1": 2, "Q2": 1, "Q3": 0, "Q4": 0}
+
+    # Same convention for has_works: the facet keeps counting the whole set.
+    body = (await client.get("/api/v1/ut/publishers", params={"has_works": "false"})).json()
+    assert body["total"] == 1
+    assert body["facets"]["has_works"] == {"true": 3, "false": 1}
 
     body = (await client.get("/api/v1/ut/publishers", params={"include_facets": False})).json()
     assert body["facets"] == {}

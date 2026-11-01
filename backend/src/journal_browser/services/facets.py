@@ -175,6 +175,10 @@ def publisher_facets(
     out["quartile"] = dict(zip(quartiles, counts, strict=True))
     yes, no = _count("has_apc", lambda p: p.apc_journals > 0, lambda p: p.apc_journals == 0)
     out["has_apc"] = {"yes": yes, "no": no}
+    with_works, without_works = _count(
+        "has_works", lambda p: p.n_works > 0, lambda p: p.n_works == 0
+    )
+    out["has_works"] = {"true": with_works, "false": without_works}
     counts = _count(
         "size",
         lambda p: p.n_journals == 1,
