@@ -164,6 +164,28 @@
         }
       }
     },
+    "/api/v1/admin/summary": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Summary",
+        "description": "Counters for the admin dashboard: pipeline health and open work.\n\nOne cheap set of aggregate queries so the overview page needs one call\ninstead of four list fetches.",
+        "operationId": "admin_summary_api_v1_admin_summary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSummaryOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/settings": {
       "get": {
         "tags": [
@@ -3520,6 +3542,83 @@
         ],
         "title": "AdminInstitutionOut"
       },
+      "AdminLastRunOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "entity_type": {
+            "type": "string",
+            "title": "Entity Type"
+          },
+          "institution_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institution Id"
+          },
+          "institution_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institution Code"
+          },
+          "status": {
+            "$ref": "#/components/schemas/HarvestStatus"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "entity_type",
+          "institution_id",
+          "institution_code",
+          "status",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "AdminLastRunOut"
+      },
       "AdminRunOut": {
         "properties": {
           "id": {
@@ -3602,6 +3701,56 @@
           "stats"
         ],
         "title": "AdminRunOut"
+      },
+      "AdminSummaryOut": {
+        "properties": {
+          "failed_runs_24h": {
+            "type": "integer",
+            "title": "Failed Runs 24H"
+          },
+          "running_runs": {
+            "type": "integer",
+            "title": "Running Runs"
+          },
+          "flagged_deals": {
+            "type": "integer",
+            "title": "Flagged Deals"
+          },
+          "open_feedback": {
+            "type": "integer",
+            "title": "Open Feedback"
+          },
+          "author_identity_candidates": {
+            "type": "integer",
+            "title": "Author Identity Candidates"
+          },
+          "work_identity_candidates": {
+            "type": "integer",
+            "title": "Work Identity Candidates"
+          },
+          "last_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdminLastRunOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "failed_runs_24h",
+          "running_runs",
+          "flagged_deals",
+          "open_feedback",
+          "author_identity_candidates",
+          "work_identity_candidates",
+          "last_run"
+        ],
+        "title": "AdminSummaryOut",
+        "description": "Dashboard counters for the admin overview (GET /admin/summary)."
       },
       "ApcAggregateOut": {
         "properties": {

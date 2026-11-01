@@ -72,6 +72,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin Summary
+         * @description Counters for the admin dashboard: pipeline health and open work.
+         *
+         *     One cheap set of aggregate queries so the overview page needs one call
+         *     instead of four list fetches.
+         */
+        get: operations["admin_summary_api_v1_admin_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/settings": {
         parameters: {
             query?: never;
@@ -817,6 +840,24 @@ export interface components {
             /** Require Confirmed Affiliation */
             require_confirmed_affiliation: boolean;
         };
+        /** AdminLastRunOut */
+        AdminLastRunOut: {
+            /** Id */
+            id: number;
+            /** Source */
+            source: string;
+            /** Entity Type */
+            entity_type: string;
+            /** Institution Id */
+            institution_id: number | null;
+            /** Institution Code */
+            institution_code: string | null;
+            status: components["schemas"]["HarvestStatus"];
+            /** Started At */
+            started_at: string | null;
+            /** Finished At */
+            finished_at: string | null;
+        };
         /** AdminRunOut */
         AdminRunOut: {
             /** Id */
@@ -838,6 +879,25 @@ export interface components {
             stats: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * AdminSummaryOut
+         * @description Dashboard counters for the admin overview (GET /admin/summary).
+         */
+        AdminSummaryOut: {
+            /** Failed Runs 24H */
+            failed_runs_24h: number;
+            /** Running Runs */
+            running_runs: number;
+            /** Flagged Deals */
+            flagged_deals: number;
+            /** Open Feedback */
+            open_feedback: number;
+            /** Author Identity Candidates */
+            author_identity_candidates: number;
+            /** Work Identity Candidates */
+            work_identity_candidates: number;
+            last_run: components["schemas"]["AdminLastRunOut"] | null;
         };
         /** ApcAggregateOut */
         ApcAggregateOut: {
@@ -2491,6 +2551,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FlaggedDealOut"][];
+                };
+            };
+        };
+    };
+    admin_summary_api_v1_admin_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSummaryOut"];
                 };
             };
         };

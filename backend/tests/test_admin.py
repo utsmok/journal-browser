@@ -499,3 +499,78 @@ async def test_feedback_status_change_is_audited(admin_api, db_engine):
         assert changes[0].old_value == "todo"
         assert changes[0].new_value == "in_progress"
         assert changes[0].changed_by == "sam"
+
+
+@requires_db
+async def test_admin_summary_counts(admin_api, db_engine):
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with maker() as session:
+        inst_id = (await session.execute(select(Institution.id).limit(1))).scalar_one()
+        run_id = (
+            await session.execute(
+                select(HarvestRun.id).where(HarvestRun.source == "reconcile").limit(1)
+            )
+        ).scalar_one()
+        session.add(
+            HarvestRun(
+                source="openaccess_nl",
+                entity_type="deal",
+                status="failed",
+                config_fingerprint="x",
+                stats={"error": "boom"},
+            )
+        )
+        session.add(
+            HarvestRun(
+                source="openalex",
+                entity_type="work",
+                status="running",
+                config_fingerprint="x",
+                stats={},
+            )
+        )
+        session.add(Feedback(title="t", description="d", category="bug"))
+        session.add(
+            AuthorIdentity(
+                institution_id=inst_id,
+                author_pure_uuid="p-sum",
+                source="openalex",
+                external_id="a-sum",
+                status="candidate",
+            )
+        )
+        session.add(
+            Work(
+                institution_id=inst_id,
+                pure_uuid="w-sum",
+                title="Summary work",
+                norm_title="summary work",
+                year=2025,
+                first_seen_run=run_id,
+                last_seen_run=run_id,
+            )
+        )
+        session.add(
+            WorkIdentity(
+                institution_id=inst_id,
+                source="openalex",
+                source_pk="doi:10.1/sum",
+                work_id="w-sum",
+                matched_by="doi",
+                status="candidate",
+            )
+        )
+        await session.commit()
+
+    headers = await _login(admin_api)
+    r = await admin_api.get("/api/v1/admin/summary", headers=headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["failed_runs_24h"] == 1
+    assert body["running_runs"] == 1
+    assert body["flagged_deals"] == 1
+    assert body["open_feedback"] == 1
+    assert body["author_identity_candidates"] == 1
+    assert body["work_identity_candidates"] == 1
+    assert body["last_run"]["source"] == "openalex"
+    assert body["last_run"]["status"] == "running"

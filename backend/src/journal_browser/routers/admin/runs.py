@@ -1,10 +1,20 @@
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Query
 from sqlalchemy import desc, func, select
 
-from ...models import Deal, DealJournal, HarvestRun, Institution, Publisher
-from ...schemas import AdminRunOut, FlaggedDealOut
+from ...models import (
+    AuthorIdentity,
+    Deal,
+    DealJournal,
+    Feedback,
+    HarvestRun,
+    Institution,
+    Publisher,
+    WorkIdentity,
+)
+from ...schemas import AdminRunOut, AdminSummaryOut, FlaggedDealOut
 from .auth import AdminDep, SessionDep
 from .settings_admin import _get_institution_or_404
 
@@ -73,3 +83,65 @@ async def flagged_deals(session: SessionDep, _: AdminDep) -> list[dict[str, Any]
         }
         for deal, name, count in rows
     ]
+
+
+@router.get("/summary", response_model=AdminSummaryOut)
+async def admin_summary(session: SessionDep, _: AdminDep) -> dict[str, Any]:
+    """Counters for the admin dashboard: pipeline health and open work.
+
+    One cheap set of aggregate queries so the overview page needs one call
+    instead of four list fetches.
+    """
+    since = datetime.now(UTC) - timedelta(hours=24)
+    failed_24h = await session.scalar(
+        select(func.count())
+        .select_from(HarvestRun)
+        .where(HarvestRun.status == "failed", HarvestRun.started_at >= since)
+    )
+    running = await session.scalar(
+        select(func.count()).select_from(HarvestRun).where(HarvestRun.status == "running")
+    )
+    flagged = await session.scalar(
+        select(func.count()).select_from(Deal).where(Deal.needs_curation.is_(True))
+    )
+    open_feedback = await session.scalar(
+        select(func.count())
+        .select_from(Feedback)
+        .where(Feedback.status.in_(("todo", "in_progress")))
+    )
+    author_candidates = await session.scalar(
+        select(func.count()).select_from(AuthorIdentity).where(AuthorIdentity.status == "candidate")
+    )
+    work_candidates = await session.scalar(
+        select(func.count()).select_from(WorkIdentity).where(WorkIdentity.status == "candidate")
+    )
+    last_row = (
+        await session.execute(
+            select(HarvestRun, Institution.code)
+            .outerjoin(Institution, Institution.id == HarvestRun.institution_id)
+            .order_by(desc(HarvestRun.id))
+            .limit(1)
+        )
+    ).first()
+    last_run = None
+    if last_row is not None:
+        run, code = last_row
+        last_run = {
+            "id": run.id,
+            "source": run.source,
+            "entity_type": run.entity_type,
+            "institution_id": run.institution_id,
+            "institution_code": code,
+            "status": run.status,
+            "started_at": run.started_at,
+            "finished_at": run.finished_at,
+        }
+    return {
+        "failed_runs_24h": failed_24h or 0,
+        "running_runs": running or 0,
+        "flagged_deals": flagged or 0,
+        "open_feedback": open_feedback or 0,
+        "author_identity_candidates": author_candidates or 0,
+        "work_identity_candidates": work_candidates or 0,
+        "last_run": last_run,
+    }

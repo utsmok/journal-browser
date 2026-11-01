@@ -568,6 +568,29 @@ class AdminRunOut(BaseModel):
     stats: dict[str, Any]
 
 
+class AdminLastRunOut(BaseModel):
+    id: int
+    source: str
+    entity_type: str
+    institution_id: int | None
+    institution_code: str | None
+    status: HarvestStatus
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
+class AdminSummaryOut(BaseModel):
+    """Dashboard counters for the admin overview (GET /admin/summary)."""
+
+    failed_runs_24h: int
+    running_runs: int
+    flagged_deals: int
+    open_feedback: int
+    author_identity_candidates: int
+    work_identity_candidates: int
+    last_run: AdminLastRunOut | None
+
+
 class FlaggedDealOut(BaseModel):
     id: int
     publisher: str
