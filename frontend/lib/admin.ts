@@ -137,3 +137,6 @@ export type WorkIdentityAdmin = Schemas["WorkIdentityAdminOut"];
 
 /** GET /admin/status-changes: one audited admin status flip. */
 export type StatusChange = Schemas["StatusChangeOut"];
+
+/** GET /admin/summary: dashboard counters for the overview page. */
+export type AdminSummary = Schemas["AdminSummaryOut"];

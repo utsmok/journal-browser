@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { LoginForm } from "@/components/admin/login-form";
 import { IdentitiesPanel } from "@/components/admin/identities-table";
 import { RunsTable } from "@/components/admin/runs-table";
@@ -29,11 +31,16 @@ export default function InstAdminPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-10">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">Admin — {uni?.short_name ?? uni?.name ?? inst}</h1>
-        <Button variant="outline" onClick={() => setToken(null)}>
-          Sign out
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link href="/admin" className="text-sm underline-offset-2 hover:underline">
+            Full admin
+          </Link>
+          <Button variant="outline" onClick={() => setToken(null)}>
+            Sign out
+          </Button>
+        </div>
       </div>
 
       <section className="space-y-3">

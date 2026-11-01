@@ -45,14 +45,14 @@ export function WorkIdentitiesPanel({
   onUnauthorized,
 }: {
   token: string;
-  inst: string;
+  /** Optional institution code; omitted lists every institution. */
+  inst?: string;
   onUnauthorized: () => void;
 }) {
   const [filter, setFilter] = useState<StatusFilter>("candidate");
   const [busy, setBusy] = useState<string | null>(null);
-  const query = `work-identities?limit=500&institution=${encodeURIComponent(inst)}${
-    filter === "all" ? "" : `&status=${filter}`
-  }`;
+  const instQ = inst ? `&institution=${encodeURIComponent(inst)}` : "";
+  const query = `work-identities?limit=500${instQ}${filter === "all" ? "" : `&status=${filter}`}`;
   const { data, setData, loading, error, setError } = useAdminResource<WorkIdentityAdmin[]>(
     query,
     token,
