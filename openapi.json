@@ -170,8 +170,27 @@
           "admin"
         ],
         "summary": "Admin Summary",
-        "description": "Counters for the admin dashboard: pipeline health and open work.\n\nOne cheap set of aggregate queries so the overview page needs one call\ninstead of four list fetches.",
+        "description": "Counters for the admin dashboard: pipeline health and open work.\n\nOne cheap set of aggregate queries so the overview page needs one call\ninstead of four list fetches. With `institution`, the run/candidate/\nlast-run counters scope to that institution; flagged deals and feedback\nstay instance-global (deals span institutions via participations).",
         "operationId": "admin_summary_api_v1_admin_summary_get",
+        "parameters": [
+          {
+            "name": "institution",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Institution"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -179,6 +198,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AdminSummaryOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }

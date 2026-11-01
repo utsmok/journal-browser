@@ -84,7 +84,9 @@ export interface paths {
          * @description Counters for the admin dashboard: pipeline health and open work.
          *
          *     One cheap set of aggregate queries so the overview page needs one call
-         *     instead of four list fetches.
+         *     instead of four list fetches. With `institution`, the run/candidate/
+         *     last-run counters scope to that institution; flagged deals and feedback
+         *     stay instance-global (deals span institutions via participations).
          */
         get: operations["admin_summary_api_v1_admin_summary_get"];
         put?: never;
@@ -2557,7 +2559,9 @@ export interface operations {
     };
     admin_summary_api_v1_admin_summary_get: {
         parameters: {
-            query?: never;
+            query?: {
+                institution?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2571,6 +2575,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminSummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -574,3 +574,66 @@ async def test_admin_summary_counts(admin_api, db_engine):
     assert body["work_identity_candidates"] == 1
     assert body["last_run"]["source"] == "openalex"
     assert body["last_run"]["status"] == "running"
+
+
+@requires_db
+async def test_admin_summary_institution_scope(admin_api, db_engine):
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with maker() as session:
+        ut_id = (
+            await session.execute(select(Institution.id).where(Institution.code == "ut"))
+        ).scalar_one()
+        session.add(Institution(name="Other University", code="rug", active=True))
+        session.add(
+            HarvestRun(
+                source="openalex",
+                entity_type="work",
+                status="failed",
+                institution_id=ut_id,
+                config_fingerprint="x",
+            )
+        )
+        session.add(
+            HarvestRun(
+                source="reconcile", entity_type="deal", status="completed", config_fingerprint="x"
+            )
+        )
+        session.add(
+            AuthorIdentity(
+                institution_id=ut_id,
+                author_pure_uuid="p-scope",
+                source="openalex",
+                external_id="a-scope",
+                status="candidate",
+            )
+        )
+        await session.commit()
+
+    headers = await _login(admin_api)
+    body = (await admin_api.get("/api/v1/admin/summary", headers=headers)).json()
+    assert body["failed_runs_24h"] == 1
+    assert body["author_identity_candidates"] == 1
+    # Global last run is the unscoped rug run (inserted last).
+    assert body["last_run"]["institution_code"] is None
+    assert body["last_run"]["status"] == "completed"
+    # Flagged deals and feedback stay instance-global.
+    assert body["flagged_deals"] == 1
+    assert body["open_feedback"] == 0
+
+    scoped = (await admin_api.get("/api/v1/admin/summary?institution=ut", headers=headers)).json()
+    assert scoped["failed_runs_24h"] == 1
+    assert scoped["running_runs"] == 0
+    assert scoped["author_identity_candidates"] == 1
+    assert scoped["work_identity_candidates"] == 0
+    assert scoped["last_run"]["institution_code"] == "ut"
+    assert scoped["last_run"]["status"] == "failed"
+    assert scoped["flagged_deals"] == 1
+
+    rug = (await admin_api.get("/api/v1/admin/summary?institution=rug", headers=headers)).json()
+    assert rug["failed_runs_24h"] == 0
+    assert rug["author_identity_candidates"] == 0
+    assert rug["last_run"] is None
+    assert rug["flagged_deals"] == 1
+
+    r = await admin_api.get("/api/v1/admin/summary?institution=nope", headers=headers)
+    assert r.status_code == 404

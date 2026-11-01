@@ -86,20 +86,32 @@ async def flagged_deals(session: SessionDep, _: AdminDep) -> list[dict[str, Any]
 
 
 @router.get("/summary", response_model=AdminSummaryOut)
-async def admin_summary(session: SessionDep, _: AdminDep) -> dict[str, Any]:
+async def admin_summary(
+    session: SessionDep,
+    _: AdminDep,
+    institution: Annotated[str | None, Query(max_length=32)] = None,
+) -> dict[str, Any]:
     """Counters for the admin dashboard: pipeline health and open work.
 
     One cheap set of aggregate queries so the overview page needs one call
-    instead of four list fetches.
+    instead of four list fetches. With `institution`, the run/candidate/
+    last-run counters scope to that institution; flagged deals and feedback
+    stay instance-global (deals span institutions via participations).
     """
     since = datetime.now(UTC) - timedelta(hours=24)
+    run_filter = True
+    if institution is not None:
+        inst = await _get_institution_or_404(session, institution)
+        run_filter = HarvestRun.institution_id == inst.id
     failed_24h = await session.scalar(
         select(func.count())
         .select_from(HarvestRun)
-        .where(HarvestRun.status == "failed", HarvestRun.started_at >= since)
+        .where(HarvestRun.status == "failed", HarvestRun.started_at >= since, run_filter)
     )
     running = await session.scalar(
-        select(func.count()).select_from(HarvestRun).where(HarvestRun.status == "running")
+        select(func.count())
+        .select_from(HarvestRun)
+        .where(HarvestRun.status == "running", run_filter)
     )
     flagged = await session.scalar(
         select(func.count()).select_from(Deal).where(Deal.needs_curation.is_(True))
@@ -109,20 +121,27 @@ async def admin_summary(session: SessionDep, _: AdminDep) -> dict[str, Any]:
         .select_from(Feedback)
         .where(Feedback.status.in_(("todo", "in_progress")))
     )
+    author_filter = AuthorIdentity.institution_id == inst.id if institution is not None else True
     author_candidates = await session.scalar(
-        select(func.count()).select_from(AuthorIdentity).where(AuthorIdentity.status == "candidate")
+        select(func.count())
+        .select_from(AuthorIdentity)
+        .where(AuthorIdentity.status == "candidate", author_filter)
     )
+    work_filter = WorkIdentity.institution_id == inst.id if institution is not None else True
     work_candidates = await session.scalar(
-        select(func.count()).select_from(WorkIdentity).where(WorkIdentity.status == "candidate")
+        select(func.count())
+        .select_from(WorkIdentity)
+        .where(WorkIdentity.status == "candidate", work_filter)
     )
-    last_row = (
-        await session.execute(
-            select(HarvestRun, Institution.code)
-            .outerjoin(Institution, Institution.id == HarvestRun.institution_id)
-            .order_by(desc(HarvestRun.id))
-            .limit(1)
-        )
-    ).first()
+    last_query = (
+        select(HarvestRun, Institution.code)
+        .outerjoin(Institution, Institution.id == HarvestRun.institution_id)
+        .order_by(desc(HarvestRun.id))
+        .limit(1)
+    )
+    if institution is not None:
+        last_query = last_query.where(HarvestRun.institution_id == inst.id)
+    last_row = (await session.execute(last_query)).first()
     last_run = None
     if last_row is not None:
         run, code = last_row
