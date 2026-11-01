@@ -1,6 +1,6 @@
 # Lore
 
-journal-browser was created on Oct 22, 2026, and by the evening of Oct 31, 2026 it held 248 commits, all from one developer (mostly committed as `utsmok`, five times as Sam or Samuel Mok; the same person). The project rebuilds the WUR-hosted Open Access journal browser as a Twente-first, open-data-only search tool. Nine days is short, but the shape of the code changed several times in that span.
+journal-browser was created on Oct 22, 2026, and by the evening of Nov 1, 2026 it held 270 commits, all from one developer (mostly committed as `utsmok`, five times as Sam or Samuel Mok; the same person). The project rebuilds the WUR-hosted Open Access journal browser as a Twente-first, open-data-only search tool. Ten days is short, but the shape of the code changed several times in that span.
 
 One caveat on sources: `docs/` is mostly gitignored (since Oct 23, 2026, commit `2d65f23`), so this wiki's view of the documentation history rests on the two tracked files, `docs/data-pipeline/OVERVIEW.md` and `docs/multi-institute.md`. The rest of this story is reconstructed from commit timestamps and the dated decision and issues registers those docs reference.
 
@@ -33,6 +33,29 @@ Oct 28 is the one day with zero commits, and still not idle: the feedback system
 Oct 30 is the biggest day so far: 63 commits. Much of it executes the audit plans: one vocabulary module with validation at the API boundary, regenerated frontend API types, CHECK constraints that make illegal data states unrepresentable (migration `0033`), shared query/facet/cache logic extracted into `services/`, and the split of god files into packages. The same day shipped decisions 27 and 28, the standalone author path: local stores, a ported identity-resolution cascade, an admin identity-review surface, and an ingest cutover, so journal-browser no longer depends on the UT-local ut-metadata database for authors. CI was unbroken, ty joined the toolchain, AGENTS.md and dependabot arrived.
 
 Oct 31 (36 commits by evening) ran the repair chain the new author path exposed. The CERIF publication store had frozen at 2021-era records, leaving 2021 coverage at 2%, so it was re-swept to full coverage, author lists were backfilled (358,376 edges over 155,692 works), and 591 of 634 stranded roster authors recovered confirmed identities. Harvesting of the Pure portal org tree began the same day. Performance work landed too: guards around HNSW queries, skipped denorm refreshes for unchanged rows, a `journal_flags` bloat reclaim, and a chunked identity upsert under asyncpg's 32767-parameter cap.
+
+### November 1, 2026: hardening the review surfaces
+
+November 1 opened with serving polish: structured JSON logging with request ids and
+credential redaction (`1ef31ae`), advisory dependency scans plus local pre-commit gates
+(`35ae461`), a droid QA skill with a CI workflow (`b2ddd64`), and the first generated wiki
+(`d223433`). The publisher and orgunit directories gained sort direction, a works filter,
+has-works facet counts, a cached orgunit snapshot (`d428226`), and Open Access NL profile
+links on journal and publisher detail pages. The author cascade picked up enforcement of the
+weak-rung single-ORCID rule (`8e69afb`), with the validation script rewritten as a read-only
+probe (`990a714`).
+
+The day's last stretch came out of an implicit-state-machine audit that mapped every status
+column, tri-state boolean, and hand-rolled fetch machine in the codebase. It landed in four
+commits: `start_run` now closes stale `running` harvest rows so a killed job cannot leave a
+phantom run (`3b0f3b0`); every admin status flip on the review surfaces appends to a new
+append-only `status_changes` audit table, the work-identity review loop moved in-app behind
+`GET/PUT /admin/work-identities`, and the deal curation dismissal became reason-aware —
+`deals.curation_resolved_reason` records what was dismissed so the harvester suppresses
+exactly that reason instead of blanket-suppressing every future one (`9756103`); and the
+frontend admin panels swapped their five hand-rolled fetch state machines for one shared
+`useAdminResource` hook, gaining a work-identity review panel on the way (`bd5aeca`,
+`bf2a852`).
 
 ## Longest-standing features
 

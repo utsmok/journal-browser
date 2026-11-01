@@ -85,9 +85,14 @@ not derivable from the ROR); an unset id turns the harvest off for that institut
 | `issn_map` | ISSN-L resolution for coverage rows | `backend/src/journal_browser/harvest/issn_backfill.py` | `backend/jobs/backfill_issn_l.py` (global `deals-issn-l`) | `deal_journals.issn_l` |
 
 The scrape walks overview, publisher, and deal pages and stores raw HTML in the landing
-zone before parsing; admin `ManualOverride` rows win over scraped fields. Reconcile merges
-candidates on `esac_id`, flags status conflicts as `needs_curation`, and prints a curation
-report; with `--institution` it only derives participation and refreshes coverage flags.
+zone before parsing; admin `ManualOverride` rows win over scraped fields, with the
+curation columns as the deliberate exception: `needs_curation` is harvest-owned, and an
+admin dismissal is remembered in `deals.curation_resolved_reason` — the flag stays
+cleared only while the page produces exactly that reason, and any other reason re-flags.
+Reconcile merges candidates on `esac_id`, flags status conflicts as `needs_curation`, and
+prints a curation report; it also treats a recorded dismissal as hand-ownership and will
+not merge JCT rows into such a deal. With `--institution` it only derives participation
+and refreshes coverage flags.
 Unresolvable ISSNs keep `needs_curation` instead of being dropped.
 
 ### Journal metrics and derived flags

@@ -21,13 +21,16 @@ in [Admin panel](../../features/admin.md); this page covers the frontend impleme
 ```text
 frontend/
 ├── app/admin/page.tsx                  # global panel: runs, feedback, deals, settings
-├── app/[inst]/admin/page.tsx           # per-university panel: runs + institution settings
+├── app/[inst]/admin/page.tsx           # per-university panel: runs, identity review, settings
 ├── components/admin/
 │   ├── login-form.tsx                  # password form, calls adminLogin
 │   ├── runs-table.tsx                  # RunsTable + StatusBadge
 │   ├── feedback-table.tsx              # FeedbackSection (triage)
 │   ├── deal-editor.tsx                 # DealsTable, DealEditor, CreateDealForm
+│   ├── identities-table.tsx            # IdentitiesPanel (author identity review)
+│   ├── work-identities-table.tsx       # WorkIdentitiesPanel (work identity review)
 │   └── settings-forms.tsx              # schema-driven GlobalSettingsForm / InstitutionSettingsForm
+├── hooks/use-admin-resource.ts         # shared admin list hook: GET + loading/error + refresh
 └── lib/admin.ts                        # token storage, adminGet/Put/Post/Patch/Delete, payload types
 ```
 
@@ -37,6 +40,7 @@ frontend/
 |---|---|---|
 | Admin token | `useAdminToken` in `frontend/lib/admin.ts` | Bearer token cached in `sessionStorage["jb-admin-token"]`, cleared on 401 |
 | Admin fetch | `adminGet`/`adminPut`/`adminPost`/`adminPatch`/`adminDelete` | Same helpers with the Authorization header attached; `AdminError` carries the status |
+| Admin resource | `useAdminResource` in `frontend/hooks/use-admin-resource.ts` | One shared hook for list loads: authenticated GET, loading/error state, manual refresh, 401 routes to sign-out |
 | Settings schema | `SettingsResponse` in `frontend/lib/admin.ts` | Schema-driven form fields (string, number, bool, secret, list) from `GET /admin/settings` |
 | Deal editor | `frontend/components/admin/deal-editor.tsx` | Editable deal detail: status, years, ESAC id, caps, journal membership |
 | Runs table | `frontend/components/admin/runs-table.tsx` | Harvest-run rows with a status badge |
@@ -64,13 +68,15 @@ flowchart TD
 
 `frontend/app/admin/page.tsx` renders one section stack after the login gate:
 
-1. Harvest runs: the newest 100 runs with an institution filter, via `RunsTable`.
+1. Harvest runs: the newest 100 runs with an institution filter, via `RunsTable`. All three
+   panel loads (runs, flagged deals, deals) go through `useAdminResource`; a change of
+   institution filter just changes the hook's path and triggers the refetch.
 2. Feedback triage: `FeedbackSection` lists reports with their captured page-data dumps.
 3. Deals: a `DealsTable` plus `CreateDealForm` and `DealEditor`. The editor loads
    `GET /admin/deals/{id}`, edits status, start and end years, corresponding-authors-only,
    ESAC id, summary, and cap text (parsed into cap rows), and manages journal membership by
-   ISSN lookup. A 409 surfaces as "ESAC id already in use". Any mutation bumps a `dealsEpoch`
-   counter so the list refetches.
+   ISSN lookup. A 409 surfaces as "ESAC id already in use". Any mutation calls the deals
+   hook's `refresh` so the list refetches.
 4. Flagged deals: rows from `GET /admin/flagged`; clicking one selects it in the editor above.
 5. Institution settings: a university picker followed by `InstitutionSettingsForm`.
 6. Global settings: `GlobalSettingsForm`.
@@ -83,10 +89,12 @@ fields are sent. Field definitions ultimately come from the backend's
 
 ### Per-university panel
 
-`frontend/app/[inst]/admin/page.tsx` reads the institution code from context and shows that
-university's runs (already filtered server-side) and its `InstitutionSettingsForm`. It is the
-same component set with the scope fixed, so institution-level actions need no cross-university
-picker.
+`frontend/app/[inst]/admin/page.tsx` reads the institution code from context and shows four
+sections, all fed through `useAdminResource` or the shared panels: that university's runs
+(server-filtered), the author identity review panel (`IdentitiesPanel`), the work identity
+review panel (`WorkIdentitiesPanel`), and its `InstitutionSettingsForm`. Review panels keep
+row-level `busy` state so a double-click cannot send two flips, and replace the flipped row
+from the server response.
 
 ### Docs editing
 
@@ -114,9 +122,9 @@ each block. The rendered markdown and `MermaidBlock` components live in
 
 - Add a settings field type: extend `SettingType` and the renderer in
   `frontend/components/admin/settings-forms.tsx`, then the backend schema.
-- Add an admin section: follow the pattern in `frontend/app/admin/page.tsx` (load in an effect
-  with a cancellation flag, map `AdminError` 401 to sign-out, render through the shared table
-  components).
+- Add an admin section: load its data through `useAdminResource` (path, token, and the
+  sign-out callback; the hook routes 401s and formats load errors), render through the
+  shared table components, and keep row-level mutation state inside the section.
 - Change deal-editing behavior: `frontend/components/admin/deal-editor.tsx` owns all deal field
   state and validation.
 - Adjust auth handling: `frontend/lib/admin.ts` is the only place tokens are stored or attached.
@@ -125,12 +133,15 @@ each block. The rendered markdown and `MermaidBlock` components live in
 
 | File | Contents |
 |---|---|
-| `frontend/app/admin/page.tsx` | Global panel: sections, epoch-based refetching |
-| `frontend/app/[inst]/admin/page.tsx` | Per-university runs and settings |
+| `frontend/app/admin/page.tsx` | Global panel: sections, shared-hook list loads |
+| `frontend/app/[inst]/admin/page.tsx` | Per-university runs, identity review, settings |
+| `frontend/hooks/use-admin-resource.ts` | Shared admin list hook |
 | `frontend/lib/admin.ts` | Token hook, `AdminError`, typed fetch helpers, payload types |
 | `frontend/components/admin/login-form.tsx` | Password sign-in |
 | `frontend/components/admin/runs-table.tsx` | Harvest-run table |
 | `frontend/components/admin/feedback-table.tsx` | Feedback triage section |
 | `frontend/components/admin/deal-editor.tsx` | Deal table, editor, create form |
+| `frontend/components/admin/identities-table.tsx` | Author identity review panel |
+| `frontend/components/admin/work-identities-table.tsx` | Work identity review panel |
 | `frontend/components/admin/settings-forms.tsx` | Schema-driven settings forms |
 | `frontend/app/[inst]/docs/[slug]/page.tsx` | Docs viewer with hash-guarded block edits |

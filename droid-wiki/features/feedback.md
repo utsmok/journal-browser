@@ -78,9 +78,12 @@ Per report the operator can:
 These map one-to-one onto `GET /api/v1/admin/feedback`,
 `PATCH /api/v1/admin/feedback/{id}`, and
 `DELETE /api/v1/admin/feedback/{id}`, all guarded by the admin token.
-Triage is manual throughout: nothing re-opens, escalates, or resolves a
-report automatically, and there is no visitor-facing follow-up because
-reports carry no return address.
+A status change appends a `status_changes` audit row (old value, new
+value, optional note and changed_by); notes-only and priority-only
+patches change nothing in the ledger. Triage is manual throughout:
+nothing re-opens, escalates, or resolves a report automatically, and
+there is no visitor-facing follow-up because reports carry no return
+address.
 
 ### Connection to the limitations registry
 

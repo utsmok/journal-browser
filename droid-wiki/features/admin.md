@@ -6,10 +6,11 @@ Active contributors: utsmok
 
 The admin panel is the operator's console for everything curated or
 configured: editing settings, curating the deal register, reviewing author
-identity resolutions, triaging visitor feedback, inspecting harvest runs,
-and overriding served docs. The backend surface is the `/api/v1/admin`
+and work identity resolutions, triaging visitor feedback, inspecting harvest
+runs, and overriding served docs. The backend surface is the `/api/v1/admin`
 router package; the UI is a global panel at `/admin` plus a trimmed
-per-institution panel at `/{code}/admin`.
+per-institution panel at `/{code}/admin`. Every status flip on a review
+surface is appended to an audit ledger.
 
 ![The global admin panel: harvest runs, feedback triage, deal curation](images/web-admin-panel.png)
 
@@ -22,6 +23,8 @@ per-institution panel at `/{code}/admin`.
 | Settings registry | `backend/src/journal_browser/settings_schema.py` | One field definition per editable knob, sectioned global vs institution |
 | Manual override | `backend/src/journal_browser/models/app_data.py` (`ManualOverride`) | Curated values that re-applied harvests must never overwrite |
 | Identity ledger | `backend/src/journal_browser/models/openalex.py` (`AuthorIdentity`) | One row per proposed external author identity with its review status |
+| Work identity ledger | `backend/src/journal_browser/models/works.py` (`WorkIdentity`) | Cross-source work links with `confirmed` / `missing` / `candidate` review status |
+| Status flip audit | `backend/src/journal_browser/models/app_data.py` (`StatusChangeLog`, table `status_changes`) | Append-only record of every actual admin status flip across the review surfaces |
 | Doc edit | `backend/src/journal_browser/models/app_data.py` (`DocEdit`) | Per-block replacement for a served markdown doc, stored without touching source files |
 
 ## How it works
@@ -93,7 +96,14 @@ CRUD over the shared deal register. Two invariants shape it:
 Other behaviors worth knowing:
 
 - A human edit clears `needs_curation` and its reason and pins
-  `last_reviewed` to today, marking the deal as reviewed.
+  `last_reviewed` to today, marking the deal as reviewed. The dismissal is
+  reason-aware: the cleared reason text is recorded in
+  `deals.curation_resolved_reason`, and the openaccess.nl harvester keeps
+  the flag cleared only while its page still produces exactly that reason
+  (any other reason re-flags). The curation columns are harvest-owned, so
+  unlike every other accepted edit they write no `manual_overrides` rows;
+  reconcile also treats a recorded dismissal as hand-ownership and will not
+  merge JCT rows into the deal.
 - Creation accepts an existing `publisher_id` or a new `publisher_name`;
   a duplicate `esac_id` returns 409.
 - Journal adds resolve ISSNs through the ISSN-L index and upsert with
@@ -130,14 +140,48 @@ candidate rows (a SQL CASE leaves `confirmed` and `rejected` untouched), so
 a rejection blocks re-proposal of that id and a confirmation keeps it. The
 authors ingest reads the ledger additively: confirmed rows feed
 `authors.openalex_ids` at the next authors ingest; rejected rows stay out.
+Every actual flip also appends a `status_changes` audit row (see below),
+bumps the row's `updated_at` (which the review list sorts by), and a no-op
+PUT changes nothing.
+
+### Work identity review
+
+`backend/src/journal_browser/routers/admin/work_identity_admin.py` mirrors
+the author surface for cross-source work links:
+`GET /admin/work-identities` (filter by status, institution, or source,
+with the work title joined in) and `PUT /admin/work-identities` (flip one
+row's status among `confirmed`, `candidate`, and `missing`).
+
+The rows come from the enrichment ladder in
+`backend/src/journal_browser/harvest/enrich.py` and the OpenAIRE sweep:
+DOI matches auto-confirm, unresolved lookups are recorded as `missing`
+(no evidence, deliberately not a low confidence), and fuzzy matches land
+as `candidate` for review. Flips are durable by construction because every
+harvest write is `ON CONFLICT DO NOTHING`, so re-runs never overwrite a
+decision. `missing` is not a verdict: reopening a row as `candidate` asks
+the fallback passes (Crossref, then fuzzy) to look again. The frontend
+panel is `frontend/components/admin/work-identities-table.tsx` on the
+per-institution admin page.
+
+### The status flip audit
+
+Every actual status flip on the review surfaces — author identities, work
+identities, and feedback triage — appends one row to the append-only
+`status_changes` table: the subject table, the subject's primary key as
+JSON, the old and new value, an optional `note`, and an optional
+`changed_by`. No-op writes record nothing. Auth is one shared token, so
+`changed_by` is null unless the client sends it; the column is ready for
+named identities. `GET /admin/status-changes` lists the ledger newest
+first, optionally filtered by subject table; there is no write endpoint.
 
 ### Feedback triage
 
 `backend/src/journal_browser/routers/admin/feedback_admin.py` lists reports
 (`GET /admin/feedback`, optional `status` filter), patches status,
 priority, and resolution notes (`PATCH /admin/feedback/{id}`), and deletes
-reports. The full loop, including what visitors submit, is covered in
-[Feedback](feedback.md).
+reports. A status change appends a `status_changes` audit row; notes-only
+and priority-only patches do not. The full loop, including what visitors
+submit, is covered in [Feedback](feedback.md).
 
 ### Docs editing
 
@@ -163,6 +207,11 @@ it is provenance only and is never verified on write.
   `frontend/lib/api-types.ts` rather than hand-written, so the UI tracks
   the OpenAPI schema (see the type pipeline in
   [Backend](../apps/backend/index.md)).
+- List-style panels share `frontend/hooks/use-admin-resource.ts`, one hook
+  owning the authenticated GET with loading/error state, manual refresh,
+  and the 401-to-sign-out routing, so the panels no longer hand-roll their
+  own fetch state machines. Row-level busy and draft state stays in the
+  panel; form-style surfaces (deal editor, login) keep their own state.
 
 The panels:
 
@@ -170,10 +219,16 @@ The panels:
   institution filter, the feedback triage table, the deals table with the
   inline editor and create form, flagged deals (a row click opens the
   editor), the institution settings picker, and the global settings form.
+  All three of its list loads (runs, flagged deals, deals) go through the
+  shared hook; mutations call the hook's `refresh`.
 - `frontend/app/[inst]/admin/page.tsx` is the per-institution panel: this
-  university's runs and its institution settings form.
+  university's runs, the author identity review panel
+  (`frontend/components/admin/identities-table.tsx`), the work identity
+  review panel (`frontend/components/admin/work-identities-table.tsx`),
+  and its institution settings form.
 - Shared widgets live in `frontend/components/admin/`: `login-form.tsx`,
-  `runs-table.tsx`, `settings-forms.tsx`, `deal-editor.tsx`, and
+  `runs-table.tsx`, `settings-forms.tsx`, `deal-editor.tsx`,
+  `identities-table.tsx`, `work-identities-table.tsx`, and
   `feedback-table.tsx`.
 - Docs editing is not a panel section; an edit toolbar appears inline on
   the public docs pages (`frontend/app/[inst]/docs/[slug]/page.tsx`) for a
@@ -219,11 +274,14 @@ The panels:
 | `backend/src/journal_browser/routers/admin/settings_admin.py` | Settings and institution-row editing |
 | `backend/src/journal_browser/routers/admin/deals_admin.py` | Deal curation CRUD and override ledger writes |
 | `backend/src/journal_browser/routers/admin/authors_admin.py` | Identity review list and status flips |
+| `backend/src/journal_browser/routers/admin/work_identity_admin.py` | Work identity review list and status flips |
+| `backend/src/journal_browser/routers/admin/audit_admin.py` | Read access to the `status_changes` audit ledger |
 | `backend/src/journal_browser/routers/admin/feedback_admin.py` | Feedback triage endpoints |
 | `backend/src/journal_browser/routers/admin/docs_admin.py` | Doc block edits |
 | `backend/src/journal_browser/harvest/author_ids.py` | The cascade that feeds the identity ledger |
 | `backend/src/journal_browser/services/flags_refresh.py` | Post-edit search-flag refresh |
 | `frontend/lib/admin.ts` | Token storage, authenticated fetch helpers, admin types |
+| `frontend/hooks/use-admin-resource.ts` | Shared admin list hook (loading/error/refresh, 401 sign-out) |
 | `frontend/app/admin/page.tsx` | Global admin panel |
 | `frontend/app/[inst]/admin/page.tsx` | Per-institution admin panel |
-| `frontend/components/admin/` | Login form, runs table, settings forms, deal editor, feedback table |
+| `frontend/components/admin/` | Login form, runs table, settings forms, deal editor, identity review panels, feedback table |

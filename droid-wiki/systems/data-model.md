@@ -62,7 +62,7 @@ the landing store so the pipeline can be replayed.
 | harvest | `HarvestRun`, `HarvestState` | `harvest_runs`, `harvest_state` | Job run history and latest status per job key |
 | harvest | `SourceRecord`, `RawFile` | `source_records`, `raw_files` | The append-only landing store (payload and file level) |
 | app_data | `CacheEpoch` | `cache_epoch` | One-row invalidation counter for in-process caches |
-| app_data | `ManualOverride`, `Feedback`, `Limitation`, `DocEdit` | `manual_overrides`, `feedback_items`, `limitations`, `doc_edits` | Curated and application-owned state |
+| app_data | `ManualOverride`, `Feedback`, `Limitation`, `DocEdit`, `StatusChangeLog` | `manual_overrides`, `feedback_items`, `limitations`, `doc_edits`, `status_changes` | Curated and application-owned state |
 
 ## Core relationships
 
@@ -234,10 +234,18 @@ tables link to each other and to `works` through composite foreign keys.
 ### Deals and curation state
 
 `deals` holds the register rows with `status` constrained to `current` or
-`archive`, a unique `esac_id`, and `needs_curation` plus
+`archive`, a unique `esac_id`, and the curation trio: `needs_curation`,
 `needs_curation_reason` (a check constraint allows a reason only when the
-flag is set). The flag marks rows whose inputs conflicted or arrived
-incomplete; the admin panel resolves them.
+flag is set), and `curation_resolved_reason` (a second constraint forbids a
+live flag together with a recorded dismissal). The flag marks rows whose
+inputs conflicted or arrived incomplete. The admin panel's dismissal is
+reason-aware: clearing the flag records the dismissed reason text, and the
+openaccess.nl harvester keeps the flag cleared only while the page produces
+exactly that reason. A different or additional reason re-flags the deal, and
+a clean page retires the marker. The curation columns are harvest-owned:
+admin edits of other fields still ride the `manual_overrides` ledger, but no
+override rows exist for the flag itself, so a stale override can never
+silently suppress a future problem.
 
 `deal_journals` stores coverage. Rows with `institution_id` NULL are the
 shared sheet coverage (ESAC/JCT/openaccess.nl); institution-scoped rows are
@@ -250,11 +258,13 @@ upserts, two partial unique indexes (one for shared rows, one for scoped
 rows) replace a single `NULLS NOT DISTINCT` constraint.
 
 `deal_institutions` is the partnership relation keyed `(deal_id,
-institution_id)`; a missing row means the institution does not participate,
-and a shared deal is never deleted because of it. The `participation`
-column distinguishes `named` from national `consortium` deals. Effective
-per-institution coverage (shared list or scoped override) is computed into
-`journal_flags.deal_covered` by the denormalization refresh.
+institution_id)`, and the row encodes three states that must be read
+together: a missing row means the institution does not participate (and a
+shared deal is never deleted because of it); a present row with
+`participation` NULL means unassessed; `named` or `consortium` means
+classified. Effective per-institution coverage (shared list or scoped
+override) is computed into `journal_flags.deal_covered` by the
+denormalization refresh.
 
 ### Harvest bookkeeping and the landing store
 
@@ -263,6 +273,11 @@ institution id (NULL for global jobs), a `running` / `completed` / `failed`
 status, the config fingerprint, and a stats JSON blob. `harvest_state`
 keeps the latest status per `(source, entity_type, filter_set)` key, again
 with partial unique indexes separating global from institution-scoped rows.
+A run row only leaves `running` through its own process: a crashed or killed
+job would otherwise leave a phantom forever, so every `start_run` first
+closes stale `running` rows of the same `(source, entity_type, institution)`
+key with a `failed` status and a `stale: superseded` marker. The next start
+of the same job is the one moment that state is provably dead.
 
 `source_records` is the landing store: the verbatim payload of every
 fetched record, append-only and content-hash versioned through the unique
@@ -284,6 +299,10 @@ that re-ingestion must never overwrite.
   the query-cache entries live at submit time.
 - `doc_edits`: admin replacements for individual blocks of served markdown,
   applied at read time so source files stay host-owned.
+- `status_changes`: an append-only audit of admin status flips (author
+  identities, work identities, feedback triage). One row per actual
+  transition, keyed by the subject's primary key as JSON; a no-op write
+  records nothing. Read through `GET /api/v1/admin/status-changes`.
 
 ### Schema conventions
 
@@ -341,7 +360,7 @@ that re-ingestion must never overwrite.
 | `backend/src/journal_browser/models/openalex.py` | `OpenalexWork`, `AuthorIdentity` |
 | `backend/src/journal_browser/models/evidence.py` | APC evidence and institution statistics |
 | `backend/src/journal_browser/models/harvest.py` | `HarvestRun`, `HarvestState`, `SourceRecord`, `RawFile` |
-| `backend/src/journal_browser/models/app_data.py` | `CacheEpoch`, `Limitation`, `ManualOverride`, `Feedback`, `DocEdit` |
+| `backend/src/journal_browser/models/app_data.py` | `CacheEpoch`, `Limitation`, `ManualOverride`, `Feedback`, `DocEdit`, `StatusChangeLog` |
 | `backend/src/journal_browser/models/reference.py` | `Institution`, `IssnMap`, `Publisher`, `OpenalexPublisher` |
 | `backend/src/journal_browser/harvest/denorm.py` | Denormalization refresh statements and cache-epoch bumps |
 | `backend/alembic/versions/` | Reversible migrations, never reformatted |

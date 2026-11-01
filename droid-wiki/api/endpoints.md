@@ -47,7 +47,10 @@ Conventions across the catalog:
 | PUT | `/admin/docs/{slug}/edits` | Save a block-level text override for a doc |
 | DELETE | `/admin/docs/{slug}/edits/{block_key}` | Remove an override, restoring source text |
 | GET | `/admin/author-identities` | List author identity candidates for review, filterable by `status` and institution |
-| PUT | `/admin/author-identities` | Accept or reject an identity candidate |
+| PUT | `/admin/author-identities` | Accept or reject an identity candidate (audited; no-ops write nothing) |
+| GET | `/admin/work-identities` | List work identity links for review, filterable by `status`, institution, and source |
+| PUT | `/admin/work-identities` | Flip a work identity's review status (`confirmed` / `candidate` / `missing`, audited) |
+| GET | `/admin/status-changes` | List audited admin status flips, newest first, filterable by `table_name` |
 
 ## Feedback
 

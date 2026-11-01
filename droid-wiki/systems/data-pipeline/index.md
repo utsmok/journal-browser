@@ -67,7 +67,11 @@ through a browser.
 
 The `run_harvest` wrapper in `backend/src/journal_browser/harvest/common.py` opens the run,
 executes the harvest body with per-page commits, closes the run as `completed` or `failed`,
-and bumps the cache epoch.
+and bumps the cache epoch. Only the run's own process can close it: a killed job would leave
+the row `running` forever. Every `start_run` therefore first closes stale `running` rows of
+the same `(source, entity_type, institution)` key, marking them `failed` with a
+`stale: superseded` marker in their stats, so a crash cannot leave a phantom run and an
+accidental overlap is visible in the runs table instead of pretending both runs completed.
 
 ## Repairing a run
 
