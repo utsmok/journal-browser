@@ -606,13 +606,18 @@ function JournalPageInner() {
             </span>
             {data.issns.length > 1 && ` (${data.issns.join(", ")})`}
           </p>
-          {(data.homepage_url || openalex?.url) && (
+          {(data.homepage_url || openalex?.url || data.openaccess_nl_slug) && (
             <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
               {data.homepage_url && <External href={data.homepage_url}>Homepage</External>}
               {data.doaj_homepage_url && (
                 <SourceNote source="via DOAJ" url="https://doaj.org" codes={["doaj-canon"]} />
               )}
               {openalex?.url && <External href={openalex.url}>OpenAlex</External>}
+              {data.openaccess_nl_slug && (
+                <External href={`https://openaccess.nl/en/publisher/${data.openaccess_nl_slug}`}>
+                  Open Access NL
+                </External>
+              )}
             </p>
           )}
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">

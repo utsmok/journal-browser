@@ -1677,6 +1677,8 @@ export interface components {
             homepage_url?: string | null;
             /** Doaj Homepage Url */
             doaj_homepage_url?: string | null;
+            /** Openaccess Nl Slug */
+            openaccess_nl_slug?: string | null;
             /** Type */
             type?: string | null;
             /** Harvested At */

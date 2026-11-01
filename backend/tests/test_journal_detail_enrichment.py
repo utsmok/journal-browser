@@ -12,6 +12,7 @@ from journal_browser.models import (
     Institution,
     InstitutionWorksStats,
     Journal,
+    Publisher,
     SourceRecord,
     Work,
     WorkIdentity,
@@ -358,6 +359,28 @@ async def test_detail_homepage_prefers_doaj(api, db):
     await db.commit()
     r = await api.get(f"/api/v1/tu/journals/{MAIN_ISSN}")
     assert r.json()["homepage_url"] == "https://openalex.example/journal"
+
+
+@requires_db
+async def test_detail_carries_publisher_oa_nl_slug(api, db):
+    """openaccess_nl_slug joins through the journal's canonical publisher;
+    an unknown publisher just leaves it None."""
+    from sqlalchemy import select
+
+    result = await db.execute(select(Journal).where(Journal.issn_l == MAIN_ISSN))
+    row = result.scalar_one()
+    row.publisher_canonical = "Widget Press"
+    db.add(Publisher(name="Widget Press", openaccess_nl_slug="widget-press"))
+    await db.commit()
+
+    r = await api.get(f"/api/v1/tu/journals/{MAIN_ISSN}")
+    assert r.json()["openaccess_nl_slug"] == "widget-press"
+
+    row.publisher_canonical = None
+    row.publisher_name = "Unregistered Press"
+    await db.commit()
+    r = await api.get(f"/api/v1/tu/journals/{MAIN_ISSN}")
+    assert r.json()["openaccess_nl_slug"] is None
 
 
 @requires_db

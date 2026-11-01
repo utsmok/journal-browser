@@ -242,6 +242,17 @@ async def journal_detail(
     if journal is None or _is_ignored(journal.issn_l):
         raise HTTPException(status_code=404, detail="journal not found")
 
+    # Publisher registry links (Open Access NL deals profile), keyed by the
+    # same canonical grouping the publisher directory uses.
+    canonical_pub = journal.publisher_canonical or journal.publisher_name
+    oa_nl_slug = (
+        await session.scalar(
+            select(Publisher.openaccess_nl_slug).where(Publisher.name == canonical_pub)
+        )
+        if canonical_pub
+        else None
+    )
+
     # Effective coverage: a shared deal_journals row applies unless the
     # institution's relation opts into a scoped override list.
     deal_rows = (
@@ -392,6 +403,7 @@ async def journal_detail(
         # DOAJ is the canon homepage source; OpenAlex fills the gap.
         homepage_url=journal.doaj_homepage_url or journal.homepage_url,
         doaj_homepage_url=journal.doaj_homepage_url,
+        openaccess_nl_slug=oa_nl_slug,
         type=journal.type,
         harvested_at=journal.harvested_at,
         deals=[

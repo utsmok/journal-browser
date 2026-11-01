@@ -6144,6 +6144,17 @@
             ],
             "title": "Doaj Homepage Url"
           },
+          "openaccess_nl_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openaccess Nl Slug"
+          },
           "type": {
             "anyOf": [
               {

@@ -255,6 +255,9 @@ class JournalDetailResponse(BaseModel):
     counts_by_year: list[Any] = []
     homepage_url: str | None = None
     doaj_homepage_url: str | None = None
+    # Open Access NL deals-profile slug of the journal's (canonical)
+    # publisher; None when the publisher is not in their registry.
+    openaccess_nl_slug: str | None = None
     type: str | None = None
     harvested_at: datetime | None = None
     deals: list[DealOut] = []
