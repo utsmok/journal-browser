@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AdminError, adminGet, adminPut, type AuthorIdentityAdmin } from "@/lib/admin";
+import { useAdminResource } from "@/hooks/use-admin-resource";
+import { adminPut, type AuthorIdentityAdmin } from "@/lib/admin";
 
 /** Matches the backend's IDENTITY_STATUSES; "all" omits the filter param. */
 const STATUS_FILTERS = ["candidate", "confirmed", "rejected", "all"] as const;
@@ -35,6 +36,7 @@ function rowKey(row: AuthorIdentityAdmin): string {
  * Identity-cascade review: the resolution rows with per-row status flips.
  * A flip is sticky server-side and reaches authors.openalex_ids at the
  * next authors ingest; the panel just reflects and persists decisions.
+ * Every actual flip is audited server-side (status_changes).
  */
 export function IdentitiesPanel({
   token,
@@ -45,35 +47,18 @@ export function IdentitiesPanel({
   inst: string;
   onUnauthorized: () => void;
 }) {
-  const [rows, setRows] = useState<AuthorIdentityAdmin[]>([]);
   const [filter, setFilter] = useState<StatusFilter>("candidate");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-
   const query = `author-identities?limit=500&institution=${encodeURIComponent(inst)}${
     filter === "all" ? "" : `&status=${filter}`
   }`;
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      setRows(await adminGet<AuthorIdentityAdmin[]>(query, token));
-      setError(null);
-    } catch (err) {
-      if (err instanceof AdminError && err.status === 401) {
-        onUnauthorized();
-        return;
-      }
-      setError(`Could not load identities (${err instanceof Error ? err.message : err}).`);
-    } finally {
-      setLoading(false);
-    }
-  }, [query, token, onUnauthorized]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  const { data, setData, loading, error, setError } = useAdminResource<AuthorIdentityAdmin[]>(
+    query,
+    token,
+    onUnauthorized,
+    "identities",
+  );
+  const rows = data ?? [];
 
   const flip = async (row: AuthorIdentityAdmin, status: string) => {
     if (row.status === status) return;
@@ -87,12 +72,10 @@ export function IdentitiesPanel({
         external_id: row.external_id,
         status,
       });
-      setRows((current) => current.map((r) => (rowKey(r) === key ? updated : r)));
+      // Replace from the server response; the flip is audited and sticky
+      // there, so the row we show must be the stored one.
+      setData((current) => (current ?? []).map((r) => (rowKey(r) === key ? updated : r)));
     } catch (err) {
-      if (err instanceof AdminError && err.status === 401) {
-        onUnauthorized();
-        return;
-      }
       setError(`Could not flip ${row.external_id} (${err instanceof Error ? err.message : err}).`);
     } finally {
       setBusy(null);

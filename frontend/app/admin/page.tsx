@@ -16,26 +16,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useAdminResource } from "@/hooks/use-admin-resource";
 import { useInstitutionsDirectory } from "@/hooks/use-api";
-import {
-  AdminError,
-  adminGet,
-  useAdminToken,
-  type AdminDeal,
-  type AdminRun,
-  type FlaggedDeal,
-} from "@/lib/admin";
+import { useAdminToken, type AdminDeal, type AdminRun, type FlaggedDeal } from "@/lib/admin";
 
 export default function AdminPage() {
   const [token, setToken] = useAdminToken();
+  const logout = () => setToken(null);
   const [instFilter, setInstFilter] = useState<string>("all");
   const [selectedUni, setSelectedUni] = useState<string>("");
-  const [runs, setRuns] = useState<AdminRun[]>([]);
-  const [flagged, setFlagged] = useState<FlaggedDeal[]>([]);
-  const [runsError, setRunsError] = useState<string | null>(null);
-  const [deals, setDeals] = useState<AdminDeal[]>([]);
-  const [dealsError, setDealsError] = useState<string | null>(null);
-  const [dealsEpoch, setDealsEpoch] = useState(0);
   const [selectedDealId, setSelectedDealId] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const directory = useInstitutionsDirectory();
@@ -47,54 +36,15 @@ export default function AdminPage() {
     if (codes.length > 0 && !codes.includes(selectedUni)) setSelectedUni(codes[0]);
   }, [directory.data, selectedUni]);
 
-  useEffect(() => {
-    if (!token) return;
-    let cancelled = false;
-    const instQ = instFilter === "all" ? "" : `&institution=${encodeURIComponent(instFilter)}`;
-    Promise.all([
-      adminGet<AdminRun[]>(`/runs?limit=100${instQ}`, token),
-      adminGet<FlaggedDeal[]>("/flagged", token),
-    ])
-      .then(([r, f]) => {
-        if (cancelled) return;
-        setRuns(r);
-        setFlagged(f);
-        setRunsError(null);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        if (err instanceof AdminError && err.status === 401) {
-          setToken(null);
-          return;
-        }
-        setRunsError(`Could not load admin data (${err instanceof Error ? err.message : err}).`);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token, instFilter, setToken]);
-
-  useEffect(() => {
-    if (!token) return;
-    let cancelled = false;
-    adminGet<AdminDeal[]>("/deals", token)
-      .then((d) => {
-        if (cancelled) return;
-        setDeals(d);
-        setDealsError(null);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        if (err instanceof AdminError && err.status === 401) {
-          setToken(null);
-          return;
-        }
-        setDealsError(`Could not load deals (${err instanceof Error ? err.message : err}).`);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token, dealsEpoch, setToken]);
+  const instQ = instFilter === "all" ? "" : `&institution=${encodeURIComponent(instFilter)}`;
+  const runs = useAdminResource<AdminRun[]>(
+    `/runs?limit=100${instQ}`,
+    token ?? "",
+    logout,
+    "admin data",
+  );
+  const flagged = useAdminResource<FlaggedDeal[]>("/flagged", token ?? "", logout, "flagged deals");
+  const deals = useAdminResource<AdminDeal[]>("/deals", token ?? "", logout, "deals");
 
   if (!token) return <LoginForm onToken={setToken} />;
 
@@ -127,15 +77,15 @@ export default function AdminPage() {
             ))}
           </select>
         </div>
-        {runsError && <p className="text-sm text-destructive">{runsError}</p>}
-        <RunsTable runs={runs} directory={unis} />
+        {runs.error && <p className="text-sm text-destructive">{runs.error}</p>}
+        <RunsTable runs={runs.data ?? []} directory={unis} />
       </section>
 
       <FeedbackSection token={token} onUnauthorized={setToken} />
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Deals ({deals.length})</h2>
+          <h2 className="text-lg font-semibold">Deals ({deals.data?.length ?? 0})</h2>
           <div className="flex items-center gap-2">
             {selectedDealId && (
               <Button variant="outline" size="sm" onClick={() => setSelectedDealId(null)}>
@@ -153,8 +103,12 @@ export default function AdminPage() {
             </Button>
           </div>
         </div>
-        {dealsError && <p className="text-sm text-destructive">{dealsError}</p>}
-        <DealsTable deals={deals} selectedId={selectedDealId} onSelect={setSelectedDealId} />
+        {deals.error && <p className="text-sm text-destructive">{deals.error}</p>}
+        <DealsTable
+          deals={deals.data ?? []}
+          selectedId={selectedDealId}
+          onSelect={setSelectedDealId}
+        />
         {showCreate && (
           <CreateDealForm
             token={token}
@@ -162,7 +116,7 @@ export default function AdminPage() {
             onCreated={(id) => {
               setShowCreate(false);
               setSelectedDealId(id);
-              setDealsEpoch((e) => e + 1);
+              void deals.refresh();
             }}
             onCancel={() => setShowCreate(false)}
           />
@@ -174,13 +128,16 @@ export default function AdminPage() {
             token={token}
             institutions={unis}
             onUnauthorized={setToken}
-            onChanged={() => setDealsEpoch((e) => e + 1)}
+            onChanged={() => void deals.refresh()}
           />
         )}
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Deals flagged for curation ({flagged.length})</h2>
+        <h2 className="text-lg font-semibold">
+          Deals flagged for curation ({flagged.data?.length ?? 0})
+        </h2>
+        {flagged.error && <p className="text-sm text-destructive">{flagged.error}</p>}
         <Table>
           <TableHeader>
             <TableRow>
@@ -192,7 +149,7 @@ export default function AdminPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {flagged.map((deal) => (
+            {(flagged.data ?? []).map((deal) => (
               <TableRow
                 key={deal.id}
                 className="cursor-pointer"

@@ -1,46 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
 import { LoginForm } from "@/components/admin/login-form";
 import { IdentitiesPanel } from "@/components/admin/identities-table";
 import { RunsTable } from "@/components/admin/runs-table";
 import { InstitutionSettingsForm } from "@/components/admin/settings-forms";
+import { WorkIdentitiesPanel } from "@/components/admin/work-identities-table";
 import { Button } from "@/components/ui/button";
+import { useAdminResource } from "@/hooks/use-admin-resource";
 import { useInstitutionsDirectory } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
-import { AdminError, adminGet, useAdminToken, type AdminRun } from "@/lib/admin";
+import { useAdminToken, type AdminRun } from "@/lib/admin";
 
 /** Per-university admin: this uni's harvest runs + its institution settings. */
 export default function InstAdminPage() {
   const inst = useInstitution();
   const [token, setToken] = useAdminToken();
-  const [runs, setRuns] = useState<AdminRun[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const logout = () => setToken(null);
   const directory = useInstitutionsDirectory();
   const uni = directory.data?.find((i) => i.code === inst);
-
-  useEffect(() => {
-    if (!token) return;
-    let cancelled = false;
-    adminGet<AdminRun[]>(`/runs?limit=100&institution=${encodeURIComponent(inst)}`, token)
-      .then((r) => {
-        if (cancelled) return;
-        setRuns(r);
-        setError(null);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        if (err instanceof AdminError && err.status === 401) {
-          setToken(null);
-          return;
-        }
-        setError(`Could not load runs (${err instanceof Error ? err.message : err}).`);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token, inst, setToken]);
+  const runs = useAdminResource<AdminRun[]>(
+    `/runs?limit=100&institution=${encodeURIComponent(inst)}`,
+    token ?? "",
+    logout,
+    "runs",
+  );
 
   if (!token) return <LoginForm onToken={setToken} />;
 
@@ -55,22 +38,33 @@ export default function InstAdminPage() {
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Harvest runs (newest first)</h2>
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        <RunsTable runs={runs} directory={uni ? [uni] : []} />
+        {runs.error && <p className="text-sm text-destructive">{runs.error}</p>}
+        <RunsTable runs={runs.data ?? []} directory={uni ? [uni] : []} />
       </section>
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Author identity review</h2>
         <p className="text-sm text-[var(--muted-foreground)]">
           Resolution rows from the identity cascade. Confirming or rejecting is sticky across
-          re-runs; flips reach the public author pages at the next authors ingest.
+          re-runs; flips reach the public author pages at the next authors ingest. Every flip is
+          audited.
         </p>
-        <IdentitiesPanel token={token} inst={inst} onUnauthorized={() => setToken(null)} />
+        <IdentitiesPanel token={token} inst={inst} onUnauthorized={logout} />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Work identity review</h2>
+        <p className="text-sm text-[var(--muted-foreground)]">
+          Cross-source links between local works and OpenAlex/OpenAIRE records. Flips are durable
+          (harvests never overwrite existing rows) and audited; &lsquo;Miss&rsquo; marks a recorded
+          lookup gap, not a bad link.
+        </p>
+        <WorkIdentitiesPanel token={token} inst={inst} onUnauthorized={logout} />
       </section>
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Institution settings</h2>
-        <InstitutionSettingsForm token={token} code={inst} onUnauthorized={setToken} />
+        <InstitutionSettingsForm token={token} code={inst} onUnauthorized={logout} />
       </section>
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -11,7 +11,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AdminError, adminDelete, adminGet, adminPatch, type FeedbackAdmin } from "@/lib/admin";
+import { useAdminResource } from "@/hooks/use-admin-resource";
+import { AdminError, adminDelete, adminPatch, type FeedbackAdmin } from "@/lib/admin";
 
 const STATUSES = ["todo", "in_progress", "done", "wontfix"] as const;
 const PRIORITIES = ["low", "normal", "high", "critical"] as const;
@@ -104,7 +105,8 @@ function FeedbackDetail({
 }
 
 /** Admin triage for user feedback: filter by status, patch inline, expand for
- * details and the page-data dump. */
+ * details and the page-data dump. Status flips are audited server-side
+ * (status_changes). */
 export function FeedbackSection({
   token,
   onUnauthorized,
@@ -112,39 +114,28 @@ export function FeedbackSection({
   token: string;
   onUnauthorized: (token: string | null) => void;
 }) {
-  const [items, setItems] = useState<FeedbackAdmin[]>([]);
   const [filter, setFilter] = useState<string>("all");
-  const [error, setError] = useState<string | null>(null);
+  const [patchError, setPatchError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const q = filter === "all" ? "" : `?status=${encodeURIComponent(filter)}`;
-      setItems(await adminGet<FeedbackAdmin[]>(`/feedback${q}`, token));
-      setError(null);
-    } catch (err) {
-      if (err instanceof AdminError && err.status === 401) {
-        onUnauthorized(null);
-        return;
-      }
-      setError(`Could not load feedback (${err instanceof Error ? err.message : err}).`);
-    }
-  }, [token, filter, onUnauthorized]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const q = filter === "all" ? "" : `?status=${encodeURIComponent(filter)}`;
+  const { data, loading, error, refresh } = useAdminResource<FeedbackAdmin[]>(
+    `/feedback${q}`,
+    token,
+    () => onUnauthorized(null),
+    "feedback",
+  );
+  const items = data ?? [];
 
   async function patch(id: number, body: Record<string, string>) {
     try {
       await adminPatch(`/feedback/${id}`, token, body);
-      await load();
+      await refresh();
     } catch (err) {
       if (err instanceof AdminError && err.status === 401) {
         onUnauthorized(null);
         return;
       }
-      setError(`Update failed (${err instanceof Error ? err.message : err}).`);
+      setPatchError(`Update failed (${err instanceof Error ? err.message : err}).`);
     }
   }
 
@@ -154,7 +145,7 @@ export function FeedbackSection({
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Feedback ({items.length})</h2>
+        <h2 className="text-lg font-semibold">Feedback {loading ? "…" : `(${items.length})`}</h2>
         <div className="flex items-center gap-2 text-sm">
           <label htmlFor="feedback-filter" className="text-muted-foreground">
             Status
@@ -178,6 +169,7 @@ export function FeedbackSection({
         </div>
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
+      {patchError && <p className="text-sm text-destructive">{patchError}</p>}
       <Table>
         <TableHeader>
           <TableRow>
@@ -238,7 +230,7 @@ export function FeedbackSection({
                   item={item}
                   token={token}
                   onUnauthorized={onUnauthorized}
-                  onChanged={load}
+                  onChanged={refresh}
                 />
               )}
             </Fragment>
