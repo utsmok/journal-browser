@@ -1,50 +1,69 @@
 #!/usr/bin/env bash
-# Weak-affiliation rung validation (owner decision 2026-11-02).
-# Run ONCE Docker is back: preview first, then live.
-# Every step is fail-fast; each prints its evidence line.
+# Weak-affiliation rung status probe (READ-ONLY).
+#
+# The original one-shot validation script ran resolve + ingest on live;
+# the rung went live on 2026-10-31 (5,322 confirmed weak rows, van Doorn
+# spot-checked), so that version was retired. This replacement checks the
+# invariants the weak-rung decision rests on with SELECT-only access:
+#   1. population snapshot (authors / identities / weak / candidates)
+#   2. weak rows by method
+#   3. invariants: weak rows are confirmed; no weak author carries >1
+#      distinct ORCID (the Xiang Zhang class the gate exists to prevent)
+#   4. van Doorn spot check (the name-exact case that motivated the rung)
+# Safe to run any time; safe for agents (no writes, no resolve/ingest).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 LIVE_URL="postgresql+asyncpg://journal:journal@localhost:5433/journalbrowser"
-PREVIEW_URL="postgresql+asyncpg://journal:journal@localhost:5433/jb_author_preview"
+PSQL_LIVE="${LIVE_URL/postgresql+asyncpg:/postgresql:}"
 
-echo "== 0. docker/db up check"
+echo "== 0. db up check"
 pg_isready -h localhost -p 5433 -U journal >/dev/null || { echo "postgres down"; exit 1; }
 
-echo "== 1. PREVIEW: pre-run author/identity snapshot"
-psql "${PREVIEW_URL/postgresql+asyncpg:/postgresql:}" -tAc \
+echo "== 1. live population snapshot"
+psql "$PSQL_LIVE" -tAc \
   "SELECT 'authors', count(*) FROM authors UNION ALL
    SELECT 'identities', count(*) FROM author_identities UNION ALL
-   SELECT 'weak', count(*) FROM author_identities WHERE evidence->>'weak_affiliation' = 'true'"
-
-echo "== 2. PREVIEW: resolve with the rung (--no-sweeps)"
-JB_DATABASE_URL="$PREVIEW_URL" uv run python jobs/resolve_author_ids.py --institution ut --no-sweeps \
-  | python3 -c "import json,sys; d=json.load(sys.stdin)['ut']; print('weak:', d['weak_affiliation']); print('matched:', d['matched']); print('authors_seen:', d['authors_walked'])"
-
-echo "== 3. PREVIEW: post-run counts + van Doorn check"
-psql "${PREVIEW_URL/postgresql+asyncpg:/postgresql:}" -tAc \
-  "SELECT 'weak_rows', count(*) FROM author_identities WHERE evidence->>'weak_affiliation' = 'true'"
-psql "${PREVIEW_URL/postgresql+asyncpg:/postgresql:}" -tAc \
-  "SELECT author_pure_uuid, external_id, method, status, evidence->'orcids'
-   FROM author_identities WHERE evidence->>'weak_affiliation' = 'true' LIMIT 60" | head -50
-psql "${PREVIEW_URL/postgresql+asyncpg:/postgresql:}" -tAc \
-  "SELECT count(*) FROM author_identities WHERE external_id = 'a5010733081' AND status = 'confirmed'"
-
-echo "== 4. LIVE: pre-run snapshot"
-psql "${LIVE_URL/postgresql+asyncpg:/postgresql:}" -tAc \
-  "SELECT 'authors', count(*) FROM authors UNION ALL
-   SELECT 'identities', count(*) FROM author_identities"
-
-echo "== 5. LIVE: resolve with the rung (--no-sweeps)"
-JB_DATABASE_URL="$LIVE_URL" uv run python jobs/resolve_author_ids.py --institution ut --no-sweeps \
-  | python3 -c "import json,sys; d=json.load(sys.stdin)['ut']; print('weak:', d['weak_affiliation'])"
-
-echo "== 6. LIVE: ingest authors (roster now admits identity-confirmed)"
-uv run python jobs/ingest_authors.py --institution ut
-
-echo "== 7. LIVE: post-run diff"
-psql "${LIVE_URL/postgresql+asyncpg:/postgresql:}" -tAc \
-  "SELECT 'authors', count(*) FROM authors UNION ALL
-   SELECT 'weak_rows', count(*) FROM author_identities WHERE evidence->>'weak_affiliation' = 'true'
+   SELECT 'weak', count(*) FROM author_identities WHERE evidence->>'weak_affiliation' = 'true'
    UNION ALL
-   SELECT 'van_doorn', count(*) FROM authors WHERE openalex_author_id = 'a5010733081'"
+   SELECT 'candidates', count(*) FROM author_identities WHERE status = 'candidate'"
+
+echo "== 2. weak rows by method"
+psql "$PSQL_LIVE" -tAc \
+  "SELECT method, count(*) FROM author_identities
+   WHERE evidence->>'weak_affiliation' = 'true' GROUP BY method ORDER BY 2 DESC"
+
+echo "== 3. invariants"
+printf -- "-- weak rows NOT confirmed (expect 0): "
+psql "$PSQL_LIVE" -tAc \
+  "SELECT count(*) FROM author_identities
+   WHERE evidence->>'weak_affiliation' = 'true' AND status <> 'confirmed'"
+printf -- "-- weak authors with >1 distinct orcid (expect 0 after the\n"
+echo "   ambiguity gate lands on live; 4 known rows predate it):"
+psql "$PSQL_LIVE" -tAc \
+  "SELECT count(*) FROM (
+     SELECT i.author_pure_uuid
+     FROM author_identities i
+     CROSS JOIN LATERAL jsonb_array_elements_text(
+       COALESCE(i.evidence->'orcids', '[]'::jsonb)
+     ) AS e(value)
+     WHERE i.status = 'confirmed' AND i.evidence->>'weak_affiliation' = 'true'
+     GROUP BY i.author_pure_uuid
+     HAVING count(DISTINCT e.value) > 1
+   ) s"
+printf -- "-- fragmentation twins riding confirmed primaries: "
+psql "$PSQL_LIVE" -tAc \
+  "SELECT count(*) FROM author_identities WHERE evidence ? 'twin_of'"
+
+echo "== 4. van Doorn spot check (expect 1 confirmed identity row + authors row)"
+# Identities keep OpenAlex source casing (A501...): compare lowercased.
+psql "$PSQL_LIVE" -tAc \
+  "SELECT 'identity', count(*) FROM author_identities
+   WHERE lower(external_id) = 'a5010733081' AND status = 'confirmed'
+   UNION ALL
+   SELECT 'authors_row', count(*)
+   FROM authors a
+   JOIN author_identities i ON i.author_pure_uuid = a.pure_uuid
+   WHERE lower(i.external_id) = 'a5010733081' AND i.status = 'confirmed'"
+
+echo "== done (all counts labeled; investigate any non-zero in section 3)"
