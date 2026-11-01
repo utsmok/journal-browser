@@ -19,7 +19,6 @@ class Publisher(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
-    openalex_host_organization: Mapped[str | None] = mapped_column(Text, nullable=True)
     openaccess_nl_slug: Mapped[str | None] = mapped_column(Text, nullable=True, unique=True)
     aliases: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
 
