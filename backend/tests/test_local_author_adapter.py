@@ -61,6 +61,10 @@ async def test_adapter_roster_edges_and_ids(db, institution_factory):
         ("a-jack", "w13"),
         ("a-karl", "w14"),
         ("a-gina2", "w15"),
+        # mary's works are store facts even though the ambiguity gate
+        # declines her weak-rung identity
+        ("a-mary", "w16"),
+        ("a-mary", "w17"),
     }
     # pure's own author lists ride verbatim (roster-gated at ingest)
     assert set(data.pure_edges) == {
@@ -82,6 +86,8 @@ async def test_adapter_roster_edges_and_ids(db, institution_factory):
         ("p-eve", "w13"),
         ("p-karl", "w14"),
         ("p-gina", "w15"),
+        ("p-mary", "w16"),
+        ("p-mary", "w17"),
     }
     # the resolved root carries the institution's bare ROR
     assert data.org_rors.get("root") == "006hf6230"

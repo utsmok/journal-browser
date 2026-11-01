@@ -240,7 +240,9 @@ def _weak_affiliation_rung(
     evidence on unaffiliated works is the namesake trap the org gate
     exists for) and a single consistent ORCID: the set of orcids on the
     person's matched entries (plus their profile orcid) must be exactly
-    one value and equal the id's global orcid set in our store — impostor
+    one value — multiple distinct values is merged-profile/human
+    ambiguity the rung refuses (skipped_orcid_ambiguous) — and that one
+    value must equal the id's global orcid set in our store — impostor
     namesakes carry their own orcid, and a merged OpenAlex profile fails
     the equality. Persons without any orcid evidence stay unadmitted.
     An extra matched id is a fragment twin (rides along confirmed) when
@@ -298,6 +300,13 @@ def _weak_affiliation_rung(
             person_orcids.add(person_orcid[uuid])
         if not person_orcids:
             skipped["orcid_missing"] += 1
+            continue
+        # Exactly ONE human orcid across the person's evidence (the
+        # Xiang Zhang class: multiple distinct values means the evidence
+        # spans several humans — merged profiles, family shared names —
+        # and name evidence alone cannot tell them apart).
+        if len(person_orcids) > 1:
+            skipped["orcid_ambiguous"] += 1
             continue
         if aid_orcids.get(primary.id, set()) != person_orcids:
             skipped["orcid_mismatch"] += 1

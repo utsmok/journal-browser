@@ -29,6 +29,8 @@ ORCID_IVY = "0000-0009-0005-0005"
 ORCID_J1 = "0000-0009-0006-0006"
 ORCID_J2 = "0000-0009-0007-0007"
 ORCID_KARL = "0000-0009-0008-0008"
+ORCID_M1 = "0000-0009-0009-0009"
+ORCID_M2 = "0000-0009-0001-0002"
 
 
 async def _fixture(db, institution_factory):
@@ -53,8 +55,9 @@ async def _fixture(db, institution_factory):
     so tree.resolves never closes for these persons): gina (name-exact,
     single orcid) and karl (name-initials, single orcid) are admitted;
     hank carries no orcid anywhere; jack's id appears with two different
-    orcids across the store (merged/impostor profile); ivy1 and ivy2 are
-    same-name persons whose works both select one shared id."""
+    orcids across the store (merged/impostor profile); mary's own works
+    bind one id under two distinct orcids (ambiguous evidence); ivy1 and
+    ivy2 are same-name persons whose works both select one shared id."""
     inst = await institution_factory(
         code="ut", name="University of Twente", ror="https://ror.org/006hf6230"
     )
@@ -109,6 +112,7 @@ async def _fixture(db, institution_factory):
             _person("p-ivy2", "Ivy", "Twin", ["flat"]),
             _person("p-jack", "Jack", "Flat", ["flat"]),
             _person("p-karl", "Karl", "Flat", ["flat"]),
+            _person("p-mary", "Mary", "Flat", ["flat"]),
         ]
     )
     run = HarvestRun(source="pure", entity_type="works", status="completed", config_fingerprint="t")
@@ -143,6 +147,8 @@ async def _fixture(db, institution_factory):
             _work("w13", "10.1000/w13"),
             _work("w14", "10.1000/w14"),
             _work("w15", "10.1000/w15"),
+            _work("w16", "10.1000/w16"),
+            _work("w17", "10.1000/w17"),
         ]
     )
     db.add(journal_factory("1234-5678"))
@@ -179,6 +185,8 @@ async def _fixture(db, institution_factory):
             _cerif_author("w13", "p-eve", "Eve", "Namesake", ["dept"]),
             _cerif_author("w14", "p-karl", "K.", "Flat", ["flat"]),
             _cerif_author("w15", "p-gina", "Gina", "Flat", ["flat"]),
+            _cerif_author("w16", "p-mary", "Mary", "Flat", ["flat"]),
+            _cerif_author("w17", "p-mary", "Mary", "Flat", ["flat"]),
         ]
     )
 
@@ -258,6 +266,10 @@ async def _fixture(db, institution_factory):
             # gina's OpenAlex fragment: another id, no orcid, never
             # co-listed with a-gina — rides along as a confirmed twin
             _oa_work("W-o", "10.1000/w15", [{"a": "a-gina2", "n": "G. Flat", "o": None}]),
+            # mary: her OWN works bind one id under two distinct orcids —
+            # the evidence spans humans, the rung's cardinality gate refuses
+            _oa_work("W-p", "10.1000/w16", [{"a": "a-mary", "n": "Mary Flat", "o": ORCID_M1}]),
+            _oa_work("W-q", "10.1000/w17", [{"a": "a-mary", "n": "Mary Flat", "o": ORCID_M2}]),
         ]
     )
     oa_run = HarvestRun(
@@ -395,7 +407,10 @@ async def test_weak_affiliation_rung(db, institution_factory):
         # carol (partner-org profile, no orcid) and hank both evaluated and
         # declined for missing orcid evidence
         "skipped_orcid_missing": 2,
+        # jack: the id carries two orcids across the store (equality fails);
+        # mary: her own matched entries carry two orcids (cardinality gate)
         "skipped_orcid_mismatch": 1,
+        "skipped_orcid_ambiguous": 1,
         "skipped_namesake_contested": 2,
     }
 
@@ -424,9 +439,12 @@ async def test_weak_affiliation_rung(db, institution_factory):
     assert karl.method == "name-initials"
 
     # hank: no orcid anywhere; jack: the id carries two orcids across the
-    # store; the ivys: one shared id selected by two same-name persons
+    # store (equality fails); mary: her own works carry two orcids (the
+    # Xiang Zhang class — cardinality gate); the ivys: one shared id
+    # selected by two same-name persons
     assert ("p-hank", "a-hank") not in rows
     assert ("p-jack", "a-jack") not in rows
+    assert ("p-mary", "a-mary") not in rows
     assert ("p-ivy1", "a-ivy") not in rows
     assert ("p-ivy2", "a-ivy") not in rows
 
