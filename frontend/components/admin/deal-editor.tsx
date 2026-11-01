@@ -176,6 +176,9 @@ export function DealEditor({
   };
 
   const reload = useCallback(async () => {
+    // Skip the pre-hydration window (token still "") — an unauthenticated
+    // fetch here 401s and would clear a valid stored session.
+    if (!token) return;
     try {
       const d = await adminGet<AdminDealDetail>(`/deals/${dealId}`, token);
       setDetail(d);

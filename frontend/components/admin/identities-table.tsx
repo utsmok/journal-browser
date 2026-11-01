@@ -51,7 +51,7 @@ export function IdentitiesPanel({
   const [filter, setFilter] = useState<StatusFilter>("candidate");
   const [busy, setBusy] = useState<string | null>(null);
   const instQ = inst ? `&institution=${encodeURIComponent(inst)}` : "";
-  const query = `author-identities?limit=500${instQ}${filter === "all" ? "" : `&status=${filter}`}`;
+  const query = `/author-identities?limit=500${instQ}${filter === "all" ? "" : `&status=${filter}`}`;
   const { data, setData, loading, error, setError } = useAdminResource<AuthorIdentityAdmin[]>(
     query,
     token,

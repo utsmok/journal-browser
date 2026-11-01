@@ -52,7 +52,7 @@ export function WorkIdentitiesPanel({
   const [filter, setFilter] = useState<StatusFilter>("candidate");
   const [busy, setBusy] = useState<string | null>(null);
   const instQ = inst ? `&institution=${encodeURIComponent(inst)}` : "";
-  const query = `work-identities?limit=500${instQ}${filter === "all" ? "" : `&status=${filter}`}`;
+  const query = `/work-identities?limit=500${instQ}${filter === "all" ? "" : `&status=${filter}`}`;
   const { data, setData, loading, error, setError } = useAdminResource<WorkIdentityAdmin[]>(
     query,
     token,

@@ -210,6 +210,10 @@ function SettingsForm({
   );
 
   const reload = useCallback(async () => {
+    // The page's own token hook hydrates one tick after the layout renders
+    // children; fetching before that goes out without Authorization, and the
+    // 401 would wipe a perfectly valid session from storage.
+    if (!token) return;
     try {
       const doc = await fetchDoc();
       setFields(doc.fields);
@@ -222,7 +226,7 @@ function SettingsForm({
       if (err instanceof AdminError && err.status === 401) onUnauthorized(null);
       else setLoadError(`Could not load settings (${err instanceof Error ? err.message : err}).`);
     }
-  }, [fetchDoc, onUnauthorized]);
+  }, [fetchDoc, token, onUnauthorized]);
 
   useEffect(() => {
     void reload();
