@@ -38,7 +38,7 @@ from ..models import (
     JournalFlags,
     Publisher,
 )
-from .cache import SNAPSHOT_CACHE, cache_get, cache_put
+from .cache import SNAPSHOT_CACHE, SNAPSHOT_TTL, cache_get, cache_put
 from .deal_coverage import deal_institution_join, dj_scope
 from .facets import passes, publisher_facets, publisher_predicates, publisher_topic_facet
 from .search import APC_SHOWN, OA_TYPES, _oa_type, _order, attach_apc_display, base_query
@@ -50,7 +50,6 @@ DEAL_DISCREPANCY_CAP = 10
 TOPIC_FACET_LIMIT = 10
 TOPICS_PER_ITEM = 3
 TOPICS_PER_DETAIL = 5
-SNAPSHOT_TTL = 86400  # seconds; a harvest bump invalidates sooner
 SNAPSHOT_WORK_MEM = "128MB"  # cold-build-only, see _snapshot
 
 QUARTILES = ("Q1", "Q2", "Q3", "Q4")

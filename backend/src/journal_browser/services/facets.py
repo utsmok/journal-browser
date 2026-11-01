@@ -1,5 +1,6 @@
-"""Drop-own-dimension facet rule: shared helper plus the three facet
-implementations (author SQL, orgunit SQL, publisher in-memory)."""
+"""Drop-own-dimension facet rule: shared helper plus the two facet
+implementations (author SQL, publisher in-memory; orgunit facets moved
+into the unit snapshot)."""
 
 from typing import TYPE_CHECKING, Any
 
@@ -7,7 +8,6 @@ from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Author
-from .works_query import WORKS_STRATA, strata_bound
 
 if TYPE_CHECKING:
     from .publishers import _Pub
@@ -60,54 +60,6 @@ async def author_facets(
         ).all()
         out[name] = [{"value": value, "count": n} for value, n in rows if value is not None]
     return out
-
-
-async def orgunit_facets(
-    session: AsyncSession,
-    units: Any,
-    conds: dict[str, Any],
-    q_cond: Any | None,
-    level: str,
-) -> dict[str, dict[str, int]]:
-    """Org-unit facets: faculty (group level), size strata, deal usage; each
-    variant drops its own filter and keeps q."""
-    q_extra = [q_cond] if q_cond is not None else []
-    facets: dict[str, dict[str, int]] = {}
-    if level == "group":
-        rows_ = (
-            await session.execute(
-                select(units.c.faculty, func.count())
-                .where(*others(conds, "faculty"), *q_extra, units.c.faculty.is_not(None))
-                .group_by(units.c.faculty)
-                .order_by(func.count().desc(), units.c.faculty)
-            )
-        ).all()
-        facets["faculty"] = {r.faculty: int(r[1]) for r in rows_}
-    row = (
-        await session.execute(
-            select(
-                *[
-                    func.count().filter(strata_bound(units.c.n_works, stratum))
-                    for stratum in WORKS_STRATA
-                ]
-            )
-            .select_from(units)
-            .where(*others(conds, "works"), *q_extra)
-        )
-    ).one()
-    facets["size"] = dict(zip(WORKS_STRATA, (int(v or 0) for v in row), strict=True))
-    row = (
-        await session.execute(
-            select(
-                func.count().filter(units.c.deal_works > 0),
-                func.count().filter(units.c.deal_works == 0),
-            )
-            .select_from(units)
-            .where(*others(conds, "uses_deals"), *q_extra)
-        )
-    ).one()
-    facets["uses_deals"] = {"yes": int(row[0] or 0), "no": int(row[1] or 0)}
-    return facets
 
 
 def publisher_predicates(

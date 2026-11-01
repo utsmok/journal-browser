@@ -1,8 +1,12 @@
-"""Monotonic-TTL caches shared by search facets and the publisher snapshot.
-A harvest bump (cache_epoch in the key) invalidates sooner than the TTL."""
+"""Monotonic-TTL caches shared by search facets and the publisher/unit
+snapshots. A harvest bump (cache_epoch in the key) invalidates sooner
+than the TTL."""
 
 import time
 from typing import Any
+
+#: Snapshot lifetime in seconds; a harvest bump invalidates sooner.
+SNAPSHOT_TTL = 86400
 
 # Stores live here so the TTL/get/put pattern has exactly one home.
 FACET_CACHE: dict[tuple, tuple[float, Any]] = {}

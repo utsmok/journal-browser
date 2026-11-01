@@ -1,17 +1,23 @@
-"""Org-unit browsing: authors grouped by faculty or research_group.
+"""Org-unit browsing: authors grouped by faculty, research_group, or
+institute.
 
 The author set mirrors the authors list gate (institutions.
-require_confirmed_affiliation); facets are authors-style query-time GROUP
-BY under the drop-own-dimension rule. Unit membership is the non-empty
-grouping column; works/APC/deal rollups bound to the institution's data
-window."""
+require_confirmed_affiliation). Serving follows the publisher-directory
+pattern: one cached per-institution snapshot of unit aggregates
+(`_snapshot`, 24h TTL + harvest-epoch bump), then filter/sort/page/facets
+in Python over the name-keyed rows; per-item topic distributions stay a
+query-time GROUP BY for exactly the paged units. Unit membership is the
+non-empty grouping column; works/APC/deal rollups bound to the
+institution's data window."""
 
+from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import case, func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
+from ..harvest.common import cache_epoch
 from ..models import (
     ApcEvidence,
     Author,
@@ -21,12 +27,13 @@ from ..models import (
     JournalFlags,
     Work,
 )
-from .facets import orgunit_facets
-from .search import _like, _oa_type
+from .cache import SNAPSHOT_CACHE, SNAPSHOT_TTL, cache_get, cache_put
+from .search import _oa_type
 from .works_query import (
+    WORKS_STRATA,
     YEAR_BUCKETS,
     empty_year_buckets,
-    strata_cond,
+    strata_match,
     unit_author_join,
     unit_work_join,
     work_window,
@@ -39,9 +46,24 @@ AUTHOR_CAP = 50
 DEAL_USAGE_CAP = 8
 TOPICS_PER_ITEM = 3
 TOPICS_PER_DETAIL = 5
+SNAPSHOT_WORK_MEM = "256MB"  # cold-build-only, see _snapshot
 
 LEVELS = ("faculty", "group", "institute")
 SORT_KEYS = ("relevance", "name", "authors", "works", "deal_works")
+
+
+@dataclass(slots=True)
+class _Unit:
+    """One unit row of the cached snapshot."""
+
+    name: str
+    faculty: str | None
+    n_authors: int
+    n_works: int
+    n_groups: int | None
+    deal_works: int
+    apc_euro_total: float
+    apc_n: int
 
 
 def _unit_key(level: str) -> Any:
@@ -179,20 +201,6 @@ def _unit_rows(institution: Institution, level: str) -> Any:
     )
 
 
-def _order(units: Any, sort: str, q: str | None) -> tuple[Any, str]:
-    """(order expression, natural direction)."""
-    if sort == "name":
-        return func.lower(units.c.name), "asc"
-    if sort == "authors":
-        return units.c.n_authors, "desc"
-    if sort == "deal_works":
-        return units.c.deal_works, "desc"
-    if sort == "relevance" and q and q.strip():
-        tier = case((units.c.name.ilike(f"{_like(q.strip())}%", escape="\\"), 1), else_=0)
-        return tier, "desc"
-    return units.c.n_works, "desc"  # works, and relevance without q
-
-
 def _item(row: Any, level: str, topics: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "level": level,
@@ -241,6 +249,105 @@ async def _unit_topics(
     }
 
 
+async def _snapshot(session: AsyncSession, institution: Institution) -> dict[str, dict[str, _Unit]]:
+    """Per-level unit aggregates for one institution, cached until the next
+    harvest bump or 24h (publishers-snapshot pattern)."""
+    cache_key = (
+        institution.id,
+        await cache_epoch(session),
+    )
+    hit = cache_get(SNAPSHOT_CACHE, cache_key, SNAPSHOT_TTL)
+    if hit is not None:
+        return hit
+    snap: dict[str, dict[str, _Unit]] = {}
+    # One-off build: keep the edge-join hash aggregates and sorts in
+    # memory instead of spilling. SET LOCAL dies with the request's
+    # transaction, so the pool is unaffected.
+    await session.execute(text(f"SET LOCAL work_mem = '{SNAPSHOT_WORK_MEM}'"))
+    for level in LEVELS:
+        units = _unit_rows(institution, level)
+        result = await session.execute(select(units))
+        snap[level] = {
+            r.name: _Unit(
+                name=r.name,
+                faculty=r.faculty,
+                n_authors=int(r.n_authors),
+                n_works=int(r.n_works or 0),
+                n_groups=r.n_groups if level == "faculty" else None,
+                deal_works=int(r.deal_works),
+                apc_euro_total=float(r.apc_euro_total),
+                apc_n=int(r.apc_n),
+            )
+            for r in result.all()
+        }
+    cache_put(SNAPSHOT_CACHE, cache_key, snap)
+    return snap
+
+
+def _order_units(sort: str, q: str | None) -> tuple[Any, str]:
+    """(sort key over _Unit rows, natural direction). SQL convention: head
+    direction, ties broken by (lower(name), name) ascending."""
+
+    def head(u: _Unit) -> Any:
+        if sort == "name":
+            return u.name.lower()
+        if sort == "authors":
+            return u.n_authors
+        if sort == "deal_works":
+            return u.deal_works
+        if sort == "relevance" and q and q.strip():
+            return 1 if u.name.lower().startswith(q.strip().lower()) else 0
+        return u.n_works  # works, and relevance without q
+
+    return head, "desc" if sort != "name" else "asc"
+
+
+def _matches_q(u: _Unit, q: str) -> bool:
+    """SQL ilike '%q%' twin: case-insensitive substring of the raw name
+    (LIKE metacharacters stay literal, same as the escaped SQL path)."""
+    return q.lower() in u.name.lower()
+
+
+def _snapshot_facets(
+    units: list[_Unit],
+    level: str,
+    wanted_faculty: set[str] | None,
+    works: list[str] | None,
+    uses_deals: bool | None,
+) -> dict[str, dict[str, int]]:
+    """Drop-own-dimension counts over the snapshot's pre-filtered rows
+    (each facet re-applies every filter except its own; q already
+    filtered the caller's copy)."""
+
+    def _count(skip: str) -> list[_Unit]:
+        rows = units
+        if skip != "faculty" and wanted_faculty is not None:
+            rows = [u for u in rows if (u.faculty or "").lower() in wanted_faculty]
+        if skip != "works" and works:
+            rows = [u for u in rows if strata_match(u.n_works, works)]
+        if skip != "uses_deals" and uses_deals is True:
+            rows = [u for u in rows if u.deal_works > 0]
+        return rows
+
+    facets: dict[str, dict[str, int]] = {}
+    if level == "group":
+        counts: dict[str, int] = {}
+        for u in _count("faculty"):
+            if u.faculty:
+                counts[u.faculty] = counts.get(u.faculty, 0) + 1
+        facets["faculty"] = dict(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
+    facets["size"] = {
+        stratum: sum(1 for u in _count("works") if strata_match(u.n_works, [stratum]))
+        for stratum in WORKS_STRATA
+    }
+    rows = _count("uses_deals")
+    facets["uses_deals"] = {
+        "yes": sum(1 for u in rows if u.deal_works > 0),
+        "no": sum(1 for u in rows if u.deal_works == 0),
+    }
+    return facets
+
+
 async def search_orgunits(
     session: AsyncSession,
     *,
@@ -258,48 +365,43 @@ async def search_orgunits(
 ) -> dict[str, Any]:
     """Unit roster for one institution: total is the filter match count,
     items the offset/limit page of the sorted matches (default sort
-    relevance-with-q, else works desc)."""
-    iid = institution.id
-    units = _unit_rows(institution, level)
-    conds: dict[str, Any] = {}
-    if faculty and level == "group":
-        conds["faculty"] = units.c.faculty.in_(faculty)
+    relevance-with-q, else works desc). Serves from the cached unit
+    snapshot; only the page's topic distributions hit the database."""
+    require_confirmed = institution.require_confirmed_affiliation
+    snapshot = await _snapshot(session, institution)
+    matches = list(snapshot.get(level, {}).values())
+
+    wanted_faculty = {f.lower() for f in faculty} if faculty and level == "group" else None
+    if wanted_faculty is not None:
+        matches = [u for u in matches if (u.faculty or "").lower() in wanted_faculty]
     if works:
-        conds["works"] = strata_cond(units.c.n_works, works)
+        matches = [u for u in matches if strata_match(u.n_works, works)]
     if uses_deals is True:
-        conds["uses_deals"] = units.c.deal_works > 0
-    q_cond = units.c.name.ilike(f"%{_like(q.strip())}%", escape="\\") if q and q.strip() else None
-    where = list(conds.values()) + ([q_cond] if q_cond is not None else [])
-    total = await session.scalar(select(func.count()).select_from(units).where(*where)) or 0
+        matches = [u for u in matches if u.deal_works > 0]
+    if q and q.strip():
+        matches = [u for u in matches if _matches_q(u, q.strip())]
+    total = len(matches)
 
     if sort is None:
-        sort = "relevance" if q_cond is not None else "works"
-    order_col, direction = _order(units, sort, q)
+        sort = "relevance" if q and q.strip() else "works"
+    head, direction = _order_units(sort, q)
     # An explicit dir overrides the key's natural direction.
     if dir in ("asc", "desc"):
         direction = dir
-    order_by = [order_col.desc(), func.lower(units.c.name), units.c.name]
-    if direction == "asc":
-        order_by[0] = order_col.asc()
-    page_rows = (
-        await session.execute(
-            select(units)
-            .where(*where)
-            .order_by(*order_by)
-            .offset(offset)
-            .limit(min(limit, MAX_LIMIT))
-        )
-    ).all()
+    matches.sort(key=lambda u: (u.name.lower(), u.name))
+    matches.sort(key=head, reverse=direction == "desc")
+    page = matches[offset : offset + min(limit, MAX_LIMIT)]
 
-    require_confirmed = institution.require_confirmed_affiliation
     topics = await _unit_topics(
-        session, iid, level, require_confirmed, [r.name for r in page_rows], TOPICS_PER_ITEM
+        session, institution.id, level, require_confirmed, [u.name for u in page], TOPICS_PER_ITEM
     )
-    items = [_item(r, level, topics.get(r.name, [])) for r in page_rows]
+    items = [_item(u, level, topics.get(u.name, [])) for u in page]
 
     facets: dict[str, dict[str, int]] = {}
     if include_facets:
-        facets = await orgunit_facets(session, units, conds, q_cond, level)
+        facets = _snapshot_facets(
+            list(snapshot.get(level, {}).values()), level, wanted_faculty, works, uses_deals
+        )
     return {"level": level, "items": items, "total": int(total), "facets": facets}
 
 
@@ -309,9 +411,8 @@ async def orgunit_detail(
     """Full unit bundle; None = unknown unit (404 upstream)."""
     iid = institution.id
     require_confirmed = institution.require_confirmed_affiliation
-    units = _unit_rows(institution, level)
-    unit_row = (await session.execute(select(units).where(units.c.name == name))).one_or_none()
-    if unit_row is None:
+    unit = (await _snapshot(session, institution)).get(level, {}).get(name)
+    if unit is None:
         return None
 
     topics_by_unit = await _unit_topics(
@@ -506,7 +607,7 @@ async def orgunit_detail(
     ).all()
 
     return {
-        "unit": _item(unit_row, level, topics),
+        "unit": _item(unit, level, topics),
         "groups": groups,
         "journals": [
             {

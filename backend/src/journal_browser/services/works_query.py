@@ -74,6 +74,17 @@ def strata_cond(column: Any, values: list[str]) -> ColumnElement:
     return or_(*parts) if parts else false()
 
 
+def strata_match(n_works: int, values: list[str]) -> bool:
+    """Python twin of strata_cond for snapshot-filtered serving; same
+    unknown-value-matches-nothing rule."""
+    for value in values:
+        if value == "50+" and n_works >= 50:
+            return True
+        if (bounds := _STRATA_BOUNDS.get(value)) and bounds[0] <= n_works <= bounds[1]:
+            return True
+    return False
+
+
 def empty_year_buckets() -> dict[str, int]:
     """Fresh per-year OA counter dict in canonical bucket order."""
     return dict.fromkeys(YEAR_BUCKETS, 0)

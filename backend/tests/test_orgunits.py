@@ -316,6 +316,34 @@ async def test_orgunit_filters_and_sorts(orgunits_api):
 
 
 @requires_db
+async def test_orgunit_search_serves_from_snapshot_cache(orgunits_api, monkeypatch):
+    """After the first request builds the per-institution snapshot, further
+    searches (new filters, sorts, q) must not rebuild the aggregates."""
+    client, _ids = orgunits_api
+    assert (await client.get("/api/v1/ut/orgunits")).status_code == 200
+
+    from journal_browser.services import orgunits as orgunits_service
+
+    real_rows = orgunits_service._unit_rows
+    calls = 0
+
+    def counting(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return real_rows(*args, **kwargs)
+
+    monkeypatch.setattr(orgunits_service, "_unit_rows", counting)
+    for params in (
+        {},
+        {"q": "quantum"},
+        {"level": "group", "works": "50+", "sort": "name", "dir": "desc"},
+        {"include_facets": "false"},
+    ):
+        assert (await client.get("/api/v1/ut/orgunits", params=params)).status_code == 200
+    assert calls == 0  # snapshot hit: no aggregate rebuild, no SQL
+
+
+@requires_db
 async def test_orgunit_facets_drop_own_dimension(orgunits_api):
     client, _ids = orgunits_api
     body = (await client.get("/api/v1/ut/orgunits", params={"level": "group"})).json()
