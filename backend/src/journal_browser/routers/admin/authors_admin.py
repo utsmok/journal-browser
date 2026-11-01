@@ -7,15 +7,17 @@ the resolver's upsert never lowers an explicit confirmed/rejected
 decision (candidates follow new evidence). A flip changes the additive
 `authors.openalex_ids` build only at the next authors ingest, and
 'rejected' rows keep the cascade from re-proposing the same id.
+Every actual flip appends a status_changes audit row (see audit_admin).
 """
 
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
-from ...models import Author, AuthorIdentity, Institution
+from ...models import Author, AuthorIdentity, Institution, StatusChangeLog
 from ...schemas import AuthorIdentityAdminOut
 from .auth import AdminDep, SessionDep
 
@@ -30,6 +32,10 @@ class IdentityStatusIn(BaseModel):
     source: str = "openalex"
     external_id: str
     status: str
+    # Optional provenance for the audit row; auth is one shared token, so
+    # the body is the only place a reviewer name can come from.
+    changed_by: str | None = Field(default=None, max_length=200)
+    note: str | None = Field(default=None, max_length=2000)
 
 
 @router.get("/author-identities", response_model=list[AuthorIdentityAdminOut])
@@ -89,7 +95,12 @@ async def set_identity_status(
     The row is keyed by its full PK, sent in the body. 'rejected' is
     sticky: re-runs keep it out of authors.openalex_ids and never
     re-promote it. 'confirmed' forces the id into the next ingest's
-    additive openalex_ids build even if the cascade demotes it."""
+    additive openalex_ids build even if the cascade demotes it.
+
+    Every actual transition appends a status_changes audit row; a no-op
+    (status already the requested value) changes nothing and records
+    nothing.
+    """
     if body.status not in IDENTITY_STATUSES:
         raise HTTPException(422, f"status must be one of {list(IDENTITY_STATUSES)}")
     row = await session.get(
@@ -98,7 +109,33 @@ async def set_identity_status(
     )
     if row is None:
         raise HTTPException(404, "identity row not found")
+    if row.status == body.status:
+        return await _identity_payload(session, row)
+    old_status = row.status
     row.status = body.status
+    # The review list orders by updated_at ("newest activity first"), so a
+    # flip counts as activity.
+    row.updated_at = datetime.now(UTC)
+    session.add(
+        StatusChangeLog(
+            table_name="author_identities",
+            row_key={
+                "institution_id": body.institution_id,
+                "author_pure_uuid": body.author_pure_uuid,
+                "source": body.source,
+                "external_id": body.external_id,
+            },
+            old_value=old_status,
+            new_value=body.status,
+            note=body.note,
+            changed_by=body.changed_by,
+        )
+    )
+    await session.commit()
+    return await _identity_payload(session, row)
+
+
+async def _identity_payload(session: SessionDep, row: AuthorIdentity) -> dict[str, Any]:
     inst_code = await session.scalar(
         select(Institution.code).where(Institution.id == row.institution_id)
     )
@@ -110,7 +147,6 @@ async def set_identity_status(
         )
         .limit(1)
     )
-    await session.commit()
     return {
         "institution_id": row.institution_id,
         "institution_code": inst_code,

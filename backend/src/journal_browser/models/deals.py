@@ -48,6 +48,13 @@ class Deal(Base):
         Boolean, nullable=False, server_default=text("false")
     )
     needs_curation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Reason text the admin last dismissed via PUT /admin/deals/{id}. The
+    # openaccess.nl harvest keeps the flag cleared while the page produces
+    # exactly this reason; a different reason re-flags. Cleared whenever
+    # the page stops needing curation. Replaces the old needs_curation
+    # ManualOverride rows, whose blanket False also suppressed future,
+    # different problems (the reason text itself was lost on clearing).
+    curation_resolved_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_reviewed: Mapped[str | None] = mapped_column(Date, nullable=True)
     updated_at: Mapped[datetime] = _tstamp()
 
@@ -56,6 +63,12 @@ class Deal(Base):
         CheckConstraint(
             "needs_curation = true OR needs_curation_reason IS NULL",
             name="ck_deals_curation_reason",
+        ),
+        # A live flag never coexists with a dismissal: flag=true rows are
+        # unreviewed problems.
+        CheckConstraint(
+            "needs_curation = false OR curation_resolved_reason IS NULL",
+            name="ck_deals_curation_resolved",
         ),
         Index("ix_deals_publisher", "publisher_id", "status"),
     )
@@ -119,8 +132,18 @@ class DealJournal(Base):
 
 
 class DealInstitution(Base):
-    """Deal ↔ institution partnership relation. A missing row means
-    non-participation; a shared deal is never deleted for it."""
+    """Deal ↔ institution partnership relation. The row's presence and its
+    participation value encode three distinct states — read them together,
+    never infer one from the other:
+
+    - row absent: non-participation (the deal text names other parties; a
+      shared national deal is never deleted for it).
+    - row present, participation NULL: unassessed (the relation was seen
+      but not yet classified).
+    - row present, participation 'named' | 'consortium': classified —
+      the institution is listed in the deal text, or the deal is national
+      with no member enumeration.
+    """
 
     __tablename__ = "deal_institutions"
 

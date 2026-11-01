@@ -12,10 +12,14 @@ from journal_browser.models import (
     AuthorIdentity,
     Deal,
     DealJournal,
+    Feedback,
     HarvestRun,
     Institution,
     Journal,
     Publisher,
+    StatusChangeLog,
+    Work,
+    WorkIdentity,
 )
 
 PASSWORD = "test-admin-pw"
@@ -314,3 +318,184 @@ async def test_author_identities_list_and_flip(admin_api, db_engine):
         },
     )
     assert r.status_code == 404
+
+
+@requires_db
+async def test_author_identity_flip_audits_and_skips_noops(admin_api, db_engine):
+    """Every actual flip appends one status_changes row; no-ops write none."""
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with maker() as session:
+        inst_id = (await session.execute(select(Institution.id).limit(1))).scalar_one()
+        session.add(
+            AuthorIdentity(
+                institution_id=inst_id,
+                author_pure_uuid="p-audit",
+                source="openalex",
+                external_id="a-9",
+                status="candidate",
+                evidence={},
+            )
+        )
+        await session.commit()
+
+    headers = await _login(admin_api)
+    body = {
+        "institution_id": inst_id,
+        "author_pure_uuid": "p-audit",
+        "source": "openalex",
+        "external_id": "a-9",
+        "status": "rejected",
+        "changed_by": "sam",
+        "note": "namesake, not the same person",
+    }
+    r = await admin_api.put("/api/v1/admin/author-identities", headers=headers, json=body)
+    assert r.status_code == 200
+    assert r.json()["status"] == "rejected"
+
+    # Idempotent repeat: 200, same payload, no extra audit row.
+    r = await admin_api.put("/api/v1/admin/author-identities", headers=headers, json=body)
+    assert r.status_code == 200
+
+    async with maker() as session:
+        changes = (
+            (
+                await session.execute(
+                    select(StatusChangeLog).where(StatusChangeLog.table_name == "author_identities")
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(changes) == 1
+        assert changes[0].old_value == "candidate"
+        assert changes[0].new_value == "rejected"
+        assert changes[0].changed_by == "sam"
+        assert changes[0].row_key["external_id"] == "a-9"
+
+    listing = (
+        await admin_api.get(
+            "/api/v1/admin/status-changes",
+            params={"table_name": "author_identities"},
+            headers=headers,
+        )
+    ).json()
+    assert len(listing) == 1
+    assert listing[0]["old_value"] == "candidate" and listing[0]["new_value"] == "rejected"
+
+
+@requires_db
+async def test_work_identities_list_flip_and_audit(admin_api, db_engine):
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with maker() as session:
+        inst_id = (await session.execute(select(Institution.id).limit(1))).scalar_one()
+        run_id = (await session.execute(select(HarvestRun.id).limit(1))).scalar_one()
+        session.add(
+            Work(
+                institution_id=inst_id,
+                pure_uuid="w-local",
+                title="A local work",
+                norm_title="a local work",
+                year=2025,
+                first_seen_run=run_id,
+                last_seen_run=run_id,
+            )
+        )
+        session.add(
+            WorkIdentity(
+                institution_id=inst_id,
+                source="openalex",
+                source_pk="doi:10.1/xyz",
+                work_id="w-local",
+                matched_by="doi",
+                status="missing",
+            )
+        )
+        await session.commit()
+
+    headers = await _login(admin_api)
+    rows = (await admin_api.get("/api/v1/admin/work-identities", headers=headers)).json()
+    assert len(rows) == 1
+    assert rows[0]["work_title"] == "A local work"
+    assert rows[0]["institution_code"] == "ut"
+
+    body = {
+        "institution_id": inst_id,
+        "source": "openalex",
+        "source_pk": "doi:10.1/xyz",
+        "status": "candidate",
+    }
+    r = await admin_api.put("/api/v1/admin/work-identities", headers=headers, json=body)
+    assert r.status_code == 200
+    assert r.json()["status"] == "candidate"
+
+    # No-op: no audit row.
+    r = await admin_api.put("/api/v1/admin/work-identities", headers=headers, json=body)
+    assert r.status_code == 200
+
+    # Validation + unknown row.
+    r = await admin_api.put(
+        "/api/v1/admin/work-identities",
+        headers=headers,
+        json={**body, "status": "maybe"},
+    )
+    assert r.status_code == 422
+    r = await admin_api.put(
+        "/api/v1/admin/work-identities",
+        headers=headers,
+        json={**body, "source_pk": "doi:10.1/none"},
+    )
+    assert r.status_code == 404
+
+    async with maker() as session:
+        changes = (
+            (
+                await session.execute(
+                    select(StatusChangeLog).where(StatusChangeLog.table_name == "work_identity")
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(changes) == 1
+        assert changes[0].old_value == "missing"
+        assert changes[0].new_value == "candidate"
+
+
+@requires_db
+async def test_feedback_status_change_is_audited(admin_api, db_engine):
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with maker() as session:
+        session.add(Feedback(title="t", description="d", category="bug"))
+        await session.commit()
+
+    headers = await _login(admin_api)
+    fb_id = (await admin_api.get("/api/v1/admin/feedback", headers=headers)).json()[0]["id"]
+
+    # Status flip -> audited. Notes-only patch -> not audited.
+    r = await admin_api.patch(
+        f"/api/v1/admin/feedback/{fb_id}",
+        headers=headers,
+        json={"status": "in_progress", "changed_by": "sam"},
+    )
+    assert r.status_code == 200
+    r = await admin_api.patch(
+        f"/api/v1/admin/feedback/{fb_id}",
+        headers=headers,
+        json={"resolution_notes": "looking"},
+    )
+    assert r.status_code == 200
+
+    async with maker() as session:
+        changes = (
+            (
+                await session.execute(
+                    select(StatusChangeLog).where(StatusChangeLog.table_name == "feedback_items")
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(changes) == 1
+        assert changes[0].old_value == "todo"
+        assert changes[0].new_value == "in_progress"
+        assert changes[0].changed_by == "sam"

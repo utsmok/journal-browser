@@ -137,7 +137,17 @@ async def _override_protected(session: AsyncSession, deal_ids: list[int]) -> set
             ManualOverride.field.in_(["needs_curation", "esac_id"]),
         )
     )
-    return {int(k) for (k,) in rows.all()}
+    protected = {int(k) for (k,) in rows.all()}
+    # A recorded admin dismissal is hand-ownership too: don't merge JCT
+    # rows into a deal whose curation story ends in a human review.
+    resolved = await session.scalars(
+        select(Deal.id).where(
+            Deal.id.in_(deal_ids),
+            Deal.curation_resolved_reason.is_not(None),
+        )
+    )
+    protected |= set(resolved.all())
+    return protected
 
 
 #: Journal-publisher name patterns for openaccess.nl deal publishers whose

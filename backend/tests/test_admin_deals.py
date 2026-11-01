@@ -147,9 +147,13 @@ async def test_update_deal_records_overrides(admin_api, db_engine):
     assert body["status"] == "archive" and body["summary"] == "Hand-fixed summary"
     assert body["cap_numbers"] is None and body["capped"] is False
     assert body["needs_curation"] is False and body["needs_curation_reason"] is None
+    # The dismissal records WHAT was reviewed, for reason-aware suppression.
+    assert body["curation_resolved_reason"] == "duplicate sheet"
 
     async with async_sessionmaker(db_engine)() as session:
-        assert str((await session.get(Deal, deal_id)).last_reviewed) == date.today().isoformat()
+        deal = await session.get(Deal, deal_id)
+        assert str(deal.last_reviewed) == date.today().isoformat()
+        assert deal.curation_resolved_reason == "duplicate sheet"
         fields = set(
             await session.scalars(
                 select(ManualOverride.field).where(
@@ -158,8 +162,12 @@ async def test_update_deal_records_overrides(admin_api, db_engine):
                 )
             )
         )
-        expected = {"summary", "cap_numbers", "status", "needs_curation", "needs_curation_reason"}
+        # Curation columns are harvest-owned: no override rows for them, so
+        # no stale override can suppress future curation reasons.
+        expected = {"summary", "cap_numbers", "status"}
         assert expected <= fields
+        assert "needs_curation" not in fields
+        assert "needs_curation_reason" not in fields
 
     # validation: bad status / bad cap_numbers key / unknown field / esac clash
     r = await admin_api.put(

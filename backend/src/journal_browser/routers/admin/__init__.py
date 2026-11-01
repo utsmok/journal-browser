@@ -2,8 +2,11 @@
 
 POST /admin/login exchanges the admin password for a stateless HMAC
 bearer token (12 h; the MAC secret derives from the current settings, so a
-password change invalidates old tokens immediately). GET endpoints show
-recent harvest runs and deals flagged for curation. GET/PUT /settings read
+password change invalidates old tokens immediately). GET /admin/runs show
+recent harvest runs, /admin/flagged the deals flagged for curation, and
+/admin/author-identities + /admin/work-identities the review queues;
+every admin status flip appends to status_changes (read via
+/admin/status-changes). GET/PUT /settings read
 and write the settings.yaml overlay (reloaded live, no restart) and
 GET/PUT /institutions/{code} the per-university configuration rows.
 /deals is the curation CRUD: edits are recorded as manual_overrides and
@@ -13,6 +16,7 @@ survive every re-harvest; removed deal journals are flagged, not deleted.
 from fastapi import APIRouter
 
 from . import (
+    audit_admin,
     auth,
     authors_admin,
     deals_admin,
@@ -20,6 +24,7 @@ from . import (
     feedback_admin,
     runs,
     settings_admin,
+    work_identity_admin,
 )
 
 # Each submodule router carries the /admin prefix itself: this FastAPI
@@ -34,3 +39,5 @@ router.include_router(deals_admin.router)
 router.include_router(feedback_admin.router)
 router.include_router(docs_admin.router)
 router.include_router(authors_admin.router)
+router.include_router(work_identity_admin.router)
+router.include_router(audit_admin.router)

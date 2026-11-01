@@ -270,3 +270,64 @@ async def test_upsert_publisher_and_deal_natural_key(db):
     assert deal.needs_curation is True
     assert deal.needs_curation_reason == "missing summary"
     assert deal.provenance[0]["source"] == "openaccess.nl"
+
+
+@requires_db
+async def test_upsert_suppresses_dismissed_reason_but_reflags_new(db):
+    """A reason-aware dismissal keeps the flag cleared only for the same
+    reason; a different reason re-flags and voids the dismissal."""
+    item = {
+        "duration_text": "2025-2027",
+        "start_year": 2025,
+        "end_year": 2027,
+        "per_year_oa_counts": None,
+        "status": "current",
+    }
+    page = {
+        "url": "https://www.openaccess.nl/en/publisherdeal/brill-2025-2027",
+        "summary": None,
+        "conditions_text": "c",
+        "workflow_text": "w",
+        "article_types_text": None,
+        "cap_text": None,
+        "cap_numbers": None,
+        "contract_url": None,
+        "openaccess_nl_url": "https://www.openaccess.nl/en/publisherdeal/brill-2025-2027",
+        "curation_reasons": ["missing summary"],
+    }
+    pub = await _upsert_publisher(db, "brill", "Brill")
+    assert await _upsert_deal(db, pub.id, item, page) is True
+    await db.flush()
+    deal = await db.scalar(select(Deal))
+    assert deal.needs_curation is True
+
+    # The admin dismisses exactly this reason.
+    deal.needs_curation = False
+    deal.needs_curation_reason = None
+    deal.curation_resolved_reason = "missing summary"
+    await db.flush()
+
+    # Same page again: suppressed, marker kept.
+    assert await _upsert_deal(db, pub.id, item, page) is False
+    await db.flush()
+    await db.refresh(deal)
+    assert deal.needs_curation is False
+    assert deal.needs_curation_reason is None
+    assert deal.curation_resolved_reason == "missing summary"
+
+    # A different reason re-flags and voids the stale dismissal.
+    page_new = dict(page, curation_reasons=["ambiguous cap numbers"])
+    assert await _upsert_deal(db, pub.id, item, page_new) is True
+    await db.flush()
+    await db.refresh(deal)
+    assert deal.needs_curation is True
+    assert deal.needs_curation_reason == "ambiguous cap numbers"
+    assert deal.curation_resolved_reason is None
+
+    # A clean page clears the flag and retires the marker.
+    page_clean = dict(page, curation_reasons=[])
+    assert await _upsert_deal(db, pub.id, item, page_clean) is False
+    await db.flush()
+    await db.refresh(deal)
+    assert deal.needs_curation is False
+    assert deal.curation_resolved_reason is None

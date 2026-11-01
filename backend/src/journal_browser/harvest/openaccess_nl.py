@@ -23,7 +23,10 @@ from .common import HarvestDataError, download_to_landing, run_harvest
 logger = logging.getLogger(__name__)
 
 # Deal fields this source rewrites on every scrape; ManualOverride rows
-# (admin edits via /admin/deals) win over the scraped value.
+# (admin edits via /admin/deals) win over the scraped value. The curation
+# columns are NOT here: needs_curation is harvest-owned, and the admin's
+# dismissal is remembered in deals.curation_resolved_reason (reason-aware
+# suppression in _upsert_deal) instead of a blanket False override.
 _DEAL_FIELDS = [
     "status",
     "start_year",
@@ -31,8 +34,6 @@ _DEAL_FIELDS = [
     "cap_text",
     "cap_numbers",
     "summary",
-    "needs_curation",
-    "needs_curation_reason",
 ]
 
 SOURCE = "openaccess.nl"
@@ -310,7 +311,9 @@ async def _upsert_publisher(session: AsyncSession, slug: str, name: str) -> Publ
 async def _upsert_deal(
     session: AsyncSession, publisher_id: int, item: dict[str, Any], page: dict[str, Any]
 ) -> bool:
-    """Upsert by natural key (publisher, duration). Returns needs_curation."""
+    """Upsert by natural key (publisher, duration). Returns needs_curation
+    after suppression (False when the admin already dismissed exactly this
+    reason)."""
     deal = await session.scalar(
         select(Deal).where(
             Deal.publisher_id == publisher_id,
@@ -318,6 +321,20 @@ async def _upsert_deal(
         )
     )
     needs_curation = bool(page["curation_reasons"])
+    reason = "; ".join(page["curation_reasons"]) or None
+    # Reason-aware dismissal: the admin cleared this deal while the page
+    # produced exactly this reason text. Keep it cleared until the source
+    # produces a different (or additional) reason; also stop carrying the
+    # marker once the page needs no curation at all.
+    suppressed = bool(
+        deal is not None
+        and needs_curation
+        and not deal.needs_curation
+        and deal.curation_resolved_reason == reason
+    )
+    if suppressed:
+        needs_curation = False
+        reason = None
     values = {
         "status": item["status"],
         "start_year": item["start_year"],
@@ -339,8 +356,11 @@ async def _upsert_deal(
             }
         ],
         "needs_curation": needs_curation,
-        "needs_curation_reason": "; ".join(page["curation_reasons"]) or None,
+        "needs_curation_reason": reason,
     }
+    if not suppressed:
+        # Re-flagging voids any stale dismissal; a clean page retires it.
+        values["curation_resolved_reason"] = None
     if deal is None:
         deal = Deal(publisher_id=publisher_id, duration_text=item["duration_text"], **values)
         session.add(deal)

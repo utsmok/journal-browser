@@ -267,8 +267,60 @@ export interface paths {
          *     sticky: re-runs keep it out of authors.openalex_ids and never
          *     re-promote it. 'confirmed' forces the id into the next ingest's
          *     additive openalex_ids build even if the cascade demotes it.
+         *
+         *     Every actual transition appends a status_changes audit row; a no-op
+         *     (status already the requested value) changes nothing and records
+         *     nothing.
          */
         put: operations["set_identity_status_api_v1_admin_author_identities_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/work-identities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Work Identities
+         * @description Identity rows, newest activity first, with the work title.
+         */
+        get: operations["list_work_identities_api_v1_admin_work_identities_get"];
+        /**
+         * Set Work Identity Status
+         * @description Flip one work-identity row (institution + source + source_pk).
+         *
+         *     Any status flip is allowed — including un-rejecting — because the
+         *     review surface has no other undo. A flip writes a status_changes
+         *     audit row; a no-op changes nothing and records nothing.
+         */
+        put: operations["set_work_identity_status_api_v1_admin_work_identities_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/status-changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Status Changes
+         * @description Audited status flips, newest first, optionally per subject table.
+         */
+        get: operations["list_status_changes_api_v1_admin_status_changes_get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -675,6 +727,8 @@ export interface components {
             needs_curation: boolean;
             /** Needs Curation Reason */
             needs_curation_reason: string | null;
+            /** Curation Resolved Reason */
+            curation_resolved_reason: string | null;
             /** Journals */
             journals: components["schemas"]["AdminDealJournal"][];
         };
@@ -725,6 +779,8 @@ export interface components {
             needs_curation: boolean;
             /** Needs Curation Reason */
             needs_curation_reason: string | null;
+            /** Curation Resolved Reason */
+            curation_resolved_reason: string | null;
         };
         /** AdminInstitutionOut */
         AdminInstitutionOut: {
@@ -1389,8 +1445,7 @@ export interface components {
         };
         /**
          * FeedbackCategory
-         * @description feedback_items.category (the /feedback intake surface; the DB has no
-         *     CHECK yet — the API set is authoritative).
+         * @description feedback_items.category (ck_feedback_items_category).
          * @enum {string}
          */
         FeedbackCategory: "bug" | "data" | "feature" | "improvement" | "other";
@@ -1435,6 +1490,10 @@ export interface components {
             priority?: string | null;
             /** Resolution Notes */
             resolution_notes?: string | null;
+            /** Changed By */
+            changed_by?: string | null;
+            /** Note */
+            note?: string | null;
         };
         /** FlaggedDealOut */
         FlaggedDealOut: {
@@ -1545,6 +1604,10 @@ export interface components {
             external_id: string;
             /** Status */
             status: string;
+            /** Changed By */
+            changed_by?: string | null;
+            /** Note */
+            note?: string | null;
         };
         /**
          * InstitutionMetrics
@@ -2166,6 +2229,33 @@ export interface components {
             /** Oa Closed */
             oa_closed: number;
         };
+        /**
+         * StatusChangeOut
+         * @description One audited admin status flip (status_changes rows).
+         */
+        StatusChangeOut: {
+            /** Id */
+            id: number;
+            /** Table Name */
+            table_name: string;
+            /** Row Key */
+            row_key: unknown;
+            /** Field */
+            field: string;
+            /** Old Value */
+            old_value: string | null;
+            /** New Value */
+            new_value: string;
+            /** Note */
+            note: string | null;
+            /** Changed By */
+            changed_by: string | null;
+            /**
+             * Changed At
+             * Format: date-time
+             */
+            changed_at: string;
+        };
         /** TopicMassRow */
         TopicMassRow: {
             /** Name */
@@ -2185,6 +2275,61 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /**
+         * WorkIdentityAdminOut
+         * @description One cross-source work-identity row for the admin review list.
+         *
+         *     Flips are durable: every harvest write is on_conflict_do_nothing, so
+         *     re-runs never overwrite an admin decision.
+         */
+        WorkIdentityAdminOut: {
+            /** Institution Id */
+            institution_id: number;
+            /** Institution Code */
+            institution_code: string | null;
+            /** Work Id */
+            work_id: string;
+            /** Work Title */
+            work_title: string | null;
+            /** Source */
+            source: string;
+            /** Source Pk */
+            source_pk: string;
+            /** Matched By */
+            matched_by: string;
+            /** Confidence */
+            confidence: number | null;
+            status: components["schemas"]["WorkIdentityStatus"];
+            /** Note */
+            note: string | null;
+            /** Updated At */
+            updated_at: string | null;
+        };
+        /**
+         * WorkIdentityStatus
+         * @description work_identity.status (ck_work_identity_status).
+         *
+         *     'confirmed' = DOI-verified link (auto, admin-reaffirmed); 'missing' =
+         *     recorded lookup miss (no evidence, not low confidence); 'candidate' =
+         *     fuzzy match awaiting review.
+         * @enum {string}
+         */
+        WorkIdentityStatus: "confirmed" | "missing" | "candidate";
+        /** WorkIdentityStatusIn */
+        WorkIdentityStatusIn: {
+            /** Institution Id */
+            institution_id: number;
+            /** Source */
+            source: string;
+            /** Source Pk */
+            source_pk: string;
+            /** Status */
+            status: string;
+            /** Changed By */
+            changed_by?: string | null;
+            /** Note */
+            note?: string | null;
         };
         /** WorkItem */
         WorkItem: {
@@ -2877,6 +3022,106 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthorIdentityAdminOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_work_identities_api_v1_admin_work_identities_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                /** @description institution code */
+                institution?: string | null;
+                source?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkIdentityAdminOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_work_identity_status_api_v1_admin_work_identities_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkIdentityStatusIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkIdentityAdminOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_status_changes_api_v1_admin_status_changes_get: {
+        parameters: {
+            query?: {
+                table_name?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusChangeOut"][];
                 };
             };
             /** @description Validation Error */

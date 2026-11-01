@@ -43,6 +43,21 @@ async def test_deal_rejects_reason_without_flag(db):
 
 
 @requires_db
+async def test_deal_rejects_live_flag_with_dismissal(db):
+    db.add(
+        Deal(
+            esac_id="x2",
+            status="current",
+            needs_curation=True,
+            needs_curation_reason="ambiguous cap numbers",
+            curation_resolved_reason="some previously dismissed reason",
+        )
+    )
+    with pytest.raises(IntegrityError):
+        await db.commit()
+
+
+@requires_db
 async def test_work_rejects_noncanonical_oa_status(db):
     inst = Institution(code="c1", name="C")
     db.add(inst)

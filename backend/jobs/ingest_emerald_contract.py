@@ -232,15 +232,21 @@ async def main(session, contract_path: Path) -> None:
         )
     )
     deal.needs_curation = bool(unmatched)
-    deal.needs_curation_reason = (
+    provenance_text = (
         f"Journal list reconstructed from the signed SURF-Emerald contract "
         f"({len(matched)}/{len(titles)} titles matched to OpenAlex sources; "
         f"{len(unmatched)} unmatched). Derived manually because the JCT dump "
         f"still links this esac to the Elsevier sheet; a JCT re-ingest must "
         f"not overwrite the manual rows until JCT publishes correct data."
-        if True
-        else None
     )
+    if deal.needs_curation:
+        deal.needs_curation_reason = provenance_text
+        deal.curation_resolved_reason = None
+    else:
+        # Flag cleared: the CK requires needs_curation_reason NULL, so the
+        # provenance lives in the dismissal marker.
+        deal.needs_curation_reason = None
+        deal.curation_resolved_reason = provenance_text
     deal.last_reviewed = date.today()
     await session.commit()
 

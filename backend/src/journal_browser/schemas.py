@@ -14,6 +14,7 @@ from .vocab import (
     HarvestStatus,
     IdentityStatus,
     OaType,
+    WorkIdentityStatus,
     WorksSource,
 )
 
@@ -595,6 +596,40 @@ class AuthorIdentityAdminOut(BaseModel):
     updated_at: datetime | None
 
 
+class WorkIdentityAdminOut(BaseModel):
+    """One cross-source work-identity row for the admin review list.
+
+    Flips are durable: every harvest write is on_conflict_do_nothing, so
+    re-runs never overwrite an admin decision.
+    """
+
+    institution_id: int
+    institution_code: str | None
+    work_id: str
+    work_title: str | None
+    source: str
+    source_pk: str
+    matched_by: str
+    confidence: float | None
+    status: WorkIdentityStatus
+    note: str | None
+    updated_at: datetime | None
+
+
+class StatusChangeOut(BaseModel):
+    """One audited admin status flip (status_changes rows)."""
+
+    id: int
+    table_name: str
+    row_key: Any
+    field: str
+    old_value: str | None
+    new_value: str
+    note: str | None
+    changed_by: str | None
+    changed_at: datetime
+
+
 class AdminInstitutionOut(BaseModel):
     code: str | None
     name: str
@@ -639,6 +674,7 @@ class AdminDealOut(BaseModel):
     participations: list[str]
     needs_curation: bool
     needs_curation_reason: str | None
+    curation_resolved_reason: str | None
 
 
 class AdminDealDetail(AdminDealOut):

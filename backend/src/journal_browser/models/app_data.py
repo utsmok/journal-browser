@@ -4,6 +4,7 @@ from typing import Any
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
+    Index,
     Integer,
     Text,
     UniqueConstraint,
@@ -127,3 +128,28 @@ class DocEdit(Base):
     updated_at: Mapped[datetime] = _tstamp()
 
     __table_args__ = (UniqueConstraint("doc_slug", "block_key", name="uq_doc_edits_block"),)
+
+
+class StatusChangeLog(Base):
+    """Append-only audit of admin status flips across the review surfaces
+    (author identities, work identities, feedback triage).
+
+    One row per actual transition; no-op writes record nothing. `row_key`
+    is the subject's primary key as a JSON object (compound keys) or
+    scalar (single-column tables). `changed_by` stays null today — admin
+    auth is one shared token — and is ready for named identities.
+    """
+
+    __tablename__ = "status_changes"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    table_name: Mapped[str] = mapped_column(Text, nullable=False)
+    row_key: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    field: Mapped[str] = mapped_column(Text, nullable=False, server_default="status")
+    old_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    new_value: Mapped[str] = mapped_column(Text, nullable=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    changed_by: Mapped[str | None] = mapped_column(Text, nullable=True)
+    changed_at: Mapped[datetime] = _tstamp()
+
+    __table_args__ = (Index("ix_status_changes_table_time", "table_name", "changed_at"),)

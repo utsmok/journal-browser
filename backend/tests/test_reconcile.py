@@ -145,6 +145,33 @@ async def test_unmatched_oanl_flagged_but_override_protected(maker):
         assert d.needs_curation_reason is None
 
 
+async def test_unmatched_oanl_dismissal_protects(maker):
+    """A reason-aware admin dismissal (no override row) also blocks merging
+    and re-flagging."""
+    async with maker() as session:
+        pub = await _publisher(session, "ACM", slug="acm")
+        deal = await _deal(
+            session,
+            pub.id,
+            openaccess_nl_url="https://www.openaccess.nl/en/publisherdeal/acm-2026-2028",
+        )
+        deal.start_year, deal.end_year = 2026, 2028
+        deal.needs_curation = False
+        deal.curation_resolved_reason = "checked: local ACM deal"
+        await session.commit()
+        deal_id = deal.id
+
+    async with maker() as s2:
+        stats = await reconcile_deals(s2)
+    assert stats["matched"] == 0
+
+    async with maker() as s3:
+        d = await s3.get(Deal, deal_id)
+        assert d.needs_curation is False
+        assert d.needs_curation_reason is None
+        assert d.curation_resolved_reason == "checked: local ACM deal"
+
+
 async def test_reconcile_is_idempotent(maker):
     async with maker() as session:
         pub_o = await _publisher(session, "Elsevier", slug="elsevier")

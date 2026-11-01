@@ -914,7 +914,7 @@
           "admin"
         ],
         "summary": "Set Identity Status",
-        "description": "Flip one identity row (institution + author + source + external id).\n\nThe row is keyed by its full PK, sent in the body. 'rejected' is\nsticky: re-runs keep it out of authors.openalex_ids and never\nre-promote it. 'confirmed' forces the id into the next ingest's\nadditive openalex_ids build even if the cascade demotes it.",
+        "description": "Flip one identity row (institution + author + source + external id).\n\nThe row is keyed by its full PK, sent in the body. 'rejected' is\nsticky: re-runs keep it out of authors.openalex_ids and never\nre-promote it. 'confirmed' forces the id into the next ingest's\nadditive openalex_ids build even if the cascade demotes it.\n\nEvery actual transition appends a status_changes audit row; a no-op\n(status already the requested value) changes nothing and records\nnothing.",
         "operationId": "set_identity_status_api_v1_admin_author_identities_put",
         "requestBody": {
           "required": true,
@@ -933,6 +933,213 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AuthorIdentityAdminOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/work-identities": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Work Identities",
+        "description": "Identity rows, newest activity first, with the work title.",
+        "operationId": "list_work_identities_api_v1_admin_work_identities_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "institution",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "institution code",
+              "title": "Institution"
+            },
+            "description": "institution code"
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WorkIdentityAdminOut"
+                  },
+                  "title": "Response List Work Identities Api V1 Admin Work Identities Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Set Work Identity Status",
+        "description": "Flip one work-identity row (institution + source + source_pk).\n\nAny status flip is allowed \u2014 including un-rejecting \u2014 because the\nreview surface has no other undo. A flip writes a status_changes\naudit row; a no-op changes nothing and records nothing.",
+        "operationId": "set_work_identity_status_api_v1_admin_work_identities_put",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkIdentityStatusIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkIdentityAdminOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/status-changes": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Status Changes",
+        "description": "Audited status flips, newest first, optionally per subject table.",
+        "operationId": "list_status_changes_api_v1_admin_status_changes_get",
+        "parameters": [
+          {
+            "name": "table_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Table Name"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StatusChangeOut"
+                  },
+                  "title": "Response List Status Changes Api V1 Admin Status Changes Get"
                 }
               }
             }
@@ -2880,6 +3087,17 @@
             ],
             "title": "Needs Curation Reason"
           },
+          "curation_resolved_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curation Resolved Reason"
+          },
           "journals": {
             "items": {
               "$ref": "#/components/schemas/AdminDealJournal"
@@ -2906,6 +3124,7 @@
           "participations",
           "needs_curation",
           "needs_curation_reason",
+          "curation_resolved_reason",
           "journals"
         ],
         "title": "AdminDealDetail"
@@ -3094,6 +3313,17 @@
               }
             ],
             "title": "Needs Curation Reason"
+          },
+          "curation_resolved_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curation Resolved Reason"
           }
         },
         "type": "object",
@@ -3113,7 +3343,8 @@
           "journal_count",
           "participations",
           "needs_curation",
-          "needs_curation_reason"
+          "needs_curation_reason",
+          "curation_resolved_reason"
         ],
         "title": "AdminDealOut"
       },
@@ -5294,7 +5525,7 @@
           "other"
         ],
         "title": "FeedbackCategory",
-        "description": "feedback_items.category (the /feedback intake surface; the DB has no\nCHECK yet \u2014 the API set is authoritative)."
+        "description": "feedback_items.category (ck_feedback_items_category)."
       },
       "FeedbackOut": {
         "properties": {
@@ -5403,6 +5634,30 @@
               }
             ],
             "title": "Resolution Notes"
+          },
+          "changed_by": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed By"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
           }
         },
         "type": "object",
@@ -5716,6 +5971,30 @@
           "status": {
             "type": "string",
             "title": "Status"
+          },
+          "changed_by": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed By"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
           }
         },
         "type": "object",
@@ -7484,6 +7763,81 @@
         ],
         "title": "StatsYear"
       },
+      "StatusChangeOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "table_name": {
+            "type": "string",
+            "title": "Table Name"
+          },
+          "row_key": {
+            "title": "Row Key"
+          },
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "old_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Old Value"
+          },
+          "new_value": {
+            "type": "string",
+            "title": "New Value"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "changed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed By"
+          },
+          "changed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Changed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "table_name",
+          "row_key",
+          "field",
+          "old_value",
+          "new_value",
+          "note",
+          "changed_by",
+          "changed_at"
+        ],
+        "title": "StatusChangeOut",
+        "description": "One audited admin status flip (status_changes rows)."
+      },
       "TopicMassRow": {
         "properties": {
           "name": {
@@ -7541,6 +7895,167 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "WorkIdentityAdminOut": {
+        "properties": {
+          "institution_id": {
+            "type": "integer",
+            "title": "Institution Id"
+          },
+          "institution_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institution Code"
+          },
+          "work_id": {
+            "type": "string",
+            "title": "Work Id"
+          },
+          "work_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Title"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "source_pk": {
+            "type": "string",
+            "title": "Source Pk"
+          },
+          "matched_by": {
+            "type": "string",
+            "title": "Matched By"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "status": {
+            "$ref": "#/components/schemas/WorkIdentityStatus"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "institution_id",
+          "institution_code",
+          "work_id",
+          "work_title",
+          "source",
+          "source_pk",
+          "matched_by",
+          "confidence",
+          "status",
+          "note",
+          "updated_at"
+        ],
+        "title": "WorkIdentityAdminOut",
+        "description": "One cross-source work-identity row for the admin review list.\n\nFlips are durable: every harvest write is on_conflict_do_nothing, so\nre-runs never overwrite an admin decision."
+      },
+      "WorkIdentityStatus": {
+        "type": "string",
+        "enum": [
+          "confirmed",
+          "missing",
+          "candidate"
+        ],
+        "title": "WorkIdentityStatus",
+        "description": "work_identity.status (ck_work_identity_status).\n\n'confirmed' = DOI-verified link (auto, admin-reaffirmed); 'missing' =\nrecorded lookup miss (no evidence, not low confidence); 'candidate' =\nfuzzy match awaiting review."
+      },
+      "WorkIdentityStatusIn": {
+        "properties": {
+          "institution_id": {
+            "type": "integer",
+            "title": "Institution Id"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "source_pk": {
+            "type": "string",
+            "title": "Source Pk"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "changed_by": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed By"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "institution_id",
+          "source",
+          "source_pk",
+          "status"
+        ],
+        "title": "WorkIdentityStatusIn"
       },
       "WorkItem": {
         "properties": {

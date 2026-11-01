@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
-from ...models import Feedback
+from ...models import Feedback, StatusChangeLog
 from ...schemas import FeedbackAdminOut, FeedbackPatchOut
 from ...vocab import FeedbackPriority, FeedbackStatus
 from .auth import AdminDep, SessionDep
@@ -23,6 +23,9 @@ class FeedbackUpdateIn(BaseModel):
     status: str | None = None
     priority: str | None = None
     resolution_notes: str | None = Field(default=None, max_length=8000)
+    # Optional provenance for the status_changes audit row.
+    changed_by: str | None = Field(default=None, max_length=200)
+    note: str | None = Field(default=None, max_length=2000)
 
 
 @router.get("/feedback", response_model=list[FeedbackAdminOut])
@@ -72,13 +75,24 @@ async def update_feedback(
     row = await session.get(Feedback, feedback_id)
     if row is None:
         raise HTTPException(404, "feedback not found")
-    if body.status is not None:
+    status_change: StatusChangeLog | None = None
+    if body.status is not None and body.status != row.status:
+        status_change = StatusChangeLog(
+            table_name="feedback_items",
+            row_key={"id": feedback_id},
+            old_value=row.status,
+            new_value=body.status,
+            note=body.note,
+            changed_by=body.changed_by,
+        )
         row.status = body.status
     if body.priority is not None:
         row.priority = body.priority
     if body.resolution_notes is not None:
         row.resolution_notes = body.resolution_notes
     row.updated_at = datetime.now(UTC)
+    if status_change is not None:
+        session.add(status_change)
     await session.commit()
     return {"id": row.id, "status": row.status, "priority": row.priority}
 

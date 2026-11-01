@@ -33,8 +33,7 @@ class DealJournalSource(StrEnum):
 
 
 class FeedbackCategory(StrEnum):
-    """feedback_items.category (the /feedback intake surface; the DB has no
-    CHECK yet — the API set is authoritative)."""
+    """feedback_items.category (ck_feedback_items_category)."""
 
     BUG = "bug"
     DATA = "data"
@@ -62,7 +61,8 @@ class FeedbackPriority(StrEnum):
 
 
 class WorkOaStatus(StrEnum):
-    """works.oa_status (per-work OA color; no DB constraint yet)."""
+    """works.oa_status and openalex_works.oa_status
+    (ck_works_oa_status / ck_openalex_works_oa_status)."""
 
     GOLD = "gold"
     HYBRID = "hybrid"
@@ -94,3 +94,16 @@ class IdentityStatus(StrEnum):
     CONFIRMED = "confirmed"
     CANDIDATE = "candidate"
     REJECTED = "rejected"
+
+
+class WorkIdentityStatus(StrEnum):
+    """work_identity.status (ck_work_identity_status).
+
+    'confirmed' = DOI-verified link (auto, admin-reaffirmed); 'missing' =
+    recorded lookup miss (no evidence, not low confidence); 'candidate' =
+    fuzzy match awaiting review.
+    """
+
+    CONFIRMED = "confirmed"
+    MISSING = "missing"
+    CANDIDATE = "candidate"

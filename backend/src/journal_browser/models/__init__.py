@@ -6,7 +6,7 @@ Landing store (ut-metadata pattern): verbatim payloads in `source_records`
 store; `manual_overrides` survives every re-ingestion.
 """
 
-from .app_data import CacheEpoch, DocEdit, Feedback, Limitation, ManualOverride
+from .app_data import CacheEpoch, DocEdit, Feedback, Limitation, ManualOverride, StatusChangeLog
 from .authors import Author, AuthorWork
 from .base import Base, _tstamp
 from .deals import Deal, DealInstitution, DealJournal
@@ -52,6 +52,7 @@ __all__ = [
     "RawFile",
     "ScimagojrMetric",
     "SourceRecord",
+    "StatusChangeLog",
     "Work",
     "WorkIdentity",
     "WorkPureAuthor",

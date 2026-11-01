@@ -29,9 +29,11 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 # ── Deals: curation CRUD ────────────────────────────────────────────────────
 # Every accepted edit writes a manual_overrides row (table_name="deals",
 # row_key=str(deal id)), which apply_overrides re-applies after each
-# harvester upsert — that is what makes edits stick. Removing a deal
-# journal sets excluded=true and keeps the row so the JCT upsert cannot
-# resurrect it.
+# harvester upsert — that is what makes edits stick. Exception: the
+# curation columns are harvest-owned (see update_deal); the admin's
+# dismissal is remembered in deals.curation_resolved_reason instead.
+# Removing a deal journal sets excluded=true and keeps the row so the JCT
+# upsert cannot resurrect it.
 
 
 class DealUpdate(BaseModel):
@@ -86,6 +88,7 @@ def _deal_payload(
         "participations": participations,
         "needs_curation": deal.needs_curation,
         "needs_curation_reason": deal.needs_curation_reason,
+        "curation_resolved_reason": deal.curation_resolved_reason,
     }
 
 
@@ -250,16 +253,18 @@ async def update_deal(
     ):
         raise HTTPException(404, f"unknown publisher: {body.publisher_id}")
     changed = {k: v for k, v in updates.items() if getattr(deal, k) != v}
-    if not changed:
+    if not changed and not deal.needs_curation:
         return await _deal_detail(session, deal_id)
     for key, value in changed.items():
         setattr(deal, key, value)
-    # A human reviewed the deal: clear the curation flag and pin the date.
-    # (needs_curation sticks because the openaccess.nl harvester re-applies
-    # overrides for it; last_reviewed stays JCT-owned by design.)
+    # A human reviewed the deal: clear the curation flag, record WHAT was
+    # dismissed so the harvester suppresses exactly this reason (a new,
+    # different reason still re-flags), and pin the date. The curation
+    # columns are harvest-owned — no ManualOverride rows for them, so no
+    # stale override can silently suppress future problems either.
+    # (last_reviewed stays JCT-owned by design.)
     if deal.needs_curation:
-        changed["needs_curation"] = False
-        changed["needs_curation_reason"] = None
+        deal.curation_resolved_reason = deal.needs_curation_reason
         deal.needs_curation = False
         deal.needs_curation_reason = None
     deal.last_reviewed = date.today()
