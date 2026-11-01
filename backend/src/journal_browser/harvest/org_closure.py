@@ -72,9 +72,15 @@ def resolve_root(
         return None
     inst_names = {_name_key(institution.name), _name_key(institution.short_name)}
     inst_names.discard("")
-    for uuid in roots:
-        if _name_key(orgs[uuid].name) in inst_names:
-            return uuid
+    named = [uuid for uuid in roots if _name_key(orgs[uuid].name) in inst_names]
+    if named:
+        # Duplicate root rows under one name exist in the wild (CERIF keeps
+        # two "University of Twente" records): prefer the one other orgs
+        # actually hang under, so the closure keeps the whole tree. The
+        # sorted(roots) order keeps the pick deterministic when neither
+        # has children.
+        with_children = [uuid for uuid in named if uuid in set(parents.values())]
+        return (with_children or named)[0]
     universities = [uuid for uuid in roots if (orgs[uuid].org_type or "") == "university"]
     if len(universities) == 1:
         return universities[0]
