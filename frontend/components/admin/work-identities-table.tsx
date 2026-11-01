@@ -2,8 +2,11 @@
 
 import { useState } from "react";
 
+import { WorkIdentityDrawer } from "@/components/admin/work-identity-drawer";
+import { useReviewer } from "@/components/admin/record";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -51,6 +54,8 @@ export function WorkIdentitiesPanel({
 }) {
   const [filter, setFilter] = useState<StatusFilter>("candidate");
   const [busy, setBusy] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [reviewer, setReviewer] = useReviewer();
   const instQ = inst ? `&institution=${encodeURIComponent(inst)}` : "";
   const query = `/work-identities?limit=500${instQ}${filter === "all" ? "" : `&status=${filter}`}`;
   const { data, setData, loading, error, setError } = useAdminResource<WorkIdentityAdmin[]>(
@@ -60,17 +65,25 @@ export function WorkIdentitiesPanel({
     "work identities",
   );
   const rows = data ?? [];
+  const selected = rows.find((row) => rowKey(row) === selectedKey) ?? null;
 
-  const flip = async (row: WorkIdentityAdmin, status: string) => {
+  const flip = async (
+    row: WorkIdentityAdmin,
+    status: string,
+    note = "",
+    changedBy = "",
+  ): Promise<void> => {
     if (row.status === status) return;
     const key = rowKey(row);
     setBusy(key);
     try {
-      const updated = await adminPut<WorkIdentityAdmin>("work-identities", token, {
+      const updated = await adminPut<WorkIdentityAdmin>("/work-identities", token, {
         institution_id: row.institution_id,
         source: row.source,
         source_pk: row.source_pk,
         status,
+        ...(changedBy ? { changed_by: changedBy } : {}),
+        ...(note ? { note } : {}),
       });
       setData((current) => (current ?? []).map((r) => (rowKey(r) === key ? updated : r)));
     } catch (err) {
@@ -99,6 +112,16 @@ export function WorkIdentitiesPanel({
             </option>
           ))}
         </select>
+        <label htmlFor="work-identity-reviewer" className="whitespace-nowrap text-muted-foreground">
+          Reviewer
+        </label>
+        <Input
+          id="work-identity-reviewer"
+          placeholder="your name (for the audit log)"
+          value={reviewer}
+          onChange={(event) => setReviewer(event.target.value)}
+          className="h-9 w-56"
+        />
         <span className="text-[var(--muted-foreground)]" aria-live="polite">
           {loading ? "loading…" : `${rows.length.toLocaleString("en")} rows`}
         </span>
@@ -111,6 +134,7 @@ export function WorkIdentitiesPanel({
             <TableHead>Work</TableHead>
             <TableHead>External id</TableHead>
             <TableHead>Source</TableHead>
+            {!inst && <TableHead>Institution</TableHead>}
             <TableHead>Matched by</TableHead>
             <TableHead>Confidence</TableHead>
             <TableHead>Status</TableHead>
@@ -121,7 +145,12 @@ export function WorkIdentitiesPanel({
           {rows.map((row) => {
             const key = rowKey(row);
             return (
-              <TableRow key={key}>
+              <TableRow
+                key={key}
+                className="cursor-pointer"
+                title="Click to open the full record"
+                onClick={() => setSelectedKey(key)}
+              >
                 <TableCell className="max-w-72 truncate font-medium" title={row.work_title ?? ""}>
                   {row.work_title ?? <span className="font-mono text-xs">{row.work_id}</span>}
                 </TableCell>
@@ -129,6 +158,7 @@ export function WorkIdentitiesPanel({
                   {row.source_pk}
                 </TableCell>
                 <TableCell>{row.source}</TableCell>
+                {!inst && <TableCell>{row.institution_code ?? "—"}</TableCell>}
                 <TableCell className="font-mono text-xs">{row.matched_by}</TableCell>
                 <TableCell className="tabular-nums">
                   {row.confidence == null ? "—" : row.confidence.toFixed(2)}
@@ -147,7 +177,10 @@ export function WorkIdentitiesPanel({
                       variant="outline"
                       size="sm"
                       disabled={busy === key || row.status === "confirmed"}
-                      onClick={() => void flip(row, "confirmed")}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void flip(row, "confirmed");
+                      }}
                     >
                       Confirm
                     </Button>
@@ -155,7 +188,10 @@ export function WorkIdentitiesPanel({
                       variant="outline"
                       size="sm"
                       disabled={busy === key || row.status === "candidate"}
-                      onClick={() => void flip(row, "candidate")}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void flip(row, "candidate");
+                      }}
                       title="Back to the review queue"
                     >
                       Reopen
@@ -164,7 +200,10 @@ export function WorkIdentitiesPanel({
                       variant="outline"
                       size="sm"
                       disabled={busy === key || row.status === "missing"}
-                      onClick={() => void flip(row, "missing")}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void flip(row, "missing");
+                      }}
                       title="Recorded lookup miss: no evidence, not a bad link"
                     >
                       Miss
@@ -176,7 +215,10 @@ export function WorkIdentitiesPanel({
           })}
           {!loading && rows.length === 0 && (
             <TableRow>
-              <TableCell colSpan={7} className="text-center text-[var(--muted-foreground)]">
+              <TableCell
+                colSpan={inst ? 7 : 8}
+                className="text-center text-[var(--muted-foreground)]"
+              >
                 No {filter === "all" ? "" : `${filter} `}work identity rows
                 {inst ? " for this institution" : " across institutions"}.
               </TableCell>
@@ -184,6 +226,15 @@ export function WorkIdentitiesPanel({
           )}
         </TableBody>
       </Table>
+      {selected && (
+        <WorkIdentityDrawer
+          key={rowKey(selected)}
+          row={selected}
+          busy={busy}
+          onClose={() => setSelectedKey(null)}
+          onFlip={(row, status, note, changedBy) => void flip(row, status, note, changedBy)}
+        />
+      )}
     </div>
   );
 }

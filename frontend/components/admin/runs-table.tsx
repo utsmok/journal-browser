@@ -20,9 +20,11 @@ export function StatusBadge({ status }: { status: string }) {
 export function RunsTable({
   runs,
   directory = [],
+  onRowClick,
 }: {
   runs: AdminRun[];
   directory?: InstitutionDirectoryEntry[];
+  onRowClick?: (run: AdminRun) => void;
 }) {
   return (
     <Table>
@@ -38,7 +40,12 @@ export function RunsTable({
       </TableHeader>
       <TableBody>
         {runs.map((run) => (
-          <TableRow key={run.id}>
+          <TableRow
+            key={run.id}
+            className={onRowClick ? "cursor-pointer" : undefined}
+            title={onRowClick ? "Click for run details" : undefined}
+            onClick={onRowClick ? () => onRowClick(run) : undefined}
+          >
             <TableCell>{run.id}</TableCell>
             <TableCell>
               {run.institution_code == null

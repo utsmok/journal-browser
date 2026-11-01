@@ -2,8 +2,11 @@
 
 import { useState } from "react";
 
+import { AuthorIdentityDrawer } from "@/components/admin/author-identity-drawer";
+import { useReviewer } from "@/components/admin/record";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -36,7 +39,8 @@ function rowKey(row: AuthorIdentityAdmin): string {
  * Identity-cascade review: the resolution rows with per-row status flips.
  * A flip is sticky server-side and reaches authors.openalex_ids at the
  * next authors ingest; the panel just reflects and persists decisions.
- * Every actual flip is audited server-side (status_changes).
+ * Every actual flip is audited server-side (status_changes). Row click
+ * opens the side-by-side compare drawer for the real decision work.
  */
 export function IdentitiesPanel({
   token,
@@ -50,6 +54,8 @@ export function IdentitiesPanel({
 }) {
   const [filter, setFilter] = useState<StatusFilter>("candidate");
   const [busy, setBusy] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [reviewer, setReviewer] = useReviewer();
   const instQ = inst ? `&institution=${encodeURIComponent(inst)}` : "";
   const query = `/author-identities?limit=500${instQ}${filter === "all" ? "" : `&status=${filter}`}`;
   const { data, setData, loading, error, setError } = useAdminResource<AuthorIdentityAdmin[]>(
@@ -59,18 +65,26 @@ export function IdentitiesPanel({
     "identities",
   );
   const rows = data ?? [];
+  const selected = rows.find((row) => rowKey(row) === selectedKey) ?? null;
 
-  const flip = async (row: AuthorIdentityAdmin, status: string) => {
+  const flip = async (
+    row: AuthorIdentityAdmin,
+    status: string,
+    note = "",
+    changedBy = "",
+  ): Promise<void> => {
     if (row.status === status) return;
     const key = rowKey(row);
     setBusy(key);
     try {
-      const updated = await adminPut<AuthorIdentityAdmin>("author-identities", token, {
+      const updated = await adminPut<AuthorIdentityAdmin>("/author-identities", token, {
         institution_id: row.institution_id,
         author_pure_uuid: row.author_pure_uuid,
         source: row.source,
         external_id: row.external_id,
         status,
+        ...(changedBy ? { changed_by: changedBy } : {}),
+        ...(note ? { note } : {}),
       });
       // Replace from the server response; the flip is audited and sticky
       // there, so the row we show must be the stored one.
@@ -101,6 +115,16 @@ export function IdentitiesPanel({
             </option>
           ))}
         </select>
+        <label htmlFor="identity-reviewer" className="whitespace-nowrap text-muted-foreground">
+          Reviewer
+        </label>
+        <Input
+          id="identity-reviewer"
+          placeholder="your name (for the audit log)"
+          value={reviewer}
+          onChange={(event) => setReviewer(event.target.value)}
+          className="h-9 w-56"
+        />
         <span className="text-[var(--muted-foreground)]" aria-live="polite">
           {loading ? "loading…" : `${rows.length.toLocaleString("en")} rows`}
         </span>
@@ -113,10 +137,10 @@ export function IdentitiesPanel({
             <TableHead>Author</TableHead>
             <TableHead>External id</TableHead>
             <TableHead>Source</TableHead>
+            {!inst && <TableHead>Institution</TableHead>}
             <TableHead>Status</TableHead>
             <TableHead>Method</TableHead>
             <TableHead className="text-right">Works</TableHead>
-            <TableHead>Evidence</TableHead>
             <TableHead>Review</TableHead>
           </TableRow>
         </TableHeader>
@@ -124,7 +148,12 @@ export function IdentitiesPanel({
           {rows.map((row) => {
             const key = rowKey(row);
             return (
-              <TableRow key={key}>
+              <TableRow
+                key={key}
+                className="cursor-pointer"
+                title="Click to open the side-by-side comparison"
+                onClick={() => setSelectedKey(key)}
+              >
                 <TableCell className="font-medium">
                   {row.author_name ?? (
                     <span className="font-mono text-xs">{row.author_pure_uuid}</span>
@@ -137,6 +166,7 @@ export function IdentitiesPanel({
                       target="_blank"
                       rel="noopener noreferrer"
                       className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                      onClick={(event) => event.stopPropagation()}
                     >
                       {row.external_id}
                     </a>
@@ -145,6 +175,7 @@ export function IdentitiesPanel({
                   )}
                 </TableCell>
                 <TableCell>{row.source}</TableCell>
+                {!inst && <TableCell>{row.institution_code ?? "—"}</TableCell>}
                 <TableCell>
                   <StatusBadge status={row.status} />
                   {row.orcid_corroborated && (
@@ -161,19 +192,16 @@ export function IdentitiesPanel({
                 <TableCell className="text-right tabular-nums">
                   {row.n_works.toLocaleString("en")}
                 </TableCell>
-                <TableCell
-                  className="max-w-64 truncate font-mono text-xs"
-                  title={JSON.stringify(row.evidence)}
-                >
-                  {JSON.stringify(row.evidence)}
-                </TableCell>
                 <TableCell>
                   <div className="flex gap-1">
                     <Button
                       variant="outline"
                       size="sm"
                       disabled={busy === key || row.status === "confirmed"}
-                      onClick={() => void flip(row, "confirmed")}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void flip(row, "confirmed");
+                      }}
                     >
                       Confirm
                     </Button>
@@ -181,7 +209,10 @@ export function IdentitiesPanel({
                       variant="outline"
                       size="sm"
                       disabled={busy === key || row.status === "rejected"}
-                      onClick={() => void flip(row, "rejected")}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void flip(row, "rejected");
+                      }}
                     >
                       Reject
                     </Button>
@@ -192,7 +223,10 @@ export function IdentitiesPanel({
           })}
           {!loading && rows.length === 0 && (
             <TableRow>
-              <TableCell colSpan={8} className="text-center text-[var(--muted-foreground)]">
+              <TableCell
+                colSpan={inst ? 8 : 9}
+                className="text-center text-[var(--muted-foreground)]"
+              >
                 No {filter === "all" ? "" : `${filter} `}identity rows
                 {inst ? " for this institution" : " across institutions"}.
               </TableCell>
@@ -200,6 +234,15 @@ export function IdentitiesPanel({
           )}
         </TableBody>
       </Table>
+      {selected && (
+        <AuthorIdentityDrawer
+          key={rowKey(selected)}
+          row={selected}
+          busy={busy}
+          onClose={() => setSelectedKey(null)}
+          onFlip={(row, status, note, changedBy) => void flip(row, status, note, changedBy)}
+        />
+      )}
     </div>
   );
 }

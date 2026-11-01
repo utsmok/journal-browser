@@ -2,6 +2,7 @@
 
 import { Fragment, useState } from "react";
 
+import { CopyButton } from "@/components/admin/record";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -93,6 +94,9 @@ function FeedbackDetail({
                 Page data ({pageData.queries?.length ?? 0} cached responses)
                 {pageData.url ? ` — ${pageData.url}` : ""}
               </summary>
+              <div className="mt-2 flex justify-end">
+                <CopyButton text={JSON.stringify(item.page_data, null, 2)} />
+              </div>
               <pre className="mt-2 max-h-72 overflow-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-2 text-xs">
                 {JSON.stringify(item.page_data, null, 2)}
               </pre>
