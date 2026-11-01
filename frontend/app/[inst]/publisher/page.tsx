@@ -7,6 +7,7 @@ import * as React from "react";
 
 import { FacetGroupList, type FacetGroupDef, type FacetValue } from "@/components/filter-panel";
 import { OaCompositionBar } from "@/components/oa-composition";
+import { SortHead } from "@/components/search/sort-head";
 import { ListSkeletonRows } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -29,6 +30,7 @@ import {
   type PublisherSearchSort,
 } from "@/lib/api";
 import { formatEur } from "@/lib/format";
+import { PUBLISHER_COLUMN_SORTS } from "@/lib/search-config";
 
 const SEARCH_INPUT_ID = "publisher-search";
 
@@ -147,13 +149,17 @@ function PublishersView() {
   const topic = sp.get("topic") ?? "";
   const apcParam = sp.get("has_apc");
   const hasApc: "yes" | "no" | null = apcParam === "yes" || apcParam === "no" ? apcParam : null;
+  const worksParam = sp.get("has_works");
+  const hasWorks: "true" | "false" | null =
+    worksParam === "true" || worksParam === "false" ? worksParam : null;
   const anyFilter =
     oaTypes.length > 0 ||
     deal !== null ||
     quartiles.length > 0 ||
     sizes.length > 0 ||
     topic !== "" ||
-    hasApc !== null;
+    hasApc !== null ||
+    hasWorks !== null;
 
   // The backend default is relevance-with-q, else works desc.
   const sortParam = sp.get("sort");
@@ -167,6 +173,8 @@ function PublishersView() {
   ].includes(sortParam ?? "")
     ? (sortParam as PublisherSearchSort)
     : undefined;
+  const dirParam = sp.get("dir");
+  const dir: "asc" | "desc" | null = dirParam === "asc" || dirParam === "desc" ? dirParam : null;
   const limitParam = parseInt(sp.get("limit") ?? "", 10);
   const pageSize = PAGE_SIZES.includes(limitParam) ? limitParam : 50;
   const offsetParam = parseInt(sp.get("offset") ?? "", 10);
@@ -211,7 +219,9 @@ function PublishersView() {
     size: sizes.length > 0 ? sizes : undefined,
     topic: topic || undefined,
     has_apc: hasApc === null ? undefined : hasApc === "yes",
+    has_works: hasWorks === null ? undefined : hasWorks === "true",
     sort,
+    dir: dir ?? undefined,
     offset: offset > 0 ? offset : undefined,
     limit: pageSize === 50 ? undefined : pageSize,
     include_facets: true,
@@ -243,6 +253,10 @@ function PublishersView() {
       setParams({ topic: topic === value ? undefined : value });
       return;
     }
+    if (key === "has_works") {
+      setParams({ has_works: hasWorks === value ? undefined : value });
+      return;
+    }
     if (key === "has_apc") {
       setParams({ has_apc: hasApc === value ? undefined : value });
     }
@@ -256,7 +270,32 @@ function PublishersView() {
       size: undefined,
       topic: undefined,
       has_apc: undefined,
+      has_works: undefined,
     });
+
+  // Tri-state column sort: natural → reversed → off (journal-table
+  // convention). Off removes both params so the backend default applies
+  // (relevance with a query, works high→low without).
+  const cycleSort = (columnId: string) => {
+    const spec = PUBLISHER_COLUMN_SORTS[columnId];
+    if (!spec) return;
+    if (sort !== spec.key) {
+      setParams({ sort: spec.key, dir: spec.natural });
+      return;
+    }
+    const atNatural = (dir ?? spec.natural) === spec.natural;
+    setParams(
+      atNatural
+        ? { sort: spec.key, dir: spec.natural === "asc" ? "desc" : "asc" }
+        : { sort: undefined, dir: undefined },
+    );
+  };
+  const sortHeadState = { sort, dir, cycleSort, specs: PUBLISHER_COLUMN_SORTS };
+  const ariaSortFor = (columnId: string): "ascending" | "descending" | undefined => {
+    const spec = PUBLISHER_COLUMN_SORTS[columnId];
+    if (!spec || sort !== spec.key) return undefined;
+    return (dir ?? spec.natural) === "asc" ? "ascending" : "descending";
+  };
 
   const groups: FacetGroupDef[] = [
     {
@@ -288,6 +327,15 @@ function PublishersView() {
         v === "yes" ? "Has price info" : "No price info",
       ),
       activeValues: hasApc ? [hasApc] : [],
+    },
+    {
+      key: "has_works",
+      label: "Works",
+      defaultOpen: false,
+      values: facetValues(facets?.has_works, hasWorks ? [hasWorks] : [], (v) =>
+        v === "true" ? "Has works" : "No works",
+      ),
+      activeValues: hasWorks ? [hasWorks] : [],
     },
     {
       key: "size",
@@ -373,6 +421,9 @@ function PublishersView() {
               onChange={(event) =>
                 setParams({
                   sort: event.target.value === "default" ? undefined : event.target.value,
+                  // A sort change invalidates the old direction: keeping
+                  // `dir` would flip the freshly chosen label.
+                  dir: undefined,
                 })
               }
               className={SELECT_CLASS}
@@ -544,13 +595,23 @@ function PublishersView() {
                       <caption className="sr-only">Publisher search results</caption>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Publisher</TableHead>
-                          <TableHead className="text-right">Journals</TableHead>
-                          <TableHead className="text-right">Works</TableHead>
+                          <TableHead aria-sort={ariaSortFor("name")}>
+                            <SortHead columnId="name" label="Publisher" state={sortHeadState} />
+                          </TableHead>
+                          <TableHead className="text-right" aria-sort={ariaSortFor("journals")}>
+                            <SortHead columnId="journals" label="Journals" state={sortHeadState} />
+                          </TableHead>
+                          <TableHead className="text-right" aria-sort={ariaSortFor("works")}>
+                            <SortHead columnId="works" label="Works" state={sortHeadState} />
+                          </TableHead>
                           <TableHead>OA composition</TableHead>
-                          <TableHead className="text-right">Deals</TableHead>
+                          <TableHead className="text-right" aria-sort={ariaSortFor("deals")}>
+                            <SortHead columnId="deals" label="Deals" state={sortHeadState} />
+                          </TableHead>
                           <TableHead>Quartiles</TableHead>
-                          <TableHead>APC</TableHead>
+                          <TableHead aria-sort={ariaSortFor("apc")}>
+                            <SortHead columnId="apc" label="APC" state={sortHeadState} />
+                          </TableHead>
                           <TableHead>Topics</TableHead>
                         </TableRow>
                       </TableHeader>

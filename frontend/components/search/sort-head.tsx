@@ -2,8 +2,11 @@
 
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
 
-import type { SortKey } from "@/lib/api";
 import { COLUMN_SORTS } from "@/lib/search-config";
+
+/** Column → backend sort key + natural direction; defaults to the journal
+ * search table's specs so journals callers need no prop. */
+type SortSpecs = Record<string, { key: string; natural: "asc" | "desc" }>;
 
 export function SortHead({
   columnId,
@@ -14,17 +17,18 @@ export function SortHead({
   columnId: string;
   label: string;
   state: {
-    sort: SortKey;
+    sort?: string | null;
     dir: "asc" | "desc" | null;
     cycleSort: (columnId: string) => void;
     disabled?: boolean;
+    specs?: SortSpecs;
   };
   title?: string;
 }) {
   // Semantic ranking ignores sort params, so the buttons would lie.
   if (state.disabled)
     return <span className="inline-flex items-center gap-1 opacity-60">{label}</span>;
-  const spec = COLUMN_SORTS[columnId];
+  const spec = (state.specs ?? COLUMN_SORTS)[columnId];
   const active = !!spec && state.sort === spec.key;
   const current = active ? (state.dir ?? spec!.natural) : null;
   const atNatural = active && current === spec!.natural;

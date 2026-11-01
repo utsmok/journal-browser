@@ -1,4 +1,4 @@
-import type { SearchIn, SortKey } from "@/lib/api";
+import type { PublisherSearchSort, SearchIn, SortKey } from "@/lib/api";
 
 export const SORTS: { value: SortKey; label: string }[] = [
   { value: "relevance", label: "Relevance" },
@@ -21,6 +21,19 @@ export const COLUMN_SORTS: Record<string, { key: SortKey; natural: "asc" | "desc
   quartile: { key: "quartile", natural: "asc" },
   apc: { key: "apc", natural: "desc" },
   topic: { key: "topic", natural: "asc" },
+};
+
+// Publisher directory columns: same tri-state header convention as the
+// journal search table (natural → reversed → off).
+export const PUBLISHER_COLUMN_SORTS: Record<
+  string,
+  { key: PublisherSearchSort; natural: "asc" | "desc" }
+> = {
+  name: { key: "name", natural: "asc" },
+  journals: { key: "journals", natural: "desc" },
+  works: { key: "works", natural: "desc" },
+  deals: { key: "deals", natural: "desc" },
+  apc: { key: "apc", natural: "desc" },
 };
 
 export const SEARCH_IN_OPTIONS: { value: SearchIn; label: string }[] = [
