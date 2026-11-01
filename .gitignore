@@ -40,5 +40,10 @@ backups/
 # Live settings overlay (admin panel writes here; may hold secrets)
 backend/settings.yaml
 
+# Wiki-video generation workspace: TTS models, narration audio, node
+# modules, and intermediate renders. Regenerable; the deliverable mp4 is
+# committed under droid-wiki/video/.
+.factory/video/
+
 # Impeccable design-review artifacts
 .impeccable/

@@ -1,0 +1,166 @@
+{
+  "generatedAt": "2026-11-01T12:40:00Z",
+  "commitHash": "d2d56577fff3ce5e2375b292465ca38214fbd854",
+  "branch": "main",
+  "pageCount": 43,
+  "topLevelSections": [
+    "overview",
+    "by-the-numbers",
+    "lore",
+    "fun-facts",
+    "how-to-contribute",
+    "apps",
+    "systems",
+    "features",
+    "api",
+    "deployment",
+    "security",
+    "how-to-monitor",
+    "background",
+    "cleanup-opportunities",
+    "reference"
+  ],
+  "pageOrder": [
+    "overview/index.md",
+    "overview/architecture.md",
+    "overview/getting-started.md",
+    "overview/glossary.md",
+    "by-the-numbers.md",
+    "lore.md",
+    "fun-facts.md",
+    "how-to-contribute/index.md",
+    "how-to-contribute/development-workflow.md",
+    "how-to-contribute/testing.md",
+    "how-to-contribute/debugging.md",
+    "how-to-contribute/patterns-and-conventions.md",
+    "how-to-contribute/tooling.md",
+    "apps/index.md",
+    "apps/backend/index.md",
+    "apps/backend/api-surface.md",
+    "apps/backend/configuration.md",
+    "apps/frontend/index.md",
+    "apps/frontend/search-and-browse.md",
+    "apps/frontend/admin-ui.md",
+    "systems/index.md",
+    "systems/data-pipeline/index.md",
+    "systems/data-pipeline/bootstrap-dag.md",
+    "systems/data-pipeline/harvest-sources.md",
+    "systems/data-model.md",
+    "systems/search.md",
+    "features/index.md",
+    "features/multi-institution.md",
+    "features/admin.md",
+    "features/feedback.md",
+    "api/index.md",
+    "api/endpoints.md",
+    "deployment.md",
+    "security.md",
+    "how-to-monitor.md",
+    "background/index.md",
+    "background/design-decisions.md",
+    "background/pitfalls.md",
+    "cleanup-opportunities.md",
+    "reference/index.md",
+    "reference/configuration.md",
+    "reference/data-models.md",
+    "reference/dependencies.md"
+  ],
+  "images": [
+    {
+      "path": "images/web-home.png",
+      "source_app": "web",
+      "source_flow": "institution-home",
+      "captured_at": "2026-11-01T12:10:00Z",
+      "wiki_pages": ["overview/index.md"],
+      "size_bytes": 118283
+    },
+    {
+      "path": "images/web-search-results.png",
+      "source_app": "web",
+      "source_flow": "journal-search",
+      "captured_at": "2026-11-01T12:18:00Z",
+      "wiki_pages": ["systems/search.md"],
+      "size_bytes": 113188
+    },
+    {
+      "path": "images/web-semantic-search.png",
+      "source_app": "web",
+      "source_flow": "semantic-search",
+      "captured_at": "2026-11-01T12:30:00Z",
+      "wiki_pages": ["systems/search.md", "apps/frontend/search-and-browse.md"],
+      "size_bytes": 80383
+    },
+    {
+      "path": "images/web-journal-detail.png",
+      "source_app": "web",
+      "source_flow": "journal-detail",
+      "captured_at": "2026-11-01T12:22:00Z",
+      "wiki_pages": ["apps/frontend/search-and-browse.md"],
+      "size_bytes": 101686
+    },
+    {
+      "path": "images/web-authors.png",
+      "source_app": "web",
+      "source_flow": "author-listing",
+      "captured_at": "2026-11-01T12:14:00Z",
+      "wiki_pages": ["apps/frontend/search-and-browse.md"],
+      "size_bytes": 118515
+    },
+    {
+      "path": "images/web-deals.png",
+      "source_app": "web",
+      "source_flow": "deals-register",
+      "captured_at": "2026-11-01T12:14:00Z",
+      "wiki_pages": ["apps/frontend/index.md"],
+      "size_bytes": 116377
+    },
+    {
+      "path": "images/web-about-docs.png",
+      "source_app": "web",
+      "source_flow": "about-docs",
+      "captured_at": "2026-11-01T12:24:00Z",
+      "wiki_pages": ["apps/backend/index.md"],
+      "size_bytes": 94120
+    },
+    {
+      "path": "images/web-universities.png",
+      "source_app": "web",
+      "source_flow": "institution-chooser",
+      "captured_at": "2026-11-01T12:24:00Z",
+      "wiki_pages": ["features/multi-institution.md"],
+      "size_bytes": 46211
+    },
+    {
+      "path": "images/web-admin-panel.png",
+      "source_app": "web",
+      "source_flow": "admin-panel",
+      "captured_at": "2026-11-01T12:34:00Z",
+      "wiki_pages": ["features/admin.md", "apps/frontend/admin-ui.md"],
+      "size_bytes": 48733
+    },
+    {
+      "path": "images/web-admin-settings.png",
+      "source_app": "web",
+      "source_flow": "admin-institution-settings",
+      "captured_at": "2026-11-01T12:35:00Z",
+      "wiki_pages": ["features/multi-institution.md", "apps/frontend/admin-ui.md"],
+      "size_bytes": 58843
+    },
+    {
+      "path": "images/web-publishers.png",
+      "source_app": "web",
+      "source_flow": "publisher-listing",
+      "captured_at": "2026-11-01T12:14:00Z",
+      "wiki_pages": [],
+      "size_bytes": 41342
+    },
+    {
+      "path": "images/web-faculties.png",
+      "source_app": "web",
+      "source_flow": "orgunit-listing",
+      "captured_at": "2026-11-01T12:37:00Z",
+      "wiki_pages": [],
+      "size_bytes": 96320
+    }
+  ]
+}
