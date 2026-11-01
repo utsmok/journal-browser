@@ -46,7 +46,7 @@ jobs:
       QA_ADMIN_PASSWORD: ${{ secrets.QA_ADMIN_PASSWORD }}
       FACTORY_API_KEY: ${{ secrets.FACTORY_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
