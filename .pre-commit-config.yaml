@@ -1,0 +1,38 @@
+# Local quality gates, run by `pre-commit install` (see AGENTS.md). CI runs
+# the same checks, so a red hook here never surprises anyone at push time.
+# Migrations are excluded everywhere: alembic/versions is historical record
+# and is never reformatted (repo convention).
+repos:
+  # Pinned to the ruff version floor in backend/pyproject.toml.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.1
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^backend/
+        exclude: ^backend/alembic/versions/
+      - id: ruff-format
+        files: ^backend/
+        exclude: ^backend/alembic/versions/
+
+  - repo: local
+    hooks:
+      - id: frontend-eslint
+        name: frontend eslint
+        entry: bash -c 'cd frontend && npx --no-install eslint .'
+        language: system
+        files: ^frontend/.*\.(ts|tsx|js|jsx|mjs)$
+        pass_filenames: false
+
+      - id: frontend-biome-format
+        name: frontend biome format check
+        entry: bash -c 'cd frontend && npx --no-install biome format .'
+        language: system
+        files: ^frontend/.*\.(ts|tsx|js|jsx|mjs|json|css)$
+        pass_filenames: false
+
+      - id: check-file-length
+        name: check file length (2000 lines)
+        entry: python3 dev/hooks/check_file_length.py
+        language: system
+        files: .*

@@ -1,0 +1,9 @@
+{
+  "ignores": [
+    "@tailwindcss/postcss",
+    "@types/node",
+    "@types/react-dom",
+    "eslint-config-next",
+    "tailwindcss"
+  ]
+}

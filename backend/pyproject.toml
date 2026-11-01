@@ -24,6 +24,7 @@ dependencies = [
     "currencyconverter>=0.18.22",
     "nameparser>=2.8.0",
     "levenshtein>=0.27.5",
+    "pydantic>=2.14.1",
 ]
 
 
@@ -80,3 +81,20 @@ unsupported-operator = "warn"
 invalid-return-type = "warn"
 not-subscriptable = "warn"
 invalid-type-form = "warn"
+
+[tool.deptry]
+known_first_party = ["journal_browser"]
+
+[tool.deptry.package_module_name_map]
+pyyaml = ["yaml"]
+currencyconverter = ["currency_converter"]
+beautifulsoup4 = ["bs4"]
+levenshtein = ["Levenshtein"]
+
+[tool.deptry.per_rule_ignores]
+# uvicorn is the server process, never imported; lxml is the bs4 parser
+# selected by string name. numpy/starlette arrive with fastembed/fastapi but
+# are imported directly -- promote them to direct dependencies if this
+# baseline ever grows instead of extending these ignores.
+DEP002 = ["uvicorn", "lxml"]
+DEP001 = ["starlette", "numpy"]
