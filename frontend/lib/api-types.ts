@@ -517,6 +517,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/{institution_code}/funders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search Funders */
+        get: operations["search_funders_api_v1__institution_code__funders_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/{institution_code}/funders/{funder_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Funder Detail */
+        get: operations["funder_detail_api_v1__institution_code__funders__funder_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/{institution_code}/authors": {
         parameters: {
             query?: never;
@@ -1694,6 +1728,104 @@ export interface components {
              */
             degraded: components["schemas"]["DegradedSource"][];
         };
+        /** FunderDetailResponse */
+        FunderDetailResponse: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string | null;
+            /** Country */
+            country: string | null;
+            /** Url */
+            url: string | null;
+            /** Ror */
+            ror: string | null;
+            /** Fundref */
+            fundref: string | null;
+            /** Openalex Funder Id */
+            openalex_funder_id?: string | null;
+            /**
+             * Policy Structured
+             * @default false
+             */
+            policy_structured: boolean;
+            /**
+             * N Ut Works
+             * @default 0
+             */
+            n_ut_works: number;
+            /** Publications Policy */
+            publications_policy?: {
+                [key: string]: unknown;
+            } | null;
+            /** Data Archiving Policy */
+            data_archiving_policy?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Top Journals
+             * @default []
+             */
+            top_journals: components["schemas"]["FunderTopJournal"][];
+        };
+        /**
+         * FunderFitOut
+         * @description How well one journal satisfies the selected funder's OA policy.
+         *
+         *     status None = the funder's policy is text-only, no tier derivable.
+         */
+        FunderFitOut: {
+            /** Status */
+            status: ("compliant" | "check" | "no") | null;
+            /**
+             * Reasons
+             * @default []
+             */
+            reasons: string[];
+        };
+        /** FunderListItem */
+        FunderListItem: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string | null;
+            /** Country */
+            country: string | null;
+            /** Url */
+            url: string | null;
+            /** Ror */
+            ror: string | null;
+            /** Fundref */
+            fundref: string | null;
+            /** Openalex Funder Id */
+            openalex_funder_id?: string | null;
+            /**
+             * Policy Structured
+             * @default false
+             */
+            policy_structured: boolean;
+            /**
+             * N Ut Works
+             * @default 0
+             */
+            n_ut_works: number;
+        };
+        /** FunderSearchResponse */
+        FunderSearchResponse: {
+            /** Items */
+            items: components["schemas"]["FunderListItem"][];
+            /** Total */
+            total: number;
+        };
+        /** FunderTopJournal */
+        FunderTopJournal: {
+            /** Title */
+            title: string | null;
+            /** Issn L */
+            issn_l: string | null;
+            /** N Works */
+            n_works: number;
+        };
         /**
          * GreenOa
          * @description Best green (self-archiving) route per Jisc Open Policy Finder
@@ -1729,6 +1861,13 @@ export interface components {
             urls: {
                 [key: string]: string;
             }[];
+            /**
+             * Repository Links
+             * @default {}
+             */
+            repository_links: {
+                [key: string]: string;
+            };
             /** Policy Uri */
             policy_uri?: string | null;
             /** Harvested At */
@@ -1979,6 +2118,7 @@ export interface components {
              */
             openaire: components["schemas"]["OpenaireInfo"];
             green_oa?: components["schemas"]["GreenOaPolicy"] | null;
+            funder_fit?: components["schemas"]["FunderFitOut"] | null;
             /**
              * @default {
              *       "openalex_matched": 0,
@@ -2050,6 +2190,7 @@ export interface components {
              * @default []
              */
             apc_stats: components["schemas"]["ApcAggregateOut"][];
+            funder_fit?: components["schemas"]["FunderFitOut"] | null;
         };
         /** JournalSearchResponse */
         JournalSearchResponse: {
@@ -2304,6 +2445,8 @@ export interface components {
         PublisherExternalIds: {
             /** Openaccess Nl Slug */
             openaccess_nl_slug?: string | null;
+            /** Ror */
+            ror?: string | null;
         };
         /** PublisherListItem */
         PublisherListItem: {
@@ -3497,6 +3640,10 @@ export interface operations {
                 cursor?: string | null;
                 limit?: number;
                 include_facets?: boolean;
+                /** @description Jisc OPF funder id */
+                funder?: number | null;
+                /** @description Funder-fit tier filter */
+                funder_fit?: string | null;
             };
             header?: never;
             path: {
@@ -3630,7 +3777,10 @@ export interface operations {
     };
     journal_detail_api_v1__institution_code__journals__issn_l__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Jisc OPF funder id */
+                funder?: number | null;
+            };
             header?: never;
             path: {
                 issn_l: string;
@@ -3647,6 +3797,73 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JournalDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_funders_api_v1__institution_code__funders_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunderSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    funder_detail_api_v1__institution_code__funders__funder_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                funder_id: number;
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunderDetailResponse"];
                 };
             };
             /** @description Validation Error */

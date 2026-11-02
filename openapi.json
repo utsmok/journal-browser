@@ -1650,6 +1650,43 @@
               "default": true,
               "title": "Include Facets"
             }
+          },
+          {
+            "name": "funder",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Jisc OPF funder id",
+              "title": "Funder"
+            },
+            "description": "Jisc OPF funder id"
+          },
+          {
+            "name": "funder_fit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(compliant|check|no)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Funder-fit tier filter",
+              "title": "Funder Fit"
+            },
+            "description": "Funder-fit tier filter"
           }
         ],
         "responses": {
@@ -1910,6 +1947,24 @@
               "type": "string",
               "title": "Institution Code"
             }
+          },
+          {
+            "name": "funder",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Jisc OPF funder id",
+              "title": "Funder"
+            },
+            "description": "Jisc OPF funder id"
           }
         ],
         "responses": {
@@ -1919,6 +1974,139 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/JournalDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/funders": {
+      "get": {
+        "tags": [
+          "funders"
+        ],
+        "summary": "Search Funders",
+        "operationId": "search_funders_api_v1__institution_code__funders_get",
+        "parameters": [
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FunderSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/funders/{funder_id}": {
+      "get": {
+        "tags": [
+          "funders"
+        ],
+        "summary": "Funder Detail",
+        "operationId": "funder_detail_api_v1__institution_code__funders__funder_id__get",
+        "parameters": [
+          {
+            "name": "funder_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Funder Id"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FunderDetailResponse"
                 }
               }
             }
@@ -6273,6 +6461,318 @@
         "title": "FreshnessResponse",
         "description": "Config comes from the institution row; unset optional fields are\nNone rather than global defaults."
       },
+      "FunderDetailResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "ror": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ror"
+          },
+          "fundref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fundref"
+          },
+          "openalex_funder_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Funder Id"
+          },
+          "policy_structured": {
+            "type": "boolean",
+            "title": "Policy Structured",
+            "default": false
+          },
+          "n_ut_works": {
+            "type": "integer",
+            "title": "N Ut Works",
+            "default": 0
+          },
+          "publications_policy": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publications Policy"
+          },
+          "data_archiving_policy": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Archiving Policy"
+          },
+          "top_journals": {
+            "items": {
+              "$ref": "#/components/schemas/FunderTopJournal"
+            },
+            "type": "array",
+            "title": "Top Journals",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "country",
+          "url",
+          "ror",
+          "fundref"
+        ],
+        "title": "FunderDetailResponse"
+      },
+      "FunderFitOut": {
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "compliant",
+                  "check",
+                  "no"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "FunderFitOut",
+        "description": "How well one journal satisfies the selected funder's OA policy.\n\nstatus None = the funder's policy is text-only, no tier derivable."
+      },
+      "FunderListItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "ror": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ror"
+          },
+          "fundref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fundref"
+          },
+          "openalex_funder_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Funder Id"
+          },
+          "policy_structured": {
+            "type": "boolean",
+            "title": "Policy Structured",
+            "default": false
+          },
+          "n_ut_works": {
+            "type": "integer",
+            "title": "N Ut Works",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "country",
+          "url",
+          "ror",
+          "fundref"
+        ],
+        "title": "FunderListItem"
+      },
+      "FunderSearchResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FunderListItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "FunderSearchResponse"
+      },
+      "FunderTopJournal": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "issn_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issn L"
+          },
+          "n_works": {
+            "type": "integer",
+            "title": "N Works"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "issn_l",
+          "n_works"
+        ],
+        "title": "FunderTopJournal"
+      },
       "GreenOa": {
         "type": "string",
         "enum": [
@@ -6330,6 +6830,14 @@
             "type": "array",
             "title": "Urls",
             "default": []
+          },
+          "repository_links": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Repository Links",
+            "default": {}
           },
           "policy_uri": {
             "anyOf": [
@@ -7038,6 +7546,16 @@
               }
             ]
           },
+          "funder_fit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FunderFitOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "institution_metrics": {
             "$ref": "#/components/schemas/InstitutionMetrics",
             "default": {
@@ -7248,6 +7766,16 @@
             "type": "array",
             "title": "Apc Stats",
             "default": []
+          },
+          "funder_fit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FunderFitOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -7936,6 +8464,17 @@
               }
             ],
             "title": "Openaccess Nl Slug"
+          },
+          "ror": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ror"
           }
         },
         "type": "object",
