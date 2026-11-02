@@ -4,7 +4,7 @@ Funders are canon (not institution-scoped); only the UT-work attribution
 is per institution. work_funders (migration 0049) may be absent — the
 counts degrade to zeros instead of erroring."""
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -28,9 +28,14 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 DEFAULT_LIMIT = 25
 
 
-async def _openalex_links(session: AsyncSession) -> dict[int, str]:
-    """jisc_funders.id -> openalex_funder_id, ROR-preferred over FundRef,
-    in two keyed queries (the canon is ~200 rows; 39k openalex funders)."""
+async def _openalex_links(
+    session: AsyncSession,
+) -> tuple[dict[int, str], dict[int, set[str]]]:
+    """jisc_funders.id -> (display url, bare-id set). One ROR can map to
+    several OpenAlex funder rows (funding-stream twins with different
+    FundRef ids), and works cite any of them, so counts must union the set
+    while display prefers the twin carrying the most works (fallback:
+    ROR-preferred, then FundRef)."""
     ror_rows = await session.execute(
         select(JiscFunder.id, OpenalexFunder.openalex_id)
         .select_from(JiscFunder)
@@ -43,9 +48,15 @@ async def _openalex_links(session: AsyncSession) -> dict[int, str]:
         .join(OpenalexFunder, OpenalexFunder.fundref == JiscFunder.fundref)
         .where(JiscFunder.ror.is_(None), JiscFunder.fundref.is_not(None))
     )
-    links = dict(ref_rows.all())
-    links.update(dict(ror_rows.all()))
-    return links
+    urls: dict[int, list[str]] = {}
+    ids: dict[int, set[str]] = {}
+    for funder_id, openalex_id in (*ror_rows.all(), *ref_rows.all()):
+        if not openalex_id:
+            continue
+        urls.setdefault(funder_id, []).append(openalex_id)
+        ids.setdefault(funder_id, set()).add(str(openalex_id).rsplit("/", 1)[-1])
+    display = {fid: vals[0] for fid, vals in urls.items()}
+    return display, ids
 
 
 async def _search_aliases(session: AsyncSession) -> dict[int, list[str]]:
@@ -77,10 +88,14 @@ async def _search_aliases(session: AsyncSession) -> dict[int, list[str]]:
 
 def _to_item(
     funder: JiscFunder,
-    openalex_funder_id: str | None,
+    urls: list[str],
+    ids: set[str],
     counts: dict[str, int],
 ) -> FunderListItem:
     structured = bool((funder.publications_policy or {}).get("archiving_policy"))
+    # Display the twin the works actually cite; bare-id keys everywhere.
+    openalex_url = max(urls, key=lambda u: counts.get(str(u).rsplit("/", 1)[-1], 0), default=None)
+    n_ut_works = sum(counts.get(bare, 0) for bare in ids)
     return FunderListItem(
         id=funder.id,
         name=funder.name,
@@ -88,9 +103,9 @@ def _to_item(
         url=funder.url,
         ror=funder.ror,
         fundref=funder.fundref,
-        openalex_funder_id=openalex_funder_id,
+        openalex_funder_id=openalex_url,
         policy_structured=structured,
-        n_ut_works=counts.get(openalex_funder_id, 0),
+        n_ut_works=n_ut_works,
     )
 
 
@@ -106,7 +121,7 @@ async def search_funders(
     # raw-SQL order-by over a conditionally-existing table.
     funders = (await session.execute(select(JiscFunder).order_by(JiscFunder.name))).scalars().all()
     counts = await funders_service.ut_work_counts(session, institution.id)
-    links = await _openalex_links(session)
+    urls_by_id, ids_by_id = await _openalex_links(session)
     aliases = await _search_aliases(session)
     needle = (q or "").strip().lower()
     items = []
@@ -115,7 +130,9 @@ async def search_funders(
             haystack = [(funder.name or ""), *aliases.get(funder.id, [])]
             if not any(needle in name.lower() for name in haystack):
                 continue
-        items.append(_to_item(funder, links.get(funder.id), counts))
+        items.append(
+            _to_item(funder, urls_by_id.get(funder.id, []), ids_by_id.get(funder.id, set()), counts)
+        )
     # Order: n_ut_works desc nulls last (counts default 0), then name.
     items.sort(key=lambda f: (-f.n_ut_works, (f.name or "").lower()))
     return FunderSearchResponse(items=items[offset : offset + limit], total=len(items))
@@ -128,13 +145,18 @@ async def funder_detail(
     funder = await session.get(JiscFunder, funder_id)
     if funder is None:
         raise HTTPException(status_code=404, detail=f"funder {funder_id} not found")
-    links = await _openalex_links(session)
-    openalex_funder_id = links.get(funder_id)
     counts = await funders_service.ut_work_counts(session, institution.id)
-    top = await funders_service.top_journals(session, institution.id, openalex_funder_id)
+    urls_by_id, ids_by_id = await _openalex_links(session)
+    item = _to_item(funder, urls_by_id.get(funder_id, []), ids_by_id.get(funder_id, set()), counts)
+    # Top journals across every twin the works may cite.
+    top: list[dict[str, Any]] = []
+    for bare in sorted(ids_by_id.get(funder_id, set()), key=lambda b: -counts.get(b, 0)):
+        top.extend(await funders_service.top_journals(session, institution.id, bare))
+    seen: set[str] = set()
+    deduped = [j for j in top if not (j["issn_l"] in seen or seen.add(j["issn_l"]))]
     return FunderDetailResponse(
-        **_to_item(funder, openalex_funder_id, counts).model_dump(),
+        **item.model_dump(),
         publications_policy=funder.publications_policy,
         data_archiving_policy=funder.data_archiving_policy,
-        top_journals=[FunderTopJournal(**j) for j in top],
+        top_journals=[FunderTopJournal(**j) for j in deduped[:5]],
     )

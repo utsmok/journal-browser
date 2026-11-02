@@ -15,7 +15,9 @@ async def _work_funders_ready(session: AsyncSession) -> bool:
 
 
 async def ut_work_counts(session: AsyncSession, institution_id: int) -> dict[str, int]:
-    """UT works per funder_openalex_id for this institution."""
+    """UT works per funder_openalex_id for this institution. Keys are bare
+    OpenAlex ids (no https://openalex.org/ prefix); work_funders stores
+    whatever the grants payload carried, so normalize both sides."""
     if not await _work_funders_ready(session):
         return {}
     rows = await session.execute(
@@ -25,7 +27,11 @@ async def ut_work_counts(session: AsyncSession, institution_id: int) -> dict[str
         ),
         {"i": institution_id},
     )
-    return {r[0]: int(r[1]) for r in rows}
+    counts: dict[str, int] = {}
+    for funder_id, n in rows:
+        bare = str(funder_id).rsplit("/", 1)[-1]
+        counts[bare] = counts.get(bare, 0) + int(n)
+    return counts
 
 
 async def top_journals(
