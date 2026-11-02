@@ -68,6 +68,12 @@ const SOURCES: SourceInfo[] = [
     table: "apc_evidence",
   },
   {
+    name: "Jisc Open Policy Finder",
+    url: "https://openpolicyfinder.jisc.ac.uk",
+    role: "Green open access (self-archiving) policies: which version of an article the publisher allows archived where, under which licence and embargo. Policy text is shown verbatim; it is Jisc content under CC BY-NC-ND 4.0.",
+    harvest: "jisc_opf",
+  },
+  {
     name: "Scimago",
     url: "https://www.scimagojr.com",
     role: "SJR indicator, best quartile, and SJR h-index.",

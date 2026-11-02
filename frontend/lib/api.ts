@@ -88,6 +88,8 @@ export type JournalSearchParams = {
   topic?: string;
   /** Comma-separated multi-select, OR'd server-side. */
   oa_type?: string;
+  /** Self-archiving route per Jisc: "submitted" | "accepted" | "published" | "none". */
+  green_oa?: string;
   sort?: SortKey;
   /** Sort direction; omitted = each key's natural direction. */
   dir?: "asc" | "desc";

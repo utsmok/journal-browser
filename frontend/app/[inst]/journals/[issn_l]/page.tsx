@@ -264,6 +264,136 @@ function DealPanel({
 
 const WORKS_PAGE_SIZE = 20;
 
+type GreenOaPolicy = NonNullable<JournalDetailResponse["green_oa"]>;
+
+const GREEN_OA_VERSIONS: Record<string, string> = {
+  submitted: "Submitted version",
+  accepted: "Accepted version",
+  published: "Published version",
+};
+
+/** Sherpa location slugs (verified against the live jisc_policy corpus). */
+const GREEN_OA_LOCATIONS: Record<string, string> = {
+  academic_social_network: "Academic social network",
+  any_repository: "Any repository",
+  any_website: "Any website",
+  authors_homepage: "Author's homepage",
+  funder_designated_location: "Funder-designated location",
+  institutional_repository: "Institutional repository",
+  institutional_website: "Institutional website",
+  named_academic_social_network: "Named academic social networks",
+  named_repository: "Named repositories",
+  non_commercial_institutional_repository: "Non-commercial institutional repository",
+  non_commercial_repository: "Non-commercial repository",
+  non_commercial_social_network: "Non-commercial academic social network",
+  non_commercial_subject_repository: "Non-commercial subject repository",
+  non_commercial_website: "Non-commercial website",
+  preprint_repository: "Preprint repository",
+  subject_repository: "Subject repository",
+  this_journal: "This journal",
+};
+
+function licenseLabel(license: string): string {
+  if (license === "cc0") return "CC0";
+  if (license.startsWith("cc_")) return `CC ${license.slice(3).replaceAll("_", "-").toUpperCase()}`;
+  return license.charAt(0).toUpperCase() + license.slice(1).replaceAll("_", " ");
+}
+
+function locationPhrase(location: string, repositories: string[]): string {
+  const base =
+    GREEN_OA_LOCATIONS[location] ??
+    location.charAt(0).toUpperCase() + location.slice(1).replaceAll("_", " ");
+  return location.startsWith("named_") && repositories.length > 0
+    ? `${base}: ${repositories.join(", ")}`
+    : base;
+}
+
+/** Green (self-archiving) routes for this journal, from Jisc Open Policy Finder. */
+function GreenOaPanel({
+  greenOa,
+  attribution,
+}: {
+  greenOa: GreenOaPolicy;
+  attribution: Partial<Attribution>;
+}) {
+  const routes = Object.entries(greenOa.routes);
+  return (
+    <CollapsibleCard
+      id="green-oa"
+      title="Green OA policy"
+      description={
+        <p className="text-sm text-[var(--muted-foreground)]">
+          Which versions of your article the publisher lets you self-archive.
+        </p>
+      }
+      contentClassName="space-y-4 text-sm"
+    >
+      {greenOa.oa_prohibited && (
+        <p className="font-medium text-red-700 dark:text-red-300">
+          The publisher prohibits open access for this journal.
+        </p>
+      )}
+      {routes.map(([version, route]) => (
+        <div key={version} className="space-y-1">
+          <h3 className="flex flex-wrap items-center gap-2 font-semibold">
+            {GREEN_OA_VERSIONS[version] ?? version}
+            {route.additional_oa_fee === "yes" && (
+              <Badge
+                variant="muted"
+                title="The policy states this route requires an additional open access fee."
+              >
+                OA fee required
+              </Badge>
+            )}
+          </h3>
+          {route.locations.length > 0 && (
+            <p>
+              Where:{" "}
+              {route.locations
+                .map((location) => locationPhrase(location, route.repositories))
+                .join("; ")}
+              .
+            </p>
+          )}
+          {route.licenses.length > 0 && (
+            <p>Licence: {route.licenses.map(licenseLabel).join(", ")}.</p>
+          )}
+          {route.embargo_months != null && (
+            <p>
+              Embargo: after {route.embargo_months}{" "}
+              {route.embargo_months === 1 ? "month" : "months"}.
+            </p>
+          )}
+          {route.conditions.length > 0 && (
+            // Jisc policy text is CC BY-NC-ND: shown verbatim, never paraphrased.
+            <div>
+              <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                Conditions
+              </h4>
+              <ul className="list-disc space-y-1 pl-4">
+                {route.conditions.map((condition) => (
+                  <li key={condition} className="text-pretty">
+                    {condition}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      ))}
+      {routes.length === 0 && !greenOa.oa_prohibited && (
+        <p>No self-archiving route is listed for this journal.</p>
+      )}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-[var(--border)] pt-3">
+        {greenOa.policy_uri && (
+          <External href={greenOa.policy_uri}>View on Jisc Open Policy Finder</External>
+        )}
+        <SourceNote {...attribution} codes={attribution.caveat_codes} />
+      </div>
+    </CollapsibleCard>
+  );
+}
+
 function doiHref(doi: string | null): string | null {
   if (!doi) return null;
   return /^https?:\/\//.test(doi) ? doi : `https://doi.org/${doi}`;
@@ -526,6 +656,7 @@ function JournalPageInner() {
   if (isError || !data) return <ErrorPanel message={errorMessage(error)} backHref={backHref} />;
 
   const { journal, stats, deals, attribution, summary_stats, stats_totals: totals } = data;
+  const greenOa = data.green_oa ?? null;
   const recent = stats.filter((s) => s.year >= (site.windowStart ?? 0));
   const openalex = data.openalex ?? null;
   const openaire = data.openaire ?? null;
@@ -554,6 +685,7 @@ function JournalPageInner() {
           label: "Open access deal",
         }))
       : [{ id: "deal", label: "Open access deal" }]),
+    ...(greenOa ? [{ id: "green-oa", label: "Green OA policy" }] : []),
     ...(topics.length > 0 || oaTopics.length > 0 ? [{ id: "topics", label: "Topics" }] : []),
     { id: "publications", label: "Publications" },
     { id: "cite", label: "Cite this journal" },
@@ -655,6 +787,8 @@ function JournalPageInner() {
                 </div>
               </CollapsibleCard>
             )}
+
+            {greenOa && <GreenOaPanel greenOa={greenOa} attribution={attribution.green_oa ?? {}} />}
 
             {oaTopics.length > 0 ? (
               <CollapsibleCard id="topics" title="Topics" contentClassName="space-y-4">

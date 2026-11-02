@@ -12,6 +12,13 @@ const OA_TYPE_LABELS: Record<string, string> = {
   subscription: "Subscription (closed)",
 };
 
+const GREEN_OA_LABELS: Record<string, string> = {
+  submitted: "Submitted version",
+  accepted: "Accepted version",
+  published: "Published version",
+  none: "No green route",
+};
+
 export type FacetValue = { value: string; count?: number; label?: string };
 
 type FacetsData = Record<string, Record<string, number>>;
@@ -25,6 +32,7 @@ type FilterSelection = {
   publisher: string;
   hasApc: string | null;
   hasWorks: string | null;
+  greenOa: string | null;
   /** Multi-select: values OR together (single-select groups do not). */
   oaTypes: string[];
 };
@@ -202,6 +210,9 @@ function facetLook(key: string, value: string): { icon: ReactNode; tint: string 
     case "has_works:true":
     case "has_works:false":
       return { icon: <WorksGlyph />, tint: value === "true" ? TINTS.brand : TINTS.slate };
+    // Positive green-OA values ride the default icon-less brand look, like topic/publisher.
+    case "green_oa:none":
+      return { icon: null, tint: TINTS.slate };
     default:
       // The deal facet's negative value is backend-defined; anything that is
       // not "covered" is a no-deal option.
@@ -225,6 +236,8 @@ const GROUP_HINTS: Record<string, string> = {
     "SCImago impact quartile of the journal in its subject category. One choice; click it again to clear.",
   has_apc:
     "Is any APC known for this journal — a list price (OpenAlex) or costs reported to OpenAPC? One choice; click it again to clear.",
+  green_oa:
+    "Which versions of an article the publisher lets authors self-archive, per Jisc Open Policy Finder. One choice; click it again to clear.",
   topic: "OpenAlex topic of the journal's works. One choice; click it again to clear.",
   publisher: "The journal's publisher. One choice; click it again to clear.",
 };
@@ -249,6 +262,13 @@ const FACET_TITLES: Record<string, string> = {
   "has_apc:true":
     "APCs are known for this journal: a list price (OpenAlex) or costs reported to OpenAPC.",
   "has_apc:false": "No APC is known for this journal from either source.",
+  "green_oa:submitted":
+    "You may self-archive the submitted version (preprint), e.g. on a preprint server or your own website.",
+  "green_oa:accepted":
+    "You may self-archive the peer-reviewed accepted version (postprint), e.g. in an institutional repository.",
+  "green_oa:published": "You may self-archive the publisher's final published version.",
+  "green_oa:none":
+    "The journal is listed by Jisc Open Policy Finder but permits no self-archiving route, or prohibits open access outright.",
 };
 
 /** Hints that name the institution or window, resolved per render. */
@@ -507,6 +527,17 @@ export function FilterPanel({
         label: value === "true" ? "APC data known" : "No APC data",
       })),
       activeValues: selection.hasApc !== null ? [selection.hasApc] : [],
+    },
+    {
+      key: "green_oa",
+      label: "Green OA",
+      defaultOpen: true,
+      values: ["submitted", "accepted", "published", "none"].map((v) => ({
+        value: v,
+        count: facets.green_oa?.[v] ?? 0,
+        label: GREEN_OA_LABELS[v] ?? v,
+      })),
+      activeValues: selection.greenOa ? [selection.greenOa] : [],
     },
     {
       key: "has_works",

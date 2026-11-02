@@ -69,6 +69,7 @@ function SearchView() {
   const publisher = sp.get("publisher") ?? "";
   const hasApc = sp.get("has_apc");
   const hasWorks = sp.get("has_works");
+  const greenOa = sp.get("green_oa");
   const searchIn = (sp.get("search_in") ?? "all") as SearchIn;
   // oa_type is the one multi-select facet: comma-joined in the URL, OR'd
   // server-side.
@@ -193,6 +194,7 @@ function SearchView() {
     publisher: publisher || undefined,
     has_apc: hasApc === null ? undefined : hasApc === "true",
     has_works: hasWorks === null ? undefined : hasWorks === "true",
+    green_oa: greenOa ?? undefined,
     topic: topic || undefined,
     oa_type: oaTypes.join(",") || undefined,
     sort,
@@ -215,6 +217,7 @@ function SearchView() {
     publisher,
     hasApc,
     hasWorks,
+    greenOa,
     oaTypes,
   };
 
@@ -475,6 +478,7 @@ function SearchView() {
       publisher ||
       hasApc !== null ||
       hasWorks !== null ||
+      greenOa !== null ||
       oaTypes.length > 0,
   );
   const hasNonQueryFilters = Boolean(
@@ -486,6 +490,7 @@ function SearchView() {
       publisher ||
       hasApc !== null ||
       hasWorks !== null ||
+      greenOa !== null ||
       oaTypes.length > 0,
   );
   const clearFilters = () =>
@@ -500,6 +505,7 @@ function SearchView() {
       publisher: undefined,
       has_apc: undefined,
       has_works: undefined,
+      green_oa: undefined,
       oa_type: undefined,
     });
 

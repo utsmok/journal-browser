@@ -45,8 +45,8 @@ export function SiteFooter() {
           ))}
         </ul>
         <p className="mt-3 text-xs text-white/70">
-          Data: OpenAlex, cOAlition S Journal Checker Tool, openaccess.nl, OpenAPC, Scimago. Links
-          on every page lead to the upstream source.
+          Data: OpenAlex, cOAlition S Journal Checker Tool, openaccess.nl, OpenAPC, Scimago, Jisc
+          Open Policy Finder. Links on every page lead to the upstream source.
         </p>
       </div>
     </footer>
