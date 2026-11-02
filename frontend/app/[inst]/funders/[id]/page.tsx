@@ -68,11 +68,14 @@ const POLICY_LABELS: Record<string, string> = {
   conditions: "Conditions",
 };
 
+// Payload wrapper keys rendered elsewhere; never show them as JSON fallback.
+const NON_RULE_KEYS: Record<string, true> = { urls: true, notes: true, scope: true };
+
 /** One OPF policy sub-block (archiving_policy / publishing_policy):
  * known keys as label rows, everything else falls back to pretty JSON. */
 function PolicyRules({ rules }: { rules: Record<string, unknown> }) {
   const known = Object.entries(POLICY_LABELS).filter(([k]) => k in rules);
-  const rest = Object.keys(rules).filter((k) => !(k in POLICY_LABELS));
+  const rest = Object.keys(rules).filter((k) => !(k in POLICY_LABELS) && !(k in NON_RULE_KEYS));
   return (
     <>
       {known.length > 0 && (
