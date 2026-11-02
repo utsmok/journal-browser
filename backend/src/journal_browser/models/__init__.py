@@ -12,6 +12,14 @@ from .base import Base, _tstamp
 from .deals import Deal, DealInstitution, DealJournal
 from .evidence import ApcEvidence, InstitutionTrend, InstitutionWorksStats, JournalApcAggregate
 from .harvest import HarvestRun, HarvestState, RawFile, SourceRecord
+from .jisc import (
+    JiscFunder,
+    JiscFunderGroup,
+    JiscPolicy,
+    JiscPublication,
+    JiscPublisher,
+    JiscRepository,
+)
 from .journals import Journal, JournalFlags, ScimagojrMetric
 from .openalex import AuthorIdentity, OpenalexWork
 from .pure import PureOrg, PureOrgParent, PurePerson, PurePersonOrg, WorkPureAuthor
@@ -37,6 +45,12 @@ __all__ = [
     "InstitutionTrend",
     "InstitutionWorksStats",
     "IssnMap",
+    "JiscFunder",
+    "JiscFunderGroup",
+    "JiscPolicy",
+    "JiscPublication",
+    "JiscPublisher",
+    "JiscRepository",
     "Journal",
     "JournalApcAggregate",
     "JournalFlags",

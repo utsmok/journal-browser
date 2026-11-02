@@ -78,6 +78,21 @@ class Journal(Base):
     doaj_harvested_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
+    # Jisc Open Policy Finder journal canon (harvest/jisc_opf.py + normalizer):
+    # same tri-state convention as DOAJ — NULL = never swept, never read as
+    # "no policy". jisc_policy is the normalizer-built display object
+    # (routes/open_access_prohibited/policy_uri), not the raw record.
+    jisc_in_opf: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    jisc_oa_prohibited: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    jisc_sherpa_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    jisc_allows_sa_submitted: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    jisc_allows_sa_accepted: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    jisc_allows_sa_published: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    jisc_embargo_accepted_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    jisc_policy: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    jisc_harvested_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
     crossref_meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     openaire_meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     harvested_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
