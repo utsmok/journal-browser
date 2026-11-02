@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
 from ..deps import InstitutionDep
-from ..models import JiscFunder, OpenalexFunder
+from ..models import JiscFunder, OpenaireFunder, OpenalexFunder
 from ..schemas import (
     FunderDetailResponse,
     FunderListItem,
@@ -48,6 +48,33 @@ async def _openalex_links(session: AsyncSession) -> dict[int, str]:
     return links
 
 
+async def _search_aliases(session: AsyncSession) -> dict[int, list[str]]:
+    """jisc_funders.id -> extra searchable names from linked canon rows:
+    OpenAlex display names (e.g. the Dutch name for NWO) and OpenAIRE
+    short names (e.g. "NWO"). Canon-linked, so no invented aliases."""
+    ror_rows = await session.execute(
+        select(JiscFunder.id, OpenalexFunder.display_name, OpenaireFunder.short_name)
+        .select_from(JiscFunder)
+        .outerjoin(OpenalexFunder, OpenalexFunder.ror == JiscFunder.ror)
+        .outerjoin(OpenaireFunder, OpenaireFunder.ror == JiscFunder.ror)
+        .where(JiscFunder.ror.is_not(None))
+    )
+    ref_rows = await session.execute(
+        select(JiscFunder.id, OpenalexFunder.display_name, OpenaireFunder.short_name)
+        .select_from(JiscFunder)
+        .outerjoin(OpenalexFunder, OpenalexFunder.fundref == JiscFunder.fundref)
+        .outerjoin(OpenaireFunder, OpenaireFunder.ror == JiscFunder.ror)
+        .where(JiscFunder.ror.is_(None), JiscFunder.fundref.is_not(None))
+    )
+    aliases: dict[int, list[str]] = {}
+    for funder_id, display_name, short_name in (*ror_rows.all(), *ref_rows.all()):
+        bucket = aliases.setdefault(funder_id, [])
+        for value in (display_name, short_name):
+            if value and value not in bucket:
+                bucket.append(value)
+    return aliases
+
+
 def _to_item(
     funder: JiscFunder,
     openalex_funder_id: str | None,
@@ -80,10 +107,14 @@ async def search_funders(
     funders = (await session.execute(select(JiscFunder).order_by(JiscFunder.name))).scalars().all()
     counts = await funders_service.ut_work_counts(session, institution.id)
     links = await _openalex_links(session)
+    aliases = await _search_aliases(session)
+    needle = (q or "").strip().lower()
     items = []
     for funder in funders:
-        if q and q.strip() and q.strip().lower() not in (funder.name or "").lower():
-            continue
+        if needle:
+            haystack = [(funder.name or ""), *aliases.get(funder.id, [])]
+            if not any(needle in name.lower() for name in haystack):
+                continue
         items.append(_to_item(funder, links.get(funder.id), counts))
     # Order: n_ut_works desc nulls last (counts default 0), then name.
     items.sort(key=lambda f: (-f.n_ut_works, (f.name or "").lower()))
