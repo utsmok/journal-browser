@@ -1,4 +1,4 @@
-"""Tests for the blocked scaffolds: citation batching + Jisc gating."""
+"""Journal-citations harvester tests: batching, counting, and gating."""
 
 import pytest
 
