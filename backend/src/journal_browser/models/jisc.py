@@ -76,6 +76,10 @@ class JiscFunder(Base):
     country: Mapped[str | None] = mapped_column(String(2), nullable=True)
     url: Mapped[str | None] = mapped_column(Text, nullable=True)
     identifiers: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
+    # Bare ROR id ("04ad7pn51") / FundRef number ("100009795") extracted
+    # from identifiers; NULL when the OPF payload has neither.
+    ror: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fundref: Mapped[str | None] = mapped_column(Text, nullable=True)
     publications_policy: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     data_archiving_policy: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     date_modified: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)

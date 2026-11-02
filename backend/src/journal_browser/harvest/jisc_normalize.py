@@ -28,6 +28,7 @@ from ..models import (
     SourceRecord,
 )
 from .common import HarvestDataError, normalize_issn, run_harvest
+from .funders import normalize_fundref, normalize_ror
 from .jisc_opf import SOURCE, SWEEP_TYPES
 
 logger = logging.getLogger(__name__)
@@ -196,18 +197,32 @@ def _policy_row(pk: str, p: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def _funder_ids(identifiers: Any) -> tuple[str | None, str | None]:
+    """(ror, fundref) canon ids from the OPF identifiers list."""
+    ror = fundref = None
+    for item in identifiers or []:
+        raw = item.get("identifier") if isinstance(item, dict) else item
+        ror = ror or normalize_ror(raw)
+        fundref = fundref or normalize_fundref(raw)
+    return ror, fundref
+
+
 def _funder_row(pk: str, p: dict[str, Any]) -> dict[str, Any] | None:
     """jisc_funders row; both OA policy blocks kept verbatim (stripped)."""
     funder_id = _int_or_none(p.get("id", pk))
     if funder_id is None:
         return None
     meta = p.get("funder_metadata") or {}
+    idents = _strip_phrases(meta.get("identifiers"))
+    ror, fundref = _funder_ids(idents)
     return {
         "id": funder_id,
         "name": _display_name(meta.get("name")),
         "country": _ccode(meta.get("country")),
         "url": _url(meta.get("url")),
-        "identifiers": _strip_phrases(meta.get("identifiers")),
+        "identifiers": idents,
+        "ror": ror,
+        "fundref": fundref,
         "publications_policy": _strip_phrases(p.get("open_access_publications_policy")),
         "data_archiving_policy": _strip_phrases(p.get("open_access_data_archiving_policy")),
         "date_modified": _date_modified(p),

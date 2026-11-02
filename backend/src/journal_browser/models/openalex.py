@@ -137,3 +137,25 @@ class AuthorIdentity(Base):
             "status",
         ),
     )
+
+
+class OpenalexFunder(Base):
+    """OpenAlex funder canon (jobs/harvest_openalex_funders.py).
+
+    ror is the bare lowercase ROR id ("04ad7pn51"), fundref the bare
+    FundRef number ("100009795") so jisc_funders/openaire_funders join
+    directly.
+    """
+
+    __tablename__ = "openalex_funders"
+
+    openalex_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    ror: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fundref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    display_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    country_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    grant_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    works_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cited_by_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    updated_at: Mapped[datetime] = _tstamp()

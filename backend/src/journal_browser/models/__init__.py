@@ -21,7 +21,8 @@ from .jisc import (
     JiscRepository,
 )
 from .journals import Journal, JournalFlags, ScimagojrMetric
-from .openalex import AuthorIdentity, OpenalexWork
+from .openaire import OpenaireFunder
+from .openalex import AuthorIdentity, OpenalexFunder, OpenalexWork
 from .pure import PureOrg, PureOrgParent, PurePerson, PurePersonOrg, WorkPureAuthor
 from .reference import Institution, IssnMap, OpenalexPublisher, Publisher
 from .works import WORK_IDENTITY_UQ, Work, WorkIdentity
@@ -56,6 +57,8 @@ __all__ = [
     "JournalFlags",
     "Limitation",
     "ManualOverride",
+    "OpenaireFunder",
+    "OpenalexFunder",
     "OpenalexPublisher",
     "OpenalexWork",
     "Publisher",
