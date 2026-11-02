@@ -8,7 +8,7 @@ policies, funders, funder groups, repositories. Raw payloads live in
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, Integer, String, Text
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -115,3 +115,23 @@ class JiscRepository(Base):
     metadata_record_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     date_modified: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     harvested_at: Mapped[datetime] = _tstamp()
+
+
+class FunderLink(Base):
+    """Canon link: jisc_funders.id -> twin funder row in another source.
+
+    source is 'openalex' (source_id = openalex_funders.openalex_id) or
+    'openaire' (source_id = openaire_funders.openaire_id); via records the
+    matching key ('ror' | 'fundref'). One jisc funder may link several
+    OpenAlex twins (funding streams). Rebuilt by harvest/funders.refresh_
+    funder_links, seeded by migration 0050."""
+
+    __tablename__ = "funder_links"
+
+    funder_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("jisc_funders.id", ondelete="CASCADE"), primary_key=True
+    )
+    source: Mapped[str] = mapped_column(Text, primary_key=True)
+    source_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    via: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = _tstamp()

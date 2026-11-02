@@ -6567,6 +6567,16 @@
             ],
             "title": "Data Archiving Policy"
           },
+          "openaire": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FunderOpenaireBlock"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "top_journals": {
             "items": {
               "$ref": "#/components/schemas/FunderTopJournal"
@@ -6714,6 +6724,64 @@
           "fundref"
         ],
         "title": "FunderListItem"
+      },
+      "FunderOpenaireBlock": {
+        "properties": {
+          "openaire_id": {
+            "type": "string",
+            "title": "Openaire Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "short_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Name"
+          },
+          "jurisdiction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jurisdiction"
+          },
+          "website_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Website Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "openaire_id"
+        ],
+        "title": "FunderOpenaireBlock",
+        "description": "OpenAIRE graph identity for the same funder (canon-linked via ROR)."
       },
       "FunderSearchResponse": {
         "properties": {

@@ -13,6 +13,7 @@ from .deals import Deal, DealInstitution, DealJournal
 from .evidence import ApcEvidence, InstitutionTrend, InstitutionWorksStats, JournalApcAggregate
 from .harvest import HarvestRun, HarvestState, RawFile, SourceRecord
 from .jisc import (
+    FunderLink,
     JiscFunder,
     JiscFunderGroup,
     JiscPolicy,
@@ -40,6 +41,7 @@ __all__ = [
     "DealJournal",
     "DocEdit",
     "Feedback",
+    "FunderLink",
     "HarvestRun",
     "HarvestState",
     "Institution",

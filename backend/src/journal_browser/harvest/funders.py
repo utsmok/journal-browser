@@ -15,7 +15,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from journal_browser.config import get_settings
-from journal_browser.models import JiscFunder, OpenaireFunder, OpenalexFunder
+from journal_browser.models import FunderLink, JiscFunder, OpenaireFunder, OpenalexFunder
 
 try:
     from aireloom import AireloomClient
@@ -115,6 +115,7 @@ async def harvest_openalex_funders(session: AsyncSession) -> dict[str, int]:
     stats["upserted"] = await _upsert(session, OpenalexFunder, "openalex_id", rows)
     stats["with_ror"] = sum(1 for r in rows if r["ror"])
     stats["with_fundref"] = sum(1 for r in rows if r["fundref"])
+    stats["funder_links"] = await refresh_funder_links(session)
     logger.info("harvest_openalex_funders: %s", stats)
     return stats
 
@@ -182,6 +183,7 @@ async def harvest_openaire_funders(session: AsyncSession) -> dict[str, int]:
         raise RuntimeError("openaire sweep: zero funders returned")
     stats["upserted"] = await _upsert(session, OpenaireFunder, "openaire_id", rows)
     stats["with_ror"] = sum(1 for r in rows if r["ror"])
+    stats["funder_links"] = await refresh_funder_links(session)
     logger.info("harvest_openaire_funders: %s", stats)
     return stats
 
@@ -225,3 +227,34 @@ async def funder_link_matrix(session: AsyncSession) -> dict[str, int]:
     }
     logger.info("funder_link_matrix: %s", matrix)
     return matrix
+
+
+async def refresh_funder_links(session: AsyncSession) -> int:
+    """Rebuild funder_links from the ror/fundref columns (idempotent).
+
+    Called after each funder harvest so the table never goes stale; the
+    API's canon links, search aliases and OpenAIRE identity blocks read it.
+    """
+    await session.execute(text("delete from funder_links"))
+    for source_sql in (
+        "INSERT INTO funder_links (funder_id, source, source_id, via)"
+        " SELECT j.id, 'openalex', o.openalex_id, 'ror'"
+        " FROM jisc_funders j JOIN openalex_funders o ON o.ror = j.ror"
+        " WHERE j.ror IS NOT NULL",
+        "INSERT INTO funder_links (funder_id, source, source_id, via)"
+        " SELECT j.id, 'openalex', o.openalex_id, 'fundref'"
+        " FROM jisc_funders j JOIN openalex_funders o ON o.fundref = j.fundref"
+        " WHERE j.fundref IS NOT NULL",
+        "INSERT INTO funder_links (funder_id, source, source_id, via)"
+        " SELECT j.id, 'openaire', a.openaire_id, 'ror'"
+        " FROM jisc_funders j JOIN openaire_funders a ON a.ror = j.ror"
+        " WHERE j.ror IS NOT NULL",
+    ):
+        await session.execute(text(source_sql))
+    await session.commit()
+    n = int(
+        (await session.execute(select(func.count()).select_from(FunderLink.__table__))).scalar()
+        or 0
+    )
+    logger.info("refresh_funder_links: %d links", n)
+    return n

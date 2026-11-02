@@ -490,8 +490,11 @@ async def test_publisher_detail_by_canonical_name(canonical_api):
         ("7777-7771", "Springer"),
         ("1010-1010", "Nature Research"),
     ]
-    # The group lives under the canonical; its former name is gone.
-    assert (await client.get(f"/api/v1/ut/publishers/{quote('Springer')}")).status_code == 404
+    # Member sub-brand URLs resolve to the canonical group page.
+    r = await client.get(f"/api/v1/ut/publishers/{quote('Springer')}")
+    assert r.status_code == 200
+    assert r.json()["publisher"]["name"] == "Springer Nature"
+    assert r.json()["publisher"]["n_journals"] == 3
 
 
 @requires_db

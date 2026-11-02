@@ -103,9 +103,20 @@ class FunderTopJournal(BaseModel):
     n_works: int
 
 
+class FunderOpenaireBlock(BaseModel):
+    """OpenAIRE graph identity for the same funder (canon-linked via ROR)."""
+
+    openaire_id: str
+    name: str | None = None
+    short_name: str | None = None
+    jurisdiction: str | None = None
+    website_url: str | None = None
+
+
 class FunderDetailResponse(FunderListItem):
     publications_policy: dict[str, Any] | None = None
     data_archiving_policy: dict[str, Any] | None = None
+    openaire: FunderOpenaireBlock | None = None
     top_journals: list[FunderTopJournal] = []
 
 

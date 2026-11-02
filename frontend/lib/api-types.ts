@@ -1762,6 +1762,7 @@ export interface components {
             data_archiving_policy?: {
                 [key: string]: unknown;
             } | null;
+            openaire?: components["schemas"]["FunderOpenaireBlock"] | null;
             /**
              * Top Journals
              * @default []
@@ -1809,6 +1810,22 @@ export interface components {
              * @default 0
              */
             n_ut_works: number;
+        };
+        /**
+         * FunderOpenaireBlock
+         * @description OpenAIRE graph identity for the same funder (canon-linked via ROR).
+         */
+        FunderOpenaireBlock: {
+            /** Openaire Id */
+            openaire_id: string;
+            /** Name */
+            name?: string | null;
+            /** Short Name */
+            short_name?: string | null;
+            /** Jurisdiction */
+            jurisdiction?: string | null;
+            /** Website Url */
+            website_url?: string | null;
         };
         /** FunderSearchResponse */
         FunderSearchResponse: {

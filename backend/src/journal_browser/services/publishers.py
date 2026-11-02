@@ -419,9 +419,18 @@ async def publisher_detail(
     canonical key (404 upstream). Deals reuse the journal-detail
     participation join."""
     iid = institution.id
-    pub = (await _snapshot(session, iid)).get(name)
+    snapshot = await _snapshot(session, iid)
+    pub = snapshot.get(name)
     if pub is None:
-        return None
+        # Sub-brand name requested (e.g. "Cambridge University Press" groups
+        # under its OpenAlex lineage root "University of Cambridge"):
+        # resolve to the canonical group so the page exists.
+        for group_name, p in snapshot.items():
+            if name.lower() in p.members_lower:
+                name, pub = group_name, p
+                break
+        if pub is None:
+            return None
 
     # External registry refs for the detail header (Open Access NL profile
     # link); a missing Publishers row just leaves the slug None.
