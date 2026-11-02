@@ -148,6 +148,7 @@ def _expected_policy() -> dict:
                 "embargo_months": 12,
                 "conditions": ["Deposit in any repository"],
                 "additional_oa_fee": "no",
+                "fee_only": False,
             },
             "accepted": {
                 "locations": ["institutional_repository"],
@@ -156,6 +157,7 @@ def _expected_policy() -> dict:
                 "embargo_months": 6,
                 "conditions": ["Publisher copyright notice"],
                 "additional_oa_fee": "yes",
+                "fee_only": True,
             },
             "published": {
                 "locations": ["this_journal"],
@@ -164,6 +166,7 @@ def _expected_policy() -> dict:
                 "embargo_months": None,
                 "conditions": [],
                 "additional_oa_fee": "no",
+                "fee_only": False,
             },
         },
         "open_access_prohibited": True,
@@ -384,7 +387,7 @@ async def test_normalize_jisc_end_to_end(db):
     assert j.jisc_sherpa_id == 101
     assert (j.jisc_allows_sa_submitted, j.jisc_allows_sa_accepted, j.jisc_allows_sa_published) == (
         True,
-        True,
+        False,  # accepted route exists but is fee-only: not a green route
         True,
     )
     assert j.jisc_embargo_accepted_months == 6

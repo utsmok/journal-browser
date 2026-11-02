@@ -342,6 +342,7 @@ def _blank_route() -> dict[str, Any]:
         "embargo_months": None,
         "conditions": [],
         "additional_oa_fee": None,
+        "fee_only": False,
     }
 
 
@@ -374,6 +375,8 @@ def _merge_policies(payloads: list[dict[str, Any]], sherpa_id: int) -> dict[str,
     prohibited = False
     moniker: str | None = None
     urls: list[Any] = []
+    fee_stated: dict[str, int] = {}
+    fee_yes: dict[str, int] = {}
     for payload in payloads:
         for pol in _strip_phrases(payload.get("publisher_policy")) or []:
             prohibited = prohibited or _yesno(pol.get("open_access_prohibited")) is True
@@ -418,6 +421,12 @@ def _merge_policies(payloads: list[dict[str, Any]], sherpa_id: int) -> dict[str,
                         route["additional_oa_fee"] = "yes"
                     elif fee is False and route["additional_oa_fee"] is None:
                         route["additional_oa_fee"] = "no"
+                    # Green semantics: a version only self-archives free when
+                    # at least one of its routes is not fee-gated.
+                    if fee is not None:
+                        fee_stated[version] = fee_stated.get(version, 0) + 1
+                        if fee is True:
+                            fee_yes[version] = fee_yes.get(version, 0) + 1
                     months = _embargo_months(loc.get("embargo"))
                     if months is not None and (
                         route["embargo_months"] is None or months < route["embargo_months"]
@@ -425,6 +434,9 @@ def _merge_policies(payloads: list[dict[str, Any]], sherpa_id: int) -> dict[str,
                         route["embargo_months"] = months
     ordered = {v: routes[v] for v in ROUTE_ORDER if v in routes}
     ordered.update({k: routes[k] for k in routes if k not in ROUTE_ORDER})
+    for version, route in ordered.items():
+        stated = fee_stated.get(version, 0)
+        route["fee_only"] = stated > 0 and fee_yes.get(version, 0) == stated
     return {
         "routes": ordered,
         "open_access_prohibited": prohibited,
@@ -474,9 +486,12 @@ async def _stamp_journals(
                 "b_issn_l": issn_l,
                 "b_prohibited": policy["open_access_prohibited"],
                 "b_sherpa_id": pids[0],
-                "b_submitted": "submitted" in policy["routes"],
-                "b_accepted": "accepted" in policy["routes"],
-                "b_published": "published" in policy["routes"],
+                "b_submitted": "submitted" in policy["routes"]
+                and not policy["routes"]["submitted"].get("fee_only"),
+                "b_accepted": "accepted" in policy["routes"]
+                and not policy["routes"]["accepted"].get("fee_only"),
+                "b_published": "published" in policy["routes"]
+                and not policy["routes"]["published"].get("fee_only"),
                 "b_embargo": accepted_embargo,
                 "b_policy": policy,
                 "b_now": now,
