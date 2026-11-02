@@ -1,3 +1,5 @@
+import { CircleCheck, CircleHelp, CircleX } from "lucide-react";
+
 /**
  * Access lockups: single-family SVG badges that replace generic pills.
  *
@@ -373,5 +375,38 @@ export function QuartileBadge({ quartile }: { quartile: string | null }) {
     >
       <QuartileGlyph />
     </Lockup>
+  );
+}
+
+/** Funder-fit tier for the selected funder: green check = compliant,
+ * amber question = check, red cross = no. Reasons ride in the tooltip.
+ * status null (text-only funder policy) renders nothing here — the detail
+ * page carries that message instead. */
+const FIT_SPEC = {
+  compliant: {
+    Icon: CircleCheck,
+    color: "text-emerald-700 dark:text-emerald-400",
+    label: "Compliant",
+  },
+  check: { Icon: CircleHelp, color: "text-amber-600 dark:text-amber-400", label: "Check" },
+  no: { Icon: CircleX, color: "text-red-700 dark:text-red-400", label: "Not compliant" },
+} as const;
+
+export function FunderFitBadge({
+  status,
+  reasons,
+}: {
+  status: "compliant" | "check" | "no" | null | undefined;
+  reasons: string[];
+}) {
+  if (!status) return null;
+  const { Icon, color, label } = FIT_SPEC[status];
+  return (
+    <span
+      className={`jb-badge inline-flex shrink-0 items-center gap-0.5 ${color}`}
+      title={`Funder fit: ${label}${reasons.length ? " — " + reasons.join(" ") : ""}`}
+    >
+      <Icon aria-label={`Funder fit: ${label}`} className="size-4" role="img" />
+    </span>
   );
 }

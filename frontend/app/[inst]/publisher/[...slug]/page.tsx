@@ -199,6 +199,20 @@ export default function PublisherPage() {
               </a>
             </>
           )}
+          {publisher.external_ids?.ror && (
+            <>
+              <span aria-hidden>·</span>
+              <a
+                href={publisher.external_ids.ror}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline"
+                title="Research Organization Registry record for this publisher"
+              >
+                ROR <ExternalLink aria-hidden className="size-3.5 shrink-0" />
+              </a>
+            </>
+          )}
         </div>
       </header>
 

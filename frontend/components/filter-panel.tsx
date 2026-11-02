@@ -16,7 +16,7 @@ const GREEN_OA_LABELS: Record<string, string> = {
   submitted: "Submitted version",
   accepted: "Accepted version",
   published: "Published version",
-  none: "No green route",
+  none: "No green route or prohibited",
 };
 
 export type FacetValue = { value: string; count?: number; label?: string };
@@ -33,6 +33,8 @@ type FilterSelection = {
   hasApc: string | null;
   hasWorks: string | null;
   greenOa: string | null;
+  /** Funder-fit tier; only selectable when a funder is picked. */
+  funderFit: string;
   /** Multi-select: values OR together (single-select groups do not). */
   oaTypes: string[];
 };
@@ -550,6 +552,28 @@ export function FilterPanel({
       })),
       activeValues: selection.hasWorks !== null ? [selection.hasWorks] : [],
     },
+    // Only rendered when a funder is selected and its policy is structured
+    // (the backend omits the facet otherwise).
+    ...(facets.funder_fit
+      ? [
+          {
+            key: "funder_fit",
+            label: "Funder fit",
+            defaultOpen: true,
+            values: ["compliant", "check", "no"].map((v) => ({
+              value: v,
+              count: facets.funder_fit?.[v] ?? 0,
+              label:
+                v === "compliant"
+                  ? "Compliant"
+                  : v === "check"
+                    ? "Check manually"
+                    : "Not compliant",
+            })),
+            activeValues: selection.funderFit ? [selection.funderFit] : [],
+          },
+        ]
+      : []),
     ...(topicValues.length > 0
       ? [
           {

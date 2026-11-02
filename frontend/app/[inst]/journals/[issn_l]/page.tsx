@@ -1,6 +1,15 @@
 "use client";
 
-import { ArrowLeft, Check, Copy, ExternalLink, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  CircleCheck,
+  CircleHelp,
+  CircleX,
+  Copy,
+  ExternalLink,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -20,11 +29,13 @@ import {
   type Attribution,
   type DealLink,
   type DealOut,
+  type FunderFitOut,
   type JournalDetailResponse,
   type OpenalexSource,
   type OpenalexTopic,
 } from "@/lib/api";
 import { dealLinkLabel, orderedDealLinks } from "@/lib/deal-links";
+import { useFunderPrefs, type FunderPrefs } from "@/lib/funder-prefs";
 import { cleanProse, cn } from "@/lib/utils";
 
 type NamedTopic = { display_name?: string };
@@ -299,16 +310,77 @@ function licenseLabel(license: string): string {
   return license.charAt(0).toUpperCase() + license.slice(1).replaceAll("_", " ");
 }
 
-function locationPhrase(location: string, repositories: string[]): string {
+function locationPhrase(
+  location: string,
+  repositories: string[],
+  links: Record<string, string>,
+): React.ReactNode {
   const base =
     GREEN_OA_LOCATIONS[location] ??
     location.charAt(0).toUpperCase() + location.slice(1).replaceAll("_", " ");
-  return location.startsWith("named_") && repositories.length > 0
-    ? `${base}: ${repositories.join(", ")}`
-    : base;
+  if (!(location.startsWith("named_") && repositories.length > 0)) return base;
+  return (
+    <>
+      {base}:{" "}
+      {repositories.map((name, i) => (
+        <React.Fragment key={name}>
+          {i > 0 && ", "}
+          {/* Linked when the name matched a jisc_repositories row. */}
+          {links[name] ? <External href={links[name]}>{name}</External> : name}
+        </React.Fragment>
+      ))}
+    </>
+  );
 }
 
-/** Green (self-archiving) routes for this journal, from Jisc Open Policy Finder. */
+/** Small card in the green-OA area: how the selected funder's policy
+ * judges this journal, with the engine's reasons. Text-only funder
+ * policies (fit.status null) show the check-manually note. */
+const FIT_TIER = {
+  compliant: {
+    Icon: CircleCheck,
+    color: "text-emerald-700 dark:text-emerald-400",
+    label: "Compliant",
+  },
+  check: { Icon: CircleHelp, color: "text-amber-600 dark:text-amber-400", label: "Check" },
+  no: { Icon: CircleX, color: "text-red-700 dark:text-red-400", label: "Not compliant" },
+} as const;
+
+function FunderFitCard({
+  fit,
+  funder,
+  inst,
+}: {
+  fit: FunderFitOut | null;
+  funder: NonNullable<FunderPrefs>;
+  inst: string;
+}) {
+  const tier = fit?.status ? FIT_TIER[fit.status] : null;
+  return (
+    <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        {tier && <tier.Icon aria-hidden className={`size-5 ${tier.color}`} />}
+        <span className="font-medium">
+          {tier
+            ? `Funder fit for ${funder.name}: ${tier.label}`
+            : `Funder policy for ${funder.name}`}
+        </span>
+        <Link
+          href={`/${inst}/funders/${funder.id}`}
+          className="text-xs underline decoration-dotted underline-offset-2"
+        >
+          view funder policy
+        </Link>
+      </div>
+      <ul className="mt-2 list-disc space-y-1 pl-5 text-[var(--muted-foreground)]">
+        {(fit?.reasons ?? ["Funder policy is text-only; check manually"]).map((reason) => (
+          <li key={reason}>{reason}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function GreenOaPanel({
   greenOa,
   attribution,
@@ -349,9 +421,12 @@ function GreenOaPanel({
           {route.locations.length > 0 && (
             <p>
               Where:{" "}
-              {route.locations
-                .map((location) => locationPhrase(location, route.repositories))
-                .join("; ")}
+              {route.locations.map((location, i) => (
+                <React.Fragment key={location}>
+                  {i > 0 && "; "}
+                  {locationPhrase(location, route.repositories, greenOa.repository_links)}
+                </React.Fragment>
+              ))}
               .
             </p>
           )}
@@ -388,6 +463,11 @@ function GreenOaPanel({
         {greenOa.policy_uri && (
           <External href={greenOa.policy_uri}>View on Jisc Open Policy Finder</External>
         )}
+        {greenOa.urls.map((u) => (
+          <External key={u.url} href={u.url}>
+            {u.description || u.url}
+          </External>
+        ))}
         <SourceNote {...attribution} codes={attribution.caveat_codes} />
       </div>
     </CollapsibleCard>
@@ -644,7 +724,8 @@ function JournalPageInner() {
   const inst = useInstitution();
   const issnL = params?.issn_l ? decodeURIComponent(params.issn_l) : undefined;
   const backHref = useLastSearchHref();
-  const { data, isPending, isError, error } = useJournal(issnL);
+  const [funder] = useFunderPrefs();
+  const { data, isPending, isError, error } = useJournal(issnL, funder?.id);
   // Old backends lack /similar; the section simply stays hidden then.
   const similarQuery = useSimilar(issnL);
   const similar = similarQuery.data;
@@ -789,6 +870,8 @@ function JournalPageInner() {
             )}
 
             {greenOa && <GreenOaPanel greenOa={greenOa} attribution={attribution.green_oa ?? {}} />}
+
+            {funder && <FunderFitCard fit={data.funder_fit ?? null} funder={funder} inst={inst} />}
 
             {oaTopics.length > 0 ? (
               <CollapsibleCard id="topics" title="Topics" contentClassName="space-y-4">

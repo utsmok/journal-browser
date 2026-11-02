@@ -27,6 +27,10 @@ export type WorksPage = Schemas["WorksPage"];
 export type LimitationOut = Schemas["LimitationOut"];
 export type FreshnessResponse = Schemas["FreshnessResponse"];
 export type StatsYear = Schemas["StatsYear"];
+export type FunderListItem = Schemas["FunderListItem"];
+export type FunderSearchResponse = Schemas["FunderSearchResponse"];
+export type FunderDetailResponse = Schemas["FunderDetailResponse"];
+export type FunderFitOut = Schemas["FunderFitOut"];
 export type Attribution = Schemas["Attribution"];
 
 // --- Author profiles (Pure-based, per institution) ---
@@ -90,6 +94,10 @@ export type JournalSearchParams = {
   oa_type?: string;
   /** Self-archiving route per Jisc: "submitted" | "accepted" | "published" | "none". */
   green_oa?: string;
+  /** Jisc OPF funder id; annotates rows with funder_fit. */
+  funder?: number;
+  /** Funder-fit tier filter; needs `funder` set. */
+  funder_fit?: string;
   sort?: SortKey;
   /** Sort direction; omitted = each key's natural direction. */
   dir?: "asc" | "desc";

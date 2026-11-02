@@ -6,8 +6,9 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
-import { DealBadge, OaTypeBadge, QuartileBadge } from "@/components/badges";
+import { DealBadge, FunderFitBadge, OaTypeBadge, QuartileBadge } from "@/components/badges";
 import { FilterPanel } from "@/components/filter-panel";
+import { FunderPicker } from "@/components/search/funder-picker";
 import { Pagination } from "@/components/search/pagination";
 import { SortHead } from "@/components/search/sort-head";
 import { SourceNote } from "@/components/source-note";
@@ -26,6 +27,7 @@ import {
 import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { useFacets, useJournals } from "@/hooks/use-api";
+import { useFunderPrefs } from "@/lib/funder-prefs";
 import {
   encodeNamePath,
   errorMessage,
@@ -80,6 +82,11 @@ function SearchView() {
   // mode, while shorter input just falls back to a normal browse.
   const semanticMode = sp.get("mode") === "semantic";
   const semantic = semanticMode && spQ.trim().length >= 2;
+  // Selected funder lives in localStorage, not the URL: it's a personal
+  // lens over the same result set. The tier filter is URL state like the
+  // other facets.
+  const [funder] = useFunderPrefs();
+  const funderFit = sp.get("funder_fit") ?? "";
 
   const [input, setInput] = React.useState(spQ);
   const [stack, setStack] = React.useState<string[]>([]);
@@ -195,6 +202,8 @@ function SearchView() {
     has_apc: hasApc === null ? undefined : hasApc === "true",
     has_works: hasWorks === null ? undefined : hasWorks === "true",
     green_oa: greenOa ?? undefined,
+    funder: funder && !semanticMode ? funder.id : undefined,
+    funder_fit: funderFit || undefined,
     topic: topic || undefined,
     oa_type: oaTypes.join(",") || undefined,
     sort,
@@ -218,6 +227,7 @@ function SearchView() {
     hasApc,
     hasWorks,
     greenOa,
+    funderFit,
     oaTypes,
   };
 
@@ -310,6 +320,14 @@ function SearchView() {
         // a column name.
         header: () => <span className="sr-only">Deal coverage</span>,
         cell: (info) => <DealBadge covered={info.getValue<boolean>()} />,
+      },
+      {
+        accessorKey: "funder_fit",
+        header: () => <span className="sr-only">Funder fit</span>,
+        cell: (info) => {
+          const fit = info.row.original.funder_fit;
+          return <FunderFitBadge status={fit?.status ?? null} reasons={fit?.reasons ?? []} />;
+        },
       },
       {
         accessorKey: "is_oa",
@@ -594,6 +612,9 @@ function SearchView() {
               <Search aria-hidden className="size-4" /> Search
             </Button>
           </form>
+          <div className="mt-2 max-w-2xl">
+            <FunderPicker />
+          </div>
         </section>
 
         {/* Stacked filter card: the only filter UI below 960px. */}
@@ -783,6 +804,10 @@ function SearchView() {
                           </div>
                           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                             <DealBadge covered={row.deal_covered} />
+                            <FunderFitBadge
+                              status={row.funder_fit?.status ?? null}
+                              reasons={row.funder_fit?.reasons ?? []}
+                            />
                             <OaTypeBadge oaType={row.oa_type} isOa={row.is_oa} />
                             <QuartileBadge quartile={row.quartile ?? null} />
                           </div>
@@ -870,6 +895,9 @@ function SearchView() {
                     "doaj-canon",
                     "jct-coverage",
                     "issn-mapping",
+                    // Funder fit is heuristic (deal/DOAJ/green-route rules),
+                    // never a policy opinion; surface the currency caveat.
+                    ...(funder ? ["jisc-policy-currency"] : []),
                   ]}
                 />
               </div>

@@ -12,6 +12,8 @@ import {
   fetchPublishers,
   type DealOut,
   type FreshnessResponse,
+  type FunderDetailResponse,
+  type FunderSearchResponse,
   type JournalDetailResponse,
   type JournalSearchParams,
   type JournalSearchResponse,
@@ -40,6 +42,8 @@ const qk = {
   publisher: (i: string, name: string) => ["publisher", i, name] as const,
   orgunits: (i: string, params: OrgUnitSearchParams) => ["orgunits", i, params] as const,
   orgunit: (i: string, level: OrgUnitLevel, name: string) => ["orgunit", i, level, name] as const,
+  funders: (i: string, q: string) => ["funders", i, q] as const,
+  funder: (i: string, id: number) => ["funder", i, id] as const,
 };
 
 /**
@@ -110,11 +114,14 @@ export function useFacets(
   });
 }
 
-export function useJournal(issnL: string | undefined) {
+export function useJournal(issnL: string | undefined, funderId?: number) {
   const inst = useInstitution();
   return useQuery({
-    queryKey: qk.journal(inst, issnL ?? ""),
-    queryFn: () => apiGet<JournalDetailResponse>(`/${inst}/journals/${issnL}`),
+    queryKey: [...qk.journal(inst, issnL ?? ""), funderId ?? null] as const,
+    queryFn: () =>
+      apiGet<JournalDetailResponse>(`/${inst}/journals/${issnL}`, {
+        funder: funderId,
+      }),
     enabled: Boolean(issnL),
   });
 }
@@ -225,5 +232,26 @@ export function useOrgUnit(level: OrgUnitLevel | undefined, name: string | undef
     queryKey: qk.orgunit(inst, level ?? "faculty", name ?? ""),
     queryFn: () => fetchOrgUnit(inst, level ?? "faculty", name ?? ""),
     enabled: Boolean(level && name),
+  });
+}
+
+/** Funder picker suggestions: name-substring search over the Jisc OPF
+ * canon (~200 rows, server-filtered). Disabled until 2 chars. */
+export function useFunders(q: string | undefined, enabled: boolean) {
+  const inst = useInstitution();
+  return useQuery({
+    queryKey: qk.funders(inst, q ?? ""),
+    queryFn: () => apiGet<FunderSearchResponse>(`/${inst}/funders`, { q, limit: 10 }),
+    enabled: enabled && Boolean(q && q.trim().length >= 2) && inst !== "",
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useFunder(id: number | undefined) {
+  const inst = useInstitution();
+  return useQuery({
+    queryKey: qk.funder(inst, id ?? 0),
+    queryFn: () => apiGet<FunderDetailResponse>(`/${inst}/funders/${id}`),
+    enabled: Boolean(id) && inst !== "",
   });
 }
