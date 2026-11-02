@@ -6774,6 +6774,14 @@
               }
             ],
             "title": "Website Url"
+          },
+          "streams": {
+            "items": {
+              "$ref": "#/components/schemas/FunderOpenaireStream"
+            },
+            "type": "array",
+            "title": "Streams",
+            "default": []
           }
         },
         "type": "object",
@@ -6782,6 +6790,36 @@
         ],
         "title": "FunderOpenaireBlock",
         "description": "OpenAIRE graph identity for the same funder (canon-linked via ROR)."
+      },
+      "FunderOpenaireStream": {
+        "properties": {
+          "level0_id": {
+            "type": "string",
+            "title": "Level0 Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "n_projects": {
+            "type": "integer",
+            "title": "N Projects"
+          }
+        },
+        "type": "object",
+        "required": [
+          "level0_id",
+          "n_projects"
+        ],
+        "title": "FunderOpenaireStream",
+        "description": "One funding level-0 stream with its OpenAIRE project count."
       },
       "FunderSearchResponse": {
         "properties": {

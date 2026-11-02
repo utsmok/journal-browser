@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import FunderLink, OpenaireFunder, OpenalexFunder
+from ..models import FunderLink, OpenaireFunder, OpenaireFunderStream, OpenalexFunder
 
 
 @dataclass(slots=True)
@@ -66,6 +66,20 @@ async def canon_links(session: AsyncSession) -> FunderCanon:
         )
     ).all()
     canon = FunderCanon(aliases={}, bare_ids={}, urls={}, openaire={})
+    # Streams ride along keyed by openaire id; attached to the funder
+    # blocks below (top funding-level-0 facets with project counts).
+    stream_rows = (
+        await session.execute(
+            select(OpenaireFunderStream).order_by(
+                OpenaireFunderStream.funder_openaire_id, OpenaireFunderStream.n_projects.desc()
+            )
+        )
+    ).scalars()
+    streams_by_id: dict[str, list[dict[str, Any]]] = {}
+    for st in stream_rows:
+        streams_by_id.setdefault(st.funder_openaire_id, []).append(
+            {"level0_id": st.level0_id, "name": st.name, "n_projects": st.n_projects}
+        )
     seen_alias: set[tuple[int, str]] = set()
     for (
         fid,
@@ -93,6 +107,7 @@ async def canon_links(session: AsyncSession) -> FunderCanon:
                     "short_name": short_name,
                     "jurisdiction": jurisdiction,
                     "website_url": website_url,
+                    "streams": streams_by_id.get(sid, []),
                 },
             )
             if short_name and (fid, short_name) not in seen_alias:

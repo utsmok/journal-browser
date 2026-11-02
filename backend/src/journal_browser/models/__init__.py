@@ -22,7 +22,7 @@ from .jisc import (
     JiscRepository,
 )
 from .journals import Journal, JournalFlags, ScimagojrMetric
-from .openaire import OpenaireFunder
+from .openaire import OpenaireFunder, OpenaireFunderStream
 from .openalex import AuthorIdentity, OpenalexFunder, OpenalexWork
 from .pure import PureOrg, PureOrgParent, PurePerson, PurePersonOrg, WorkPureAuthor
 from .reference import Institution, IssnMap, OpenalexPublisher, Publisher
@@ -60,6 +60,7 @@ __all__ = [
     "Limitation",
     "ManualOverride",
     "OpenaireFunder",
+    "OpenaireFunderStream",
     "OpenalexFunder",
     "OpenalexPublisher",
     "OpenalexWork",

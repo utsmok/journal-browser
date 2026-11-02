@@ -206,6 +206,23 @@ function OpenaireCard({ oa }: { oa: NonNullable<FunderDetailResponse["openaire"]
           <dt className="text-[var(--muted-foreground)]">OpenAIRE id</dt>
           <dd className="break-all">{oa.openaire_id}</dd>
         </dl>
+        {oa.streams.length > 0 && (
+          <div className="mt-3 border-t border-[var(--border)] pt-3">
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+              Top funding streams (OpenAIRE projects)
+            </p>
+            <ul className="space-y-1">
+              {oa.streams.map((s) => (
+                <li key={s.level0_id} className="flex justify-between gap-3">
+                  <span className="min-w-0 truncate">{s.name ?? s.level0_id}</span>
+                  <span className="shrink-0 tabular-nums text-[var(--muted-foreground)]">
+                    {s.n_projects.toLocaleString()}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div className="mt-2">
           <SourceNote source="OpenAIRE Graph" url={OPENAIRE_URL} codes={["openaire-enrichment"]} />
         </div>

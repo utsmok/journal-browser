@@ -9,13 +9,20 @@ import logging
 import re
 from typing import Any
 
+import httpx
 from aletheca import AlethecaClient
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from journal_browser.config import get_settings
-from journal_browser.models import FunderLink, JiscFunder, OpenaireFunder, OpenalexFunder
+from journal_browser.models import (
+    FunderLink,
+    JiscFunder,
+    OpenaireFunder,
+    OpenaireFunderStream,
+    OpenalexFunder,
+)
 
 try:
     from aireloom import AireloomClient
@@ -184,8 +191,78 @@ async def harvest_openaire_funders(session: AsyncSession) -> dict[str, int]:
     stats["upserted"] = await _upsert(session, OpenaireFunder, "openaire_id", rows)
     stats["with_ror"] = sum(1 for r in rows if r["ror"])
     stats["funder_links"] = await refresh_funder_links(session)
+    stats["streams"] = await harvest_openaire_funder_streams(session)
     logger.info("harvest_openaire_funders: %s", stats)
     return stats
+
+
+async def harvest_openaire_funder_streams(session: AsyncSession) -> int:
+    """Top funding streams per OPENAIRE_FUNDER_CODES funder -> rebuild.
+
+    Source is the explore backend facet search (portal-search, fast): the
+    fundinglevel0_id facet per fundingShortName -- the funding the funder
+    distributes, with project counts. Top 10 per funder (the facet
+    endpoint's cap); grant amounts are deliberately not harvested (zero
+    or missing for most funders, so sums would mislead). Idempotent:
+    replaces the whole table every run."""
+    known = set(
+        (
+            await session.execute(
+                select(OpenaireFunder.openaire_id).where(
+                    OpenaireFunder.short_name.in_(OPENAIRE_FUNDER_CODES)
+                )
+            )
+        ).scalars()
+    )
+    rows: list[dict[str, Any]] = []
+    async with httpx.AsyncClient(timeout=30) as client:
+        for code in OPENAIRE_FUNDER_CODES:
+            resp = await client.get(
+                "https://services.openaire.eu/portal-search/projects/facetSearch",
+                params={
+                    "fundingShortName": code,
+                    "facet": "true",
+                    "facetFields": "fundinglevel0_id",
+                    "page": 1,
+                    "size": 1,
+                },
+            )
+            resp.raise_for_status()
+            facets = (
+                resp.json()
+                .get("body", {})
+                .get("facetResponse", {})
+                .get("facets", {})
+                .get("fundinglevel0_id", [])
+            )
+            for facet in facets:
+                level0_id = str(facet.get("id") or "")
+                # level-0 ids are "<funder_id>::<stream>"; drop the stream
+                # suffix to attribute the facet to its funder row.
+                funder_id = level0_id.rsplit("::", 1)[0]
+                if funder_id not in known:
+                    continue
+                name = str(facet.get("name") or "").split("|", 1)[-1] or None
+                rows.append(
+                    {
+                        "funder_openaire_id": funder_id,
+                        "level0_id": level0_id,
+                        "name": name,
+                        "n_projects": int(facet.get("count") or 0),
+                    }
+                )
+    await session.execute(text("delete from openaire_funder_streams"))
+    for chunk in range(0, len(rows), UPSERT_CHUNK):
+        await session.execute(
+            pg_insert(OpenaireFunderStream).values(rows[chunk : chunk + UPSERT_CHUNK])
+        )
+    await session.commit()
+    logger.info(
+        "harvest_openaire_funder_streams: %d rows across %d funders",
+        len(rows),
+        len({r["funder_openaire_id"] for r in rows}),
+    )
+    return len(rows)
 
 
 async def funder_link_matrix(session: AsyncSession) -> dict[str, int]:

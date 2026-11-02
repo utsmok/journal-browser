@@ -1826,6 +1826,23 @@ export interface components {
             jurisdiction?: string | null;
             /** Website Url */
             website_url?: string | null;
+            /**
+             * Streams
+             * @default []
+             */
+            streams: components["schemas"]["FunderOpenaireStream"][];
+        };
+        /**
+         * FunderOpenaireStream
+         * @description One funding level-0 stream with its OpenAIRE project count.
+         */
+        FunderOpenaireStream: {
+            /** Level0 Id */
+            level0_id: string;
+            /** Name */
+            name?: string | null;
+            /** N Projects */
+            n_projects: number;
         };
         /** FunderSearchResponse */
         FunderSearchResponse: {

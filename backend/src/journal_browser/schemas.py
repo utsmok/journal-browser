@@ -103,6 +103,14 @@ class FunderTopJournal(BaseModel):
     n_works: int
 
 
+class FunderOpenaireStream(BaseModel):
+    """One funding level-0 stream with its OpenAIRE project count."""
+
+    level0_id: str
+    name: str | None = None
+    n_projects: int
+
+
 class FunderOpenaireBlock(BaseModel):
     """OpenAIRE graph identity for the same funder (canon-linked via ROR)."""
 
@@ -111,6 +119,9 @@ class FunderOpenaireBlock(BaseModel):
     short_name: str | None = None
     jurisdiction: str | None = None
     website_url: str | None = None
+    # Top funding streams by project count (empty before the streams
+    # harvest runs).
+    streams: list[FunderOpenaireStream] = []
 
 
 class FunderDetailResponse(FunderListItem):
