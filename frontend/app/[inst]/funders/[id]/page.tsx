@@ -122,12 +122,28 @@ function PolicyUrls({ urls }: { urls: unknown }) {
  * scope, structured rules); unknown shapes fall back to pretty JSON. */
 function PolicyBlock({ data }: { data: Record<string, unknown> | null | undefined }) {
   if (!data) return <p className="text-sm text-[var(--muted-foreground)]">Not harvested.</p>;
-  const rules =
-    (data.archiving_policy as Record<string, unknown> | undefined) ??
-    (data.publishing_policy as Record<string, unknown> | undefined);
+  // Nested shape (publications_policy: archiving_policy/publishing_policy
+  // sub-blocks) and flat shape (data_archiving_policy: rule keys directly
+  // on the payload) both occur in the OPF payloads.
+  const RULE_KEYS = [
+    "what",
+    "when",
+    "where",
+    "license",
+    "requirement",
+    "conditions",
+    "special_conditions",
+  ];
+  const flat = RULE_KEYS.some((k) => k in data) ? data : null;
+  const rules = flat
+    ? []
+    : ([
+        ["Archiving rules", data.archiving_policy],
+        ["Publishing rules", data.publishing_policy],
+      ].filter(([, v]) => v && typeof v === "object") as [string, Record<string, unknown>][]);
   const notes = Array.isArray(data.notes) ? (data.notes as string[]) : [];
   const scope = Array.isArray(data.scope) ? (data.scope as string[]) : [];
-  if (!rules && notes.length === 0 && !Array.isArray(data.urls)) {
+  if (!flat && rules.length === 0 && notes.length === 0 && !Array.isArray(data.urls)) {
     return (
       <pre className="max-h-96 overflow-y-auto rounded-[var(--radius)] bg-[var(--muted)] p-3 text-xs whitespace-pre-wrap">
         {JSON.stringify(data, null, 2)}
@@ -147,11 +163,19 @@ function PolicyBlock({ data }: { data: Record<string, unknown> | null | undefine
           Scope: {scope.map(policyValue).join(", ")}
         </p>
       )}
-      {rules && (
+      {flat && (
         <div className="mt-4 border-t border-[var(--border)] pt-3">
-          <PolicyRules rules={rules} />
+          <PolicyRules rules={flat} />
         </div>
       )}
+      {rules.map(([label, block]) => (
+        <div key={label} className="mt-4 border-t border-[var(--border)] pt-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+            {label}
+          </p>
+          <PolicyRules rules={block} />
+        </div>
+      ))}
     </div>
   );
 }
