@@ -119,63 +119,67 @@ async def harvest_openalex_funders(session: AsyncSession) -> dict[str, int]:
     return stats
 
 
-def _openaire_row(item: dict[str, Any]) -> dict[str, Any]:
-    """openaire_funders row from one graph v3 funder payload."""
-    oid = str(item.get("id") or "").strip()
+#: Curated OpenAIRE funder codes for the canon pull. OpenAIRE Graph v3 has
+#: no funder enumeration endpoint (verified 2026-11-02 against v1/v2/v3 +
+#: SKG-IF api-docs), but the projects endpoint accepts fundingShortName and
+#: every hit carries the funder canon in funding[].funder. Codes verified
+#: live 2026-11-02 (projects numFound): NWO 48170, EC 130457, WT 21507,
+#: NSF 601434. ERC/EU returned 0 (ERC projects ride under EC streams).
+#: Extend this list only after live-verifying a code, never blind.
+OPENAIRE_FUNDER_CODES = ("NWO", "EC", "WT", "NSF")
+
+
+def _openaire_row(funder: Any) -> dict[str, Any]:
+    """openaire_funders row from an aireloom FundingFunder payload."""
+    oid = str(getattr(funder, "id", "") or "").strip()
     if not oid:
         raise RuntimeError("openaire sweep: funder row without id")
-    # ROR when obvious: website URL or any ror.org occurrence in the payload.
+    jurisdiction = getattr(funder, "jurisdiction", None)
+    pid = getattr(funder, "pid", None)
     return {
         "openaire_id": oid,
-        "name": item.get("name"),
-        "short_name": item.get("shortName"),
-        "website_url": item.get("websiteUrl"),
-        "jurisdiction": item.get("jurisdiction"),
-        "ror": normalize_ror(item.get("websiteUrl"), json.dumps(item)),
+        "name": getattr(funder, "name", None),
+        "short_name": getattr(funder, "shortname", None),
+        "website_url": None,
+        "jurisdiction": getattr(jurisdiction, "code", None),
+        "ror": normalize_ror(pid, json.dumps(funder.model_dump(), default=str)),
     }
 
 
 async def harvest_openaire_funders(session: AsyncSession) -> dict[str, int]:
-    """OpenAIRE graph v3 funders page sweep -> openaire_funders upsert.
-    Idempotent: reruns refresh every row."""
+    """Curated OpenAIRE funder canon pull -> openaire_funders upsert.
+
+    OpenAIRE Graph v3 exposes no funder enumeration (see
+    OPENAIRE_FUNDER_CODES), so we sample one page of projects per verified
+    fundingShortName and collect the funder canon from funding[].funder.
+    Idempotent: reruns refresh every row.
+    """
     if AireloomClient is None:  # pragma: no cover
         raise RuntimeError("openaire sweep: aireloom not installed")
-    # Dormant: OpenAIRE Graph API exposes no funders endpoint (verified
-    # 2026-11-02 against v1/v2/v3 + SKG-IF api-docs); funders exist only
-    # embedded in projects.fundings[]; awaiting upstream endpoint.
-    # Remove this guard when OpenAIRE ships /graph/v3/funders; the page
-    # loop below lights up unchanged.
-    raise RuntimeError(
-        "openaire sweep: OpenAIRE Graph API exposes no funders endpoint "
-        "(verified 2026-11-02 against v1/v2/v3 + SKG-IF api-docs); funders "
-        "exist only embedded in projects.fundings[]; awaiting upstream endpoint"
-    )
-    stats = {"pages": 0, "seen": 0, "upserted": 0, "with_ror": 0}
+    stats = {"codes": 0, "projects_seen": 0, "upserted": 0, "with_ror": 0}
     by_id: dict[str, dict[str, Any]] = {}
     async with AireloomClient() as client:
-        page = 1
-        while True:
-            resp = await client.request(
-                "GET", "funders", params={"page": page, "pageSize": OPENAIRE_PAGE_SIZE}, raw=True
+        for code in OPENAIRE_FUNDER_CODES:
+            resp = await client.projects.search(
+                filters={"fundingShortName": code}, page_size=OPENAIRE_PAGE_SIZE, page=1
             )
-            data = resp.json() if hasattr(resp, "json") else resp
-            if isinstance(data, dict):
-                results = data.get("results") or (data.get("response") or {}).get("results")
-            else:
-                results = data
-            if not isinstance(results, list):
-                raise RuntimeError(f"openaire sweep: page {page} response shape unexpected")
-            stats["pages"] += 1
-            for item in results:
-                row = _openaire_row(item)
-                by_id[row["openaire_id"]] = row
-            if len(results) < OPENAIRE_PAGE_SIZE:
-                break
-            page += 1
+            stats["codes"] += 1
+            results = resp.results or []
+            stats["projects_seen"] += len(results)
+            for project in results:
+                # funding is one ProjectFunding object (hierarchical v3
+                # structure); fundings, when present, is the flat list.
+                fundings = list(project.fundings or [])
+                if project.funding is not None:
+                    fundings.append(project.funding)
+                for f in fundings:
+                    canon = getattr(f, "funder", None)
+                    if canon is None or not getattr(canon, "id", None):
+                        continue
+                    by_id.setdefault(canon.id, _openaire_row(canon))
     rows = list(by_id.values())
     if not rows:
         raise RuntimeError("openaire sweep: zero funders returned")
-    stats["seen"] = len(rows)
     stats["upserted"] = await _upsert(session, OpenaireFunder, "openaire_id", rows)
     stats["with_ror"] = sum(1 for r in rows if r["ror"])
     logger.info("harvest_openaire_funders: %s", stats)

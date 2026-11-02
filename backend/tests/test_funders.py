@@ -157,12 +157,25 @@ async def test_normalize_jisc_funder_rerun_idempotent(db):
     assert (rows[0].ror, rows[0].fundref) == ("04ad7pn51", "100009795")
 
 
-@requires_db
-async def test_openaire_harvest_fails_fast(db):
-    from journal_browser.harvest.funders import harvest_openaire_funders
+async def test_openaire_row_from_funding_funder():
+    from aireloom.models.project import FundingFunder, FundingJurisdiction
 
-    with pytest.raises(RuntimeError, match="no funders endpoint"):
-        await harvest_openaire_funders(db)
+    from journal_browser.harvest.funders import _openaire_row
+
+    funder = FundingFunder(
+        id="nwo_________::NWO",
+        shortname="NWO",
+        name="Netherlands Organisation for Scientific Research (NWO)",
+        jurisdiction=FundingJurisdiction(code="NL", label="Netherlands"),
+        pid=None,
+    )
+    row = _openaire_row(funder)
+    assert row["openaire_id"] == "nwo_________::NWO"
+    assert row["short_name"] == "NWO"
+    assert row["jurisdiction"] == "NL"
+    assert row["ror"] is None
+    with pytest.raises(RuntimeError, match="without id"):
+        _openaire_row(FundingFunder(id="", shortname=None, name=None, jurisdiction=None, pid=None))
 
 
 @requires_db
