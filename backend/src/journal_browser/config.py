@@ -101,9 +101,7 @@ class Settings(BaseSettings):
     # Bootstrap job mode: auto = only on an empty DB, always, off.
     bootstrap: str = "auto"
 
-    # Feature flags. Both scaffolds stay OFF until explicitly enabled.
     enable_journal_citations: bool = False
-    enable_jisc: bool = False
     jisc_api_key: str = ""
 
     # Pure OAI-PMH endpoint (anonymous) and request pacing.

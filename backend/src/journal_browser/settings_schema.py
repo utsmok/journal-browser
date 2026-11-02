@@ -170,13 +170,6 @@ SETTINGS_REGISTRY: list[FieldDef] = [
         "Journal citations",
         "Citation feature scaffold; stays off until explicitly enabled.",
     ),
-    _f(
-        "enable_jisc",
-        "global",
-        "bool",
-        "JISC integration",
-        "JISC feature scaffold; stays off until explicitly enabled.",
-    ),
     # ── Institution-backed (institutions table, PUT /admin/institutions/{code})
     _f(
         "institution_code",

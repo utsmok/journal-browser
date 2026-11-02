@@ -53,9 +53,8 @@ bootstrap: auto
 pure_oai_base_url: https://ris.utwente.nl/ws/oai
 pure_oai_min_spacing: 1.0
 
-# Feature scaffolds; leave off until explicitly enabled.
+# Feature scaffold; leave off until explicitly enabled.
 enable_journal_citations: false
-enable_jisc: false
 
 # ── Institution (seed for the default institutions row) ─────────────────
 
