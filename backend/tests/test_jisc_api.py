@@ -99,6 +99,15 @@ async def api(client, db_engine):
                 ),
                 # Never swept: every jisc column NULL.
                 journal_factory("5555-5555", title="Unswept Journal", search_text=None),
+                # Prohibited despite a free route: prohibition wins over routes.
+                journal_factory(
+                    "6666-6666",
+                    title="Prohibited With Route Journal",
+                    search_text=None,
+                    jisc_in_opf=True,
+                    jisc_oa_prohibited=True,
+                    jisc_allows_sa_submitted=True,
+                ),
             ]
         )
         await session.commit()
@@ -161,7 +170,13 @@ async def test_search_green_oa_filter(api):
 @requires_db
 async def test_search_green_oa_none_excludes_unswept(api):
     body = (await api.get("/api/v1/ut/journals", params={"green_oa": "none"})).json()
-    assert _issns(body) == {"3333-3333"}
+    assert _issns(body) == {"3333-3333", "6666-6666"}
+
+
+@requires_db
+async def test_search_green_oa_prohibited_excluded_from_routes(api):
+    body = (await api.get("/api/v1/ut/journals", params={"green_oa": "submitted"})).json()
+    assert "6666-6666" not in _issns(body)
 
 
 @requires_db
@@ -177,7 +192,7 @@ async def test_facet_green_oa_bucket(api):
         "submitted": 1,
         "accepted": 1,
         "published": 1,
-        "none": 1,
+        "none": 2,
     }
     # Drop-own-dimension: counts under an active green_oa filter show what
     # selecting each value would yield, i.e. the unfiltered distribution.

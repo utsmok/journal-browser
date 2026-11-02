@@ -43,16 +43,20 @@ re-run live. Browser-visible effect: "published free" journals dropped from
 
 ## Green OA definition
 
-`green_oa` is `none` when the journal is in OPF and has no free published
-route (`in_opf AND NOT allows_sa_published`): 11,996 journals. This is the
-strictest useful reading — fee-only published routes mean "pay to open",
-which is not self-archiving.
+`green_oa` is a best-route bucket: the freest permitted version wins
+(`submitted` > `accepted` > `published`). `none` means in OPF but either
+prohibited outright or with no free route of any version: 87 journals live
+(11,996 is only "published route is fee-only" — most of those journals still
+self-archive an earlier version free, and 942 have no published route at
+all). A journal with `open_access_prohibited` lands in `none` even if route
+data exists — prohibition wins over routes.
 
 ## Cross-source overlap
 
-- 8,273 of the 27,666 covered journals are also in DOAJ — OPF adds policy
-  detail DOAJ lacks (DOAJ describes the journal's own OA terms, not the
-  hybrid publisher's self-archiving terms).
+- 8,244 of the 27,666 covered journals are also in DOAJ (`doaj_in_doaj`,
+  the authoritative DOAJ harvest; OpenAlex's `is_in_doaj` flag says 8,273).
+  OPF adds policy detail DOAJ lacks (DOAJ describes the journal's own OA
+  terms, not the hybrid publisher's self-archiving terms).
 - Publisher ROR links (202) join to `publishers` rows; funder ROR/FundRef
   identifiers join to the new `openalex_funders` / `openaire_funders` canon
   tables (harvested separately, see `harvest_openalex_funders.py` /
@@ -62,7 +66,7 @@ which is not self-archiving.
 
 ```bash
 cd backend
-uv run python ../jobs/harvest_jisc.py      # full sweep to landing
+uv run python jobs/harvest_jisc.py         # full sweep to landing
 uv run python jobs/normalize_jisc.py       # landing -> journals.jisc_policy
 ```
 

@@ -58,6 +58,10 @@ APC_SHOWN = or_(
 #: per-column mapping from the design doc. jisc columns NULL (never swept)
 #: land in no bucket, never in "none" (DOAJ tri-state convention).
 GREEN_OA_BEST_ROUTE = case(
+    (
+        and_(Journal.jisc_in_opf.is_(True), Journal.jisc_oa_prohibited.is_(True)),
+        GreenOa.NONE,
+    ),
     (Journal.jisc_allows_sa_submitted.is_(True), GreenOa.SUBMITTED),
     (Journal.jisc_allows_sa_accepted.is_(True), GreenOa.ACCEPTED),
     (Journal.jisc_allows_sa_published.is_(True), GreenOa.PUBLISHED),
@@ -65,14 +69,28 @@ GREEN_OA_BEST_ROUTE = case(
     else_=None,
 )
 GREEN_OA_CONDS: dict[GreenOa, Any] = {
-    GreenOa.SUBMITTED: Journal.jisc_allows_sa_submitted.is_(True),
-    GreenOa.ACCEPTED: Journal.jisc_allows_sa_accepted.is_(True),
-    GreenOa.PUBLISHED: Journal.jisc_allows_sa_published.is_(True),
+    GreenOa.SUBMITTED: and_(
+        Journal.jisc_oa_prohibited.is_not(True),
+        Journal.jisc_allows_sa_submitted.is_(True),
+    ),
+    GreenOa.ACCEPTED: and_(
+        Journal.jisc_oa_prohibited.is_not(True),
+        Journal.jisc_allows_sa_accepted.is_(True),
+    ),
+    GreenOa.PUBLISHED: and_(
+        Journal.jisc_oa_prohibited.is_not(True),
+        Journal.jisc_allows_sa_published.is_(True),
+    ),
     GreenOa.NONE: and_(
         Journal.jisc_in_opf.is_(True),
-        Journal.jisc_allows_sa_submitted.is_not(True),
-        Journal.jisc_allows_sa_accepted.is_not(True),
-        Journal.jisc_allows_sa_published.is_not(True),
+        or_(
+            Journal.jisc_oa_prohibited.is_(True),
+            and_(
+                Journal.jisc_allows_sa_submitted.is_not(True),
+                Journal.jisc_allows_sa_accepted.is_not(True),
+                Journal.jisc_allows_sa_published.is_not(True),
+            ),
+        ),
     ),
 }
 
