@@ -97,7 +97,11 @@ async def funder_detail(
     for bare in sorted(ids, key=lambda b: -counts.get(b, 0)):
         top.extend(await funders_service.top_journals(session, institution.id, bare))
     seen: set[str] = set()
-    deduped = [j for j in top if not (j["issn_l"] in seen or seen.add(j["issn_l"]))]
+    deduped = []
+    for j in top:
+        if j["issn_l"] not in seen:
+            seen.add(j["issn_l"])
+            deduped.append(j)
     return FunderDetailResponse(
         **item.model_dump(),
         publications_policy=funder.publications_policy,
