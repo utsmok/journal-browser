@@ -3,6 +3,7 @@ from typing import Any
 from sqlalchemy import (
     Numeric,
     Text,
+    and_,
     case,
     cast,
     exists,
@@ -15,6 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...models import IssnMap, Journal, JournalApcAggregate, JournalFlags
+from ...vocab import GreenOa
 from .classify import _oa_type
 from .currency import _to_eur
 
@@ -50,6 +52,30 @@ APC_SHOWN = or_(
     APC_COST_EXISTS,
 )
 
+#: Green-OA route buckets over the Jisc OPF columns. The facet counts the
+#: best allowed route (submitted > accepted > published; "none" = swept but
+#: no route, or OA prohibited); the search filter matches the literal
+#: per-column mapping from the design doc. jisc columns NULL (never swept)
+#: land in no bucket, never in "none" (DOAJ tri-state convention).
+GREEN_OA_BEST_ROUTE = case(
+    (Journal.jisc_allows_sa_submitted.is_(True), GreenOa.SUBMITTED),
+    (Journal.jisc_allows_sa_accepted.is_(True), GreenOa.ACCEPTED),
+    (Journal.jisc_allows_sa_published.is_(True), GreenOa.PUBLISHED),
+    (Journal.jisc_in_opf.is_(True), GreenOa.NONE),
+    else_=None,
+)
+GREEN_OA_CONDS: dict[GreenOa, Any] = {
+    GreenOa.SUBMITTED: Journal.jisc_allows_sa_submitted.is_(True),
+    GreenOa.ACCEPTED: Journal.jisc_allows_sa_accepted.is_(True),
+    GreenOa.PUBLISHED: Journal.jisc_allows_sa_published.is_(True),
+    GreenOa.NONE: and_(
+        Journal.jisc_in_opf.is_(True),
+        Journal.jisc_allows_sa_submitted.is_not(True),
+        Journal.jisc_allows_sa_accepted.is_not(True),
+        Journal.jisc_allows_sa_published.is_not(True),
+    ),
+}
+
 
 def _list_price(currency: str) -> Any:
     """OpenAlex list-price APC in one currency; None without an entry."""
@@ -83,6 +109,7 @@ def base_query(
     has_apc: bool | None = None,
     has_works: bool | None = None,
     oa_types: list[str] | None = None,
+    green_oa: GreenOa | str | None = None,
     fuzzy: bool = False,
 ):
     """Filtered select with computed columns; search + facet counts share it.
@@ -151,6 +178,8 @@ def base_query(
             ),
             # Any-source APC presence; the facet pass filters on this.
             APC_SHOWN.label("apc_any"),
+            # Best green-OA route bucket (facet pass; NULL = never swept).
+            GREEN_OA_BEST_ROUTE.label("green_oa"),
         )
         .select_from(J)
         .join(flags, flags.c.issn_l == J.issn_l)
@@ -223,6 +252,8 @@ def base_query(
         query = query.where(APC_SHOWN if has_apc else ~APC_SHOWN)
     if has_works is not None:
         query = query.where(flags.c.works_count > 0 if has_works else flags.c.works_count == 0)
+    if green_oa:
+        query = query.where(GREEN_OA_CONDS[GreenOa(green_oa)])
     return query
 
 

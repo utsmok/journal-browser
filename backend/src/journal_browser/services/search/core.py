@@ -3,6 +3,7 @@ from typing import Any
 from sqlalchemy import Numeric, String, cast, func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...vocab import GreenOa
 from .cursors import encode_cursor, parse_cursor
 from .facets import facet_counts
 from .query import NUMERIC_SORTS, SortKey, _order, attach_apc_display, base_query
@@ -23,6 +24,7 @@ async def search_journals(
     has_apc: bool | None = None,
     has_works: bool | None = None,
     oa_types: list[str] | None = None,
+    green_oa: GreenOa | str | None = None,
     sort: SortKey = "relevance",
     dir: str | None = None,
     cursor: str | None = None,
@@ -42,6 +44,7 @@ async def search_journals(
         "has_apc": has_apc,
         "has_works": has_works,
         "oa_types": oa_types,
+        "green_oa": green_oa,
     }
     fuzzy = False
     subq = base_query(**filters).subquery()

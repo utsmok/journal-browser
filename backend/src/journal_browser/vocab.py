@@ -17,6 +17,18 @@ class OaType(StrEnum):
     SUBSCRIPTION = "subscription"
 
 
+class GreenOa(StrEnum):
+    """Best green (self-archiving) route per Jisc Open Policy Finder
+    (journals.jisc_allows_sa_* / jisc_in_opf; search filter + facet
+    vocabulary). "none" = swept but no route permitted (or OA prohibited
+    outright); never-swept journals land in no bucket."""
+
+    SUBMITTED = "submitted"
+    ACCEPTED = "accepted"
+    PUBLISHED = "published"
+    NONE = "none"
+
+
 class DealStatus(StrEnum):
     """deals.status (ck_deals_status)."""
 

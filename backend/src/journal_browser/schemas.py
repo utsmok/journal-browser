@@ -246,6 +246,31 @@ class WorksPage(BaseModel):
     page_size: int
 
 
+class GreenOaRoute(BaseModel):
+    """One self-archiving route (per article version) as aggregated by the
+    Jisc normalizer from publisher_policy[].permitted_oa."""
+
+    locations: list[str] = []
+    repositories: list[str] = []
+    licenses: list[str] = []
+    embargo_months: int | None = None
+    conditions: list[str] = []
+    additional_oa_fee: str | None = None
+
+
+class GreenOaPolicy(BaseModel):
+    """Jisc Open Policy Finder green-OA policy bundle (journals.jisc_policy
+    display object + stamp columns); null when the journal was never swept."""
+
+    in_opf: bool
+    oa_prohibited: bool | None = None
+    routes: dict[str, GreenOaRoute] = {}
+    internal_moniker: str | None = None
+    urls: list[dict[str, str]] = []
+    policy_uri: str | None = None
+    harvested_at: datetime | None = None
+
+
 class JournalDetailResponse(BaseModel):
     journal: JournalListItem
     issns: list[str] = []
@@ -269,6 +294,7 @@ class JournalDetailResponse(BaseModel):
     apc_evidence: list[ApcEvidenceOut] = []
     openalex: OpenalexInfo | None = None
     openaire: OpenaireInfo = OpenaireInfo()
+    green_oa: GreenOaPolicy | None = None
     institution_metrics: InstitutionMetrics = InstitutionMetrics()
     attribution: dict[str, Attribution] = {}
 

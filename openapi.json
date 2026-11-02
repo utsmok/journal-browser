@@ -1568,6 +1568,22 @@
             }
           },
           {
+            "name": "green_oa",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/GreenOa"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Green Oa"
+            }
+          },
+          {
             "name": "sort",
             "in": "query",
             "required": false,
@@ -6257,6 +6273,156 @@
         "title": "FreshnessResponse",
         "description": "Config comes from the institution row; unset optional fields are\nNone rather than global defaults."
       },
+      "GreenOa": {
+        "type": "string",
+        "enum": [
+          "submitted",
+          "accepted",
+          "published",
+          "none"
+        ],
+        "title": "GreenOa",
+        "description": "Best green (self-archiving) route per Jisc Open Policy Finder\n(journals.jisc_allows_sa_* / jisc_in_opf; search filter + facet\nvocabulary). \"none\" = swept but no route permitted (or OA prohibited\noutright); never-swept journals land in no bucket."
+      },
+      "GreenOaPolicy": {
+        "properties": {
+          "in_opf": {
+            "type": "boolean",
+            "title": "In Opf"
+          },
+          "oa_prohibited": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Prohibited"
+          },
+          "routes": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/GreenOaRoute"
+            },
+            "type": "object",
+            "title": "Routes",
+            "default": {}
+          },
+          "internal_moniker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Internal Moniker"
+          },
+          "urls": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Urls",
+            "default": []
+          },
+          "policy_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Uri"
+          },
+          "harvested_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harvested At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "in_opf"
+        ],
+        "title": "GreenOaPolicy",
+        "description": "Jisc Open Policy Finder green-OA policy bundle (journals.jisc_policy\ndisplay object + stamp columns); null when the journal was never swept."
+      },
+      "GreenOaRoute": {
+        "properties": {
+          "locations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Locations",
+            "default": []
+          },
+          "repositories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Repositories",
+            "default": []
+          },
+          "licenses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Licenses",
+            "default": []
+          },
+          "embargo_months": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embargo Months"
+          },
+          "conditions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Conditions",
+            "default": []
+          },
+          "additional_oa_fee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additional Oa Fee"
+          }
+        },
+        "type": "object",
+        "title": "GreenOaRoute",
+        "description": "One self-archiving route (per article version) as aggregated by the\nJisc normalizer from publisher_policy[].permitted_oa."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -6861,6 +7027,16 @@
             "default": {
               "matched_works": 0
             }
+          },
+          "green_oa": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GreenOaPolicy"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "institution_metrics": {
             "$ref": "#/components/schemas/InstitutionMetrics",

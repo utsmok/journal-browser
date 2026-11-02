@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...harvest.common import cache_epoch
 from ...models import Journal
+from ...vocab import GreenOa
 from ..cache import FACET_CACHE, cache_get, cache_put
 from .query import base_query
 
@@ -26,6 +27,7 @@ async def facet_counts(
     has_apc: bool | None = None,
     has_works: bool | None = None,
     oa_types: list[str] | None = None,
+    green_oa: GreenOa | str | None = None,
 ) -> tuple[dict[str, dict[str, int]], int]:
     """Facet counts over the query-filtered set. Each facet's own filter is
     excluded so a chip shows what selecting it would yield; all other active
@@ -51,6 +53,7 @@ async def facet_counts(
             has_apc is not None,
             has_works is not None,
             oa_types,
+            green_oa,
             deal != "any",
             search_in != "all",
         ]
@@ -84,6 +87,7 @@ async def facet_counts(
         "has_apc": has_apc,
         "has_works": has_works,
         "oa_types": oa_types,
+        "green_oa": green_oa,
     }
 
     def base_sub(**override: Any) -> Any:
@@ -170,6 +174,14 @@ async def facet_counts(
                 func.jsonb_object_agg(counted.c.publisher_name, counted.c.pub_n)
                 .filter(counted.c.publisher_name.is_not(None))
                 .label("publisher_counts"),
+                func.count()
+                .filter(counted.c.green_oa == GreenOa.SUBMITTED)
+                .label("green_submitted"),
+                func.count().filter(counted.c.green_oa == GreenOa.ACCEPTED).label("green_accepted"),
+                func.count()
+                .filter(counted.c.green_oa == GreenOa.PUBLISHED)
+                .label("green_published"),
+                func.count().filter(counted.c.green_oa == GreenOa.NONE).label("green_none"),
             ).select_from(counted)
         )
     ).one()
@@ -197,6 +209,12 @@ async def facet_counts(
         "apc": {"true": apc_true, "false": apc_false},
         "works": {"true": works_true, "false": works_false},
         "oa_type": dict(row.oa_type_counts or {}),
+        "green_oa": {
+            "submitted": int(row.green_submitted or 0),
+            "accepted": int(row.green_accepted or 0),
+            "published": int(row.green_published or 0),
+            "none": int(row.green_none or 0),
+        },
         # Payload bound: top 15 by count, then name (matches the old SQL LIMIT).
         "publisher": dict(
             sorted((row.publisher_counts or {}).items(), key=lambda kv: (-kv[1], kv[0]))[:15]
@@ -273,6 +291,16 @@ async def facet_counts(
         wk = variant_sub("has_works")
         wk_total, (wk_true,) = await _flag_counts(wk, wk.c.works > 0)
         facets["works"] = {"true": wk_true, "false": wk_total - wk_true}
+    if green_oa:
+        g = variant_sub("green_oa")
+        _g_total, (g_s, g_a, g_p, g_n) = await _flag_counts(
+            g,
+            g.c.green_oa == GreenOa.SUBMITTED,
+            g.c.green_oa == GreenOa.ACCEPTED,
+            g.c.green_oa == GreenOa.PUBLISHED,
+            g.c.green_oa == GreenOa.NONE,
+        )
+        facets["green_oa"] = {"submitted": g_s, "accepted": g_a, "published": g_p, "none": g_n}
     if cacheable:
         cache_put(FACET_CACHE, cache_key, (facets, total))
     return facets, total

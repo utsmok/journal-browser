@@ -26,6 +26,8 @@ from ..schemas import (
     ApcEvidenceOut,
     Attribution,
     DealOut,
+    GreenOaPolicy,
+    GreenOaRoute,
     InstitutionMetrics,
     JournalDetailResponse,
     JournalListItem,
@@ -41,7 +43,7 @@ from ..schemas import (
 from ..services import detail_enrichment, work_sources
 from ..services import search as search_service
 from ..services.deal_coverage import deal_institution_join, dj_scope
-from ..vocab import OaType
+from ..vocab import GreenOa, OaType
 from .deals import DEAL_FIELDS
 
 router = APIRouter(prefix="/journals", tags=["journals"])
@@ -112,6 +114,11 @@ ATTRIBUTION = {
         url="https://www.scimagojr.com",
         caveat_codes=["scimagojr-lag"],
     ),
+    "green_oa": Attribution(
+        source="Jisc Open Policy Finder",
+        url="https://openpolicyfinder.jisc.ac.uk",
+        caveat_codes=["jisc-policy-currency", "jisc-cc-by-nc-nd"],
+    ),
 }
 
 
@@ -142,6 +149,7 @@ async def search_journals(
     has_apc: bool | None = None,
     has_works: bool | None = None,
     oa_type: OaTypeFilter = None,
+    green_oa: GreenOa | None = None,
     sort: Annotated[
         str,
         Query(
@@ -169,6 +177,7 @@ async def search_journals(
         has_apc=has_apc,
         has_works=has_works,
         oa_types=list(oa_type) if oa_type else None,
+        green_oa=green_oa,
         sort=sort,
         dir=dir,
         cursor=cursor,
@@ -366,6 +375,25 @@ async def journal_detail(
     summary_stats = journal.summary_stats or {}
     openalex_info = await detail_enrichment.openalex_info(session, journal.issn_l)
     ut_rows = await work_sources.works_for_journal(session, institution, journal.issn_l)
+    # Jisc Open Policy Finder green-OA bundle; null when never swept
+    # (jisc_policy NULL, DOAJ tri-state convention).
+    policy = journal.jisc_policy
+    green_oa = (
+        GreenOaPolicy(
+            in_opf=journal.jisc_in_opf is True,
+            oa_prohibited=policy.get("open_access_prohibited"),
+            routes={
+                version: GreenOaRoute(**route)
+                for version, route in (policy.get("routes") or {}).items()
+            },
+            internal_moniker=policy.get("internal_moniker"),
+            urls=policy.get("urls") or [],
+            policy_uri=policy.get("policy_uri"),
+            harvested_at=journal.jisc_harvested_at,
+        )
+        if policy is not None
+        else None
+    )
     return JournalDetailResponse(
         journal=JournalListItem(
             issn_l=journal.issn_l,
@@ -448,6 +476,7 @@ async def journal_detail(
                 session, journal.issn_l, institution.id
             )
         ),
+        green_oa=green_oa,
         institution_metrics=InstitutionMetrics(
             **await detail_enrichment.institution_metrics(
                 session, journal.issn_l, institution, ut_rows

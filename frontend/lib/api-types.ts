@@ -1694,6 +1694,77 @@ export interface components {
              */
             degraded: components["schemas"]["DegradedSource"][];
         };
+        /**
+         * GreenOa
+         * @description Best green (self-archiving) route per Jisc Open Policy Finder
+         *     (journals.jisc_allows_sa_* / jisc_in_opf; search filter + facet
+         *     vocabulary). "none" = swept but no route permitted (or OA prohibited
+         *     outright); never-swept journals land in no bucket.
+         * @enum {string}
+         */
+        GreenOa: "submitted" | "accepted" | "published" | "none";
+        /**
+         * GreenOaPolicy
+         * @description Jisc Open Policy Finder green-OA policy bundle (journals.jisc_policy
+         *     display object + stamp columns); null when the journal was never swept.
+         */
+        GreenOaPolicy: {
+            /** In Opf */
+            in_opf: boolean;
+            /** Oa Prohibited */
+            oa_prohibited?: boolean | null;
+            /**
+             * Routes
+             * @default {}
+             */
+            routes: {
+                [key: string]: components["schemas"]["GreenOaRoute"];
+            };
+            /** Internal Moniker */
+            internal_moniker?: string | null;
+            /**
+             * Urls
+             * @default []
+             */
+            urls: {
+                [key: string]: string;
+            }[];
+            /** Policy Uri */
+            policy_uri?: string | null;
+            /** Harvested At */
+            harvested_at?: string | null;
+        };
+        /**
+         * GreenOaRoute
+         * @description One self-archiving route (per article version) as aggregated by the
+         *     Jisc normalizer from publisher_policy[].permitted_oa.
+         */
+        GreenOaRoute: {
+            /**
+             * Locations
+             * @default []
+             */
+            locations: string[];
+            /**
+             * Repositories
+             * @default []
+             */
+            repositories: string[];
+            /**
+             * Licenses
+             * @default []
+             */
+            licenses: string[];
+            /** Embargo Months */
+            embargo_months?: number | null;
+            /**
+             * Conditions
+             * @default []
+             */
+            conditions: string[];
+            /** Additional Oa Fee */
+            additional_oa_fee?: string | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1907,6 +1978,7 @@ export interface components {
              *     }
              */
             openaire: components["schemas"]["OpenaireInfo"];
+            green_oa?: components["schemas"]["GreenOaPolicy"] | null;
             /**
              * @default {
              *       "openalex_matched": 0,
@@ -3419,6 +3491,7 @@ export interface operations {
                 has_apc?: boolean | null;
                 has_works?: boolean | null;
                 oa_type?: components["schemas"]["OaType"][] | null;
+                green_oa?: components["schemas"]["GreenOa"] | null;
                 sort?: string;
                 dir?: string | null;
                 cursor?: string | null;
