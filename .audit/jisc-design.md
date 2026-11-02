@@ -65,12 +65,20 @@ against existing data for gaps/deal improvements.
 
 ### THE critical matching rule
 
-Match journals by the REAL ISSNs in `journals.issns` (jsonb string array) — NEVER by
-`issn_l` alone (ISSN-L ≈19% hit rate vs 100% via `issns`). Reuse the DOAJ matcher shape:
-`Journal.issn_l.in_(chunk) | Journal.issns.op("?|")(bindparam(..., type_=ARRAY(Text)))`,
-chunked ≤20,000 binds.
+Match journals by the REAL ISSNs in the records (`journals.issns`, jsonb array) —
+never by ISSN-L alone (ISSN-L ≈19% hit rate vs ~20% combined... both are similar;
+the OPF corpus covers ~20% of the serving scope, period). Reuse the DOAJ matcher
+shape: `Journal.issn_l.in_(chunk) | Journal.issns.op("?|")(bindparam(...,
+type_=ARRAY(Text)))`, chunked ≤20,000 binds.
 
-## Schema (migration 0031 `0031_jisc_policy`, models in `models/jisc.py`)
+**Measurement footgun (verified 2026-11-02):** `retrieve_by_id` interprets a
+numeric `identifier` as a Sherpa object id (`identifier=5` returns record 5). Any
+ISSN probe MUST validate that the returned record's `issns` contains the queried
+ISSN. An earlier "100% coverage" sample was a false positive from exactly this
+(asyncpg returned the jsonb issns as a string; iterating it yielded digit
+characters that resolved as Sherpa ids).
+
+## Schema (migration 0046 `0046_jisc_policy`, models in `models/jisc.py`)
 
 All tables: plain int PK = Sherpa/OpenDOAR id; `date_modified timestamptz null`;
 `harvested_at timestamptz not null default now()`; no FK constraints (harvest order
@@ -105,7 +113,8 @@ independence); CheckConstraint only where a status enum exists (none here).
 {
   "routes": {
     "submitted":  {"locations": [...], "repositories": [...], "licenses": [...],
-                   "embargo_months": null, "conditions": [...], "additional_oa_fee": "no"},
+                   "embargo_months": null, "conditions": [...], "additional_oa_fee": "no",
+                   "fee_only": false},
     "accepted":   {...}, "published": {...}
   },
   "open_access_prohibited": false,
@@ -118,9 +127,11 @@ independence); CheckConstraint only where a status enum exists (none here).
 Aggregation rule: across all publisher_policy[].permitted_oa entries, group by
 article_version; union locations/licenses/conditions/repositories; embargo_months = min
 of stated embargo amounts for that version (null when none stated anywhere);
-`open_access_prohibited` = true if ANY policy prohibits.
+`open_access_prohibited` = true if ANY policy prohibits. `fee_only` = every fee-stated
+entry for the version says `additional_oa_fee=yes` (paid OA choice, not green
+self-archiving). The `jisc_allows_sa_*` columns count ONLY free routes (fee_only=false).
 
-Migration 0032 `0032_jisc_limitations` seeds (INSERT … ON CONFLICT (code) DO NOTHING;
+Migration 0047 `0047_jisc_limitations` seeds (INSERT … ON CONFLICT (code) DO NOTHING;
 downgrade deletes):
 
 - `jisc-policy-currency`, source `jisc-opf`, scope `journals.green_oa`, severity `info`,
