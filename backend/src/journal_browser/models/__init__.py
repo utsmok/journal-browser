@@ -25,7 +25,7 @@ from .openaire import OpenaireFunder
 from .openalex import AuthorIdentity, OpenalexFunder, OpenalexWork
 from .pure import PureOrg, PureOrgParent, PurePerson, PurePersonOrg, WorkPureAuthor
 from .reference import Institution, IssnMap, OpenalexPublisher, Publisher
-from .works import WORK_IDENTITY_UQ, Work, WorkIdentity
+from .works import WORK_IDENTITY_UQ, Work, WorkFunder, WorkIdentity
 
 __all__ = [
     "WORK_IDENTITY_UQ",
@@ -71,6 +71,7 @@ __all__ = [
     "SourceRecord",
     "StatusChangeLog",
     "Work",
+    "WorkFunder",
     "WorkIdentity",
     "WorkPureAuthor",
     "_tstamp",

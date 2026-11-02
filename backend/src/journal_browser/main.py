@@ -20,6 +20,7 @@ from .routers import (
     deals,
     docs,
     feedback,
+    funders,
     institutions,
     journals,
     meta,
@@ -42,6 +43,7 @@ api_router.include_router(docs.router)
 # Institution-scoped surface: /api/v1/{code}/journals|deals|meta/...
 scoped_router = APIRouter(prefix="/{institution_code}")
 scoped_router.include_router(journals.router)
+scoped_router.include_router(funders.router)
 scoped_router.include_router(authors.router)
 scoped_router.include_router(publishers.router)
 scoped_router.include_router(orgunits.router)

@@ -18,6 +18,7 @@ from journal_browser.models import (
     DealJournal,
     HarvestRun,
     InstitutionWorksStats,
+    JiscPublisher,
     Journal,
     JournalApcAggregate,
     JournalFlags,
@@ -196,7 +197,7 @@ async def test_publisher_list_aggregates(publishers_api):
         "topics": [],
         # Search items carry the default empty external_ids; the slug is
         # detail-only.
-        "external_ids": {"openaccess_nl_slug": None},
+        "external_ids": {"openaccess_nl_slug": None, "ror": None},
     }
     assert elsevier == {
         "name": "Elsevier BV",
@@ -208,7 +209,7 @@ async def test_publisher_list_aggregates(publishers_api):
         "apc": {"n_journals": 1, "eur_min": 2400.0, "eur_max": 2400.0},
         # J1's 5 works spread over its topics by count (30/10).
         "topics": [{"name": "Physics", "n": 3.75}, {"name": "Materials Science", "n": 1.25}],
-        "external_ids": {"openaccess_nl_slug": None},  # search items: detail-only
+        "external_ids": {"openaccess_nl_slug": None, "ror": None},  # search items: detail-only
     }
 
 
@@ -304,7 +305,7 @@ async def test_publisher_detail(publishers_api):
     body = r.json()
     assert body["publisher"]["name"] == "Elsevier BV"
     # Open Access NL profile from the Publishers row (the deal-fixture one).
-    assert body["publisher"]["external_ids"] == {"openaccess_nl_slug": "elsevier"}
+    assert body["publisher"]["external_ids"] == {"openaccess_nl_slug": "elsevier", "ror": None}
     assert body["publisher"]["topics"] == [
         {"name": "Physics", "n": 3.75},
         {"name": "Materials Science", "n": 1.25},
@@ -375,7 +376,7 @@ async def test_publisher_institution_isolation(publishers_api):
         # Journal topics are institution-neutral; rug's 2 J1 works spread
         # over them by count (30/10).
         "topics": [{"name": "Physics", "n": 1.5}, {"name": "Materials Science", "n": 0.5}],
-        "external_ids": {"openaccess_nl_slug": None},  # search items: detail-only
+        "external_ids": {"openaccess_nl_slug": None, "ror": None},  # search items: detail-only
     }
     assert (await client.get("/api/v1/nonsense/publishers")).status_code == 404
 
@@ -628,3 +629,27 @@ async def test_harvest_backfill_canonical(db):
     }
     # Re-run is a no-op (IS DISTINCT FROM guard).
     assert await backfill_canonical(session) == 0
+
+
+@requires_db
+async def test_publisher_detail_ror(publishers_api, db):
+    client, _ids = publishers_api
+    # jisc_publishers has no fk to publishers: the ROR id comes from the
+    # name join. Exact case beats case-insensitive; rows without a ROR id
+    # never match.
+    db.add_all(
+        [
+            JiscPublisher(id=1, name="Elsevier BV", ror=None),
+            JiscPublisher(id=2, name="Elsevier BV", ror="https://ror.org/02exact"),
+            JiscPublisher(id=3, name="elsevier bv", ror="https://ror.org/03lower"),
+            JiscPublisher(id=4, name="Elsevier BVX", ror="https://ror.org/04nomatch"),
+        ]
+    )
+    await db.commit()
+    r = await client.get(f"/api/v1/ut/publishers/{quote('Elsevier BV')}")
+    assert r.status_code == 200
+    assert r.json()["publisher"]["external_ids"]["ror"] == "https://ror.org/02exact"
+    # No name match: ror stays None (Wiley is browsable in the fixture).
+    r = await client.get("/api/v1/ut/publishers/Wiley")
+    assert r.status_code == 200
+    assert r.json()["publisher"]["external_ids"]["ror"] is None

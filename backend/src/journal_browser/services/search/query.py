@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...models import IssnMap, Journal, JournalApcAggregate, JournalFlags
 from ...vocab import GreenOa
+from ..funder_fit import fit_case
 from .classify import _oa_type
 from .currency import _to_eur
 
@@ -129,6 +130,8 @@ def base_query(
     oa_types: list[str] | None = None,
     green_oa: GreenOa | str | None = None,
     fuzzy: bool = False,
+    funder_fit: bool | None = None,
+    funder_fit_value: str | None = None,
 ):
     """Filtered select with computed columns; search + facet counts share it.
 
@@ -198,6 +201,22 @@ def base_query(
             APC_SHOWN.label("apc_any"),
             # Best green-OA route bucket (facet pass; NULL = never swept).
             GREEN_OA_BEST_ROUTE.label("green_oa"),
+            *(
+                [
+                    # Funder-fit tier for a structured funder (facet pass
+                    # only; SQL twin of services.funder_fit, keep in sync).
+                    fit_case(
+                        oa_type,
+                        covered,
+                        J.jisc_oa_prohibited,
+                        J.jisc_allows_sa_submitted,
+                        J.jisc_allows_sa_accepted,
+                        J.jisc_allows_sa_published,
+                    ).label("funder_fit")
+                ]
+                if funder_fit
+                else []
+            ),
         )
         .select_from(J)
         .join(flags, flags.c.issn_l == J.issn_l)
@@ -211,6 +230,18 @@ def base_query(
     )
     if oa_types:
         query = query.where(oa_type.in_(oa_types))
+    if funder_fit_value:
+        query = query.where(
+            fit_case(
+                oa_type,
+                covered,
+                J.jisc_oa_prohibited,
+                J.jisc_allows_sa_submitted,
+                J.jisc_allows_sa_accepted,
+                J.jisc_allows_sa_published,
+            )
+            == funder_fit_value
+        )
     if q:
         qstr = q.strip()
         if fuzzy:

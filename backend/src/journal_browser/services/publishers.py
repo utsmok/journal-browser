@@ -34,6 +34,7 @@ from ..models import (
     DealJournal,
     Institution,
     InstitutionWorksStats,
+    JiscPublisher,
     Journal,
     JournalFlags,
     Publisher,
@@ -425,6 +426,18 @@ async def publisher_detail(
     # External registry refs for the detail header (Open Access NL profile
     # link); a missing Publishers row just leaves the slug None.
     slug = await session.scalar(select(Publisher.openaccess_nl_slug).where(Publisher.name == name))
+    # ROR registration url for the detail header. jisc_publishers has no
+    # fk to publishers: match by name, exact case first (Postgres sorts
+    # false before true), then case-insensitive; lowest id breaks ties.
+    ror = await session.scalar(
+        select(JiscPublisher.ror)
+        .where(
+            JiscPublisher.ror.is_not(None),
+            func.lower(JiscPublisher.name) == name.lower(),
+        )
+        .order_by(JiscPublisher.name != name, JiscPublisher.id)
+        .limit(1)
+    )
 
     # Same page assembly as search_journals (no facets, no cursor), scoped
     # to the canonical key so sub-brand publisher_names join the group.
@@ -600,7 +613,7 @@ async def publisher_detail(
         "publisher": _item(
             pub,
             pub.topics[:TOPICS_PER_DETAIL],
-            external_ids={"openaccess_nl_slug": slug},
+            external_ids={"openaccess_nl_slug": slug, "ror": ror},
         ),
         "journals": journals,
         "deals": [(row["deal"], row["publisher_name"], row["n_covered"]) for row in deals],

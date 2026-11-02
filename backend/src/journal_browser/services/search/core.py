@@ -3,7 +3,9 @@ from typing import Any
 from sqlalchemy import Numeric, String, cast, func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...models import Journal
 from ...vocab import GreenOa
+from ..funder_fit import JournalFacts, compute_funder_fit
 from .cursors import encode_cursor, parse_cursor
 from .facets import facet_counts
 from .query import NUMERIC_SORTS, SortKey, _order, attach_apc_display, base_query
@@ -30,6 +32,8 @@ async def search_journals(
     cursor: str | None = None,
     limit: int = 20,
     include_facets: bool = True,
+    funder_struct: dict[str, Any] | None = None,
+    funder_fit: str | None = None,
 ) -> dict[str, Any]:
     filters = {
         "institution_id": institution_id,
@@ -45,6 +49,7 @@ async def search_journals(
         "has_works": has_works,
         "oa_types": oa_types,
         "green_oa": green_oa,
+        "funder_fit_value": funder_fit,
     }
     fuzzy = False
     subq = base_query(**filters).subquery()
@@ -116,10 +121,40 @@ async def search_journals(
     if rows:
         await attach_apc_display(session, items)
 
+    # Funder fit: the tier engine runs in Python on the page rows; oa_type
+    # and deal_covered are already in each item, one keyed query fetches
+    # the Jisc green-route columns. funder_struct=None leaves the field off.
+    if funder_struct is not None and items:
+        jrows = await session.execute(
+            select(
+                Journal.issn_l,
+                Journal.jisc_oa_prohibited,
+                Journal.jisc_allows_sa_submitted,
+                Journal.jisc_allows_sa_accepted,
+                Journal.jisc_allows_sa_published,
+            ).where(Journal.issn_l.in_([i["issn_l"] for i in items]))
+        )
+        jf = {r.issn_l: r for r in jrows}
+        for item in items:
+            j = jf.get(item["issn_l"])
+            fit = compute_funder_fit(
+                funder_struct,
+                JournalFacts(
+                    oa_type=item["oa_type"],
+                    prohibited=j.jisc_oa_prohibited if j else None,
+                    sa_submitted=j.jisc_allows_sa_submitted if j else None,
+                    sa_accepted=j.jisc_allows_sa_accepted if j else None,
+                    sa_published=j.jisc_allows_sa_published if j else None,
+                    deal_covered=bool(item["deal_covered"]),
+                    publisher_name=item["publisher_name"],
+                ),
+            )
+            item["funder_fit"] = {"status": fit.status, "reasons": fit.reasons}
+
     # Facets only depend on the filter set, never on cursor/page/sort — page
     # turns skip the aggregate and pass the count through instead.
     if include_facets:
-        facets, facet_total = await facet_counts(session, **filters)
+        facets, facet_total = await facet_counts(session, funder_struct=funder_struct, **filters)
     else:
         facets, facet_total = {}, total
     return {

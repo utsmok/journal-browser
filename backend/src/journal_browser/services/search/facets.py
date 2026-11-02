@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...harvest.common import cache_epoch
 from ...models import Journal
 from ...vocab import GreenOa
+from .. import funder_fit as funder_fit_mod
 from ..cache import FACET_CACHE, cache_get, cache_put
 from .query import base_query
 
@@ -28,6 +29,8 @@ async def facet_counts(
     has_works: bool | None = None,
     oa_types: list[str] | None = None,
     green_oa: GreenOa | str | None = None,
+    funder_struct: dict[str, Any] | None = None,
+    funder_fit_value: str | None = None,
 ) -> tuple[dict[str, dict[str, int]], int]:
     """Facet counts over the query-filtered set. Each facet's own filter is
     excluded so a chip shows what selecting it would yield; all other active
@@ -56,6 +59,8 @@ async def facet_counts(
             green_oa,
             deal != "any",
             search_in != "all",
+            funder_struct is not None,
+            funder_fit_value is not None,
         ]
     )
     # The ignore-list and the harvest epoch shape the counts; either change
@@ -88,6 +93,10 @@ async def facet_counts(
         "has_works": has_works,
         "oa_types": oa_types,
         "green_oa": green_oa,
+        # Funder-fit tier column only for a structured funder (text-only
+        # funders get no facet: every journal is untiered).
+        "funder_fit": funder_fit_mod.policy_structured(funder_struct),
+        "funder_fit_value": funder_fit_value,
     }
 
     def base_sub(**override: Any) -> Any:
@@ -301,6 +310,24 @@ async def facet_counts(
             g.c.green_oa == GreenOa.NONE,
         )
         facets["green_oa"] = {"submitted": g_s, "accepted": g_a, "published": g_p, "none": g_n}
+    if defaults["funder_fit"]:
+        # Funder_fit has an own filter like any facet: chip counts must
+        # reflect what selecting a tier would yield, so an active tier
+        # recomputes on a variant without it; otherwise the base counts
+        # are final. Either way one dedicated pass keeps the shared
+        # aggregate untouched.
+        ff = base_sub(**({"funder_fit_value": None} if funder_fit_value else {}))
+        counted_ff = (
+            select(ff, func.count().over(partition_by=ff.c.funder_fit).label("n"))
+            .select_from(ff)
+            .subquery()
+        )
+        counts = (
+            await session.execute(
+                select(func.jsonb_object_agg(counted_ff.c.funder_fit, counted_ff.c.n))
+            )
+        ).scalar_one()
+        facets["funder_fit"] = dict(counts or {})
     if cacheable:
         cache_put(FACET_CACHE, cache_key, (facets, total))
     return facets, total

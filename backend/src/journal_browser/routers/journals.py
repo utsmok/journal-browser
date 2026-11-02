@@ -16,6 +16,7 @@ from ..models import (
     DealInstitution,
     DealJournal,
     InstitutionWorksStats,
+    JiscFunder,
     Journal,
     JournalApcAggregate,
     Publisher,
@@ -26,6 +27,7 @@ from ..schemas import (
     ApcEvidenceOut,
     Attribution,
     DealOut,
+    FunderFitOut,
     GreenOaPolicy,
     GreenOaRoute,
     InstitutionMetrics,
@@ -40,9 +42,10 @@ from ..schemas import (
     StatsYear,
     WorksPage,
 )
-from ..services import detail_enrichment, work_sources
+from ..services import detail_enrichment, repo_links, work_sources
 from ..services import search as search_service
 from ..services.deal_coverage import deal_institution_join, dj_scope
+from ..services.funder_fit import JournalFacts, compute_funder_fit
 from ..vocab import GreenOa, OaType
 from .deals import DEAL_FIELDS
 
@@ -69,6 +72,17 @@ OaTypeFilter = Annotated[list[OaType] | None, BeforeValidator(_split_csv), Query
 def _is_ignored(issn_l: str) -> bool:
     """Admin ignore-list: an ignored journal is treated as nonexistent."""
     return issn_l.upper() in set(get_settings().ignored_issns)
+
+
+async def _funder_policy(session: AsyncSession, funder_id: int | None) -> dict | None:
+    """Selected funder's verbatim publications_policy; 404 on a bad id,
+    None when no funder is selected."""
+    if funder_id is None:
+        return None
+    row = await session.get(JiscFunder, funder_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"funder {funder_id} not found")
+    return row.publications_policy
 
 
 #: Per-field source attribution (structural; caveat codes resolve against
@@ -160,9 +174,14 @@ async def search_journals(
     cursor: Annotated[str | None, Query(max_length=512, pattern=r"^[A-Za-z0-9_-]*={0,2}$")] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     include_facets: bool = True,
+    funder: Annotated[int | None, Query(description="Jisc OPF funder id")] = None,
+    funder_fit: Annotated[
+        str | None, Query(pattern="^(compliant|check|no)$", description="Funder-fit tier filter")
+    ] = None,
 ) -> JournalSearchResponse:
     # oa_type is a comma-separated multi-select, OR'd together server-side;
     # values validate against OaType at the boundary (422).
+    funder_policy = await _funder_policy(session, funder)
     result = await search_service.search_journals(
         session,
         institution_id=institution.id,
@@ -183,6 +202,8 @@ async def search_journals(
         cursor=cursor,
         limit=limit,
         include_facets=include_facets,
+        funder_struct=funder_policy,
+        funder_fit=funder_fit if funder_policy is not None else None,
     )
     return JournalSearchResponse(
         items=[_to_list_item(item) for item in result["items"]],
@@ -245,7 +266,10 @@ async def journal_works(
 
 @router.get("/{issn_l}", response_model=JournalDetailResponse)
 async def journal_detail(
-    issn_l: str, session: SessionDep, institution: InstitutionDep
+    issn_l: str,
+    session: SessionDep,
+    institution: InstitutionDep,
+    funder: Annotated[int | None, Query(description="Jisc OPF funder id")] = None,
 ) -> JournalDetailResponse:
     journal = await session.scalar(select(Journal).where(Journal.issn_l == issn_l.upper()))
     if journal is None or _is_ignored(journal.issn_l):
@@ -378,22 +402,55 @@ async def journal_detail(
     # Jisc Open Policy Finder green-OA bundle; null when never swept
     # (jisc_policy NULL, DOAJ tri-state convention).
     policy = journal.jisc_policy
+    routes = {
+        version: GreenOaRoute(**route)
+        for version, route in ((policy.get("routes") or {}) if policy else {}).items()
+    }
     green_oa = (
         GreenOaPolicy(
             in_opf=journal.jisc_in_opf is True,
             oa_prohibited=policy.get("open_access_prohibited"),
-            routes={
-                version: GreenOaRoute(**route)
-                for version, route in (policy.get("routes") or {}).items()
-            },
+            routes=routes,
             internal_moniker=policy.get("internal_moniker"),
             urls=policy.get("urls") or [],
+            repository_links=await repo_links.repository_links(
+                session, {name for route in routes.values() for name in route.repositories}
+            ),
             policy_uri=policy.get("policy_uri"),
             harvested_at=journal.jisc_harvested_at,
         )
         if policy is not None
         else None
     )
+    # The oa_type feeds both the list item and the optional funder fit.
+    oa_type_val = search_service.oa_type_value(
+        journal.is_in_doaj,
+        journal.is_oa,
+        bool(aggregates)
+        or journal.latest_apc_euro is not None
+        or bool(journal.apc_prices)
+        or journal.doaj_has_apc is True,
+        bool(deals),
+        journal.oa_status_observed,
+        doaj_in_doaj=journal.doaj_in_doaj,
+        doaj_has_apc=journal.doaj_has_apc,
+    )
+    funder_policy = await _funder_policy(session, funder)
+    funder_fit = None
+    if funder_policy is not None:
+        fit = compute_funder_fit(
+            funder_policy,
+            JournalFacts(
+                oa_type=oa_type_val.value if hasattr(oa_type_val, "value") else oa_type_val,
+                prohibited=journal.jisc_oa_prohibited,
+                sa_submitted=journal.jisc_allows_sa_submitted,
+                sa_accepted=journal.jisc_allows_sa_accepted,
+                sa_published=journal.jisc_allows_sa_published,
+                deal_covered=bool(deals),
+                publisher_name=journal.publisher_name,
+            ),
+        )
+        funder_fit = FunderFitOut(status=fit.status, reasons=fit.reasons)
     return JournalDetailResponse(
         journal=JournalListItem(
             issn_l=journal.issn_l,
@@ -408,18 +465,7 @@ async def journal_detail(
             works=sum(s.works_count for s in stats),
             quartile=sjr_rows[-1].best_quartile if sjr_rows else None,
             twoyr_mean_citedness=summary_stats.get("two_yr_mean_citedness"),
-            oa_type=search_service.oa_type_value(
-                journal.is_in_doaj,
-                journal.is_oa,
-                bool(aggregates)
-                or journal.latest_apc_euro is not None
-                or bool(journal.apc_prices)
-                or journal.doaj_has_apc is True,
-                bool(deals),
-                journal.oa_status_observed,
-                doaj_in_doaj=journal.doaj_in_doaj,
-                doaj_has_apc=journal.doaj_has_apc,
-            ),
+            oa_type=oa_type_val,
         ),
         stats_totals=stats_totals,
         issns=journal.issns or [],
@@ -477,6 +523,7 @@ async def journal_detail(
             )
         ),
         green_oa=green_oa,
+        funder_fit=funder_fit,
         institution_metrics=InstitutionMetrics(
             **await detail_enrichment.institution_metrics(
                 session, journal.issn_l, institution, ut_rows

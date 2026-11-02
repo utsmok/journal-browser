@@ -140,6 +140,9 @@ async def test_detail_green_oa_block(api):
         "routes": POLICY["routes"],
         "internal_moniker": "Test Publisher",
         "urls": POLICY["urls"],
+        # No jisc_repositories rows seeded here: the route's "arXiv" stays
+        # plain.
+        "repository_links": {},
         "policy_uri": POLICY["policy_uri"],
     }
     assert body["attribution"]["green_oa"]["source"] == "Jisc Open Policy Finder"

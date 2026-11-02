@@ -8,6 +8,7 @@ from sqlalchemy import (
     ForeignKey,
     ForeignKeyConstraint,
     Index,
+    Integer,
     SmallInteger,
     Text,
     UniqueConstraint,
@@ -106,4 +107,25 @@ class WorkIdentity(Base):
         ),
         UniqueConstraint("institution_id", "source", "source_pk", name=WORK_IDENTITY_UQ),
         Index("ix_work_identity_inst_work", "institution_id", "work_id"),
+    )
+
+
+class WorkFunder(Base):
+    """Funder/grant rows per UT work, harvested from OpenAlex works awards."""
+
+    __tablename__ = "work_funders"
+
+    institution_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    pure_uuid: Mapped[str] = mapped_column(Text, primary_key=True)
+    funder_openalex_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    funder_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    award: Mapped[str | None] = mapped_column(Text, nullable=True)
+    harvested_at: Mapped[datetime] = _tstamp()
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["institution_id", "pure_uuid"],
+            ["works.institution_id", "works.pure_uuid"],
+            ondelete="CASCADE",
+        ),
     )

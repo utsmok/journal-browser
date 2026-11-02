@@ -25,6 +25,15 @@ class Attribution(BaseModel):
     caveat_codes: list[str] = []
 
 
+class FunderFitOut(BaseModel):
+    """How well one journal satisfies the selected funder's OA policy.
+
+    status None = the funder's policy is text-only, no tier derivable."""
+
+    status: Literal["compliant", "check", "no"] | None
+    reasons: list[str] = []
+
+
 class JournalListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -56,6 +65,8 @@ class JournalListItem(BaseModel):
     apc_low: float | None = None
     apc_high: float | None = None
     apc_stats: list["ApcAggregateOut"] = []
+    # Present only when the list query selects a funder.
+    funder_fit: FunderFitOut | None = None
 
 
 class JournalSearchResponse(BaseModel):
@@ -64,6 +75,38 @@ class JournalSearchResponse(BaseModel):
     next_cursor: str | None = None
     fuzzy: bool = False
     facets: dict[str, dict[str, int]] = {}
+
+
+class FunderListItem(BaseModel):
+    id: int
+    name: str | None
+    country: str | None
+    url: str | None
+    ror: str | None
+    fundref: str | None
+    # ROR-preferred link into openalex_funders; None when neither id links.
+    openalex_funder_id: str | None = None
+    policy_structured: bool = False
+    # UT works crediting this funder (work_funders); 0 before migration 0049
+    # lands or the harvest runs.
+    n_ut_works: int = 0
+
+
+class FunderSearchResponse(BaseModel):
+    items: list[FunderListItem]
+    total: int
+
+
+class FunderTopJournal(BaseModel):
+    title: str | None
+    issn_l: str | None
+    n_works: int
+
+
+class FunderDetailResponse(FunderListItem):
+    publications_policy: dict[str, Any] | None = None
+    data_archiving_policy: dict[str, Any] | None = None
+    top_journals: list[FunderTopJournal] = []
 
 
 class SimilarJournalItem(BaseModel):
@@ -267,6 +310,9 @@ class GreenOaPolicy(BaseModel):
     routes: dict[str, GreenOaRoute] = {}
     internal_moniker: str | None = None
     urls: list[dict[str, str]] = []
+    # Route repository short name -> jisc_repositories url; names the
+    # normalizer could not match are absent (frontend keeps them plain).
+    repository_links: dict[str, str] = {}
     policy_uri: str | None = None
     harvested_at: datetime | None = None
 
@@ -295,6 +341,8 @@ class JournalDetailResponse(BaseModel):
     openalex: OpenalexInfo | None = None
     openaire: OpenaireInfo = OpenaireInfo()
     green_oa: GreenOaPolicy | None = None
+    # Present only when the detail query passes ?funder=<jisc funder id>.
+    funder_fit: FunderFitOut | None = None
     institution_metrics: InstitutionMetrics = InstitutionMetrics()
     attribution: dict[str, Attribution] = {}
 
@@ -482,6 +530,10 @@ class PublisherExternalIds(BaseModel):
     # (openaccess.nl/en/publisher/{slug}); None when the publisher is not
     # in their deals overview.
     openaccess_nl_slug: str | None = None
+    # ROR registration url as harvested from jisc_publishers
+    # ("https://ror.org/<id>"); None when no OPF row with a ROR id
+    # matches the publisher by name.
+    ror: str | None = None
 
 
 class PublisherListItem(BaseModel):
