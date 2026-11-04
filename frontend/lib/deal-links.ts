@@ -36,6 +36,17 @@ function cleanLabel(link: DealLink) {
   return /^[a-z][a-z\s]*$/.test(text) ? text.charAt(0).toUpperCase() + text.slice(1) : text;
 }
 
+/** Publisher names scraped in full caps ("WOLTERS KLUWER") read as shouting;
+ * title-case those for display. Short strings stay as-is so acronyms
+ * ("ACS", "AIPP", "MDPI") survive, as do two-letter suffixes ("Elsevier BV"). */
+export function displayPublisherName(name: string | null | undefined): string {
+  if (!name || !/^[A-Z0-9 .&'\-/]+$/.test(name) || name.length <= 5) return name ?? "";
+  return name
+    .split(/\s+/)
+    .map((word) => (word.length <= 2 ? word : word.charAt(0) + word.slice(1).toLowerCase()))
+    .join(" ");
+}
+
 /** Last path segment; identifies the same document mirrored on two hosts. */
 function docKey(url: string) {
   try {

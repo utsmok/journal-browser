@@ -25,7 +25,7 @@ import { usePublisher } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
 import { errorMessage, type DealOut, type PublisherListItem } from "@/lib/api";
 import { formatEur, journalApcText } from "@/lib/format";
-import { dealLinkLabel, orderedDealLinks } from "@/lib/deal-links";
+import { dealLinkLabel, displayPublisherName, orderedDealLinks } from "@/lib/deal-links";
 
 /** First curated link for a deal ("conditions" / contract document). */
 function dealConditionsUrl(deal: DealOut): string | null {
@@ -39,7 +39,9 @@ function DealRow({ deal }: { deal: DealOut }) {
     <li className="py-2.5 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <DealBadge covered />
-        <span className="font-medium">{deal.publisher_name ?? "Open access deal"}</span>
+        <span className="font-medium">
+          {displayPublisherName(deal.publisher_name) || "Open access deal"}
+        </span>
         {deal.covers_in_group != null && (
           <span className="text-xs text-[var(--muted-foreground)]">
             covers {deal.covers_in_group} {deal.covers_in_group === 1 ? "journal" : "journals"} in
@@ -120,8 +122,8 @@ function AggregateCards({ publisher }: { publisher: PublisherListItem }) {
           <>
             <p className="text-2xl font-semibold tabular-nums">
               {min != null && max != null && min !== max
-                ? `${formatEur(min)}–${formatEur(max)} €`
-                : `${formatEur(max ?? (min as number))} €`}
+                ? `€${formatEur(min)}–${formatEur(max)}`
+                : `€${formatEur(max ?? (min as number))}`}
             </p>
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
               APC known for {n_journals} {n_journals === 1 ? "journal" : "journals"}; publisher list
@@ -166,7 +168,7 @@ export default function PublisherPage() {
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
       <BackLink href={backHref} label="Back to publishers" />
       <header className="mb-6 mt-4">
-        <h1 className="text-3xl font-bold text-balance">{publisher.name}</h1>
+        <h1 className="text-3xl font-bold text-balance">{displayPublisherName(publisher.name)}</h1>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-[var(--muted-foreground)]">
           <span>
             {publisher.n_journals.toLocaleString("en")}{" "}

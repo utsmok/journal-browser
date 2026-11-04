@@ -29,6 +29,7 @@ import {
   type PublisherListItem,
   type PublisherSearchSort,
 } from "@/lib/api";
+import { displayPublisherName } from "@/lib/deal-links";
 import { formatEur } from "@/lib/format";
 import { PUBLISHER_COLUMN_SORTS } from "@/lib/search-config";
 
@@ -89,7 +90,7 @@ function QuartileChips({ item }: { item: PublisherListItem }) {
             }
             className={
               n
-                ? "rounded bg-[var(--secondary)] px-1 py-0.5"
+                ? "rounded bg-[var(--secondary)] px-1 py-0.5 text-[var(--secondary-foreground)]"
                 : "rounded bg-[var(--muted)] px-1 py-0.5 text-[var(--muted-foreground)]"
             }
           >
@@ -109,14 +110,15 @@ function ApcCell({ item }: { item: PublisherListItem }) {
     return <span className="text-[var(--muted-foreground)]">—</span>;
   const range =
     min != null && max != null && min !== max
-      ? `${formatEur(min)}–${formatEur(max)}`
-      : formatEur(max ?? (min as number));
+      ? `€${formatEur(min)}–${formatEur(max)}`
+      : `€${formatEur(max ?? (min as number))}`;
   return (
     <span
       className="tabular-nums"
       title={`APC known for ${n_journals} ${n_journals === 1 ? "journal" : "journals"}; list prices and OpenAPC ranges combined`}
     >
-      {range} € <span className="text-[var(--muted-foreground)]">({n_journals})</span>
+      {range}{" "}
+      <span className="text-[var(--muted-foreground)]">({n_journals.toLocaleString("en")})</span>
     </span>
   );
 }
@@ -361,7 +363,7 @@ function PublishersView() {
         <section className="order-1 mb-8 min-[960px]:col-start-2 min-[960px]:row-start-1 min-[960px]:mb-6">
           <h1 className="mb-3 text-3xl font-bold text-balance">Publishers</h1>
           <p className="mb-6 max-w-2xl text-[var(--muted-foreground)]">
-            Browse the journals of {site.name} by publisher, with their output, open access mix,
+            Browse {site.short}&rsquo;s journals by publisher, with their output, open access mix,
             deals, and article costs.
           </p>
           <form
@@ -564,7 +566,7 @@ function PublishersView() {
                           href={`/${inst}/publisher/${encodeNamePath(p.name)}`}
                           className="font-medium text-[var(--foreground)] underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
                         >
-                          {p.name}
+                          {displayPublisherName(p.name)}
                         </Link>
                         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs tabular-nums text-[var(--muted-foreground)]">
                           <span>
@@ -623,8 +625,11 @@ function PublishersView() {
                                 href={`/${inst}/publisher/${encodeNamePath(p.name)}`}
                                 className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
                               >
-                                <span className="block max-w-56 truncate" title={p.name}>
-                                  {p.name}
+                                <span
+                                  className="block max-w-56 truncate"
+                                  title={displayPublisherName(p.name)}
+                                >
+                                  {displayPublisherName(p.name)}
                                 </span>
                               </Link>
                             </TableCell>
@@ -640,10 +645,10 @@ function PublishersView() {
                               </div>
                             </TableCell>
                             <TableCell className="whitespace-nowrap text-right tabular-nums">
-                              {p.deal_journals}
+                              {p.deal_journals.toLocaleString("en")}
                               <span className="text-[var(--muted-foreground)]">
                                 {" "}
-                                of {p.n_journals}
+                                of {p.n_journals.toLocaleString("en")}
                               </span>
                             </TableCell>
                             <TableCell>
