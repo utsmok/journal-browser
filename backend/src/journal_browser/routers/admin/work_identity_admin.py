@@ -13,10 +13,10 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 
 from ...models import Institution, StatusChangeLog, Work, WorkIdentity
-from ...schemas import WorkIdentityAdminOut
+from ...schemas import WorkIdentityAdminOut, WorkIdentityPageOut
 from .auth import AdminDep, SessionDep
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -33,19 +33,23 @@ class WorkIdentityStatusIn(BaseModel):
     note: str | None = Field(default=None, max_length=2000)
 
 
-@router.get("/work-identities", response_model=list[WorkIdentityAdminOut])
+@router.get("/work-identities", response_model=WorkIdentityPageOut)
 async def list_work_identities(
     session: SessionDep,
     _: AdminDep,
     status: str | None = Query(default=None),
     institution: str | None = Query(default=None, description="institution code"),
     source: str | None = Query(default=None),
+    offset: int = Query(default=0, ge=0),
     limit: int = Query(default=200, ge=1, le=1000),
-) -> list[dict[str, Any]]:
-    """Identity rows, newest activity first, with the work title."""
+) -> WorkIdentityPageOut:
+    """Identity rows, newest activity first, with the work title.
+
+    Server-paged via offset/limit; total is the full filtered count.
+    """
     if status is not None and status not in WORK_IDENTITY_STATUSES:
         raise HTTPException(422, f"status must be one of {list(WORK_IDENTITY_STATUSES)}")
-    stmt = (
+    filtered = (
         select(WorkIdentity, Institution.code, Work.title)
         .select_from(WorkIdentity)
         .join(Institution, Institution.id == WorkIdentity.institution_id)
@@ -54,32 +58,41 @@ async def list_work_identities(
             (Work.institution_id == WorkIdentity.institution_id)
             & (Work.pure_uuid == WorkIdentity.work_id),
         )
-        .order_by(desc(WorkIdentity.updated_at), desc(WorkIdentity.id))
-        .limit(limit)
     )
     if status is not None:
-        stmt = stmt.where(WorkIdentity.status == status)
+        filtered = filtered.where(WorkIdentity.status == status)
     if institution is not None:
-        stmt = stmt.where(Institution.code == institution)
+        filtered = filtered.where(Institution.code == institution)
     if source is not None:
-        stmt = stmt.where(WorkIdentity.source == source)
-    rows = (await session.execute(stmt)).all()
-    return [
-        {
-            "institution_id": row.institution_id,
-            "institution_code": code,
-            "work_id": row.work_id,
-            "work_title": title,
-            "source": row.source,
-            "source_pk": row.source_pk,
-            "matched_by": row.matched_by,
-            "confidence": row.confidence,
-            "status": row.status,
-            "note": row.note,
-            "updated_at": row.updated_at,
-        }
-        for row, code, title in rows
-    ]
+        filtered = filtered.where(WorkIdentity.source == source)
+    total = await session.scalar(select(func.count()).select_from(filtered.subquery()))
+    rows = (
+        await session.execute(
+            filtered.order_by(desc(WorkIdentity.updated_at), desc(WorkIdentity.id))
+            .offset(offset)
+            .limit(limit)
+        )
+    ).all()
+    return WorkIdentityPageOut(
+        total=total or 0,
+        offset=offset,
+        items=[
+            {
+                "institution_id": row.institution_id,
+                "institution_code": code,
+                "work_id": row.work_id,
+                "work_title": title,
+                "source": row.source,
+                "source_pk": row.source_pk,
+                "matched_by": row.matched_by,
+                "confidence": row.confidence,
+                "status": row.status,
+                "note": row.note,
+                "updated_at": row.updated_at,
+            }
+            for row, code, title in rows
+        ],
+    )
 
 
 @router.put("/work-identities", response_model=WorkIdentityAdminOut)

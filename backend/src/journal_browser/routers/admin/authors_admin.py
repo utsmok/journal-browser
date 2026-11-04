@@ -15,7 +15,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 
 from ...models import (
     Author,
@@ -26,7 +26,7 @@ from ...models import (
     SourceRecord,
     StatusChangeLog,
 )
-from ...schemas import AdminExternalAuthorOut, AuthorIdentityAdminOut
+from ...schemas import AdminExternalAuthorOut, AuthorIdentityAdminOut, AuthorIdentityPageOut
 from .auth import AdminDep, SessionDep
 from .settings_admin import _get_institution_or_404
 
@@ -47,18 +47,22 @@ class IdentityStatusIn(BaseModel):
     note: str | None = Field(default=None, max_length=2000)
 
 
-@router.get("/author-identities", response_model=list[AuthorIdentityAdminOut])
+@router.get("/author-identities", response_model=AuthorIdentityPageOut)
 async def list_author_identities(
     session: SessionDep,
     _: AdminDep,
     status: str | None = Query(default=None),
     institution: str | None = Query(default=None, description="institution code"),
+    offset: int = Query(default=0, ge=0),
     limit: int = Query(default=200, ge=1, le=1000),
-) -> list[dict[str, Any]]:
-    """Identity rows, newest activity first, with the local author name."""
+) -> AuthorIdentityPageOut:
+    """Identity rows, newest activity first, with the local author name.
+
+    Server-paged via offset/limit; total is the full filtered count.
+    """
     if status is not None and status not in IDENTITY_STATUSES:
         raise HTTPException(422, f"status must be one of {list(IDENTITY_STATUSES)}")
-    stmt = (
+    filtered = (
         select(AuthorIdentity, Institution.code, Author.name)
         .select_from(AuthorIdentity)
         .join(Institution, Institution.id == AuthorIdentity.institution_id)
@@ -67,32 +71,39 @@ async def list_author_identities(
             (Author.institution_id == AuthorIdentity.institution_id)
             & (Author.pure_uuid == AuthorIdentity.author_pure_uuid),
         )
-        .order_by(desc(AuthorIdentity.updated_at))
-        .limit(limit)
     )
     if status is not None:
-        stmt = stmt.where(AuthorIdentity.status == status)
+        filtered = filtered.where(AuthorIdentity.status == status)
     if institution is not None:
-        stmt = stmt.where(Institution.code == institution)
-    rows = (await session.execute(stmt)).all()
-    return [
-        {
-            "institution_id": row.institution_id,
-            "institution_code": code,
-            "author_pure_uuid": row.author_pure_uuid,
-            "author_name": name,
-            "source": row.source,
-            "external_id": row.external_id,
-            "status": row.status,
-            "method": row.method,
-            "confidence": row.confidence,
-            "n_works": row.n_works,
-            "orcid_corroborated": row.orcid_corroborated,
-            "evidence": row.evidence,
-            "updated_at": row.updated_at,
-        }
-        for row, code, name in rows
-    ]
+        filtered = filtered.where(Institution.code == institution)
+    total = await session.scalar(select(func.count()).select_from(filtered.subquery()))
+    rows = (
+        await session.execute(
+            filtered.order_by(desc(AuthorIdentity.updated_at)).offset(offset).limit(limit)
+        )
+    ).all()
+    return AuthorIdentityPageOut(
+        total=total or 0,
+        offset=offset,
+        items=[
+            {
+                "institution_id": row.institution_id,
+                "institution_code": code,
+                "author_pure_uuid": row.author_pure_uuid,
+                "author_name": name,
+                "source": row.source,
+                "external_id": row.external_id,
+                "status": row.status,
+                "method": row.method,
+                "confidence": row.confidence,
+                "n_works": row.n_works,
+                "orcid_corroborated": row.orcid_corroborated,
+                "evidence": row.evidence,
+                "updated_at": row.updated_at,
+            }
+            for row, code, name in rows
+        ],
+    )
 
 
 @router.put("/author-identities", response_model=AuthorIdentityAdminOut)

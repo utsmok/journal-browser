@@ -770,6 +770,22 @@ class WorkIdentityAdminOut(BaseModel):
     updated_at: datetime | None
 
 
+class AuthorIdentityPageOut(BaseModel):
+    """Paged identity-cascade review queue (total is the unpaginated count)."""
+
+    total: int
+    offset: int = 0
+    items: list[AuthorIdentityAdminOut]
+
+
+class WorkIdentityPageOut(BaseModel):
+    """Paged work-identity review queue (total is the unpaginated count)."""
+
+    total: int
+    offset: int = 0
+    items: list[WorkIdentityAdminOut]
+
+
 class StatusChangeOut(BaseModel):
     """One audited admin status flip (status_changes rows)."""
 

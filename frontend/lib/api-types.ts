@@ -282,6 +282,8 @@ export interface paths {
         /**
          * List Author Identities
          * @description Identity rows, newest activity first, with the local author name.
+         *
+         *     Server-paged via offset/limit; total is the full filtered count.
          */
         get: operations["list_author_identities_api_v1_admin_author_identities_get"];
         /**
@@ -340,6 +342,8 @@ export interface paths {
         /**
          * List Work Identities
          * @description Identity rows, newest activity first, with the work title.
+         *
+         *     Server-paged via offset/limit; total is the full filtered count.
          */
         get: operations["list_work_identities_api_v1_admin_work_identities_get"];
         /**
@@ -1136,6 +1140,21 @@ export interface components {
             };
             /** Updated At */
             updated_at: string | null;
+        };
+        /**
+         * AuthorIdentityPageOut
+         * @description Paged identity-cascade review queue (total is the unpaginated count).
+         */
+        AuthorIdentityPageOut: {
+            /** Total */
+            total: number;
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
+            /** Items */
+            items: components["schemas"]["AuthorIdentityAdminOut"][];
         };
         /** AuthorItem */
         AuthorItem: {
@@ -2992,6 +3011,21 @@ export interface components {
             updated_at: string | null;
         };
         /**
+         * WorkIdentityPageOut
+         * @description Paged work-identity review queue (total is the unpaginated count).
+         */
+        WorkIdentityPageOut: {
+            /** Total */
+            total: number;
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
+            /** Items */
+            items: components["schemas"]["WorkIdentityAdminOut"][];
+        };
+        /**
          * WorkIdentityStatus
          * @description work_identity.status (ck_work_identity_status).
          *
@@ -3690,6 +3724,7 @@ export interface operations {
                 status?: string | null;
                 /** @description institution code */
                 institution?: string | null;
+                offset?: number;
                 limit?: number;
             };
             header?: never;
@@ -3704,7 +3739,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AuthorIdentityAdminOut"][];
+                    "application/json": components["schemas"]["AuthorIdentityPageOut"];
                 };
             };
             /** @description Validation Error */
@@ -3791,6 +3826,7 @@ export interface operations {
                 /** @description institution code */
                 institution?: string | null;
                 source?: string | null;
+                offset?: number;
                 limit?: number;
             };
             header?: never;
@@ -3805,7 +3841,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["WorkIdentityAdminOut"][];
+                    "application/json": components["schemas"]["WorkIdentityPageOut"];
                 };
             };
             /** @description Validation Error */

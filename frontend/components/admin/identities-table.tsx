@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { AuthorIdentityDrawer } from "@/components/admin/author-identity-drawer";
+import { CardPager } from "@/components/card-pager";
 import { useReviewer } from "@/components/admin/record";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,7 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAdminResource } from "@/hooks/use-admin-resource";
-import { adminPut, type AuthorIdentityAdmin } from "@/lib/admin";
+import { adminPut, type AuthorIdentityAdmin, type AuthorIdentityPage } from "@/lib/admin";
 
 /** Matches the backend's IDENTITY_STATUSES; "all" omits the filter param. */
 const STATUS_FILTERS = ["candidate", "confirmed", "rejected", "all"] as const;
@@ -53,19 +54,25 @@ export function IdentitiesPanel({
   onUnauthorized: () => void;
 }) {
   const [filter, setFilter] = useState<StatusFilter>("candidate");
+  const [page, setPage] = useState(1);
   const [busy, setBusy] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [reviewer, setReviewer] = useReviewer();
+  // The institution prop changes the query outside this panel; without a
+  // reset a stale page can land past the new total and read as "no rows".
+  useEffect(() => setPage(1), [inst]);
   const instQ = inst ? `&institution=${encodeURIComponent(inst)}` : "";
-  const query = `/author-identities?limit=500${instQ}${filter === "all" ? "" : `&status=${filter}`}`;
-  const { data, setData, loading, error, setError } = useAdminResource<AuthorIdentityAdmin[]>(
+  const query = `/author-identities?limit=50&offset=${(page - 1) * 50}${instQ}${filter === "all" ? "" : `&status=${filter}`}`;
+  const { data, setData, loading, error, setError } = useAdminResource<AuthorIdentityPage>(
     query,
     token,
     onUnauthorized,
     "identities",
   );
-  const rows = data ?? [];
-  const selected = rows.find((row) => rowKey(row) === selectedKey) ?? null;
+  const items = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const pages = Math.max(1, Math.ceil(total / 50));
+  const selected = items.find((row) => rowKey(row) === selectedKey) ?? null;
 
   const flip = async (
     row: AuthorIdentityAdmin,
@@ -88,7 +95,11 @@ export function IdentitiesPanel({
       });
       // Replace from the server response; the flip is audited and sticky
       // there, so the row we show must be the stored one.
-      setData((current) => (current ?? []).map((r) => (rowKey(r) === key ? updated : r)));
+      setData((current) =>
+        current
+          ? { ...current, items: current.items.map((r) => (rowKey(r) === key ? updated : r)) }
+          : current,
+      );
     } catch (err) {
       setError(`Could not flip ${row.external_id} (${err instanceof Error ? err.message : err}).`);
     } finally {
@@ -106,7 +117,10 @@ export function IdentitiesPanel({
           id="identity-status-filter"
           title="Which resolution statuses to list"
           value={filter}
-          onChange={(event) => setFilter(event.target.value as StatusFilter)}
+          onChange={(event) => {
+            setFilter(event.target.value as StatusFilter);
+            setPage(1);
+          }}
           className={SELECT_CLASS}
         >
           {STATUS_FILTERS.map((value) => (
@@ -126,7 +140,7 @@ export function IdentitiesPanel({
           className="h-9 w-56"
         />
         <span className="text-[var(--muted-foreground)]" aria-live="polite">
-          {loading ? "loading…" : `${rows.length.toLocaleString("en")} rows`}
+          {loading ? "loading…" : `${total.toLocaleString("en")} rows`}
         </span>
         {error && <p className="text-sm text-destructive">{error}</p>}
       </div>
@@ -145,7 +159,7 @@ export function IdentitiesPanel({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => {
+          {items.map((row) => {
             const key = rowKey(row);
             return (
               <TableRow
@@ -221,7 +235,7 @@ export function IdentitiesPanel({
               </TableRow>
             );
           })}
-          {!loading && rows.length === 0 && (
+          {!loading && items.length === 0 && (
             <TableRow>
               <TableCell
                 colSpan={inst ? 8 : 9}
@@ -234,6 +248,9 @@ export function IdentitiesPanel({
           )}
         </TableBody>
       </Table>
+      {pages > 1 && (
+        <CardPager page={page} pages={pages} total={total} onPage={setPage} label="rows" />
+      )}
       {selected && (
         <AuthorIdentityDrawer
           key={rowKey(selected)}

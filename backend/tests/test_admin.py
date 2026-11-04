@@ -1,5 +1,7 @@
 """Admin panel API: password gate, run listing, flagged deals, settings."""
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -276,7 +278,8 @@ async def test_author_identities_list_and_flip(admin_api, db_engine):
         "/api/v1/admin/author-identities", params={"status": "candidate"}, headers=headers
     )
     assert r.status_code == 200
-    row = next(row for row in r.json() if row["author_pure_uuid"] == "p-review")
+    rows = r.json()["items"]
+    row = next(row for row in rows if row["author_pure_uuid"] == "p-review")
     assert row["author_name"] == "Review Me"
     assert row["institution_code"] == "ut"
 
@@ -415,7 +418,7 @@ async def test_work_identities_list_flip_and_audit(admin_api, db_engine):
         await session.commit()
 
     headers = await _login(admin_api)
-    rows = (await admin_api.get("/api/v1/admin/work-identities", headers=headers)).json()
+    rows = (await admin_api.get("/api/v1/admin/work-identities", headers=headers)).json()["items"]
     assert len(rows) == 1
     assert rows[0]["work_title"] == "A local work"
     assert rows[0]["institution_code"] == "ut"
@@ -461,6 +464,112 @@ async def test_work_identities_list_flip_and_audit(admin_api, db_engine):
         assert len(changes) == 1
         assert changes[0].old_value == "missing"
         assert changes[0].new_value == "candidate"
+
+
+@requires_db
+async def test_author_identities_paging_envelope(admin_api, db_engine):
+    """total reflects all filtered rows; offset pages through without overlap."""
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with maker() as session:
+        inst_id = (await session.execute(select(Institution.id).limit(1))).scalar_one()
+        base = datetime(2026, 1, 1, tzinfo=UTC)
+        for i in range(5):
+            session.add(
+                AuthorIdentity(
+                    institution_id=inst_id,
+                    author_pure_uuid=f"p-page-{i}",
+                    source="openalex",
+                    external_id=f"a-{i}",
+                    # Even rows confirmed, odd rows candidate: filter below.
+                    status="candidate" if i % 2 else "confirmed",
+                    method="initials",
+                    n_works=1,
+                    evidence={},
+                    # Distinct stamps pin the newest-first order.
+                    updated_at=base + timedelta(minutes=i),
+                )
+            )
+        await session.commit()
+
+    headers = await _login(admin_api)
+
+    async def page(**params):
+        r = await admin_api.get("/api/v1/admin/author-identities", params=params, headers=headers)
+        assert r.status_code == 200
+        return r.json()
+
+    first = await page(limit=2)
+    assert (first["total"], first["offset"]) == (5, 0)
+    assert len(first["items"]) == 2
+
+    second = await page(limit=2, offset=2)
+    assert (second["total"], second["offset"]) == (5, 2)
+    tail = await page(limit=2, offset=4)
+    assert len(tail["items"]) == 1
+    everything = {it["author_pure_uuid"] for it in first["items"] + second["items"] + tail["items"]}
+    assert len(everything) == 5
+
+    # Filters apply to the total, not just the items.
+    filtered = await page(status="candidate", limit=1)
+    assert filtered["total"] == 2
+    assert {it["status"] for it in filtered["items"]} == {"candidate"}
+
+    r = await admin_api.get(
+        "/api/v1/admin/author-identities", params={"offset": -1}, headers=headers
+    )
+    assert r.status_code == 422
+
+
+@requires_db
+async def test_work_identities_paging_envelope(admin_api, db_engine):
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with maker() as session:
+        inst_id = (await session.execute(select(Institution.id).limit(1))).scalar_one()
+        run_id = (await session.execute(select(HarvestRun.id).limit(1))).scalar_one()
+        for i in range(4):
+            session.add(
+                Work(
+                    institution_id=inst_id,
+                    pure_uuid=f"w-{i}",
+                    title=f"Work {i}",
+                    norm_title=f"work {i}",
+                    year=2025,
+                    first_seen_run=run_id,
+                    last_seen_run=run_id,
+                )
+            )
+            session.add(
+                WorkIdentity(
+                    institution_id=inst_id,
+                    # Two openalex rows, two pure rows: filter below.
+                    source="openalex" if i < 2 else "pure",
+                    source_pk=f"doi:10.9/{i}",
+                    work_id=f"w-{i}",
+                    matched_by="doi",
+                    status="missing",
+                )
+            )
+        await session.commit()
+
+    headers = await _login(admin_api)
+
+    async def page(**params):
+        r = await admin_api.get("/api/v1/admin/work-identities", params=params, headers=headers)
+        assert r.status_code == 200
+        return r.json()
+
+    first = await page(limit=3)
+    assert (first["total"], first["offset"]) == (4, 0)
+    assert len(first["items"]) == 3
+    rest = await page(limit=3, offset=3)
+    assert (rest["total"], rest["offset"]) == (4, 3)
+    assert len(rest["items"]) == 1
+    seen = {it["source_pk"] for it in first["items"] + rest["items"]}
+    assert len(seen) == 4
+
+    filtered = await page(source="openalex", limit=1)
+    assert filtered["total"] == 2
+    assert {it["source"] for it in filtered["items"]} == {"openalex"}
 
 
 @requires_db

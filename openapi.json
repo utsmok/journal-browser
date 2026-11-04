@@ -883,7 +883,7 @@
           "admin"
         ],
         "summary": "List Author Identities",
-        "description": "Identity rows, newest activity first, with the local author name.",
+        "description": "Identity rows, newest activity first, with the local author name.\n\nServer-paged via offset/limit; total is the full filtered count.",
         "operationId": "list_author_identities_api_v1_admin_author_identities_get",
         "parameters": [
           {
@@ -921,6 +921,17 @@
             "description": "institution code"
           },
           {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -939,11 +950,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AuthorIdentityAdminOut"
-                  },
-                  "title": "Response List Author Identities Api V1 Admin Author Identities Get"
+                  "$ref": "#/components/schemas/AuthorIdentityPageOut"
                 }
               }
             }
@@ -1067,7 +1074,7 @@
           "admin"
         ],
         "summary": "List Work Identities",
-        "description": "Identity rows, newest activity first, with the work title.",
+        "description": "Identity rows, newest activity first, with the work title.\n\nServer-paged via offset/limit; total is the full filtered count.",
         "operationId": "list_work_identities_api_v1_admin_work_identities_get",
         "parameters": [
           {
@@ -1121,6 +1128,17 @@
             }
           },
           {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -1139,11 +1157,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/WorkIdentityAdminOut"
-                  },
-                  "title": "Response List Work Identities Api V1 Admin Work Identities Get"
+                  "$ref": "#/components/schemas/WorkIdentityPageOut"
                 }
               }
             }
@@ -4660,6 +4674,33 @@
         ],
         "title": "AuthorIdentityAdminOut",
         "description": "One identity-cascade row for the admin review list."
+      },
+      "AuthorIdentityPageOut": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "default": 0
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuthorIdentityAdminOut"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "items"
+        ],
+        "title": "AuthorIdentityPageOut",
+        "description": "Paged identity-cascade review queue (total is the unpaginated count)."
       },
       "AuthorItem": {
         "properties": {
@@ -10210,6 +10251,33 @@
         ],
         "title": "WorkIdentityAdminOut",
         "description": "One cross-source work-identity row for the admin review list.\n\nFlips are durable: every harvest write is on_conflict_do_nothing, so\nre-runs never overwrite an admin decision."
+      },
+      "WorkIdentityPageOut": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "default": 0
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WorkIdentityAdminOut"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "items"
+        ],
+        "title": "WorkIdentityPageOut",
+        "description": "Paged work-identity review queue (total is the unpaginated count)."
       },
       "WorkIdentityStatus": {
         "type": "string",

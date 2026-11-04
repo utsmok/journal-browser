@@ -132,8 +132,14 @@ export type FeedbackAdmin = Schemas["FeedbackAdminOut"];
 /** GET/PUT /admin/author-identities: one resolution row for review. */
 export type AuthorIdentityAdmin = Schemas["AuthorIdentityAdminOut"];
 
+/** GET /admin/author-identities is now an offset page (total = unpaginated count). */
+export type AuthorIdentityPage = Schemas["AuthorIdentityPageOut"];
+
 /** GET/PUT /admin/work-identities: one cross-source work link for review. */
 export type WorkIdentityAdmin = Schemas["WorkIdentityAdminOut"];
+
+/** GET /admin/work-identities is now an offset page (total = unpaginated count). */
+export type WorkIdentityPage = Schemas["WorkIdentityPageOut"];
 
 /** GET /admin/status-changes: one audited admin status flip. */
 export type StatusChange = Schemas["StatusChangeOut"];

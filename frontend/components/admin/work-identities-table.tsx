@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { WorkIdentityDrawer } from "@/components/admin/work-identity-drawer";
+import { CardPager } from "@/components/card-pager";
 import { useReviewer } from "@/components/admin/record";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,7 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAdminResource } from "@/hooks/use-admin-resource";
-import { adminPut, type WorkIdentityAdmin } from "@/lib/admin";
+import { adminPut, type WorkIdentityAdmin, type WorkIdentityPage } from "@/lib/admin";
 
 /** Matches the backend's WORK_IDENTITY_STATUSES; "all" omits the filter. */
 const STATUS_FILTERS = ["candidate", "confirmed", "missing", "all"] as const;
@@ -53,19 +54,25 @@ export function WorkIdentitiesPanel({
   onUnauthorized: () => void;
 }) {
   const [filter, setFilter] = useState<StatusFilter>("candidate");
+  const [page, setPage] = useState(1);
   const [busy, setBusy] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [reviewer, setReviewer] = useReviewer();
+  // The institution prop changes the query outside this panel; without a
+  // reset a stale page can land past the new total and read as "no rows".
+  useEffect(() => setPage(1), [inst]);
   const instQ = inst ? `&institution=${encodeURIComponent(inst)}` : "";
-  const query = `/work-identities?limit=500${instQ}${filter === "all" ? "" : `&status=${filter}`}`;
-  const { data, setData, loading, error, setError } = useAdminResource<WorkIdentityAdmin[]>(
+  const query = `/work-identities?limit=50&offset=${(page - 1) * 50}${instQ}${filter === "all" ? "" : `&status=${filter}`}`;
+  const { data, setData, loading, error, setError } = useAdminResource<WorkIdentityPage>(
     query,
     token,
     onUnauthorized,
     "work identities",
   );
-  const rows = data ?? [];
-  const selected = rows.find((row) => rowKey(row) === selectedKey) ?? null;
+  const items = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const pages = Math.max(1, Math.ceil(total / 50));
+  const selected = items.find((row) => rowKey(row) === selectedKey) ?? null;
 
   const flip = async (
     row: WorkIdentityAdmin,
@@ -85,7 +92,11 @@ export function WorkIdentitiesPanel({
         ...(changedBy ? { changed_by: changedBy } : {}),
         ...(note ? { note } : {}),
       });
-      setData((current) => (current ?? []).map((r) => (rowKey(r) === key ? updated : r)));
+      setData((current) =>
+        current
+          ? { ...current, items: current.items.map((r) => (rowKey(r) === key ? updated : r)) }
+          : current,
+      );
     } catch (err) {
       setError(`Could not flip ${row.source_pk} (${err instanceof Error ? err.message : err}).`);
     } finally {
@@ -103,7 +114,10 @@ export function WorkIdentitiesPanel({
           id="work-identity-status-filter"
           title="Which identity statuses to list"
           value={filter}
-          onChange={(event) => setFilter(event.target.value as StatusFilter)}
+          onChange={(event) => {
+            setFilter(event.target.value as StatusFilter);
+            setPage(1);
+          }}
           className={SELECT_CLASS}
         >
           {STATUS_FILTERS.map((value) => (
@@ -123,7 +137,7 @@ export function WorkIdentitiesPanel({
           className="h-9 w-56"
         />
         <span className="text-[var(--muted-foreground)]" aria-live="polite">
-          {loading ? "loading…" : `${rows.length.toLocaleString("en")} rows`}
+          {loading ? "loading…" : `${total.toLocaleString("en")} rows`}
         </span>
         {error && <p className="text-sm text-destructive">{error}</p>}
       </div>
@@ -142,7 +156,7 @@ export function WorkIdentitiesPanel({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => {
+          {items.map((row) => {
             const key = rowKey(row);
             return (
               <TableRow
@@ -213,7 +227,7 @@ export function WorkIdentitiesPanel({
               </TableRow>
             );
           })}
-          {!loading && rows.length === 0 && (
+          {!loading && items.length === 0 && (
             <TableRow>
               <TableCell
                 colSpan={inst ? 7 : 8}
@@ -226,6 +240,9 @@ export function WorkIdentitiesPanel({
           )}
         </TableBody>
       </Table>
+      {pages > 1 && (
+        <CardPager page={page} pages={pages} total={total} onPage={setPage} label="rows" />
+      )}
       {selected && (
         <WorkIdentityDrawer
           key={rowKey(selected)}
