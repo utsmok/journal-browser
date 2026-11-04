@@ -93,6 +93,8 @@ export type JournalSearchParams = {
   topic?: string;
   /** Comma-separated multi-select, OR'd server-side. */
   oa_type?: string;
+  /** OpenAlex venue type filter: "journal", "book series", ... */
+  pub_type?: string;
   /** Self-archiving route per Jisc: "submitted" | "accepted" | "published" | "none". */
   green_oa?: string;
   /** Jisc OPF funder id; annotates rows with funder_fit. */

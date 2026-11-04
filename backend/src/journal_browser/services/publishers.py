@@ -21,7 +21,7 @@ import warnings
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import Numeric, case, func, select, text
+from sqlalchemy import Numeric, and_, case, func, or_, select, text
 from sqlalchemy import exc as sa_exc
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -107,9 +107,14 @@ def _snapshot_query(institution_id: int) -> Any:
         )
         .join(F, (F.institution_id == institution_id) & (F.issn_l == J.issn_l))
         .where(
-            J.type == "journal",
+            # Browsable cutoffs mirror search.base_query (owner decision
+            # 2026-11-04): journals above the window cutoff, plus other venue
+            # types with at least one institution work.
+            or_(
+                and_(J.type == "journal", F.works_window_plus > 3),
+                and_(J.type.is_not(None), J.type != "journal", F.works_count > 0),
+            ),
             J.issn_l.is_not(None),
-            F.works_window_plus > 3,
             F.browse_excluded.is_not(True),
             J.publisher_name.is_not(None),
             J.publisher_name != "",

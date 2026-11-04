@@ -3,7 +3,7 @@
 import { flexRender, getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
 import { Search } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { notFound, usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { DealBadge, FunderFitBadge, OaTypeBadge, QuartileBadge } from "@/components/badges";
@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/table";
 import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
-import { useFacets, useJournals } from "@/hooks/use-api";
+import { useFacets, useInstitutionsDirectory, useJournals } from "@/hooks/use-api";
 import { useFunderPrefs } from "@/lib/funder-prefs";
 import {
   encodeNamePath,
@@ -36,7 +36,7 @@ import {
   type SortKey,
 } from "@/lib/api";
 import { apcAmount, apcStatsText, formatApc } from "@/lib/format";
-import { COLUMN_SORTS, SEARCH_IN_OPTIONS, SORTS } from "@/lib/search-config";
+import { COLUMN_SORTS, PUB_TYPE_LABELS, SEARCH_IN_OPTIONS, SORTS } from "@/lib/search-config";
 
 const SEARCH_INPUT_ID = "journal-search";
 
@@ -56,6 +56,9 @@ function SearchView() {
   const router = useRouter();
   const pathname = usePathname();
   const site = useSiteMeta();
+  const institutions = useInstitutionsDirectory();
+  // Short name can be briefly empty before the directory resolves.
+  const instShort = site.short || site.name;
 
   const spQ = sp.get("q") ?? "";
   // A browse-all with no query has nothing to rank, so Twente works is the
@@ -76,6 +79,7 @@ function SearchView() {
   // oa_type is the one multi-select facet: comma-joined in the URL, OR'd
   // server-side.
   const oaTypes = (sp.get("oa_type") ?? "").split(",").filter(Boolean);
+  const pubType = sp.get("pub_type") ?? "";
   // mode=semantic: rank by embedding similarity instead of FTS. Filters and
   // sort do not apply to the vector ranking, so their UI is hidden. Needs a
   // real query: the UI follows the toggle so it never lies about the active
@@ -206,6 +210,7 @@ function SearchView() {
     funder_fit: funderFit || undefined,
     topic: topic || undefined,
     oa_type: oaTypes.join(",") || undefined,
+    pub_type: pubType || undefined,
     sort,
     dir: dir ?? undefined,
     cursor,
@@ -229,6 +234,7 @@ function SearchView() {
     greenOa,
     funderFit,
     oaTypes,
+    pubType,
   };
 
   // Single-select per group: clicking the active value clears it.
@@ -284,6 +290,14 @@ function SearchView() {
             >
               {info.row.original.title ?? info.row.original.issn_l}
             </Link>
+            {info.row.original.pub_type && info.row.original.pub_type !== "journal" && (
+              <span
+                className="ml-2 text-xs text-[var(--muted-foreground)]"
+                title={`This is an OpenAlex ${info.row.original.pub_type}, not a conventional journal`}
+              >
+                {PUB_TYPE_LABELS[info.row.original.pub_type] ?? info.row.original.pub_type}
+              </span>
+            )}
             {info.row.original.is_in_doaj && (
               <span
                 className="ml-2 cursor-help align-middle text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]"
@@ -344,7 +358,7 @@ function SearchView() {
           <SortHead
             columnId="works"
             label="Works"
-            title={`${site.name} publications in this journal${
+            title={`${instShort} works in this journal${
               site.windowStart === undefined ? "" : `, ${site.windowStart} onwards`
             }. Click to sort, again to reverse, again to reset`}
             state={sortRef.current}
@@ -393,7 +407,7 @@ function SearchView() {
           <SortHead
             columnId="apc"
             label="APC"
-            title="APC: the journal's list price (OpenAlex) where known, otherwise the range of APCs actually reported to OpenAPC over the newest two reporting periods. Click to sort, again to reverse, again to reset"
+            title="Article processing charge (APC): the journal's list price (OpenAlex) where known, otherwise the range of APCs actually reported to OpenAPC over the newest two reporting periods. Click to sort, again to reverse, again to reset"
             state={sortRef.current}
           />
         ),
@@ -464,7 +478,7 @@ function SearchView() {
         },
       },
     ],
-    [site, inst, update],
+    [site, instShort, inst, update],
   );
 
   // Backend fields the generated types trail (see lib/api.ts).
@@ -497,7 +511,8 @@ function SearchView() {
       hasApc !== null ||
       hasWorks !== null ||
       greenOa !== null ||
-      oaTypes.length > 0,
+      oaTypes.length > 0 ||
+      Boolean(pubType),
   );
   const hasNonQueryFilters = Boolean(
     deal ||
@@ -509,7 +524,8 @@ function SearchView() {
       hasApc !== null ||
       hasWorks !== null ||
       greenOa !== null ||
-      oaTypes.length > 0,
+      oaTypes.length > 0 ||
+      Boolean(pubType),
   );
   const clearFilters = () =>
     update({
@@ -525,12 +541,18 @@ function SearchView() {
       has_works: undefined,
       green_oa: undefined,
       oa_type: undefined,
+      pub_type: undefined,
     });
 
   // Detail pages offer a "Back to search" that restores this exact URL.
   React.useEffect(() => {
     if (hasFilters) sessionStorage.setItem("jb-last-search", `${pathname}?${sp.toString()}`);
   }, [hasFilters, pathname, sp]);
+
+  // An unknown institution code would leave every query 404ing, so render
+  // the not-found page instead. Wait for the directory to load first: valid
+  // codes must not flash not-found while it resolves.
+  if (institutions.isSuccess && !institutions.data?.some((i) => i.code === inst)) notFound();
 
   return (
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
@@ -662,7 +684,7 @@ function SearchView() {
                 >
                   {SORTS.map((s) => (
                     <option key={s.value} value={s.value}>
-                      {s.value === "institution_works" ? `${site.short} works` : s.label}
+                      {s.value === "institution_works" ? `${instShort} works` : s.label}
                     </option>
                   ))}
                 </select>
@@ -782,6 +804,12 @@ function SearchView() {
                               </Link>
                             ) : (
                               "Unknown publisher"
+                            )}
+                            {row.pub_type && row.pub_type !== "journal" && (
+                              <>
+                                {" · "}
+                                {PUB_TYPE_LABELS[row.pub_type] ?? row.pub_type}
+                              </>
                             )}
                             {topic && (
                               <>

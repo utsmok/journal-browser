@@ -75,6 +75,7 @@ const FILTER_KEYS = [
   "has_works",
   "topic",
   "oa_type",
+  "pub_type",
   "green_oa",
   "funder",
   "funder_fit",

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { ACCESS_TEXT, DealGlyph, LockIcon, QuartileGlyph } from "@/components/badges";
 import { useSiteMeta } from "@/hooks/use-site-meta";
+import { PUB_TYPE_LABELS } from "@/lib/search-config";
 
 const OA_TYPE_LABELS: Record<string, string> = {
   gold: "Gold OA",
@@ -37,6 +38,8 @@ type FilterSelection = {
   funderFit: string;
   /** Multi-select: values OR together (single-select groups do not). */
   oaTypes: string[];
+  /** OpenAlex venue type ("journal", "book series", ...). */
+  pubType: string;
 };
 
 export type FacetGroupDef = {
@@ -230,6 +233,8 @@ function facetLook(key: string, value: string): { icon: ReactNode; tint: string 
 
 /** How each facet group behaves; shown as hover text on the group header. */
 const GROUP_HINTS: Record<string, string> = {
+  pub_type:
+    "What kind of venue this is: a journal, a book series, conference proceedings, and so on. One choice; click it again to clear.",
   oa: "Is the journal open access as a whole (any OA type)? One choice; click it again to clear.",
   oa_type:
     "How the journal makes content open access. You can combine several types; click a selected type to remove it.",
@@ -246,6 +251,12 @@ const GROUP_HINTS: Record<string, string> = {
 
 /** Definitions per facet option, shown as hover text on the control. */
 const FACET_TITLES: Record<string, string> = {
+  "pub_type:journal": "A conventional scholarly journal.",
+  "pub_type:book series":
+    "A book series, e.g. Springer's Lecture Notes: articles appear as book chapters, not journal issues.",
+  "pub_type:conference": "Conference proceedings published as their own venue.",
+  "pub_type:ebook platform": "A platform hosting e-books, as classified by OpenAlex.",
+  "pub_type:repository": "An institutional or subject repository, as classified by OpenAlex.",
   "oa:true": "The journal is fully or partly open access.",
   "oa:false": "Subscription journal with no open access.",
   "oa_type:gold": "Every article is published open access on the journal's own site.",
@@ -463,6 +474,16 @@ export function FilterPanel({
   const publisherValues = topValues(facets.publisher, selection.publisher);
 
   const groups: FacetGroupDef[] = [
+    {
+      key: "pub_type",
+      label: "Venue type",
+      defaultOpen: true,
+      values: topValues(facets.pub_type, selection.pubType).map((v) => ({
+        ...v,
+        label: PUB_TYPE_LABELS[v.value] ?? v.value,
+      })),
+      activeValues: selection.pubType ? [selection.pubType] : [],
+    },
     {
       key: "deal",
       label: "Deal",

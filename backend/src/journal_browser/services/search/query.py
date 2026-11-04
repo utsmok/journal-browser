@@ -132,12 +132,15 @@ def base_query(
     fuzzy: bool = False,
     funder_fit: bool | None = None,
     funder_fit_value: str | None = None,
+    pub_type: str | None = None,
 ):
     """Filtered select with computed columns; search + facet counts share it.
 
-    Scoped to one institution's journal_flags row: the per-institution
-    corpus cutoff (works_window_plus > 3) and proceedings exclusion always
-    apply."""
+    Browsable corpus: journals above the per-institution window cutoff
+    (works_window_plus > 3), plus every other OpenAlex venue type with at
+    least one institution work (book series, conference, ...; owner
+    decision 2026-11-04). Scoped to one institution's journal_flags row,
+    and the proceedings exclusion always applies."""
     J = Journal
     F = JournalFlags
     # Admin ignore-list (settings.yaml): hidden from every listing, detail
@@ -191,6 +194,8 @@ def base_query(
             func.coalesce(J.topics.op("->")(0).op("->>")("display_name"), "").label(
                 "primary_topic"
             ),
+            # OpenAlex venue type (journal, book series, conference, ...).
+            J.type.label("pub_type"),
             # Display/sort price: OpenAlex list price (EUR, then USD), else
             # the OpenAPC latest cost. apc_prices order is unspecified, so
             # the currency match goes through jsonb_path_query_first.
@@ -221,9 +226,11 @@ def base_query(
         .select_from(J)
         .join(flags, flags.c.issn_l == J.issn_l)
         .where(
-            J.type == "journal",
+            or_(
+                and_(J.type == "journal", flags.c.works_window_plus > 3),
+                and_(J.type.is_not(None), J.type != "journal", flags.c.works_count > 0),
+            ),
             J.issn_l.is_not(None),
-            flags.c.works_window_plus > 3,
             flags.c.browse_excluded.is_not(True),
             *([J.issn_l.not_in(sorted(set(ignored)))] if ignored else []),
         )
@@ -297,6 +304,8 @@ def base_query(
         query = query.where(J.topics.contains([{"display_name": topic}]))
     if publisher:
         query = query.where(J.publisher_name == publisher)
+    if pub_type:
+        query = query.where(J.type == pub_type)
     if has_apc is not None:
         query = query.where(APC_SHOWN if has_apc else ~APC_SHOWN)
     if has_works is not None:

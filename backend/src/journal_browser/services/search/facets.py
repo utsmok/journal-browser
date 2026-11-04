@@ -29,6 +29,7 @@ async def facet_counts(
     has_works: bool | None = None,
     oa_types: list[str] | None = None,
     green_oa: GreenOa | str | None = None,
+    pub_type: str | None = None,
     funder_struct: dict[str, Any] | None = None,
     funder_fit_value: str | None = None,
 ) -> tuple[dict[str, dict[str, int]], int]:
@@ -57,6 +58,7 @@ async def facet_counts(
             has_works is not None,
             oa_types,
             green_oa,
+            pub_type,
             deal != "any",
             search_in != "all",
             funder_struct is not None,
@@ -93,6 +95,7 @@ async def facet_counts(
         "has_works": has_works,
         "oa_types": oa_types,
         "green_oa": green_oa,
+        "pub_type": pub_type,
         # Funder-fit tier column only for a structured funder (text-only
         # funders get no facet: every journal is untiered).
         "funder_fit": funder_fit_mod.policy_structured(funder_struct),
@@ -162,6 +165,7 @@ async def facet_counts(
             base,
             func.count().over(partition_by=base.c.oa_type).label("oa_n"),
             func.count().over(partition_by=base.c.publisher_name).label("pub_n"),
+            func.count().over(partition_by=base.c.pub_type).label("pt_n"),
         )
         .select_from(base)
         .subquery()
@@ -180,6 +184,9 @@ async def facet_counts(
                 func.count().filter(counted.c.apc_any).label("apc_true"),
                 func.count().filter(counted.c.works > 0).label("works_true"),
                 func.jsonb_object_agg(counted.c.oa_type, counted.c.oa_n).label("oa_type_counts"),
+                func.jsonb_object_agg(counted.c.pub_type, counted.c.pt_n)
+                .filter(counted.c.pub_type.is_not(None))
+                .label("pub_type_counts"),
                 func.jsonb_object_agg(counted.c.publisher_name, counted.c.pub_n)
                 .filter(counted.c.publisher_name.is_not(None))
                 .label("publisher_counts"),
@@ -218,6 +225,10 @@ async def facet_counts(
         "apc": {"true": apc_true, "false": apc_false},
         "works": {"true": works_true, "false": works_false},
         "oa_type": dict(row.oa_type_counts or {}),
+        # Venue type distribution, sorted by count then name like publisher.
+        "pub_type": dict(
+            sorted((row.pub_type_counts or {}).items(), key=lambda kv: (-kv[1], kv[0]))
+        ),
         "green_oa": {
             "submitted": int(row.green_submitted or 0),
             "accepted": int(row.green_accepted or 0),
@@ -269,6 +280,23 @@ async def facet_counts(
             )
         ).scalar_one()
         facets["oa_type"] = dict(counts or {})
+    if pub_type:
+        pt = base_sub(pub_type=None)
+        counted_pt = (
+            select(pt, func.count().over(partition_by=pt.c.pub_type).label("n"))
+            .select_from(pt)
+            .subquery()
+        )
+        counts = (
+            await session.execute(
+                select(
+                    func.jsonb_object_agg(counted_pt.c.pub_type, counted_pt.c.n).filter(
+                        counted_pt.c.pub_type.is_not(None)
+                    )
+                )
+            )
+        ).scalar_one()
+        facets["pub_type"] = dict(sorted((counts or {}).items(), key=lambda kv: (-kv[1], kv[0])))
     if topic:
         tp = variant_sub("topic")
         facets["topic"] = await _topic_facet(tp)

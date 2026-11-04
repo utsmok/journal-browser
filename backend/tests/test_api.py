@@ -69,3 +69,48 @@ async def test_facets_reflect_cutoff(api):
     body = (await api.get("/api/v1/ut/journals")).json()
     assert sum(body["facets"]["oa"].values()) == 2
     assert body["facets"]["doaj"]["true"] == 0
+
+
+@requires_db
+async def test_nonjournal_venues_browse_with_ut_works(api, db_engine):
+    """Other OpenAlex venue types join the corpus once the institution has
+    >= 1 work in them (owner decision 2026-11-04); the corpus cutoff
+    (works_window_plus > 3) keeps applying to plain journals only. The
+    fixture's repository (works_window_plus=50, zero institution works)
+    must stay hidden."""
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with maker() as session:
+        session.add(
+            journal_factory(
+                "6666-6666",
+                type="book series",
+                title="Lecture notes in computer science",
+                search_text="Lecture notes in computer science",
+            )
+        )
+        await session.commit()
+        await session.execute(
+            text(
+                "INSERT INTO journal_flags (institution_id, issn_l, works_count,"
+                " works_window_plus) SELECT id, '6666-6666', 7, 200 FROM institutions"
+                " WHERE code = 'ut'"
+            )
+        )
+        await session.commit()
+
+    body = (await api.get("/api/v1/ut/journals")).json()
+    by_issn = {i["issn_l"]: i for i in body["items"]}
+    assert set(by_issn) == {"1111-1111", "2222-2222", "6666-6666"}
+    assert by_issn["6666-6666"]["pub_type"] == "book series"
+    # Facet counts over the widened corpus, sorted by count then name.
+    assert body["facets"]["pub_type"] == {"journal": 2, "book series": 1}
+
+    # The venue-type filter narrows to the series; its own facet keeps the
+    # full distribution (drop-own-dimension).
+    filtered = (await api.get("/api/v1/ut/journals", params={"pub_type": "book series"})).json()
+    assert [i["issn_l"] for i in filtered["items"]] == ["6666-6666"]
+    assert filtered["facets"]["pub_type"] == {"journal": 2, "book series": 1}
+
+    # Free text finds the series by title, like any journal.
+    hits = (await api.get("/api/v1/ut/journals", params={"q": "lecture notes"})).json()
+    assert [i["issn_l"] for i in hits["items"]] == ["6666-6666"]

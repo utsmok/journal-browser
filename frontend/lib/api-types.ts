@@ -2288,6 +2288,8 @@ export interface components {
             twoyr_mean_citedness?: number | null;
             /** @default subscription */
             oa_type: components["schemas"]["OaType"];
+            /** Pub Type */
+            pub_type?: string | null;
             /** Primary Topic */
             primary_topic?: string | null;
             /** Apc Source */
@@ -4067,6 +4069,7 @@ export interface operations {
                 has_works?: boolean | null;
                 oa_type?: components["schemas"]["OaType"][] | null;
                 green_oa?: components["schemas"]["GreenOa"] | null;
+                pub_type?: string | null;
                 sort?: string;
                 dir?: string | null;
                 cursor?: string | null;

@@ -1748,6 +1748,23 @@
             }
           },
           {
+            "name": "pub_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 40
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pub Type"
+            }
+          },
+          {
             "name": "sort",
             "in": "query",
             "required": false,
@@ -8063,6 +8080,17 @@
           "oa_type": {
             "$ref": "#/components/schemas/OaType",
             "default": "subscription"
+          },
+          "pub_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pub Type"
           },
           "primary_topic": {
             "anyOf": [

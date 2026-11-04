@@ -164,6 +164,7 @@ async def search_journals(
     has_works: bool | None = None,
     oa_type: OaTypeFilter = None,
     green_oa: GreenOa | None = None,
+    pub_type: Annotated[str | None, Query(max_length=40)] = None,
     sort: Annotated[
         str,
         Query(
@@ -197,6 +198,7 @@ async def search_journals(
         has_works=has_works,
         oa_types=list(oa_type) if oa_type else None,
         green_oa=green_oa,
+        pub_type=pub_type,
         sort=sort,
         dir=dir,
         cursor=cursor,

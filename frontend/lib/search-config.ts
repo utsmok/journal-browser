@@ -53,3 +53,13 @@ export const SEARCH_IN_OPTIONS: { value: SearchIn; label: string }[] = [
   { value: "publisher", label: "Publisher" },
   { value: "topic", label: "Topic" },
 ];
+
+/** Display labels for OpenAlex venue types (pub_type); unmapped values
+ * (future OpenAlex types) show raw. */
+export const PUB_TYPE_LABELS: Record<string, string> = {
+  journal: "Journal",
+  "book series": "Book series",
+  conference: "Conference",
+  "ebook platform": "E-book platform",
+  repository: "Repository",
+};

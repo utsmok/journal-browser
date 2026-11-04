@@ -27,6 +27,7 @@ async def search_journals(
     has_works: bool | None = None,
     oa_types: list[str] | None = None,
     green_oa: GreenOa | str | None = None,
+    pub_type: str | None = None,
     sort: SortKey = "relevance",
     dir: str | None = None,
     cursor: str | None = None,
@@ -35,7 +36,9 @@ async def search_journals(
     funder_struct: dict[str, Any] | None = None,
     funder_fit: str | None = None,
 ) -> dict[str, Any]:
-    filters = {
+    # Kwargs bag forwarded to base_query/facet_counts; Any value type keeps
+    # the **-unpack out of ty's per-key argument checks (the bag is keyed).
+    filters: dict[str, Any] = {
         "institution_id": institution_id,
         "q": q,
         "search_in": search_in,
@@ -49,6 +52,7 @@ async def search_journals(
         "has_works": has_works,
         "oa_types": oa_types,
         "green_oa": green_oa,
+        "pub_type": pub_type,
         "funder_fit_value": funder_fit,
     }
     fuzzy = False
