@@ -81,6 +81,18 @@ every hosted university. `--from <step>` is the serial repair path;
 idempotent; a failure names the step. See [DEPLOYMENT.md](DEPLOYMENT.md)
 for what each job builds and how the deal register is reconciled.
 
+## Usage tracking
+
+The app records anonymous usage events (page paths, searches with result
+counts, dwell time, client-side errors, and coarse audience info: IP ->
+country, user agent, timezone, locale). There are no cookies and no
+accounts — only a localStorage session id that rotates after 30 idle
+minutes. `backend/jobs/enrich_usage_geo.py` backfills the country column
+from IP addresses in batches (ip-api.com). Set
+`JB_ENABLE_USAGE_TRACKING=false` (env or the admin settings panel) to turn
+it off; the ingest endpoint then accepts and drops batches. Aggregates are
+visible to admins at `/api/v1/admin/usage/summary`.
+
 ## License
 
 Apache-2.0 — see [LICENSE](LICENSE).
