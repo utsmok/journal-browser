@@ -26,6 +26,7 @@ from .routers import (
     meta,
     orgunits,
     publishers,
+    usage,
 )
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,8 @@ api_router.include_router(feedback.router)
 # Docs before the scoped router, same reason as /admin: /api/v1/docs must
 # not be captured by /{institution_code}.
 api_router.include_router(docs.router)
+# Usage intake before the scoped router, same reason as /admin.
+api_router.include_router(usage.router)
 # Institution-scoped surface: /api/v1/{code}/journals|deals|meta/...
 scoped_router = APIRouter(prefix="/{institution_code}")
 scoped_router.include_router(journals.router)

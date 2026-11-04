@@ -170,6 +170,14 @@ SETTINGS_REGISTRY: list[FieldDef] = [
         "Journal citations",
         "Citation feature scaffold; stays off until explicitly enabled.",
     ),
+    _f(
+        "enable_usage_tracking",
+        "global",
+        "bool",
+        "Usage tracking",
+        "Anonymous usage-event intake (paths, searches, dwell, client errors); "
+        "off = batches are accepted and dropped.",
+    ),
     # ── Institution-backed (institutions table, PUT /admin/institutions/{code})
     _f(
         "institution_code",
