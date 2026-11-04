@@ -141,5 +141,11 @@ export type StatusChange = Schemas["StatusChangeOut"];
 /** GET /admin/summary: dashboard counters for the overview page. */
 export type AdminSummary = Schemas["AdminSummaryOut"];
 
+/** GET /admin/usage/summary: usage dashboard rollup over a trailing window. */
+export type UsageSummary = Schemas["UsageSummaryOut"];
+
+/** GET /admin/usage/events: one offset page of raw usage events. */
+export type UsageEventsPage = Schemas["UsageEventsPageOut"];
+
 /** GET /admin/external-author/{id}: stored OpenAlex profile + recent works. */
 export type StoredExternalAuthor = Schemas["AdminExternalAuthorOut"];

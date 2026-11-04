@@ -25,6 +25,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { path: "feedback", label: "Feedback" },
       { path: "audit", label: "Audit log" },
+      { path: "usage", label: "Usage" },
     ],
   },
   {

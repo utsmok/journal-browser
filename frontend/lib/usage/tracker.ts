@@ -17,6 +17,7 @@ type UsageEvent = {
   path: string;
   duration_ms?: number;
   query?: string;
+  is_browse?: boolean;
   results_count?: number;
   search_scope?: UsageScope;
   filters?: Record<string, unknown>;
@@ -185,11 +186,13 @@ export function trackSearch(input: {
 }): void {
   if (!active()) return;
   const { sid } = currentSession();
+  const query = input.query.trim();
   enqueue({
     type: "search",
     session_id: sid,
     path: currentPath(),
-    query: input.query.slice(0, 512),
+    // Empty query = a default browse load, never a query string.
+    ...(query === "" ? { is_browse: true } : { query: query.slice(0, 512) }),
     results_count: input.results_count,
     search_scope: input.search_scope,
     filters: input.filters,
