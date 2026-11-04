@@ -21,6 +21,7 @@ import logging
 import os
 import re
 import uuid
+from collections.abc import Mapping
 from contextvars import ContextVar
 
 request_id_ctx: ContextVar[str] = ContextVar("request_id", default="-")
@@ -65,7 +66,17 @@ class RedactionFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         record.msg = redact(str(record.msg))
-        record.args = tuple(redact(str(a)) for a in record.args) if record.args else record.args
+        # Redact only str args; stringifying non-str args (ints for %d, etc.)
+        # breaks lazy %-formatting at emit time. A mapping stored as args
+        # (logging's single-dict convention) must stay a mapping, or %-style
+        # rendering breaks; only its string values are redacted. Rendered
+        # messages are redacted again by formatters.
+        if isinstance(record.args, Mapping):
+            record.args = {
+                k: redact(v) if isinstance(v, str) else v for k, v in record.args.items()
+            }
+        elif record.args:
+            record.args = tuple(redact(a) if isinstance(a, str) else a for a in record.args)
         return True
 
 
@@ -103,3 +114,15 @@ def configure_logging() -> None:
                 handler.addFilter(RedactionFilter())
             if fmt == "json" and not isinstance(handler.formatter, JsonFormatter):
                 handler.setFormatter(JsonFormatter())
+    # uvicorn installs handlers on its own loggers only, so app records would
+    # otherwise die at the root logger's lastResort WARNING handler (root has
+    # no handlers) and app INFO lines would never emit in any mode.
+    app_logger = logging.getLogger("journal_browser")
+    if not app_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.addFilter(RequestContextFilter())
+        handler.addFilter(RedactionFilter())
+        if fmt == "json":
+            handler.setFormatter(JsonFormatter())
+        app_logger.addHandler(handler)
+    app_logger.setLevel(logging.INFO)
