@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from .vocab import (
     DealJournalSource,
@@ -52,6 +52,9 @@ class JournalListItem(BaseModel):
     quartile: str | None = None
     twoyr_mean_citedness: float | None = None
     oa_type: OaType = OaType.SUBSCRIPTION
+    # OpenAlex venue type (journal, book series, conference, ...); NULL for
+    # untyped sources.
+    pub_type: str | None = None
     # OpenAlex primary topic (first entry of the topics list); None when the
     # journal has no topics.
     primary_topic: str | None = None
@@ -932,6 +935,12 @@ class UsageEventOut(BaseModel):
     """One raw usage event as stored (admin event list)."""
 
     model_config = ConfigDict(from_attributes=True)
+
+    # asyncpg hands the INET column back as IPv4Address/IPv6Address, not str.
+    @field_validator("ip", mode="before")
+    @classmethod
+    def _ip_as_str(cls, v: object) -> str | None:
+        return None if v is None else str(v)
 
     id: int
     ts: datetime

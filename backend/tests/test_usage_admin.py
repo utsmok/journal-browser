@@ -157,6 +157,18 @@ async def test_events_filters_ordering_pagination(usage_api, db):
 
 
 @requires_db
+async def test_events_returns_ip_as_string(usage_api, db):
+    await _seed(db, "s1", "page_view", ip="203.0.113.77", user_agent="TestAgent/1.0")
+    await db.commit()
+    headers = await _login(usage_api)
+    r = await usage_api.get("/api/v1/admin/usage/events", headers=headers)
+    assert r.status_code == 200
+    item = r.json()["items"][0]
+    assert item["ip"] == "203.0.113.77"
+    assert item["user_agent"] == "TestAgent/1.0"
+
+
+@requires_db
 async def test_summary_clamps_days(usage_api, db):
     await _seed(db, "s1", "page_view")
     headers = await _login(usage_api)
