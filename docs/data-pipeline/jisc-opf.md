@@ -60,7 +60,10 @@ data exists — prohibition wins over routes.
 - Publisher ROR links (202) join to `publishers` rows; funder ROR/FundRef
   identifiers join to the new `openalex_funders` / `openaire_funders` canon
   tables (harvested separately, see `harvest_openalex_funders.py` /
-  `harvest_openaire_funders.py`).
+  `harvest_openaire_funders.py`). The resolved jisc->twin links land in
+  `funder_links` (migration 0050, rebuilt by both funder harvests via
+  `refresh_funder_links`); the funders API reads it for search aliases,
+  OpenAlex twin counts and the OpenAIRE identity block.
 
 ## Refresh
 
