@@ -247,6 +247,19 @@ export function useFunders(q: string | undefined, enabled: boolean) {
   });
 }
 
+/** Funder directory listing: paged over the whole canon with no
+ * minimum query length (the picker hook above requires 2 chars). */
+export function useFunderDirectory(q: string, offset: number, limit: number) {
+  const inst = useInstitution();
+  return useQuery({
+    queryKey: [...qk.funders(inst, q), offset, limit] as const,
+    queryFn: () =>
+      apiGet<FunderSearchResponse>(`/${inst}/funders`, { q: q || undefined, offset, limit }),
+    enabled: inst !== "",
+    placeholderData: keepPreviousData,
+  });
+}
+
 export function useFunder(id: number | undefined) {
   const inst = useInstitution();
   return useQuery({

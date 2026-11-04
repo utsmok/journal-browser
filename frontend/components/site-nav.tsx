@@ -19,6 +19,7 @@ export function SiteNav() {
     >
       <div className="flex items-center gap-4 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-6 sm:overflow-visible sm:pb-0">
         <NavLink href={`${prefix}/`} label="Search" />
+        <NavLink href={`${prefix}/funders`} label="Funders" />
         <NavLink href={`${prefix}/author`} label="Authors" />
         <NavLink href={`${prefix}/publisher`} label="Publishers" />
         <NavLink href={`${prefix}/orgunit`} label="Faculties" />

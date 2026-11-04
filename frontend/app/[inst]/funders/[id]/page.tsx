@@ -240,7 +240,7 @@ export default function FunderPage() {
 
   return (
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
-      <BackLink href={`/?q=${encodeURIComponent(data?.name ?? "")}`} label="Search" />
+      <BackLink href={`/${inst}/funders`} label="Funders" />
       {isPending && <ListSkeletonRows rows={6} />}
       {isError && (
         <div>
