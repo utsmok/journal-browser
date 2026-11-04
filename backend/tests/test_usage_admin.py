@@ -110,6 +110,53 @@ async def test_summary_searches_split(usage_api, db):
 
 
 @requires_db
+async def test_events_requires_admin(usage_api):
+    r = await usage_api.get("/api/v1/admin/usage/events")
+    assert r.status_code == 401
+
+
+@requires_db
+async def test_events_filters_ordering_pagination(usage_api, db):
+    from datetime import UTC, datetime, timedelta
+
+    now = datetime.now(UTC)
+    await _seed(db, "s1", "search", query="biochemistry", results_count=42, ts=now)
+    await _seed(db, "s2", "search", is_browse=True, ts=now - timedelta(hours=1))
+    await _seed(db, "s3", "error", source="api_status", status=500, ts=now - timedelta(days=2))
+    await _seed(db, "s4", "page_view", ts=now - timedelta(days=40))
+    await db.commit()
+
+    headers = await _login(usage_api)
+
+    r = await usage_api.get("/api/v1/admin/usage/events?days=30", headers=headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] == 3
+    assert [item["session_id"] for item in body["items"]] == ["s1", "s2", "s3"]
+    first = body["items"][0]
+    assert first["query"] == "biochemistry"
+    assert first["is_browse"] is False
+    assert first["event_type"] == "search"
+    assert body["items"][1]["is_browse"] is True and body["items"][1]["query"] is None
+
+    r = await usage_api.get("/api/v1/admin/usage/events?days=30&event_type=search", headers=headers)
+    body = r.json()
+    assert body["total"] == 2
+    assert [item["event_type"] for item in body["items"]] == ["search", "search"]
+
+    r = await usage_api.get("/api/v1/admin/usage/events?days=30&limit=1&offset=1", headers=headers)
+    body = r.json()
+    assert body["total"] == 3
+    assert [item["session_id"] for item in body["items"]] == ["s2"]
+
+    r = await usage_api.get("/api/v1/admin/usage/events?days=99999", headers=headers)
+    assert r.json()["total"] == 4
+
+    r = await usage_api.get("/api/v1/admin/usage/events?limit=0", headers=headers)
+    assert r.status_code == 422
+
+
+@requires_db
 async def test_summary_clamps_days(usage_api, db):
     await _seed(db, "s1", "page_view")
     headers = await _login(usage_api)

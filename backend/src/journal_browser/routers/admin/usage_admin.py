@@ -1,12 +1,12 @@
-"""Admin usage summary: aggregate view over usage_events.
+"""Admin usage summary: aggregate rollup and raw event list over usage_events.
 
-Read-only rollups for the admin panel — what is viewed, searched, and
+Read-only views for the admin panel — what is viewed, searched, and
 which errors clients hit. Plain selects here on purpose: one admin-only
 read model, not a service surface.
 """
 
 from datetime import UTC, datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query
 from sqlalchemy import desc, func, select
@@ -16,6 +16,8 @@ from ...schemas import (
     UsageCountryCount,
     UsageDayCount,
     UsageErrorGroup,
+    UsageEventOut,
+    UsageEventsPageOut,
     UsageSearchSplit,
     UsageSummaryOut,
     UsageTopPath,
@@ -160,4 +162,35 @@ async def usage_summary(
         errors=errors,
         countries=countries,
         sessions=sessions or 0,
+    )
+
+
+@router.get("/usage/events", response_model=UsageEventsPageOut)
+async def usage_events(
+    session: SessionDep,
+    _: AdminDep,
+    event_type: Annotated[Literal["page_view", "search", "error"] | None, Query()] = None,
+    days: Annotated[int, Query()] = 30,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> UsageEventsPageOut:
+    days = max(1, min(365, days))
+    since = datetime.now(UTC) - timedelta(days=days)
+    filters = [UsageEvent.ts >= since]
+    if event_type:
+        filters.append(UsageEvent.event_type == event_type)
+
+    total = await session.scalar(select(func.count()).select_from(UsageEvent).where(*filters)) or 0
+    rows = (
+        await session.scalars(
+            select(UsageEvent)
+            .where(*filters)
+            .order_by(desc(UsageEvent.ts), desc(UsageEvent.id))
+            .offset(offset)
+            .limit(limit)
+        )
+    ).all()
+    return UsageEventsPageOut(
+        total=total,
+        items=[UsageEventOut.model_validate(row) for row in rows],
     )

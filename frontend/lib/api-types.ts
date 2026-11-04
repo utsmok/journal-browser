@@ -395,6 +395,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/usage/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Usage Events */
+        get: operations["usage_events_api_v1_admin_usage_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/feedback": {
         parameters: {
             query?: never;
@@ -2789,6 +2806,73 @@ export interface components {
             last_ts: string;
         };
         /**
+         * UsageEventOut
+         * @description One raw usage event as stored (admin event list).
+         */
+        UsageEventOut: {
+            /** Id */
+            id: number;
+            /**
+             * Ts
+             * Format: date-time
+             */
+            ts: string;
+            /** Event Type */
+            event_type: string;
+            /** Path */
+            path: string;
+            /** Duration Ms */
+            duration_ms: number | null;
+            /** Query */
+            query: string | null;
+            /** Is Browse */
+            is_browse: boolean;
+            /** Results Count */
+            results_count: number | null;
+            /** Search Scope */
+            search_scope: string | null;
+            /** Filters */
+            filters: {
+                [key: string]: unknown;
+            } | null;
+            /** Ref Type */
+            ref_type: string | null;
+            /** Ref Id */
+            ref_id: string | null;
+            /** Source */
+            source: string | null;
+            /** Message */
+            message: string | null;
+            /** Detail */
+            detail: string | null;
+            /** Status */
+            status: number | null;
+            /** Referrer */
+            referrer: string | null;
+            /** Ip */
+            ip: string | null;
+            /** Country */
+            country: string | null;
+            /** User Agent */
+            user_agent: string | null;
+            /** Tz */
+            tz: string | null;
+            /** Locale */
+            locale: string | null;
+            /** Session Id */
+            session_id: string;
+        };
+        /**
+         * UsageEventsPageOut
+         * @description One offset page of the admin usage event list.
+         */
+        UsageEventsPageOut: {
+            /** Total */
+            total: number;
+            /** Items */
+            items: components["schemas"]["UsageEventOut"][];
+        };
+        /**
          * UsageSearchSplit
          * @description Search events split into real queries vs default browse loads.
          */
@@ -3806,6 +3890,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UsageSummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    usage_events_api_v1_admin_usage_events_get: {
+        parameters: {
+            query?: {
+                event_type?: ("page_view" | "search" | "error") | null;
+                days?: number;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageEventsPageOut"];
                 };
             };
             /** @description Validation Error */

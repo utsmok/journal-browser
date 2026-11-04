@@ -928,6 +928,43 @@ class UsageSearchSplit(BaseModel):
     queries: int
 
 
+class UsageEventOut(BaseModel):
+    """One raw usage event as stored (admin event list)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    ts: datetime
+    event_type: str
+    path: str
+    duration_ms: int | None
+    query: str | None
+    is_browse: bool
+    results_count: int | None
+    search_scope: str | None
+    filters: dict[str, Any] | None
+    ref_type: str | None
+    ref_id: str | None
+    source: str | None
+    message: str | None
+    detail: str | None
+    status: int | None
+    referrer: str | None
+    ip: str | None
+    country: str | None
+    user_agent: str | None
+    tz: str | None
+    locale: str | None
+    session_id: str
+
+
+class UsageEventsPageOut(BaseModel):
+    """One offset page of the admin usage event list."""
+
+    total: int
+    items: list[UsageEventOut]
+
+
 class UsageSummaryOut(BaseModel):
     """Admin usage snapshot over the trailing `days` window."""
 
