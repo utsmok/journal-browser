@@ -15,7 +15,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAdminResource } from "@/hooks/use-admin-resource";
+import { formatDateTime } from "@/lib/format";
 import { useAdminToken, type StatusChange } from "@/lib/admin";
+
+/** Compact row-key copy ("openalex · A501234…"); the full JSON is one
+ * hover away in the title attribute and the drawer. */
+function subjectSummary(rowKey: StatusChange["row_key"]): string {
+  const values = Object.values(rowKey ?? {})
+    .filter((v): v is string | number => typeof v === "string" || typeof v === "number")
+    .slice(0, 3);
+  return values.length > 0 ? values.join(" · ") : "—";
+}
 
 /** Audit ledger: every audited admin status flip, filterable by surface. */
 export function AuditSection() {
@@ -113,7 +123,7 @@ export function AuditSection() {
               onClick={() => setSelected(change)}
             >
               <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                {new Date(change.changed_at).toLocaleString()}
+                {formatDateTime(change.changed_at)}
               </TableCell>
               <TableCell className="text-xs">
                 {change.table_name}
@@ -126,7 +136,7 @@ export function AuditSection() {
                 className="max-w-56 truncate font-mono text-xs"
                 title={JSON.stringify(change.row_key)}
               >
-                {JSON.stringify(change.row_key)}
+                {subjectSummary(change.row_key)}
               </TableCell>
               <TableCell className="max-w-64 truncate text-xs" title={change.note ?? ""}>
                 {change.note ?? "—"}

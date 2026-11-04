@@ -146,6 +146,9 @@ function SectionNav({ sections }: { sections: { id: string; label: string }[] })
   );
 }
 
+/** Chip cloud cap before the "+N more" expander. */
+const TOPICS_LIMIT = 8;
+
 /** One candidate venue: journal link, access + deal badges, similarity %. */
 function SimilarRow({ inst, s }: { inst: string; s: AuthorSimilarJournal }) {
   return (
@@ -200,9 +203,11 @@ export default function AuthorPage() {
   const PAGE_SIZE = 20;
   const [journalPage, setJournalPage] = React.useState(1);
   const [workPage, setWorkPage] = React.useState(1);
+  const [allTopics, setAllTopics] = React.useState(false);
   React.useEffect(() => {
     setJournalPage(1);
     setWorkPage(1);
+    setAllTopics(false);
   }, [authorId]);
 
   if (isPending) return <DetailSkeleton />;
@@ -326,8 +331,12 @@ export default function AuthorPage() {
           )}
 
           {topics.length > 0 && (
-            <CollapsibleCard id="topics" title="Topics" contentClassName="flex flex-wrap gap-1.5">
-              {topics.map((t) => (
+            <CollapsibleCard
+              id="topics"
+              title="Topics"
+              contentClassName="flex flex-wrap items-center gap-1.5"
+            >
+              {(allTopics ? topics : topics.slice(0, TOPICS_LIMIT)).map((t) => (
                 <Badge
                   key={t.name}
                   variant="muted"
@@ -337,6 +346,16 @@ export default function AuthorPage() {
                   {t.name}
                 </Badge>
               ))}
+              {topics.length > TOPICS_LIMIT && (
+                <button
+                  type="button"
+                  className="text-sm text-[var(--muted-foreground)] underline-offset-2 hover:underline"
+                  aria-expanded={allTopics}
+                  onClick={() => setAllTopics((v) => !v)}
+                >
+                  {allTopics ? "Show less" : `+${topics.length - TOPICS_LIMIT} more`}
+                </button>
+              )}
             </CollapsibleCard>
           )}
 
@@ -348,9 +367,9 @@ export default function AuthorPage() {
             >
               {(
                 [
-                  { key: "all", heading: "Most similar to their journals" },
-                  { key: "deals", heading: "Similar with a deal" },
-                  { key: "diamond", heading: "Diamond options" },
+                  { key: "all", heading: "Most similar" },
+                  { key: "deals", heading: "Covered by a deal" },
+                  { key: "diamond", heading: "Diamond open access" },
                 ] as const
               ).map(
                 (g) =>
@@ -375,8 +394,8 @@ export default function AuthorPage() {
               contentClassName="space-y-5 text-sm"
               description={
                 <p className="text-sm text-[var(--muted-foreground)]">
-                  Journals where this author publishes paywalled, with open access venues covering
-                  the same territory.
+                  Each entry is a paywalled journal this author published in, with its most similar
+                  open access journals below it.
                 </p>
               }
             >

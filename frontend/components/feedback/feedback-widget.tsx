@@ -3,6 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { MessageSquarePlus, X } from "lucide-react";
 import * as React from "react";
+import { usePathname } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +51,7 @@ function buildPageDump(queries: { key: readonly unknown[]; updated: number; data
 
 export function FeedbackWidget() {
   const queryClient = useQueryClient();
+  const pathname = usePathname();
   const [open, setOpen] = React.useState(false);
   const [title, setTitle] = React.useState("");
   const [description, setDescription] = React.useState("");
@@ -67,6 +69,10 @@ export function FeedbackWidget() {
     }, 2000);
     return () => clearTimeout(t);
   }, [phase]);
+
+  // Admin operators report data issues through the admin panel itself; the
+  // public feedback button would only overlap their tables.
+  if (pathname.split("/")[1] === "admin") return null;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

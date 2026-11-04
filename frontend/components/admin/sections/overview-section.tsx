@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAdminResource } from "@/hooks/use-admin-resource";
+import { formatDateTime } from "@/lib/format";
 import { useAdminToken, type AdminRun, type AdminSummary, type FlaggedDeal } from "@/lib/admin";
 
 function StatCard({
@@ -126,8 +127,7 @@ export function OverviewSection({ inst, basePath }: { inst?: string; basePath: s
           <span className="font-medium text-[var(--foreground)]">
             {lastRun.source} / {lastRun.entity_type}
           </span>{" "}
-          — {lastRun.status}, started{" "}
-          {lastRun.started_at ? new Date(lastRun.started_at).toLocaleString() : "—"}
+          — {lastRun.status}, started {formatDateTime(lastRun.started_at)}
           {lastRun.institution_code ? ` for ${lastRun.institution_code}` : ""}
         </p>
       )}
@@ -141,6 +141,9 @@ export function OverviewSection({ inst, basePath }: { inst?: string; basePath: s
         </div>
         {runs.error && <p className="text-sm text-destructive">{runs.error}</p>}
         <RunsTable runs={runs.data ?? []} onRowClick={setSelectedRun} />
+        {!runs.loading && (runs.data ?? []).length === 0 && (
+          <p className="text-sm text-muted-foreground">No harvest runs recorded yet.</p>
+        )}
       </section>
 
       <section className="space-y-3">
@@ -180,6 +183,9 @@ export function OverviewSection({ inst, basePath }: { inst?: string; basePath: s
             ))}
           </TableBody>
         </Table>
+        {!flagged.loading && (flagged.data ?? []).length === 0 && (
+          <p className="text-sm text-muted-foreground">No deals are flagged for review.</p>
+        )}
       </section>
 
       {selectedRun && <RunDrawer run={selectedRun} onClose={() => setSelectedRun(null)} />}

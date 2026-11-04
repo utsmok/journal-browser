@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -18,6 +19,7 @@ import {
 } from "@/components/ui/table";
 import { useFunderDirectory } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
+import { useSiteMeta } from "@/hooks/use-site-meta";
 import { errorMessage, type FunderListItem } from "@/lib/api";
 
 const OPF_URL = "https://openpolicyfinder.jisc.ac.uk/";
@@ -49,15 +51,13 @@ function FunderRow({ funder, inst }: { funder: FunderListItem; inst: string }) {
         {(funder.country ?? "").toUpperCase() || "—"}
       </TableCell>
       <TableCell className="tabular-nums">{funder.n_ut_works.toLocaleString()}</TableCell>
-      <TableCell className="text-[var(--muted-foreground)]">
-        {funder.policy_structured ? "structured rules" : "text only"}
-      </TableCell>
     </TableRow>
   );
 }
 
 export default function FundersPage() {
   const inst = useInstitution();
+  const site = useSiteMeta();
   const [input, setInput] = React.useState("");
   const q = useDebounced(input.trim(), 250);
   const [offset, setOffset] = React.useState(0);
@@ -74,8 +74,8 @@ export default function FundersPage() {
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
       <h1 className="text-3xl font-bold text-balance">Funders</h1>
       <p className="mt-1 mb-4 text-sm text-[var(--muted-foreground)]">
-        OA policies from the Jisc Open Policy Finder, ordered by works from this institution&apos;s
-        authors. Open a funder for its policy details and funding streams.
+        OA policies from the Jisc Open Policy Finder, ordered by {site.short} author works. Open a
+        funder for its policy details and funding streams.
       </p>
       <div className="mb-4 flex items-center gap-2">
         <Input
@@ -104,14 +104,13 @@ export default function FundersPage() {
                 <TableRow>
                   <TableHead>Funder</TableHead>
                   <TableHead>Country</TableHead>
-                  <TableHead>UT works</TableHead>
-                  <TableHead>Policy</TableHead>
+                  <TableHead>{site.short} works</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {data.items.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-[var(--muted-foreground)]">
+                    <TableCell colSpan={3} className="text-[var(--muted-foreground)]">
                       No funder matches “{q}”
                     </TableCell>
                   </TableRow>
@@ -121,26 +120,28 @@ export default function FundersPage() {
               </TableBody>
             </Table>
             {total > PAGE_SIZE && (
-              <div className="mt-3 flex items-center justify-end gap-2 text-sm text-[var(--muted-foreground)]">
-                <span>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm text-[var(--muted-foreground)]">
                   {offset + 1}–{offset + shown} of {total.toLocaleString()}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={offset === 0}
-                  onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={offset + shown >= total}
-                  onClick={() => setOffset(offset + PAGE_SIZE)}
-                >
-                  Next
-                </Button>
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={offset === 0}
+                    onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+                  >
+                    <ChevronLeft aria-hidden className="size-4" /> Prev
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={offset + shown >= total}
+                    onClick={() => setOffset(offset + PAGE_SIZE)}
+                  >
+                    Next <ChevronRight aria-hidden className="size-4" />
+                  </Button>
+                </div>
               </div>
             )}
             <div className="mt-3">

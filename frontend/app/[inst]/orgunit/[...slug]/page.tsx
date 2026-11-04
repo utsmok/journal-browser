@@ -47,7 +47,7 @@ function UnitStats({ unit }: { unit: OrgUnitItem }) {
       </span>
       <span aria-hidden>·</span>
       <span className="tabular-nums" title="Works in journals covered by an open access deal">
-        {unit.deal_works.toLocaleString("en")} deal-covered
+        {unit.deal_works.toLocaleString("en")} deal-covered works
         {unit.n_works > 0 && ` (${share}%)`}
       </span>
       {unit.apc_n > 0 && (
@@ -134,7 +134,13 @@ function OrgUnitDetail({
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
       <BackLink
         href={backHref}
-        label={unit.level === "group" ? "Back to research groups" : `Back to ${unit.level}s`}
+        label={
+          unit.level === "group"
+            ? "Back to research groups"
+            : unit.level === "faculty"
+              ? "Back to faculties"
+              : "Back to institutes"
+        }
       />
       <header className="mb-6 mt-4">
         <h1 className="text-3xl font-bold text-balance">{unit.name}</h1>
@@ -159,13 +165,13 @@ function OrgUnitDetail({
         {groups != null && groups.length > 0 && (
           <CollapsibleCard id="groups" title="Research groups" contentClassName="text-sm">
             <Table>
-              <caption className="sr-only">Research groups of this faculty</caption>
+              <caption className="sr-only">Research groups in this unit</caption>
               <TableHeader>
                 <TableRow>
                   <TableHead>Research group</TableHead>
                   <TableHead className="text-right">Authors</TableHead>
                   <TableHead className="text-right">Works</TableHead>
-                  <TableHead className="text-right">Deal-covered</TableHead>
+                  <TableHead className="text-right">Deal-covered works</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -211,7 +217,7 @@ function OrgUnitDetail({
         )}
 
         {authors.length > 0 && (
-          <CollapsibleCard id="authors" title="Most publishing authors" contentClassName="text-sm">
+          <CollapsibleCard id="authors" title="Top authors" contentClassName="text-sm">
             <Table>
               <caption className="sr-only">Authors of this unit</caption>
               <TableHeader>

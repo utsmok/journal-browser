@@ -65,9 +65,9 @@ export default function DocsIndexPage() {
         it.
       </p>
 
-      <div className="mt-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4">
-        <p className="text-sm font-semibold">See it live</p>
-        <ul className="mt-2 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+      <section className="mt-8">
+        <h2 className="text-lg font-semibold">See it live</h2>
+        <ul className="mt-2 grid gap-x-6 gap-y-1 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 text-sm sm:grid-cols-2">
           {LIVE_SURFACES.map((s) => (
             <li key={s.label}>
               <Link
@@ -80,18 +80,18 @@ export default function DocsIndexPage() {
             </li>
           ))}
         </ul>
-      </div>
+      </section>
 
       {list.isPending && <p className="mt-10 text-sm text-[var(--muted-foreground)]">Loading…</p>}
       {list.isError && (
-        <p className="mt-10 text-sm text-destructive">Could not load the docs list.</p>
+        <p className="mt-10 text-sm text-destructive">
+          Could not load the docs list. Refresh the page to try again.
+        </p>
       )}
 
       {groups.map(({ group, docs }) => (
         <section key={group} className="mt-10">
-          <h2 className="text-xs font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
-            {GROUP_LABEL[group]}
-          </h2>
+          <h2 className="text-lg font-semibold">{GROUP_LABEL[group]}</h2>
           <ul className="mt-2 divide-y divide-[var(--border)] rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)]">
             {docs.map((d) => (
               <li key={d.slug}>

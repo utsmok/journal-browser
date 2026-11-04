@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
+import { Check, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import * as React from "react";
@@ -13,6 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useFunder } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
+import { useSiteMeta } from "@/hooks/use-site-meta";
 import { errorMessage, type FunderDetailResponse } from "@/lib/api";
 import { useFunderPrefs } from "@/lib/funder-prefs";
 
@@ -48,6 +49,7 @@ function CanonLinks({ funder }: { funder: FunderDetailResponse }) {
 /** Values inside the OPF policy sub-blocks use short codes
  * ("requires", "national_repository"); humanize before showing. */
 function policyValue(v: unknown): string {
+  if (typeof v === "boolean") return v ? "Yes" : "No";
   if (typeof v === "string") return v.replaceAll("_", " ");
   if (Array.isArray(v)) return v.map(policyValue).join("; ");
   if (v && typeof v === "object") {
@@ -72,28 +74,32 @@ const POLICY_LABELS: Record<string, string> = {
 const NON_RULE_KEYS: Record<string, true> = { urls: true, notes: true, scope: true };
 
 /** One OPF policy sub-block (archiving_policy / publishing_policy):
- * known keys as label rows, everything else falls back to pretty JSON. */
+ * every key renders as a label row — known keys get curated labels,
+ * unknown keys get a humanized label, never a raw JSON dump. */
 function PolicyRules({ rules }: { rules: Record<string, unknown> }) {
-  const known = Object.entries(POLICY_LABELS).filter(([k]) => k in rules);
-  const rest = Object.keys(rules).filter((k) => !(k in POLICY_LABELS) && !(k in NON_RULE_KEYS));
+  const rows: [string, unknown][] = [];
+  const seen = new Set<string>();
+  for (const [k, label] of Object.entries(POLICY_LABELS)) {
+    if (k in rules) {
+      rows.push([label, rules[k]]);
+      seen.add(k);
+    }
+  }
+  for (const k of Object.keys(rules)) {
+    if (!seen.has(k) && !(k in NON_RULE_KEYS)) {
+      rows.push([k.charAt(0).toUpperCase() + k.slice(1).replaceAll("_", " "), rules[k]]);
+    }
+  }
+  if (rows.length === 0) return null;
   return (
-    <>
-      {known.length > 0 && (
-        <dl className="mb-3 grid grid-cols-[10rem_1fr] gap-x-3 gap-y-1.5 text-sm">
-          {known.map(([k, label]) => (
-            <React.Fragment key={k}>
-              <dt className="text-[var(--muted-foreground)]">{label}</dt>
-              <dd>{policyValue(rules[k]) || "—"}</dd>
-            </React.Fragment>
-          ))}
-        </dl>
-      )}
-      {rest.length > 0 && (
-        <pre className="max-h-48 overflow-y-auto rounded-[var(--radius)] bg-[var(--muted)] p-3 text-xs whitespace-pre-wrap">
-          {JSON.stringify(Object.fromEntries(rest.map((k) => [k, rules[k]])), null, 2)}
-        </pre>
-      )}
-    </>
+    <dl className="grid grid-cols-[10rem_1fr] gap-x-3 gap-y-1.5 text-sm">
+      {rows.map(([label, value]) => (
+        <React.Fragment key={label}>
+          <dt className="text-[var(--muted-foreground)]">{label}</dt>
+          <dd>{policyValue(value) || "—"}</dd>
+        </React.Fragment>
+      ))}
+    </dl>
   );
 }
 
@@ -122,7 +128,8 @@ function PolicyUrls({ urls }: { urls: unknown }) {
 }
 
 /** Full rendered view of a harvested OPF policy payload (urls, notes,
- * scope, structured rules); unknown shapes fall back to pretty JSON. */
+ * scope, structured rules); unknown shapes render as humanized rows
+ * rather than a raw JSON dump. */
 function PolicyBlock({ data }: { data: Record<string, unknown> | null | undefined }) {
   if (!data) return <p className="text-sm text-[var(--muted-foreground)]">Not harvested.</p>;
   // Nested shape (publications_policy: archiving_policy/publishing_policy
@@ -146,13 +153,6 @@ function PolicyBlock({ data }: { data: Record<string, unknown> | null | undefine
       ].filter(([, v]) => v && typeof v === "object") as [string, Record<string, unknown>][]);
   const notes = Array.isArray(data.notes) ? (data.notes as string[]) : [];
   const scope = Array.isArray(data.scope) ? (data.scope as string[]) : [];
-  if (!flat && rules.length === 0 && notes.length === 0 && !Array.isArray(data.urls)) {
-    return (
-      <pre className="max-h-96 overflow-y-auto rounded-[var(--radius)] bg-[var(--muted)] p-3 text-xs whitespace-pre-wrap">
-        {JSON.stringify(data, null, 2)}
-      </pre>
-    );
-  }
   return (
     <div className="text-sm">
       <PolicyUrls urls={data.urls} />
@@ -173,12 +173,15 @@ function PolicyBlock({ data }: { data: Record<string, unknown> | null | undefine
       )}
       {rules.map(([label, block]) => (
         <div key={label} className="mt-4 border-t border-[var(--border)] pt-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-            {label}
-          </p>
+          <p className="mb-2 text-sm font-medium">{label}</p>
           <PolicyRules rules={block} />
         </div>
       ))}
+      {!flat && rules.length === 0 && (
+        <div className="mt-3">
+          <PolicyRules rules={data} />
+        </div>
+      )}
     </div>
   );
 }
@@ -208,9 +211,7 @@ function OpenaireCard({ oa }: { oa: NonNullable<FunderDetailResponse["openaire"]
         </dl>
         {oa.streams.length > 0 && (
           <div className="mt-3 border-t border-[var(--border)] pt-3">
-            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-              Top funding streams (OpenAIRE projects)
-            </p>
+            <p className="mb-1.5 text-sm font-medium">Top funding streams (OpenAIRE projects)</p>
             <ul className="space-y-1">
               {oa.streams.map((s) => (
                 <li key={s.level0_id} className="flex justify-between gap-3">
@@ -234,7 +235,8 @@ function OpenaireCard({ oa }: { oa: NonNullable<FunderDetailResponse["openaire"]
 export default function FunderPage() {
   const params = useParams<{ id: string }>();
   const inst = useInstitution();
-  const [, setFunder] = useFunderPrefs();
+  const site = useSiteMeta();
+  const [funder, setFunder] = useFunderPrefs();
   const id = params?.id ? Number(params.id) : undefined;
   const { data, isPending, isError, error, refetch } = useFunder(id);
 
@@ -256,7 +258,7 @@ export default function FunderPage() {
           <p className="mb-2 text-sm text-[var(--muted-foreground)]">
             {(data.country ?? "").toUpperCase() || "—"}
             {" · "}
-            {data.n_ut_works.toLocaleString()} UT works
+            {data.n_ut_works.toLocaleString()} {site.short} works
             {" · "}
             {data.policy_structured
               ? "structured OA policy"
@@ -264,19 +266,38 @@ export default function FunderPage() {
           </p>
           <div className="mb-6 flex flex-wrap items-center gap-4">
             <CanonLinks funder={data} />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setFunder({ id: data.id, name: data.name ?? `Funder ${data.id}` })}
-              title="Show funder-fit badges on the journal search"
-            >
-              Use as my funder
-            </Button>
+            {(() => {
+              const mine = funder?.id === data.id;
+              return (
+                <Button
+                  variant={mine ? "default" : "outline"}
+                  size="sm"
+                  aria-pressed={mine}
+                  onClick={() =>
+                    setFunder(mine ? null : { id: data.id, name: data.name ?? `Funder ${data.id}` })
+                  }
+                  title={
+                    mine
+                      ? "Showing funder-fit badges on the journal search. Select again to stop."
+                      : "Show funder-fit badges on the journal search"
+                  }
+                >
+                  {mine ? (
+                    <>
+                      <Check aria-hidden className="size-4" />
+                      Your funder
+                    </>
+                  ) : (
+                    "Use as my funder"
+                  )}
+                </Button>
+              );
+            })()}
           </div>
 
           {data.top_journals.length > 0 && (
             <section className="mb-8">
-              <h2 className="mb-2 text-xl font-bold">Top journals (institution works)</h2>
+              <h2 className="mb-2 text-xl font-bold">{site.short} works</h2>
               <Card>
                 <CardContent className="p-0">
                   <table className="w-full text-sm">
@@ -311,7 +332,7 @@ export default function FunderPage() {
               </Card>
               <div className="mt-1">
                 <SourceNote
-                  source="UT works via PURE, grants from OpenAlex/OpenAIRE"
+                  source={`${site.short} works via PURE, grants from OpenAlex/OpenAIRE`}
                   url={OPENAIRE_URL}
                   codes={["openalex-coverage", "openaire-enrichment"]}
                 />

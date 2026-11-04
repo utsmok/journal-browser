@@ -127,7 +127,8 @@ export function errorMessage(err: unknown): string {
   if (err instanceof ApiError) {
     if (err.status === 400 || err.status === 422)
       return "The request was not valid. Adjust the filters and try again.";
-    if (err.status === 404) return "We could not find that information.";
+    if (err.status === 404)
+      return "We could not find that information. Check the address, or go back and adjust your search.";
     if (err.status >= 500) return "The server could not process the search. Try again in a moment.";
   }
   return "Something went wrong while loading this data. Try again in a moment.";

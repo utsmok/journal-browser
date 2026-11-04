@@ -14,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAdminResource } from "@/hooks/use-admin-resource";
+import { formatDateTime } from "@/lib/format";
 import { useAdminToken, type UsageEventsPage, type UsageSummary } from "@/lib/admin";
 
 const PAGE_SIZE = 50;
@@ -319,7 +320,7 @@ export function UsageSection() {
                     <TableCell className="text-xs text-muted-foreground">{e.source}</TableCell>
                     <TableCell className="text-right tabular-nums">{e.count}</TableCell>
                     <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                      {new Date(e.last_ts).toLocaleString()}
+                      {formatDateTime(e.last_ts)}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -430,7 +431,7 @@ export function UsageSection() {
             {items.map((item) => (
               <TableRow key={item.id}>
                 <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                  {new Date(item.ts).toLocaleString()}
+                  {formatDateTime(item.ts)}
                 </TableCell>
                 <TableCell className="text-xs">{item.event_type}</TableCell>
                 <TableCell className="max-w-56 truncate font-mono text-xs" title={item.path}>

@@ -122,8 +122,8 @@ export default function DocPage() {
             <>
               <h1 className="mt-2 text-3xl font-bold">{doc.data.title}</h1>
               <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                {GROUP_LABEL[doc.data.group]} · {doc.data.blocks.length} blocks
-                {editedCount > 0 && ` · ${editedCount} edited locally`}
+                {GROUP_LABEL[doc.data.group]}
+                {editedCount > 0 && ` · ${editedCount} edited`}
               </p>
             </>
           )}

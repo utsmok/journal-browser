@@ -178,6 +178,9 @@ function OrgUnitsView() {
   });
 
   const rows = data?.items ?? [];
+  // Hide the APC column when no unit has APC data (e.g. ut); otherwise it
+  // reads as a column of broken dashes.
+  const showApc = rows.some((u) => u.apc_n > 0);
   const facets = data?.facets;
 
   // Pager math; total is the unpaginated filtered count.
@@ -431,7 +434,7 @@ function OrgUnitsView() {
                     region keeps its previous text, so typing never chatters. */}
                   <span aria-live="polite">
                     {data
-                      ? `${data.total.toLocaleString("en")} ${LEVEL_NOUN[level]}${data.total === 1 ? "" : "s"}${q ? ` matching “${q}”` : ""}`
+                      ? `${data.total.toLocaleString("en")} ${data.total === 1 ? LEVEL_NOUN[level] : LEVEL_PLURAL[level]}${q ? ` matching “${q}”` : ""}`
                       : ""}
                   </span>
                   {isFetching && data ? " · updating…" : ""}
@@ -531,7 +534,7 @@ function OrgUnitsView() {
                             {u.n_works.toLocaleString("en")} {u.n_works === 1 ? "work" : "works"}
                           </span>
                           {u.deal_works > 0 && (
-                            <span>{u.deal_works.toLocaleString("en")} deal-covered</span>
+                            <span>{u.deal_works.toLocaleString("en")} deal-covered works</span>
                           )}
                           {u.apc_n > 0 && <span>APC {formatEur(u.apc_euro_total)} €</span>}
                         </div>
@@ -564,11 +567,11 @@ function OrgUnitsView() {
                           <TableHead className="text-right" aria-sort={ariaSortFor("deal_works")}>
                             <SortHead
                               columnId="deal_works"
-                              label="Deal-covered"
+                              label="Deal-covered works"
                               state={sortHeadState}
                             />
                           </TableHead>
-                          <TableHead className="text-right">APC</TableHead>
+                          {showApc && <TableHead className="text-right">APC</TableHead>}
                           <TableHead>Topics</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -580,7 +583,7 @@ function OrgUnitsView() {
                                 href={unitHref(u)}
                                 className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
                               >
-                                <span className="block max-w-56 truncate" title={u.name}>
+                                <span className="line-clamp-2" title={u.name}>
                                   {u.name}
                                 </span>
                               </Link>
@@ -606,22 +609,24 @@ function OrgUnitsView() {
                             <TableCell className="text-right">
                               <DealWorksCell unit={u} />
                             </TableCell>
-                            <TableCell className="whitespace-nowrap text-right tabular-nums">
-                              {u.apc_n > 0 ? (
-                                <span
-                                  title={`APC paid for ${u.apc_n} ${
-                                    u.apc_n === 1 ? "article" : "articles"
-                                  }`}
-                                >
-                                  {formatEur(u.apc_euro_total)} €{" "}
-                                  <span className="text-[var(--muted-foreground)]">
-                                    ({u.apc_n})
+                            {showApc && (
+                              <TableCell className="whitespace-nowrap text-right tabular-nums">
+                                {u.apc_n > 0 ? (
+                                  <span
+                                    title={`APC paid for ${u.apc_n} ${
+                                      u.apc_n === 1 ? "article" : "articles"
+                                    }`}
+                                  >
+                                    {formatEur(u.apc_euro_total)} €{" "}
+                                    <span className="text-[var(--muted-foreground)]">
+                                      ({u.apc_n})
+                                    </span>
                                   </span>
-                                </span>
-                              ) : (
-                                <span className="text-[var(--muted-foreground)]">—</span>
-                              )}
-                            </TableCell>
+                                ) : (
+                                  <span className="text-[var(--muted-foreground)]">—</span>
+                                )}
+                              </TableCell>
+                            )}
                             <TableCell>
                               {u.topics.length > 0 ? (
                                 <span

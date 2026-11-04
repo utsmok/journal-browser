@@ -1,22 +1,30 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { Github } from "lucide-react";
 
 import { useSiteMeta } from "@/hooks/use-site-meta";
 
-/** Footer with institution links from settings; the repo link is static. */
+/** Footer with institution links from settings when scoped to an
+ * institution; the chooser at "/" gets only the repo link and attribution. */
 export function SiteFooter() {
   const site = useSiteMeta();
+  const seg = (usePathname() ?? "/").split("/")[1] ?? "";
+  const scoped = Boolean(seg) && seg !== "admin";
   const links: { href: string; label: string; icon?: "github" }[] = [
-    { href: site.libraryUrl, label: `${site.name} Library` },
-    { href: site.oaGuideUrl, label: "Open Access publishing guide" },
-    { href: `mailto:${site.supportEmail}`, label: site.supportEmail },
-    ...(site.adminContact
+    ...(scoped
       ? [
-          {
-            href: `mailto:${site.adminContact}`,
-            label: `${site.adminContact} (admin)`,
-          },
+          { href: site.libraryUrl, label: `${site.name} Library` },
+          { href: site.oaGuideUrl, label: "Open Access publishing guide" },
+          { href: `mailto:${site.supportEmail}`, label: site.supportEmail },
+          ...(site.adminContact
+            ? [
+                {
+                  href: `mailto:${site.adminContact}`,
+                  label: `${site.adminContact} (admin)`,
+                },
+              ]
+            : []),
         ]
       : []),
     {

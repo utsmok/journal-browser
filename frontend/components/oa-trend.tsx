@@ -12,6 +12,12 @@ export function OaTrend({ stats }: { stats: StatsYear[] }) {
   const total = (s: StatsYear) => OA_STATUS_ORDER.reduce((acc, k) => acc + (s[`oa_${k}`] ?? 0), 0);
   const max = Math.max(1, ...stats.map(total));
   const currentYear = new Date().getFullYear();
+  if (stats.length === 0 || stats.every((s) => total(s) === 0))
+    return (
+      <p className="py-8 text-sm text-[var(--muted-foreground)]">
+        No works recorded for this period.
+      </p>
+    );
   return (
     <div>
       <div

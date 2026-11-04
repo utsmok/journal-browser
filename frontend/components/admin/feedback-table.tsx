@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAdminResource } from "@/hooks/use-admin-resource";
+import { formatDateTime } from "@/lib/format";
 import { AdminError, adminDelete, adminPatch, type FeedbackAdmin } from "@/lib/admin";
 
 const STATUSES = ["todo", "in_progress", "done", "wontfix"] as const;
@@ -193,7 +194,7 @@ export function FeedbackSection({
                 onClick={() => setOpenId(openId === item.id ? null : item.id)}
               >
                 <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                  {new Date(item.created_at).toLocaleString()}
+                  {formatDateTime(item.created_at)}
                 </TableCell>
                 <TableCell className="max-w-xs truncate font-medium" title={item.title}>
                   {item.title}

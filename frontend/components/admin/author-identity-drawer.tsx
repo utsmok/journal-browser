@@ -7,6 +7,7 @@ import { CopyButton, RecordField, RecordJson, useReviewer } from "@/components/a
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { formatDate } from "@/lib/format";
 import {
   AdminError,
   adminGet,
@@ -212,10 +213,7 @@ export function AuthorIdentityDrawer({
               </h3>
               {external && (
                 <p className="text-[10px] text-muted-foreground">
-                  stored{" "}
-                  {external.harvested_at
-                    ? new Date(external.harvested_at).toLocaleDateString()
-                    : "—"}
+                  stored {external.harvested_at ? formatDate(external.harvested_at) : "—"}
                 </p>
               )}
             </div>
