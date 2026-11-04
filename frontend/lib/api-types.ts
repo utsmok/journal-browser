@@ -378,6 +378,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/usage/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Usage Summary */
+        get: operations["usage_summary_api_v1_admin_usage_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/feedback": {
         parameters: {
             query?: never;
@@ -423,6 +440,23 @@ export interface paths {
         get: operations["doc_detail_api_v1_docs__slug__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/usage/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Events */
+        post: operations["create_events_api_v1_usage_events_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1300,6 +1334,13 @@ export interface components {
              */
             unknown: number;
         };
+        /** ClientInfo */
+        ClientInfo: {
+            /** Tz */
+            tz?: string | null;
+            /** Locale */
+            locale?: string | null;
+        };
         /** CreateFeedbackIn */
         CreateFeedbackIn: {
             /** Title */
@@ -1568,6 +1609,29 @@ export interface components {
             order: number;
             /** Edits */
             edits: number;
+        };
+        /** ErrorIn */
+        ErrorIn: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "error";
+            /** Session Id */
+            session_id: string;
+            /** Path */
+            path: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "js_error" | "unhandled_rejection" | "api_status";
+            /** Message */
+            message?: string | null;
+            /** Detail */
+            detail?: string | null;
+            /** Status */
+            status?: number | null;
         };
         /** FeedbackAdminOut */
         FeedbackAdminOut: {
@@ -2436,6 +2500,26 @@ export interface components {
                 };
             };
         };
+        /** PageViewIn */
+        PageViewIn: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "page_view";
+            /** Session Id */
+            session_id: string;
+            /** Path */
+            path: string;
+            /** Duration Ms */
+            duration_ms?: number | null;
+            /** Referrer */
+            referrer?: string | null;
+            /** Ref Type */
+            ref_type?: ("journal" | "funder" | "author" | "orgunit" | "publisher") | null;
+            /** Ref Id */
+            ref_id?: string | null;
+        };
         /** PublisherApcSummary */
         PublisherApcSummary: {
             /** N Journals */
@@ -2536,6 +2620,28 @@ export interface components {
             /** H Index */
             h_index: number | null;
         };
+        /** SearchIn */
+        SearchIn: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "search";
+            /** Session Id */
+            session_id: string;
+            /** Path */
+            path: string;
+            /** Query */
+            query?: string | null;
+            /** Results Count */
+            results_count?: number | null;
+            /** Search Scope */
+            search_scope?: ("journals" | "funders" | "authors" | "publishers" | "orgunits") | null;
+            /** Filters */
+            filters?: {
+                [key: string]: unknown;
+            } | null;
+        };
         /** SettingsUpdate */
         SettingsUpdate: {
             /** Values */
@@ -2633,6 +2739,102 @@ export interface components {
             name: string;
             /** N */
             n: number;
+        };
+        /** UsageBatchIn */
+        UsageBatchIn: {
+            client?: components["schemas"]["ClientInfo"] | null;
+            /** Events */
+            events: (components["schemas"]["PageViewIn"] | components["schemas"]["SearchIn"] | components["schemas"]["ErrorIn"])[];
+        };
+        /** UsageCountryCount */
+        UsageCountryCount: {
+            /** Country */
+            country: string;
+            /** Count */
+            count: number;
+        };
+        /**
+         * UsageDayCount
+         * @description Per-day usage-event counts, one entry per calendar day.
+         */
+        UsageDayCount: {
+            /** Date */
+            date: string;
+            /** Page View */
+            page_view: number;
+            /** Search */
+            search: number;
+            /** Error */
+            error: number;
+        };
+        /** UsageErrorGroup */
+        UsageErrorGroup: {
+            /** Source */
+            source: string | null;
+            /** Status */
+            status: number | null;
+            /** Message */
+            message: string | null;
+            /** Count */
+            count: number;
+            /**
+             * Last Ts
+             * Format: date-time
+             */
+            last_ts: string;
+        };
+        /**
+         * UsageSummaryOut
+         * @description Admin usage snapshot over the trailing `days` window.
+         */
+        UsageSummaryOut: {
+            /** Days */
+            days: number;
+            /** Totals */
+            totals: {
+                [key: string]: number;
+            };
+            /** Daily */
+            daily: components["schemas"]["UsageDayCount"][];
+            /** Top Paths */
+            top_paths: components["schemas"]["UsageTopPath"][];
+            /** Top Queries */
+            top_queries: components["schemas"]["UsageTopQuery"][];
+            /** Top Refs */
+            top_refs: components["schemas"]["UsageTopRef"][];
+            /** Errors */
+            errors: components["schemas"]["UsageErrorGroup"][];
+            /** Countries */
+            countries: components["schemas"]["UsageCountryCount"][];
+            /** Sessions */
+            sessions: number;
+        };
+        /** UsageTopPath */
+        UsageTopPath: {
+            /** Path */
+            path: string;
+            /** Page Views */
+            page_views: number;
+            /** Avg Duration Ms */
+            avg_duration_ms: number | null;
+        };
+        /** UsageTopQuery */
+        UsageTopQuery: {
+            /** Query */
+            query: string;
+            /** Count */
+            count: number;
+            /** Zero Share */
+            zero_share: number;
+        };
+        /** UsageTopRef */
+        UsageTopRef: {
+            /** Ref Type */
+            ref_type: string;
+            /** Ref Id */
+            ref_id: string;
+            /** Count */
+            count: number;
         };
         /** ValidationError */
         ValidationError: {
@@ -3570,6 +3772,37 @@ export interface operations {
             };
         };
     };
+    usage_summary_api_v1_admin_usage_summary_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageSummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_feedback_api_v1_feedback_post: {
         parameters: {
             query?: never;
@@ -3642,6 +3875,37 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["DocDetailOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_events_api_v1_usage_events_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UsageBatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

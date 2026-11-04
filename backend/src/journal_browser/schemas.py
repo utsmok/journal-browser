@@ -879,3 +879,57 @@ class DocDetailOut(BaseModel):
     group: str
     order: int
     blocks: list[DocBlock]
+
+
+class UsageDayCount(BaseModel):
+    """Per-day usage-event counts, one entry per calendar day."""
+
+    date: str
+    page_view: int
+    search: int
+    error: int
+
+
+class UsageTopPath(BaseModel):
+    path: str
+    page_views: int
+    avg_duration_ms: float | None
+
+
+class UsageTopQuery(BaseModel):
+    query: str
+    count: int
+    zero_share: float
+
+
+class UsageTopRef(BaseModel):
+    ref_type: str
+    ref_id: str
+    count: int
+
+
+class UsageErrorGroup(BaseModel):
+    source: str | None
+    status: int | None
+    message: str | None
+    count: int
+    last_ts: datetime
+
+
+class UsageCountryCount(BaseModel):
+    country: str
+    count: int
+
+
+class UsageSummaryOut(BaseModel):
+    """Admin usage snapshot over the trailing `days` window."""
+
+    days: int
+    totals: dict[str, int]
+    daily: list[UsageDayCount]
+    top_paths: list[UsageTopPath]
+    top_queries: list[UsageTopQuery]
+    top_refs: list[UsageTopRef]
+    errors: list[UsageErrorGroup]
+    countries: list[UsageCountryCount]
+    sessions: int

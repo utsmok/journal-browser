@@ -1268,6 +1268,49 @@
         }
       }
     },
+    "/api/v1/admin/usage/summary": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Usage Summary",
+        "operationId": "usage_summary_api_v1_admin_usage_summary_get",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 30,
+              "title": "Days"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageSummaryOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/feedback": {
       "post": {
         "tags": [
@@ -1362,6 +1405,40 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/usage/events": {
+      "post": {
+        "tags": [
+          "usage"
+        ],
+        "summary": "Create Events",
+        "operationId": "create_events_api_v1_usage_events_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UsageBatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -5093,6 +5170,36 @@
         "title": "CanonicalOa",
         "description": "ut-metadata oa_status distribution over a journal's works."
       },
+      "ClientInfo": {
+        "properties": {
+          "tz": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tz"
+          },
+          "locale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locale"
+          }
+        },
+        "type": "object",
+        "title": "ClientInfo"
+      },
       "CreateFeedbackIn": {
         "properties": {
           "title": {
@@ -5975,6 +6082,77 @@
           "edits"
         ],
         "title": "DocMetaOut"
+      },
+      "ErrorIn": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "error",
+            "title": "Type"
+          },
+          "session_id": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Session Id"
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 512,
+            "title": "Path"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "js_error",
+              "unhandled_rejection",
+              "api_status"
+            ],
+            "title": "Source"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "session_id",
+          "path",
+          "source"
+        ],
+        "title": "ErrorIn"
       },
       "FeedbackAdminOut": {
         "properties": {
@@ -8474,6 +8652,85 @@
         ],
         "title": "OrgUnitSearchResponse"
       },
+      "PageViewIn": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "page_view",
+            "title": "Type"
+          },
+          "session_id": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Session Id"
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 512,
+            "title": "Path"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "referrer": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referrer"
+          },
+          "ref_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "journal",
+                  "funder",
+                  "author",
+                  "orgunit",
+                  "publisher"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref Type"
+          },
+          "ref_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "session_id",
+          "path"
+        ],
+        "title": "PageViewIn"
+      },
       "PublisherApcSummary": {
         "properties": {
           "n_journals": {
@@ -8727,6 +8984,85 @@
           "h_index"
         ],
         "title": "ScimagojrOut"
+      },
+      "SearchIn": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "search",
+            "title": "Type"
+          },
+          "session_id": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Session Id"
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 512,
+            "title": "Path"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          },
+          "results_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Results Count"
+          },
+          "search_scope": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "journals",
+                  "funders",
+                  "authors",
+                  "publishers",
+                  "orgunits"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Scope"
+          },
+          "filters": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filters"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "session_id",
+          "path"
+        ],
+        "title": "SearchIn"
       },
       "SettingsUpdate": {
         "properties": {
@@ -9017,6 +9353,304 @@
           "n"
         ],
         "title": "TopicMassRow"
+      },
+      "UsageBatchIn": {
+        "properties": {
+          "client": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClientInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "events": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/PageViewIn"
+                },
+                {
+                  "$ref": "#/components/schemas/SearchIn"
+                },
+                {
+                  "$ref": "#/components/schemas/ErrorIn"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "type",
+                "mapping": {
+                  "error": "#/components/schemas/ErrorIn",
+                  "page_view": "#/components/schemas/PageViewIn",
+                  "search": "#/components/schemas/SearchIn"
+                }
+              }
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Events"
+          }
+        },
+        "type": "object",
+        "required": [
+          "events"
+        ],
+        "title": "UsageBatchIn"
+      },
+      "UsageCountryCount": {
+        "properties": {
+          "country": {
+            "type": "string",
+            "title": "Country"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "country",
+          "count"
+        ],
+        "title": "UsageCountryCount"
+      },
+      "UsageDayCount": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "title": "Date"
+          },
+          "page_view": {
+            "type": "integer",
+            "title": "Page View"
+          },
+          "search": {
+            "type": "integer",
+            "title": "Search"
+          },
+          "error": {
+            "type": "integer",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "page_view",
+          "search",
+          "error"
+        ],
+        "title": "UsageDayCount",
+        "description": "Per-day usage-event counts, one entry per calendar day."
+      },
+      "UsageErrorGroup": {
+        "properties": {
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "last_ts": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Ts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "status",
+          "message",
+          "count",
+          "last_ts"
+        ],
+        "title": "UsageErrorGroup"
+      },
+      "UsageSummaryOut": {
+        "properties": {
+          "days": {
+            "type": "integer",
+            "title": "Days"
+          },
+          "totals": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Totals"
+          },
+          "daily": {
+            "items": {
+              "$ref": "#/components/schemas/UsageDayCount"
+            },
+            "type": "array",
+            "title": "Daily"
+          },
+          "top_paths": {
+            "items": {
+              "$ref": "#/components/schemas/UsageTopPath"
+            },
+            "type": "array",
+            "title": "Top Paths"
+          },
+          "top_queries": {
+            "items": {
+              "$ref": "#/components/schemas/UsageTopQuery"
+            },
+            "type": "array",
+            "title": "Top Queries"
+          },
+          "top_refs": {
+            "items": {
+              "$ref": "#/components/schemas/UsageTopRef"
+            },
+            "type": "array",
+            "title": "Top Refs"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/UsageErrorGroup"
+            },
+            "type": "array",
+            "title": "Errors"
+          },
+          "countries": {
+            "items": {
+              "$ref": "#/components/schemas/UsageCountryCount"
+            },
+            "type": "array",
+            "title": "Countries"
+          },
+          "sessions": {
+            "type": "integer",
+            "title": "Sessions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "days",
+          "totals",
+          "daily",
+          "top_paths",
+          "top_queries",
+          "top_refs",
+          "errors",
+          "countries",
+          "sessions"
+        ],
+        "title": "UsageSummaryOut",
+        "description": "Admin usage snapshot over the trailing `days` window."
+      },
+      "UsageTopPath": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "page_views": {
+            "type": "integer",
+            "title": "Page Views"
+          },
+          "avg_duration_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Duration Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "page_views",
+          "avg_duration_ms"
+        ],
+        "title": "UsageTopPath"
+      },
+      "UsageTopQuery": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "zero_share": {
+            "type": "number",
+            "title": "Zero Share"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query",
+          "count",
+          "zero_share"
+        ],
+        "title": "UsageTopQuery"
+      },
+      "UsageTopRef": {
+        "properties": {
+          "ref_type": {
+            "type": "string",
+            "title": "Ref Type"
+          },
+          "ref_id": {
+            "type": "string",
+            "title": "Ref Id"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ref_type",
+          "ref_id",
+          "count"
+        ],
+        "title": "UsageTopRef"
       },
       "ValidationError": {
         "properties": {
