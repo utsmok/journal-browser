@@ -5801,6 +5801,16 @@
             "type": "integer",
             "title": "Journal Count",
             "default": 0
+          },
+          "apc_euro_total": {
+            "type": "number",
+            "title": "Apc Euro Total",
+            "default": 0.0
+          },
+          "apc_n": {
+            "type": "integer",
+            "title": "Apc N",
+            "default": 0
           }
         },
         "type": "object",

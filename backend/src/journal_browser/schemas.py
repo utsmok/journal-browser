@@ -232,6 +232,11 @@ class DealOut(BaseModel):
     # Register links; None on rows not yet seeded.
     links: list[DealLinkOut] | None = None
     journal_count: int = 0
+    # Observed APC spend for the institution's works in the deal's
+    # effective journal list (latest-period evidence per DOI, mirror of
+    # orgunit APC aggregation).
+    apc_euro_total: float = 0.0
+    apc_n: int = 0
 
 
 class OpenalexTopicOut(BaseModel):

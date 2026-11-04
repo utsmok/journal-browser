@@ -1495,6 +1495,16 @@ export interface components {
              * @default 0
              */
             journal_count: number;
+            /**
+             * Apc Euro Total
+             * @default 0
+             */
+            apc_euro_total: number;
+            /**
+             * Apc N
+             * @default 0
+             */
+            apc_n: number;
         };
         /** DealParticipationsBody */
         DealParticipationsBody: {
