@@ -3,6 +3,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import * as React from "react";
 
+import { UsageTracker } from "@/components/usage-tracker";
+
 export type SiteFallback = {
   name: string;
   short: string;
@@ -44,7 +46,10 @@ export function Providers({
   );
   return (
     <SiteMetaContext.Provider value={siteFallback}>
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      <QueryClientProvider client={client}>
+        <UsageTracker />
+        {children}
+      </QueryClientProvider>
     </SiteMetaContext.Provider>
   );
 }

@@ -4,6 +4,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import * as React from "react";
 
 import { useInstitution } from "./use-institution";
+import { trackSearch } from "@/lib/usage/tracker";
 import {
   apiGet,
   fetchOrgUnit,
@@ -62,6 +63,31 @@ function useFetchEpoch(params: JournalSearchParams) {
   return epoch;
 }
 
+/** Filter keys stored on a usage search event; paging/sort keys dropped. */
+const FILTER_KEYS = [
+  "search_in",
+  "deal",
+  "oa",
+  "doaj",
+  "quartile",
+  "publisher",
+  "has_apc",
+  "has_works",
+  "topic",
+  "oa_type",
+  "green_oa",
+  "funder",
+  "funder_fit",
+] as const;
+
+function usageFilters(params: JournalSearchParams): Record<string, unknown> | undefined {
+  const out: Record<string, unknown> = {};
+  for (const key of FILTER_KEYS) {
+    if (params[key] !== undefined) out[key] = params[key];
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 export function useJournals(params: JournalSearchParams, semantic?: boolean) {
   const inst = useInstitution();
   const epoch = useFetchEpoch(params);
@@ -82,6 +108,13 @@ export function useJournals(params: JournalSearchParams, semantic?: boolean) {
             ...params,
           });
       if (at !== epoch.current) throw new Error("stale fetch discarded");
+      trackSearch({
+        query: params.q ?? "",
+        results_count: data.total,
+        search_scope: "journals",
+        // Filter/sort params do not apply to the semantic ranking.
+        filters: semantic ? undefined : usageFilters(params),
+      });
       return data;
     },
     placeholderData: keepPreviousData,
@@ -253,8 +286,15 @@ export function useFunderDirectory(q: string, offset: number, limit: number) {
   const inst = useInstitution();
   return useQuery({
     queryKey: [...qk.funders(inst, q), offset, limit] as const,
-    queryFn: () =>
-      apiGet<FunderSearchResponse>(`/${inst}/funders`, { q: q || undefined, offset, limit }),
+    queryFn: async () => {
+      const data = await apiGet<FunderSearchResponse>(`/${inst}/funders`, {
+        q: q || undefined,
+        offset,
+        limit,
+      });
+      trackSearch({ query: q, results_count: data.total, search_scope: "funders" });
+      return data;
+    },
     enabled: inst !== "",
     placeholderData: keepPreviousData,
   });

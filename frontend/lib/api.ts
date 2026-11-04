@@ -1,4 +1,5 @@
 import type { components } from "./api-types";
+import { trackApiError, trackSearch } from "./usage/tracker";
 
 type Schemas = components["schemas"];
 
@@ -147,6 +148,7 @@ export async function apiGet<T>(
     });
     if (!res.ok) {
       console.error(`API ${res.status} on ${path}`);
+      trackApiError("GET", path, res.status);
       throw new ApiError(res.status, path);
     }
     return (await res.json()) as T;
@@ -162,7 +164,7 @@ export async function fetchAuthors(
   filters: AuthorSearchFilters = {},
   opts: AuthorFetchOptions = {},
 ): Promise<AuthorSearchResponse> {
-  return apiGet<AuthorSearchResponse>(`/${inst}/authors`, {
+  const data = await apiGet<AuthorSearchResponse>(`/${inst}/authors`, {
     q,
     limit: opts.limit,
     faculty: filters.faculty?.join("|"),
@@ -174,6 +176,13 @@ export async function fetchAuthors(
     sort: opts.sort,
     offset: opts.offset,
   });
+  trackSearch({
+    query: q ?? "",
+    results_count: data.total,
+    search_scope: "authors",
+    filters: Object.keys(filters).length ? { ...filters } : undefined,
+  });
+  return data;
 }
 
 export async function fetchAuthor(inst: string, pureUuid: string): Promise<AuthorProfile> {
@@ -245,11 +254,25 @@ export function encodeNamePath(name: string): string {
   return name.split("/").map(encodeURIComponent).join("/");
 }
 
+/** Usage filter dump for directory fetchers: paging keys stripped. */
+function usageDirectoryFilters(params: object): Record<string, unknown> | undefined {
+  const {
+    q: _q,
+    sort: _sort,
+    dir: _dir,
+    offset: _offset,
+    limit: _limit,
+    include_facets: _include_facets,
+    ...rest
+  } = params as Record<string, unknown>;
+  return Object.keys(rest).length ? rest : undefined;
+}
+
 export async function fetchPublishers(
   inst: string,
   params: PublisherSearchParams = {},
 ): Promise<PublisherSearchResponse> {
-  return apiGet<PublisherSearchResponse>(`/${inst}/publishers`, {
+  const data = await apiGet<PublisherSearchResponse>(`/${inst}/publishers`, {
     q: params.q,
     oa_type: params.oa_type?.join("|"),
     deal: params.deal,
@@ -265,6 +288,13 @@ export async function fetchPublishers(
     limit: params.limit,
     include_facets: params.include_facets ? "true" : undefined,
   });
+  trackSearch({
+    query: params.q ?? "",
+    results_count: data.total,
+    search_scope: "publishers",
+    filters: usageDirectoryFilters(params),
+  });
+  return data;
 }
 
 export async function fetchPublisher(inst: string, name: string): Promise<PublisherDetailResponse> {
@@ -275,7 +305,7 @@ export async function fetchOrgUnits(
   inst: string,
   params: OrgUnitSearchParams = {},
 ): Promise<OrgUnitSearchResponse> {
-  return apiGet<OrgUnitSearchResponse>(`/${inst}/orgunits`, {
+  const data = await apiGet<OrgUnitSearchResponse>(`/${inst}/orgunits`, {
     level: params.level,
     q: params.q,
     faculty: params.faculty?.join("|"),
@@ -287,6 +317,13 @@ export async function fetchOrgUnits(
     limit: params.limit,
     include_facets: params.include_facets ? "true" : undefined,
   });
+  trackSearch({
+    query: params.q ?? "",
+    results_count: data.total,
+    search_scope: "orgunits",
+    filters: usageDirectoryFilters(params),
+  });
+  return data;
 }
 
 export async function fetchOrgUnit(
