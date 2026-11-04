@@ -90,8 +90,12 @@ accounts — only a localStorage session id that rotates after 30 idle
 minutes. `backend/jobs/enrich_usage_geo.py` backfills the country column
 from IP addresses in batches (ip-api.com). Set
 `JB_ENABLE_USAGE_TRACKING=false` (env or the admin settings panel) to turn
-it off; the ingest endpoint then accepts and drops batches. Aggregates are
-visible to admins at `/api/v1/admin/usage/summary`.
+it off; the ingest endpoint then accepts and drops batches. Raw IPs are
+nulled after `JB_USAGE_RETENTION_DAYS` (default 90, `0` disables the
+nightly prune) by an in-app background job; countries and the events
+themselves stay. Searches with an empty query are stored as browse loads
+(`is_browse`), not as queries. Aggregates and the raw event feed are
+visible to admins at `/admin/usage` in the admin panel.
 
 ## License
 
