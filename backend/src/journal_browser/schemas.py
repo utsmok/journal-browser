@@ -921,11 +921,19 @@ class UsageCountryCount(BaseModel):
     count: int
 
 
+class UsageSearchSplit(BaseModel):
+    """Search events split into real queries vs default browse loads."""
+
+    browse: int
+    queries: int
+
+
 class UsageSummaryOut(BaseModel):
     """Admin usage snapshot over the trailing `days` window."""
 
     days: int
     totals: dict[str, int]
+    searches: UsageSearchSplit
     daily: list[UsageDayCount]
     top_paths: list[UsageTopPath]
     top_queries: list[UsageTopQuery]

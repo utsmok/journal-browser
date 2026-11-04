@@ -3,6 +3,7 @@ from typing import Any
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     Index,
     Integer,
@@ -177,6 +178,9 @@ class UsageEvent(Base):
     # page_view dwell time
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     query: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # True when this search row is a default browse load (no query text);
+    # the server forces query to NULL whenever this is set.
+    is_browse: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     results_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # journals | funders | authors | publishers | orgunits
     search_scope: Mapped[str | None] = mapped_column(Text, nullable=True)

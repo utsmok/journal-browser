@@ -2633,6 +2633,11 @@ export interface components {
             path: string;
             /** Query */
             query?: string | null;
+            /**
+             * Is Browse
+             * @default false
+             */
+            is_browse: boolean;
             /** Results Count */
             results_count?: number | null;
             /** Search Scope */
@@ -2784,6 +2789,16 @@ export interface components {
             last_ts: string;
         };
         /**
+         * UsageSearchSplit
+         * @description Search events split into real queries vs default browse loads.
+         */
+        UsageSearchSplit: {
+            /** Browse */
+            browse: number;
+            /** Queries */
+            queries: number;
+        };
+        /**
          * UsageSummaryOut
          * @description Admin usage snapshot over the trailing `days` window.
          */
@@ -2794,6 +2809,7 @@ export interface components {
             totals: {
                 [key: string]: number;
             };
+            searches: components["schemas"]["UsageSearchSplit"];
             /** Daily */
             daily: components["schemas"]["UsageDayCount"][];
             /** Top Paths */

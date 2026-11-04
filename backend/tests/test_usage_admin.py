@@ -98,6 +98,18 @@ async def test_summary_aggregates(usage_api, db):
 
 
 @requires_db
+async def test_summary_searches_split(usage_api, db):
+    await _seed(db, "s1", "search", query="biochemistry", results_count=42)
+    await _seed(db, "s2", "search", is_browse=True)
+    await _seed(db, "s2", "page_view")
+    await db.commit()
+    headers = await _login(usage_api)
+    r = await usage_api.get("/api/v1/admin/usage/summary?days=30", headers=headers)
+    assert r.status_code == 200
+    assert r.json()["searches"] == {"browse": 1, "queries": 1}
+
+
+@requires_db
 async def test_summary_clamps_days(usage_api, db):
     await _seed(db, "s1", "page_view")
     headers = await _login(usage_api)

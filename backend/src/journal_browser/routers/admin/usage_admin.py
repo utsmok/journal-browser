@@ -16,6 +16,7 @@ from ...schemas import (
     UsageCountryCount,
     UsageDayCount,
     UsageErrorGroup,
+    UsageSearchSplit,
     UsageSummaryOut,
     UsageTopPath,
     UsageTopQuery,
@@ -139,9 +140,19 @@ async def usage_summary(
         select(func.count(func.distinct(UsageEvent.session_id))).where(window)
     )
 
+    browse, queries = (
+        await session.execute(
+            select(
+                func.count().filter(UsageEvent.is_browse),
+                func.count().filter(UsageEvent.query.is_not(None)),
+            ).where(window, UsageEvent.event_type == "search")
+        )
+    ).one()
+
     return UsageSummaryOut(
         days=days,
         totals=totals,
+        searches=UsageSearchSplit(browse=browse, queries=queries),
         daily=[UsageDayCount(date=day, **counts) for day, counts in daily.items()],
         top_paths=top_paths,
         top_queries=top_queries,

@@ -9014,6 +9014,11 @@
             ],
             "title": "Query"
           },
+          "is_browse": {
+            "type": "boolean",
+            "title": "Is Browse",
+            "default": false
+          },
           "results_count": {
             "anyOf": [
               {
@@ -9501,6 +9506,25 @@
         ],
         "title": "UsageErrorGroup"
       },
+      "UsageSearchSplit": {
+        "properties": {
+          "browse": {
+            "type": "integer",
+            "title": "Browse"
+          },
+          "queries": {
+            "type": "integer",
+            "title": "Queries"
+          }
+        },
+        "type": "object",
+        "required": [
+          "browse",
+          "queries"
+        ],
+        "title": "UsageSearchSplit",
+        "description": "Search events split into real queries vs default browse loads."
+      },
       "UsageSummaryOut": {
         "properties": {
           "days": {
@@ -9513,6 +9537,9 @@
             },
             "type": "object",
             "title": "Totals"
+          },
+          "searches": {
+            "$ref": "#/components/schemas/UsageSearchSplit"
           },
           "daily": {
             "items": {
@@ -9565,6 +9592,7 @@
         "required": [
           "days",
           "totals",
+          "searches",
           "daily",
           "top_paths",
           "top_queries",

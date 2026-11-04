@@ -141,6 +141,35 @@ async def test_oversized_filters_rejected_413(client):
 
 
 @requires_db
+async def test_search_browse_normalization(client, db):
+    r = await client.post(
+        "/api/v1/usage/events",
+        json={
+            "events": [
+                {"type": "search", "session_id": "s1", "path": "/ut", "query": "  "},
+                {"type": "search", "session_id": "s1", "path": "/ut"},
+                {
+                    "type": "search",
+                    "session_id": "s1",
+                    "path": "/ut",
+                    "query": "gold",
+                    "is_browse": True,
+                },
+                {"type": "search", "session_id": "s1", "path": "/ut", "query": "biochemistry"},
+            ]
+        },
+    )
+    assert r.status_code == 204
+    rows = (await db.scalars(select(UsageEvent).order_by(UsageEvent.id))).all()
+    assert [(row.is_browse, row.query) for row in rows] == [
+        (True, None),
+        (True, None),
+        (True, None),
+        (False, "biochemistry"),
+    ]
+
+
+@requires_db
 async def test_flag_off_accepts_and_drops(client, db, monkeypatch):
     monkeypatch.setenv("JB_ENABLE_USAGE_TRACKING", "false")
     reset_settings_cache()

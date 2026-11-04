@@ -51,6 +51,9 @@ class SearchIn(BaseModel):
     session_id: str = Field(max_length=64)
     path: str = Field(max_length=512)
     query: str | None = Field(default=None, max_length=512)
+    # True when the client means a default browse load; the server forces
+    # this on (and nulls the query) whenever the query is missing/blank.
+    is_browse: bool = False
     results_count: int | None = None
     search_scope: Literal["journals", "funders", "authors", "publishers", "orgunits"] | None = None
     filters: dict[str, Any] | None = None
@@ -102,6 +105,13 @@ async def create_events(body: UsageBatchIn, request: Request, session: SessionDe
         ):
             raise HTTPException(413, "filters too large")
         data["event_type"] = data.pop("type")
+        if data["event_type"] == "search":
+            # The stored invariant: browse rows never carry query text.
+            if not (data.get("query") or "").strip():
+                data["is_browse"] = True
+                data["query"] = None
+            elif data["is_browse"]:
+                data["query"] = None
         rows.append(UsageEvent(ip=ip, tz=tz, locale=locale, user_agent=ua, **data))
     session.add_all(rows)
     await session.commit()
