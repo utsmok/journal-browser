@@ -170,6 +170,52 @@ async def test_search_browse_normalization(client, db):
 
 
 @requires_db
+async def test_prune_old_ips_nulls_only_old_rows(db):
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import text
+
+    from journal_browser.services.usage_retention import prune_old_ips
+
+    now = datetime.now(UTC)
+    db.add_all(
+        [
+            UsageEvent(
+                session_id="old",
+                event_type="page_view",
+                path="/ut",
+                ip="203.0.113.1",
+                country="NL",
+                user_agent="ua-old",
+                ts=now - timedelta(days=100),
+            ),
+            UsageEvent(
+                session_id="fresh",
+                event_type="page_view",
+                path="/ut",
+                ip="203.0.113.2",
+                country="DE",
+                user_agent="ua-fresh",
+                ts=now,
+            ),
+        ]
+    )
+    await db.commit()
+
+    assert await prune_old_ips(db, 90) == 1
+    # Raw SELECT: the identity map must not serve pre-UPDATE attribute values.
+    rows = (
+        await db.execute(
+            text("SELECT session_id, host(ip), country, user_agent FROM usage_events ORDER BY id")
+        )
+    ).all()
+    assert rows == [
+        ("old", None, "NL", "ua-old"),
+        ("fresh", "203.0.113.2", "DE", "ua-fresh"),
+    ]
+
+
+@requires_db
 async def test_flag_off_accepts_and_drops(client, db, monkeypatch):
     monkeypatch.setenv("JB_ENABLE_USAGE_TRACKING", "false")
     reset_settings_cache()

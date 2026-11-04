@@ -106,6 +106,9 @@ class Settings(BaseSettings):
     # Anonymous usage-event intake (paths, searches, dwell, client errors).
     # False = the ingest endpoint accepts batches and drops them.
     enable_usage_tracking: bool = True
+    # Null raw usage-event IPs older than this many days (rows and country
+    # stay). 0 disables the nightly prune loop entirely.
+    usage_retention_days: int = 90
     jisc_api_key: str = ""
 
     # Pure OAI-PMH endpoint (anonymous) and request pacing.

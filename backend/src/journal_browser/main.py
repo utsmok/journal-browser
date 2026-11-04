@@ -1,18 +1,20 @@
+import asyncio
 import logging
 import os
 import time
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from . import __version__
 from .config import get_settings
-from .db import get_session
+from .db import get_engine, get_session
 from .logging_setup import REQUEST_ID_HEADER, configure_logging, new_request_id, request_id_ctx
 from .routers import (
     admin,
@@ -123,10 +125,43 @@ def _warm_embedding_model() -> None:
     threading.Thread(target=lambda: encode_query("warmup"), daemon=True).start()
 
 
+USAGE_PRUNE_FIRST_DELAY_S = 60
+USAGE_PRUNE_INTERVAL_S = 24 * 60 * 60
+
+
+async def _usage_ip_retention_loop(days: int) -> None:
+    """Nightly: null raw usage-event IPs older than `days` (rows and
+    country stay). Errors are logged, never propagated."""
+    from .services.usage_retention import prune_old_ips
+
+    delay = USAGE_PRUNE_FIRST_DELAY_S
+    while True:
+        await asyncio.sleep(delay)
+        try:
+            async with async_sessionmaker(get_engine(), expire_on_commit=False)() as session:
+                nulled = await prune_old_ips(session, days)
+            logger.info("usage ip retention: nulled ip on %d event(s)", nulled)
+        except Exception:
+            logger.exception("usage ip retention run failed")
+        # Subsequent runs are a full day apart; only the first waits 60s.
+        delay = USAGE_PRUNE_INTERVAL_S
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    days = get_settings().usage_retention_days
+    task = asyncio.create_task(_usage_ip_retention_loop(days)) if days > 0 else None
+    yield
+    if task is not None:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+
 def create_app() -> "FastAPI":
     settings = get_settings()
     configure_logging()
-    app = FastAPI(title="Journal Browser API", version=__version__)
+    app = FastAPI(title="Journal Browser API", version=__version__, lifespan=_lifespan)
     # CORS first, observability second: add_middleware prepends, so the
     # request-id middleware runs outermost and even CORS-rejected requests
     # get a request id.
