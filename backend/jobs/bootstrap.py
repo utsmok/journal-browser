@@ -82,6 +82,11 @@ INST_STEPS: list[tuple[str, list[str]]] = [
     # Normalized store over the harvested OpenAlex works (works_stats
     # payloads): authorship edges, openalex-only merge, journal works tab.
     ("openalex-works", ["jobs/build_openalex_works.py"]),
+    # Full-replace of work_pure_authors edges from the latest stored
+    # cerif records: covers works whose cerif record landed before its
+    # works row or before author extraction existed. Must precede
+    # author-ids, which iterates the edges.
+    ("pure-authors", ["jobs/backfill_pure_authors.py"]),
     # Author identity resolution (the ported cascade; runs with no DSN).
     ("author-ids", ["jobs/resolve_author_ids.py"]),
     # Author roster + edges from the source adapter (local tables by
@@ -101,7 +106,8 @@ INST_DEPS: dict[str, list[str]] = {
     "stats": ["enrich", "openaire", "openapc", "scimagojr", "flags"],
     "reconcile": ["stats", "deals-reconcile"],
     "openalex-works": ["stats"],
-    "author-ids": ["openalex-works", "pure-entities", "pure-cerif"],
+    "pure-authors": ["pure-cerif", "openalex-works"],
+    "author-ids": ["openalex-works", "pure-entities", "pure-cerif", "pure-authors"],
     "authors": ["author-ids", "reconcile"],
 }
 
