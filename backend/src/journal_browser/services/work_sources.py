@@ -18,6 +18,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
+from ..harvest.common import oa_openness_desc
 from ..harvest.org_closure import load_org_tree
 from ..models import Author, Institution, OpenalexWork
 from . import ut_metadata
@@ -116,7 +117,8 @@ async def works_for_journal(
 ) -> list[dict[str, Any]] | None:
     """Canonical works for the journal; None = serve works_stats-only.
 
-    Local store rows win (deduped by DOI, lowest W-id kept — merged
+    Local store rows win (deduped by DOI, most open record kept —
+    owner decision 2026-11-05, ties keep the lowest W-id; merged
     profiles can carry one publication under two W-ids); the DSN path
     takes over only when the store has nothing for this institution or
     the setting opts back into it. Rows serve only when a pure-side
@@ -132,7 +134,7 @@ async def works_for_journal(
                     OpenalexWork.institution_id == institution.id,
                     OpenalexWork.venue_issn_l == issn_l,
                 )
-                .order_by(OpenalexWork.w_id)
+                .order_by(oa_openness_desc(OpenalexWork.oa_status), OpenalexWork.w_id)
             )
         ).scalars()
         by_doi: dict[str, dict[str, Any]] = {}

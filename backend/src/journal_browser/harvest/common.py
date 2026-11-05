@@ -9,7 +9,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
@@ -84,6 +84,26 @@ def canonical_oa_status(raw: str | None) -> str | None:
     if not raw:
         return None
     return raw if raw in OA_STATUSES else "closed"
+
+
+def oa_openness_rank(column: Any):
+    """Ascending openness rank for an oa_status column (owner decision
+    2026-11-05, canonical merge across duplicate OpenAlex records):
+    diamond > gold > hybrid > bronze > green > closed."""
+    return case(
+        (column == "diamond", 5),
+        (column == "gold", 4),
+        (column == "hybrid", 3),
+        (column == "bronze", 2),
+        (column == "green", 1),
+        (column == "closed", 0),
+        else_=-1,
+    )
+
+
+def oa_openness_desc(column: Any):
+    """Sort expression: most open oa_status first."""
+    return oa_openness_rank(column).desc()
 
 
 def normalize_doi(doi: str | None) -> str | None:

@@ -248,6 +248,10 @@ async def test_rebuild_syncs_work_oa_status(db, institution_factory):
             ("W2", _payload(w_id="W2", doi="10.1234/still-closed", oa="closed")),
             ("W3", _payload(w_id="W3", doi="10.1234/store-null", oa=None)),
             ("W4", _payload(w_id="W4", doi="10.1234/reversed", oa="closed")),
+            # one DOI under two W-ids with conflicting colors: the most
+            # open record is canonical (owner decision 2026-11-05)
+            ("W5", _payload(w_id="W5", doi="10.1234/dup-conflict", oa="green")),
+            ("W6", _payload(w_id="W6", doi="10.1234/dup-conflict", oa="closed")),
         ],
         filter_set="institutions.id=I1",
     )
@@ -281,12 +285,13 @@ async def test_rebuild_syncs_work_oa_status(db, institution_factory):
             _work("w-null", "10.1234/store-null", "closed"),  # store NULL: untouched
             _work("w-rev", "10.1234/reversed", "green"),  # green -> closed
             _work("w-orphan", "10.1234/no-store-row", "closed"),  # no store row
+            _work("w-dup", "10.1234/dup-conflict", "closed"),  # most open wins
         ]
     )
     await db.flush()
 
     stats = await rebuild_openalex_works(db, inst)
-    assert stats["works_oa_synced"] == 2
+    assert stats["works_oa_synced"] == 3
     rows = {r.pure_uuid: r.oa_status for r in (await db.execute(select(Work))).scalars()}
     assert rows == {
         "w-stale": "green",
@@ -294,4 +299,5 @@ async def test_rebuild_syncs_work_oa_status(db, institution_factory):
         "w-null": "closed",
         "w-rev": "closed",
         "w-orphan": "closed",
+        "w-dup": "green",
     }

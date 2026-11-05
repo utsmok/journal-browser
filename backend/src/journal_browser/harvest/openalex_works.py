@@ -29,7 +29,7 @@ from ..models import (
     SourceRecord,
     Work,
 )
-from .common import canonical_oa_status, normalize_doi
+from .common import canonical_oa_status, normalize_doi, oa_openness_desc, oa_openness_rank
 
 logger = logging.getLogger(__name__)
 
@@ -199,17 +199,38 @@ async def rebuild_openalex_works(session: AsyncSession, institution: Institution
     # Fold the fresh OA picture back into the canonical works rows: their
     # oa_status comes from OpenAlex (harvest/enrich.py) but freezes once a
     # work's journal resolves, so later green/gold upgrades never land.
-    # The store is the only pass that sees current oa data.
+    # The store is the only pass that sees current oa data. DOIs carried
+    # under two W-ids with conflicting colors canonicalize to the most
+    # open record (owner decision 2026-11-05).
+    canon = (
+        select(
+            OpenalexWork.doi_normalized.label("doi"),
+            OpenalexWork.oa_status.label("oa"),
+            # rank/w_id must sit in the select list: Postgres requires
+            # DISTINCT ON trailing ORDER BY expressions to be selected.
+            oa_openness_rank(OpenalexWork.oa_status).label("rank"),
+            OpenalexWork.w_id.label("w_id"),
+        )
+        .where(
+            OpenalexWork.institution_id == institution.id,
+            OpenalexWork.oa_status.is_not(None),
+        )
+        .distinct(OpenalexWork.doi_normalized)
+        .order_by(
+            OpenalexWork.doi_normalized,
+            oa_openness_desc(OpenalexWork.oa_status),
+            OpenalexWork.w_id,
+        )
+        .subquery()
+    )
     synced = await session.execute(
         update(Work)
         .where(
             Work.institution_id == institution.id,
-            Work.doi_normalized == OpenalexWork.doi_normalized,
-            OpenalexWork.institution_id == institution.id,
-            OpenalexWork.oa_status.is_not(None),
-            Work.oa_status.is_distinct_from(OpenalexWork.oa_status),
+            Work.doi_normalized == canon.c.doi,
+            Work.oa_status.is_distinct_from(canon.c.oa),
         )
-        .values(oa_status=OpenalexWork.oa_status)
+        .values(oa_status=canon.c.oa)
     )
     stats = {
         "works": len(values),

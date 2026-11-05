@@ -22,7 +22,7 @@ from journal_browser.models import (
 )
 
 
-def _oa_work(inst_id, w_id, *, doi, title, year, authorships, work_type="article"):
+def _oa_work(inst_id, w_id, *, doi, title, year, authorships, work_type="article", oa="gold"):
     return OpenalexWork(
         institution_id=inst_id,
         w_id=w_id,
@@ -30,7 +30,7 @@ def _oa_work(inst_id, w_id, *, doi, title, year, authorships, work_type="article
         title=title,
         year=year,
         work_type=work_type,
-        oa_status="gold",
+        oa_status=oa,
         venue_issn_l="1234-5678",
         venue_name="Journal One",
         cited_by_count=4,
@@ -123,7 +123,9 @@ async def serving_api(db, institution_factory):
                 year=2024,
                 authorships=[{"a": "a-alice", "n": "Alice Author", "o": None}],
             ),
-            # same publication as the Pure copy -> merged away
+            # same publication as the Pure copy -> merged away; a second
+            # W-id record for the same DOI carries the stale closed color,
+            # and the most open record must win the DOI dedup
             _oa_work(
                 ut.id,
                 "W-twin",
@@ -131,6 +133,15 @@ async def serving_api(db, institution_factory):
                 title="Pure Work (OA twin)",
                 year=2023,
                 authorships=[{"a": "a-alice", "n": "Alice Author", "o": None}],
+            ),
+            _oa_work(
+                ut.id,
+                "W-twin-aaa",
+                doi="10.1000/shared",
+                title="Pure Work (OA twin)",
+                year=2023,
+                authorships=[{"a": "a-alice", "n": "Alice Author", "o": None}],
+                oa="closed",
             ),
             # same publication as the org-closure pure copy -> merged away
             _oa_work(
@@ -177,11 +188,13 @@ async def test_journal_works_tab_serves_local_rows(serving_api):
     # authors (confirmed-author or org-closure twin); rows whose DOI has
     # no UT-affiliated pure work behind it stay out
     assert titles == {"Pure Work (OA twin)", "Org Work (OA twin)"}
-    # canonical-side item shape survives the merge unchanged
+    # canonical-side item shape survives the merge unchanged; the DOI
+    # dedup keeps the most open of the two W-id records (gold over closed)
     twin = next(i for i in body["items"] if i["title"] == "Pure Work (OA twin)")
     assert twin["in_openalex"] is False
     assert twin["doi"] == "10.1000/shared"
     assert twin["cited_by_count"] == 4
+    assert twin["oa_status"] == "gold"
 
 
 @requires_db
