@@ -45,6 +45,7 @@ packages = ["src/journal_browser"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+pythonpath = ["."]
 testpaths = ["tests"]
 markers = [
     "live: hits real network APIs (run explicitly: pytest -m live)",
