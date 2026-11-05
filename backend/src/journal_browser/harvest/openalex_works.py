@@ -20,7 +20,15 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import work_type_excluded
-from ..models import HarvestRun, HarvestState, Institution, Journal, OpenalexWork, SourceRecord
+from ..models import (
+    HarvestRun,
+    HarvestState,
+    Institution,
+    Journal,
+    OpenalexWork,
+    SourceRecord,
+    Work,
+)
 from .common import canonical_oa_status, normalize_doi
 
 logger = logging.getLogger(__name__)
@@ -188,12 +196,28 @@ async def rebuild_openalex_works(session: AsyncSession, institution: Institution
         .where(Journal.issn_l == modal.c.issn_l, modal.c.rn == 1)
         .values(language=modal.c.lang)
     )
+    # Fold the fresh OA picture back into the canonical works rows: their
+    # oa_status comes from OpenAlex (harvest/enrich.py) but freezes once a
+    # work's journal resolves, so later green/gold upgrades never land.
+    # The store is the only pass that sees current oa data.
+    synced = await session.execute(
+        update(Work)
+        .where(
+            Work.institution_id == institution.id,
+            Work.doi_normalized == OpenalexWork.doi_normalized,
+            OpenalexWork.institution_id == institution.id,
+            OpenalexWork.oa_status.is_not(None),
+            Work.oa_status.is_distinct_from(OpenalexWork.oa_status),
+        )
+        .values(oa_status=OpenalexWork.oa_status)
+    )
     stats = {
         "works": len(values),
         "parse_failures": parse_failures,
         "excluded_types": excluded_types,
         "author_sweep_rows": sum(1 for r in values if r["source"] == AUTHOR_SWEEP_PREFIX),
         "journals_language_stamped": stamped.rowcount,
+        "works_oa_synced": synced.rowcount,
     }
     logger.info("openalex_works[%s]: %s", institution.code, stats)
     return stats

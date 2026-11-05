@@ -229,3 +229,69 @@ async def test_rebuild_stamps_modal_journal_language(db, institution_factory):
     assert (await db.scalar(select(Journal.language).where(Journal.issn_l == "3434-3434"))) == "de"
     assert (await db.scalar(select(Journal.language).where(Journal.issn_l == "4545-4545"))) is None
     assert stats["journals_language_stamped"] == 2
+
+
+@requires_db
+async def test_rebuild_syncs_work_oa_status(db, institution_factory):
+    """The rebuild folds the store's fresh oa_status into works rows whose
+    status froze at enrichment time (e.g. closed -> green after a later
+    repository deposit). Both directions sync; store NULL and unmatched
+    DOIs leave works rows alone."""
+    from journal_browser.models import Work
+
+    inst = await institution_factory(code="ut")
+    await _seed_sweep(
+        db,
+        inst,
+        [
+            ("W1", _payload(w_id="W1", doi="10.1234/went-green", oa="green")),
+            ("W2", _payload(w_id="W2", doi="10.1234/still-closed", oa="closed")),
+            ("W3", _payload(w_id="W3", doi="10.1234/store-null", oa=None)),
+            ("W4", _payload(w_id="W4", doi="10.1234/reversed", oa="closed")),
+        ],
+        filter_set="institutions.id=I1",
+    )
+    run = HarvestRun(
+        source="openalex",
+        entity_type="works_stats",
+        institution_id=inst.id,
+        status="completed",
+        config_fingerprint="t",
+    )
+    db.add(run)
+    await db.flush()
+
+    def _work(uuid: str, doi: str, oa: str) -> Work:
+        return Work(
+            institution_id=inst.id,
+            pure_uuid=uuid,
+            doi_normalized=doi,
+            title=f"Work {uuid}",
+            norm_title=f"work {uuid}",
+            year=2024,
+            oa_status=oa,
+            first_seen_run=run.id,
+            last_seen_run=run.id,
+        )
+
+    db.add_all(
+        [
+            _work("w-stale", "10.1234/went-green", "closed"),  # closed -> green
+            _work("w-same", "10.1234/still-closed", "closed"),  # already right
+            _work("w-null", "10.1234/store-null", "closed"),  # store NULL: untouched
+            _work("w-rev", "10.1234/reversed", "green"),  # green -> closed
+            _work("w-orphan", "10.1234/no-store-row", "closed"),  # no store row
+        ]
+    )
+    await db.flush()
+
+    stats = await rebuild_openalex_works(db, inst)
+    assert stats["works_oa_synced"] == 2
+    rows = {r.pure_uuid: r.oa_status for r in (await db.execute(select(Work))).scalars()}
+    assert rows == {
+        "w-stale": "green",
+        "w-same": "closed",
+        "w-null": "closed",
+        "w-rev": "closed",
+        "w-orphan": "closed",
+    }
