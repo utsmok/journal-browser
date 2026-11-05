@@ -1,4 +1,4 @@
-# Deploying the Journal Browser
+# Deploying the Open Journal Browser
 
 Everything beyond the README quick start: configuration reference, what the
 first boot does, how the deal register is built, admin panel, second-institute
@@ -94,7 +94,8 @@ Useful variants (run inside the backend image, e.g.
 - `--from <step>` re-runs one step and everything after it, serially, in the
   listed order — the repair path.
 - `--institution <code>` re-runs only that institution's layer (repository
-  harvest, enrichment, OpenAIRE, stats, participation, flags, authors).
+  harvest, CERIF enrichment, enrichment, OpenAIRE, stats, participation,
+  flags, author-edge backfill, authors).
   Global steps are skipped — the shared layer is already in place.
 
 ## What the harvests build
@@ -114,6 +115,8 @@ Useful variants (run inside the backend image, e.g.
 | `harvest_openaire` | OpenAIRE Graph | Institution works matched by DOI |
 | `harvest_stats` | all of the above | Per-journal, per-year statistics |
 | `backfill_flags` | register + stats | Curation flags, browse visibility |
+| `backfill_pure_authors` | stored CERIF publication records | The `pure-authors` step: full-replaces each work's pure authorship edges (`work_pure_authors`) from the latest stored record; runs after `openalex-works`, before author-id resolution, so it also covers works whose CERIF record predated author extraction |
+| `import_pure_export` | Pure backend export file (`--file PATH`) | Manual ops import: stores the export's records verbatim as `work_cerif_full`. The OAI stream truncates author identity; run this before/with the `pure-authors` backfill so author lists are full (backfill and entity mining prefer `work_cerif_full` per uuid) |
 | `ingest_authors` | external canonical-works DB (`JB_UT_METADATA_DSN` / `external_works_dsn`) | Per-institution author roster: identity, faculty/research group/org derivation, work edges (skips cleanly without a DSN) |
 | `embed_journals` | stats-built text | Journal embeddings for similar-journals |
 
