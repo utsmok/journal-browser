@@ -18,10 +18,11 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
-from ..harvest.common import oa_openness_desc
+from ..harvest.common import cache_epoch, oa_openness_desc
 from ..harvest.org_closure import load_org_tree
 from ..models import Author, Institution, OpenalexWork
 from . import ut_metadata
+from .cache import FACET_CACHE, SNAPSHOT_TTL, cache_get, cache_put
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +71,14 @@ async def ut_affiliated_dois(
     pure author edge whose affiliations close on the institution root
     (work-level arm), or a confirmed roster author on the work (profile
     arm). Pure is the affiliation ground truth — OpenAlex attribution and
-    author-profile sweeps leak foreign works into the venue tab."""
+    author-profile sweeps leak foreign works into the venue tab.
+
+    Epoch-keyed process cache: the scan joins every pure work's author
+    edges (~0.3 s) and runs on both the journal detail and the works tab;
+    harvest bumps to cache_epoch invalidate it."""
+    cache_key = ("ut-affiliated-dois", institution.id, issn_l, await cache_epoch(session))
+    if (hit := cache_get(FACET_CACHE, cache_key, SNAPSHOT_TTL)) is not None:
+        return hit
     tree = await load_org_tree(session, institution)
     stmt = text(
         """
@@ -109,7 +117,9 @@ async def ut_affiliated_dois(
         stmt,
         {"iid": institution.id, "issn": issn_l, "connected": sorted(tree.connected) or [""]},
     )
-    return {row[0] for row in result}
+    dois = {row[0] for row in result}
+    cache_put(FACET_CACHE, cache_key, dois)
+    return dois
 
 
 async def works_for_journal(

@@ -15,7 +15,11 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from conftest import journal_factory, requires_db
 from journal_browser.db import get_session
 from journal_browser.main import app
-from journal_browser.models import HarvestRun, Institution, SourceRecord
+from journal_browser.models import (
+    HarvestRun,
+    Institution,
+    OpenalexWork,
+)
 from journal_browser.services import ut_metadata
 
 # ── Pure logic (no database) ───────────────────────────────────────────────
@@ -181,7 +185,8 @@ async def api(db_engine, monkeypatch):
 
     app.dependency_overrides[get_session] = _override
     # The DSN fallback serves the configured default institution only;
-    # this fixture's "tu" is that owner (the mocked DSN path must run).
+    # this fixture's "tu" is that owner, and author_source=utmd forces
+    # the mocked DSN path even though the store has rows.
     from types import SimpleNamespace
 
     from journal_browser.services import work_sources
@@ -189,7 +194,7 @@ async def api(db_engine, monkeypatch):
     monkeypatch.setattr(
         work_sources,
         "get_settings",
-        lambda: SimpleNamespace(institution_code="tu", author_source="local"),
+        lambda: SimpleNamespace(institution_code="tu", author_source="utmd"),
     )
     async with maker() as session:
         home = Institution(name="Test U", code="tu", active=True)
@@ -207,44 +212,29 @@ async def api(db_engine, monkeypatch):
         await session.flush()
         session.add_all(
             [
-                # Merges with the faked ut-metadata row via DOI 10.1/one.
-                SourceRecord(
-                    source="openalex",
-                    entity_type="works_stats",
-                    source_pk="W1",
-                    payload={
-                        "id": "W1",
-                        "doi": "https://doi.org/10.1/one",
-                        "display_name": "Stats One",
-                        "publication_year": 2021,
-                        "fwci": 1.5,
-                        "cited_by_count": 5,
-                        "is_retracted": False,
-                        "type": "article",
-                        "primary_location": {"source": {"issn_l": "1234-5678"}},
-                    },
-                    publication_year=2021,
-                    content_hash="W1",
-                    harvest_run_id=run.id,
+                # Store rows — what the stats side serves now. W1 merges
+                # with the faked ut-metadata row via DOI 10.1/one; W2 is
+                # the pure works_stats-only row (no ut-metadata twin).
+                OpenalexWork(
+                    institution_id=home.id,
+                    w_id="W1",
+                    doi_normalized="10.1/one",
+                    title="Stats One",
+                    year=2021,
+                    work_type="article",
+                    venue_issn_l="1234-5678",
+                    fwci=1.5,
+                    cited_by_count=5,
                 ),
-                # Pure works_stats-only row (no ut-metadata counterpart).
-                SourceRecord(
-                    source="openalex",
-                    entity_type="works_stats",
-                    source_pk="W2",
-                    payload={
-                        "id": "W2",
-                        "doi": "10.5/stats-only",
-                        "display_name": "Stats Only",
-                        "publication_year": 2021,
-                        "cited_by_count": 5,
-                        "is_retracted": False,
-                        "type": "article",
-                        "primary_location": {"source": {"issn_l": "1234-5678"}},
-                    },
-                    publication_year=2021,
-                    content_hash="W2",
-                    harvest_run_id=run.id,
+                OpenalexWork(
+                    institution_id=home.id,
+                    w_id="W2",
+                    doi_normalized="10.5/stats-only",
+                    title="Stats Only",
+                    year=2021,
+                    work_type="article",
+                    venue_issn_l="1234-5678",
+                    cited_by_count=5,
                 ),
             ]
         )

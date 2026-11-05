@@ -1,21 +1,22 @@
 """Detail enrichment tests: openalex/openaire/institution_metrics on the detail
 bundle, per-year oa_* stats columns, and the paginated /works list."""
 
-from datetime import UTC, datetime
-
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from conftest import journal_factory, requires_db
 from journal_browser.models import (
+    Author,
     HarvestRun,
     Institution,
     InstitutionWorksStats,
     Journal,
+    OpenalexWork,
     Publisher,
     SourceRecord,
     Work,
     WorkIdentity,
+    WorkPureAuthor,
 )
 
 MAIN_ISSN = "1234-5678"
@@ -48,54 +49,10 @@ SOURCE_PAYLOAD = {
     ],
 }
 
-#: Works payloads: (2023, 9 cites, fwci null, retracted), (2021, 5, 1.5),
-#: (no year, 7, 2.5). Window (2020+) drops the year-less W3: metrics must
-#: be matched=2, avg=1.5, n=1, retracted=1, cited=14; order W2, W1.
-WORKS_PAYLOADS = {
-    "W1": {
-        "id": "W1",
-        "doi": "https://doi.org/10.1/w1",
-        "display_name": "Old Work",
-        "publication_year": 2021,
-        "fwci": 1.5,
-        "cited_by_count": 5,
-        "open_access": {"oa_status": "gold", "is_oa": True},
-        "is_retracted": False,
-        "type": "article",
-        "authorships": [{"author": {"display_name": "Secret Author"}}],
-        "primary_location": {"source": {"issn_l": MAIN_ISSN}},
-    },
-    "W2": {
-        "id": "https://openalex.org/W2",  # full-URL form must normalize to W2
-        "display_name": "New Retracted",
-        "publication_year": 2023,
-        "fwci": None,
-        "cited_by_count": 9,
-        "open_access": {"oa_status": "closed", "is_oa": False},
-        "is_retracted": True,
-        "type": "article",
-        "primary_location": {"source": {"issn_l": MAIN_ISSN}},
-    },
-    "W3": {
-        "id": "W3",
-        "display_name": "No Year",
-        "fwci": 2.5,
-        "cited_by_count": 7,
-        "is_retracted": False,
-        "type": "preprint",
-        "primary_location": {"source": {"issn_l": MAIN_ISSN}},
-    },
-    "W4": {  # belongs to OTHER_ISSN; must not leak into MAIN_ISSN numbers
-        "id": "W4",
-        "display_name": "Other Journal Work",
-        "publication_year": 2022,
-        "fwci": None,
-        "cited_by_count": 3,
-        "is_retracted": False,
-        "type": "article",
-        "primary_location": {"source": {"issn_l": OTHER_ISSN}},
-    },
-}
+#: Works rows, mirroring the former works_stats payloads: (2023, 9 cites,
+#: fwci null, retracted), (2021, 5, 1.5), (no year, 7, 2.5). Window (2020+)
+#: drops the year-less W3: metrics must be matched=2, avg=1.5, n=1,
+#: retracted=1, cited=14; order W2, W1.
 
 
 @pytest.fixture
@@ -127,35 +84,104 @@ async def api(client, db_engine):
                 harvest_run_id=run.id,
             )
         )
-        # Latest + a stale duplicate version of W1: only the newest must count.
+        # Store rows — what the works endpoints read now. Latest-wins
+        # folding is the rebuild's concern (test_openalex_works).
         session.add_all(
             [
-                SourceRecord(
-                    source="openalex",
-                    entity_type="works_stats",
-                    source_pk=pk,
-                    payload=payload,
-                    # Mirror the ingest-time projection the serving query
-                    # now filters on.
-                    publication_year=payload.get("publication_year"),
-                    content_hash=f"{pk}-v1",
-                    harvest_run_id=run.id,
-                    harvested_at=datetime(2026, 1, 2, tzinfo=UTC),
-                )
-                for pk, payload in WORKS_PAYLOADS.items()
+                OpenalexWork(
+                    institution_id=home.id,
+                    w_id="W1",
+                    doi_normalized="10.1/w1",
+                    title="Old Work",
+                    year=2021,
+                    work_type="article",
+                    oa_status="gold",
+                    venue_issn_l=MAIN_ISSN,
+                    cited_by_count=5,
+                    fwci=1.5,
+                    is_retracted=False,
+                ),
+                OpenalexWork(
+                    institution_id=home.id,
+                    w_id="W2",
+                    doi_normalized="10.5/w2",
+                    title="New Retracted",
+                    year=2023,
+                    work_type="article",
+                    oa_status="closed",
+                    venue_issn_l=MAIN_ISSN,
+                    cited_by_count=9,
+                    is_retracted=True,
+                ),
+                OpenalexWork(
+                    institution_id=home.id,
+                    w_id="W3",
+                    title="No Year",
+                    year=None,
+                    work_type="preprint",
+                    venue_issn_l=MAIN_ISSN,
+                    cited_by_count=7,
+                    fwci=2.5,
+                ),
+                OpenalexWork(
+                    institution_id=home.id,
+                    w_id="W4",
+                    title="Other Journal Work",
+                    year=2022,
+                    work_type="article",
+                    venue_issn_l=OTHER_ISSN,
+                    cited_by_count=3,
+                ),
             ]
         )
-        stale = dict(WORKS_PAYLOADS["W1"], cited_by_count=999)
+
+        # Pure anchors: the venue filter serves only works whose DOI has a
+        # UT-affiliated pure work, so W1/W2 need confirmed-author anchors.
+        session.add_all(
+            [
+                Work(
+                    institution_id=home.id,
+                    pure_uuid="pw1",
+                    title="Pure W1",
+                    norm_title="pure w1",
+                    year=2021,
+                    doi_normalized="10.1/w1",
+                    journal_issn_l=MAIN_ISSN,
+                    first_seen_run=run.id,
+                    last_seen_run=run.id,
+                ),
+                Work(
+                    institution_id=home.id,
+                    pure_uuid="pw2",
+                    title="Pure W2",
+                    norm_title="pure w2",
+                    year=2023,
+                    doi_normalized="10.5/w2",
+                    journal_issn_l=MAIN_ISSN,
+                    first_seen_run=run.id,
+                    last_seen_run=run.id,
+                ),
+            ]
+        )
         session.add(
-            SourceRecord(
-                source="openalex",
-                entity_type="works_stats",
-                source_pk="W1",
-                payload=stale,
-                content_hash="W1-v0",
-                harvest_run_id=run.id,
-                harvested_at=datetime(2026, 1, 1, tzinfo=UTC),
+            Author(
+                institution_id=home.id,
+                pure_uuid="anchor-author",
+                name="Anchor Author",
+                confirmed=True,
+                n_works=2,
             )
+        )
+        await session.flush()  # work/author FKs must exist before the edges
+        session.add_all(
+            [
+                WorkPureAuthor(
+                    institution_id=home.id, work_pure_uuid="pw1", person_uuid="anchor-author"
+                ),
+                WorkPureAuthor(
+                    institution_id=home.id, work_pure_uuid="pw2", person_uuid="anchor-author"
+                ),
+            ]
         )
 
         # OpenAIRE: u1 matched twice (distinct works must dedupe), u2 once;
@@ -281,7 +307,7 @@ async def test_works_item_shape(api):
     assert item == {
         "id": "W2",
         "url": "https://openalex.org/W2",
-        "doi": None,
+        "doi": "10.5/w2",
         "title": "New Retracted",
         "year": 2023,
         "oa_status": "closed",
@@ -289,14 +315,15 @@ async def test_works_item_shape(api):
         "cited_by_count": 9,
         "is_retracted": True,
         "type": "article",
-        "work_type": None,
+        "work_type": "article",
         "in_openalex": True,
     }
-    # Stale W1 version (cited 999) must not surface, authorships must never.
+    # W1: authorships must never surface; merged items serve the
+    # canonical (bare) DOI form.
     w1 = next(i for i in r.json()["items"] if i["id"] == "W1")
     assert w1["cited_by_count"] == 5
     assert w1["url"] == "https://openalex.org/W1"
-    assert w1["doi"] == "https://doi.org/10.1/w1"
+    assert w1["doi"] == "10.1/w1"
     assert w1["oa_status"] == "gold"
     assert "authorships" not in r.text
 
@@ -329,9 +356,17 @@ async def test_detail_enrichment(api):
         "fwci_n": 1,
         "retracted": 1,
         "cited_total": 14,
-        "canonical_total": None,
-        "canonical_retracted": None,
-        "canonical_oa": None,
+        "canonical_total": 2,
+        "canonical_retracted": 1,
+        "canonical_oa": {
+            "gold": 1,
+            "hybrid": 0,
+            "green": 0,
+            "bronze": 0,
+            "diamond": 0,
+            "closed": 1,
+            "unknown": 0,
+        },
     }
 
     for key in ("openalex", "openaire", "works"):
@@ -391,16 +426,25 @@ async def test_detail_enrichment_without_source_rows(api):
     assert body["openalex"] is None
     # u3 matched once for this journal.
     assert body["openaire"] == {"matched_works": 1}
-    # Only W4 (no fwci) belongs to this journal.
+    # Only W4 (no fwci) belongs to this journal; the venue filter keeps
+    # nothing (no UT-affiliated pure work behind W4's DOI).
     assert body["institution_metrics"] == {
         "openalex_matched": 1,
         "fwci_avg": None,
         "fwci_n": 0,
         "retracted": 0,
         "cited_total": 3,
-        "canonical_total": None,
-        "canonical_retracted": None,
-        "canonical_oa": None,
+        "canonical_total": 0,
+        "canonical_retracted": 0,
+        "canonical_oa": {
+            "gold": 0,
+            "hybrid": 0,
+            "green": 0,
+            "bronze": 0,
+            "diamond": 0,
+            "closed": 0,
+            "unknown": 0,
+        },
     }
 
 

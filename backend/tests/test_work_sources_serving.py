@@ -189,9 +189,10 @@ async def test_journal_works_tab_serves_local_rows(serving_api):
     # no UT-affiliated pure work behind it stay out
     assert titles == {"Pure Work (OA twin)", "Org Work (OA twin)"}
     # canonical-side item shape survives the merge unchanged; the DOI
-    # dedup keeps the most open of the two W-id records (gold over closed)
+    # dedup keeps the most open of the two W-id records (gold over closed),
+    # and a twin with a store copy reports in_openalex True
     twin = next(i for i in body["items"] if i["title"] == "Pure Work (OA twin)")
-    assert twin["in_openalex"] is False
+    assert twin["in_openalex"] is True
     assert twin["doi"] == "10.1000/shared"
     assert twin["cited_by_count"] == 4
     assert twin["oa_status"] == "gold"

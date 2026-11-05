@@ -1,71 +1,52 @@
 """Detail enrichment: raw OpenAlex source/works rows + OpenAIRE match counts.
 
-All work rows live in source_records (source='openalex',
-entity_type='works_stats'), keyed per journal via
-payload->'primary_location'->'source'->>'issn_l'. Re-harvests can leave
-multiple versions of one W-id; every query reads only the latest
-harvested_at per source_pk.
+The journal works list and institution metrics read the openalex_works
+store — plain indexed columns. They used to re-read the underlying
+works_stats payloads (~8 KB JSONB per work) on every request, which
+detoasting turned into seconds per journal page; the store projection
+carries every served field already. The venue source card keeps reading
+its sources payload (one small row).
 """
 
 from typing import Any
 
-from sqlalchemy import Float, Integer, case, cast, func, select
-from sqlalchemy.dialects.postgresql import distinct_on
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import HarvestRun, Institution, SourceRecord, Work, WorkIdentity
+from ..models import Institution, OpenalexWork, SourceRecord, Work, WorkIdentity
 from . import ut_metadata
 
 OPENALEX_URL = "https://openalex.org"
 
 
-def _journal_works(issn_l: str, institution_id: int, year_start: int, year_end: int):
-    """Subquery: latest version of each of the institution's OpenAlex work
-    rows for the journal (works_stats runs are institution-scoped; an
-    OpenAlex work id can appear in several institutions' harvests), inside
-    the institution's publication-year window (NULL years drop out)."""
-    return (
-        select(SourceRecord.payload)
-        .ext(distinct_on(SourceRecord.source_pk))
-        .where(
-            SourceRecord.source == "openalex",
-            SourceRecord.entity_type == "works_stats",
-            SourceRecord.harvest_run_id.in_(
-                select(HarvestRun.id).where(HarvestRun.institution_id == institution_id)
-            ),
-            # Explicit -> operators (not payload[...][...] subscripts): the
-            # subscript form plans as a seq scan and cannot use
-            # ix_source_records_works_issn_l.
-            SourceRecord.payload.op("->")("primary_location").op("->")("source").op("->>")("issn_l")
-            == issn_l,
-            # Mirrored projection column (0040): the window predicate runs
-            # pre-detoast on the partial index instead of after extracting
-            # publication_year from each ~8 KB payload.
-            SourceRecord.publication_year.between(year_start, year_end),
-        )
-        .order_by(SourceRecord.source_pk, SourceRecord.harvested_at.desc())
-        .subquery()
-    )
-
-
-def _work_item(payload: dict[str, Any]) -> dict[str, Any]:
-    # Explicit key list: authorships must never reach the API. Payload ids
-    # can be bare W-ids or full URLs; normalize to the bare id.
-    work_id = payload.get("id")
-    if isinstance(work_id, str) and "/" in work_id:
-        work_id = work_id.rsplit("/", 1)[-1]
+def _store_work_item(row: OpenalexWork) -> dict[str, Any]:
+    """Tab item from store columns; doi keeps the payload path's URL form."""
     return {
-        "id": work_id,
-        "url": f"{OPENALEX_URL}/{work_id}" if work_id else None,
-        "doi": payload.get("doi"),
-        "title": payload.get("display_name"),
-        "year": payload.get("publication_year"),
-        "oa_status": (payload.get("open_access") or {}).get("oa_status"),
-        "fwci": payload.get("fwci"),
-        "cited_by_count": payload.get("cited_by_count") or 0,
-        "is_retracted": payload.get("is_retracted"),
-        "type": payload.get("type"),
+        "id": row.w_id,
+        "url": f"{OPENALEX_URL}/{row.w_id}" if row.w_id else None,
+        "doi": f"https://doi.org/{row.doi_normalized}" if row.doi_normalized else None,
+        "title": row.title,
+        "year": row.year,
+        "oa_status": row.oa_status,
+        "fwci": row.fwci,
+        "cited_by_count": row.cited_by_count or 0,
+        "is_retracted": row.is_retracted,
+        "type": row.work_type,
     }
+
+
+def _venue_works(issn_l: str, institution_id: int, year_start: int, year_end: int):
+    """The institution's store rows for the journal, inside the
+    publication-year window (NULL years drop out via the BETWEEN)."""
+    return (
+        select(OpenalexWork)
+        .where(
+            OpenalexWork.institution_id == institution_id,
+            OpenalexWork.venue_issn_l == issn_l,
+            OpenalexWork.year.between(year_start, year_end),
+        )
+        .order_by(OpenalexWork.w_id)
+    )
 
 
 async def list_works(
@@ -82,9 +63,8 @@ async def list_works(
     bounded to the institution's publication-year window."""
     year_start = institution.data_window_start
     year_end = institution.data_window_end if institution.data_window_end is not None else 9999
-    rows = _journal_works(issn_l, institution.id, year_start, year_end)
-    payloads = (await session.execute(select(rows.c.payload))).scalars().all()
-    items = [_work_item(p) for p in payloads]
+    rows = await session.execute(_venue_works(issn_l, institution.id, year_start, year_end))
+    items = [_store_work_item(r) for r in rows.scalars()]
     for item in items:
         item["work_type"] = None
         item["in_openalex"] = True
@@ -124,17 +104,19 @@ async def institution_metrics(
     Both sides bounded to the institution's publication-year window."""
     year_start = institution.data_window_start
     year_end = institution.data_window_end if institution.data_window_end is not None else 9999
-    rows = _journal_works(issn_l, institution.id, year_start, year_end)
-    fwci = cast(rows.c.payload["fwci"].astext, Float)
     total, fwci_avg, fwci_n, retracted, cited_total = (
         await session.execute(
             select(
                 func.count(),
-                func.avg(fwci),
-                func.count(fwci),
-                func.count(case((rows.c.payload["is_retracted"].astext == "true", 1))),
-                func.coalesce(func.sum(cast(rows.c.payload["cited_by_count"].astext, Integer)), 0),
-            ).select_from(rows)
+                func.avg(OpenalexWork.fwci),
+                func.count(OpenalexWork.fwci),
+                func.count(case((OpenalexWork.is_retracted.is_(True), 1))),
+                func.coalesce(func.sum(OpenalexWork.cited_by_count), 0),
+            ).where(
+                OpenalexWork.institution_id == institution.id,
+                OpenalexWork.venue_issn_l == issn_l,
+                OpenalexWork.year.between(year_start, year_end),
+            )
         )
     ).one()
     metrics: dict[str, Any] = {
