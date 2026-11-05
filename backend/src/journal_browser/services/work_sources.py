@@ -13,11 +13,12 @@ openalex-works projection.
 import logging
 from typing import Any
 
-from sqlalchemy import or_, select, type_coerce
+from sqlalchemy import bindparam, or_, select, text, type_coerce
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
+from ..harvest.org_closure import load_org_tree
 from ..models import Author, Institution, OpenalexWork
 from . import ut_metadata
 
@@ -61,6 +62,55 @@ def _journal_row(row: OpenalexWork) -> dict[str, Any]:
     }
 
 
+async def ut_affiliated_dois(
+    session: AsyncSession, institution: Institution, issn_l: str
+) -> set[str]:
+    """DOIs of the venue's works with at least one UT-affiliated author: a
+    pure author edge whose affiliations close on the institution root
+    (work-level arm), or a confirmed roster author on the work (profile
+    arm). Pure is the affiliation ground truth — OpenAlex attribution and
+    author-profile sweeps leak foreign works into the venue tab."""
+    tree = await load_org_tree(session, institution)
+    stmt = text(
+        """
+        WITH venue_dois AS (
+            SELECT DISTINCT o.doi_normalized AS doi
+            FROM openalex_works o
+            WHERE o.institution_id = :iid
+              AND o.venue_issn_l = :issn
+              AND o.doi_normalized IS NOT NULL
+        )
+        SELECT DISTINCT w.doi_normalized
+        FROM works w
+        JOIN venue_dois v ON v.doi = w.doi_normalized
+        WHERE w.institution_id = :iid
+          AND (
+              EXISTS (
+                  SELECT 1
+                  FROM work_pure_authors wpa
+                  JOIN authors a ON a.institution_id = wpa.institution_id
+                       AND a.pure_uuid = wpa.person_uuid AND a.confirmed
+                  WHERE wpa.institution_id = w.institution_id
+                    AND wpa.work_pure_uuid = w.pure_uuid
+              )
+              OR EXISTS (
+                  SELECT 1
+                  FROM work_pure_authors wpa,
+                       jsonb_array_elements_text(wpa.affiliations) aff
+                  WHERE wpa.institution_id = w.institution_id
+                    AND wpa.work_pure_uuid = w.pure_uuid
+                    AND aff IN :connected
+              )
+          )
+        """
+    ).bindparams(bindparam("connected", expanding=True))
+    result = await session.execute(
+        stmt,
+        {"iid": institution.id, "issn": issn_l, "connected": sorted(tree.connected) or [""]},
+    )
+    return {row[0] for row in result}
+
+
 async def works_for_journal(
     session: AsyncSession, institution: Institution, issn_l: str
 ) -> list[dict[str, Any]] | None:
@@ -69,8 +119,12 @@ async def works_for_journal(
     Local store rows win (deduped by DOI, lowest W-id kept — merged
     profiles can carry one publication under two W-ids); the DSN path
     takes over only when the store has nothing for this institution or
-    the setting opts back into it."""
+    the setting opts back into it. Rows serve only when a pure-side
+    author shows UT affiliation (owner decision 2026-11-05: OpenAlex
+    attribution and author-profile sweeps leak foreign works, and
+    author-less records such as edited volumes are not works of ours)."""
     if await _use_local(session, institution):
+        ut_dois = await ut_affiliated_dois(session, institution, issn_l)
         rows = (
             await session.execute(
                 select(OpenalexWork)
@@ -85,10 +139,11 @@ async def works_for_journal(
         out: list[dict[str, Any]] = []
         for row in rows:
             item = _journal_row(row)
-            if item["doi"]:
-                if item["doi"] in by_doi:
-                    continue
-                by_doi[item["doi"]] = item
+            if not item["doi"] or item["doi"] not in ut_dois:
+                continue
+            if item["doi"] in by_doi:
+                continue
+            by_doi[item["doi"]] = item
             out.append(item)
         return out
     # Foreign institutions must not read another deployment's works.

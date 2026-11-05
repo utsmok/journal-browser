@@ -15,7 +15,10 @@ from journal_browser.models import (
     AuthorWork,
     HarvestRun,
     OpenalexWork,
+    PureOrg,
+    PureOrgParent,
     Work,
+    WorkPureAuthor,
 )
 
 
@@ -37,8 +40,10 @@ def _oa_work(inst_id, w_id, *, doi, title, year, authorships, work_type="article
 
 @pytest.fixture
 async def serving_api(db, institution_factory):
-    """ut: journal 1234-5678 with two stored openalex works (one local-DOI
-    twin), one pure work + author (openalex id a-alice)."""
+    """ut: journal 1234-5678 with three stored openalex works anchored to
+    pure (confirmed-author twin + org-closure twin), one canonical-only
+    row and one journal-only row that must NOT serve (no UT-affiliated
+    author behind their DOIs), plus one out-of-window row."""
 
     async def _override():
         async with async_sessionmaker(db.bind, expire_on_commit=False)() as session:
@@ -75,9 +80,41 @@ async def serving_api(db, institution_factory):
         )
     )
     db.add(AuthorWork(institution_id=ut.id, author_pure_uuid="alice-uuid", work_pure_uuid="w1"))
+    # Pure affiliation evidence the venue filter requires: a confirmed
+    # author on the shared work, and an author edge whose affiliation org
+    # closes on the institution root.
+    db.add(WorkPureAuthor(institution_id=ut.id, work_pure_uuid="w1", person_uuid="alice-uuid"))
     db.add_all(
         [
-            # canonical-only: DOI not held by the Pure population
+            PureOrg(institution_id=ut.id, uuid="root-uuid", name="University of Twente"),
+            PureOrg(institution_id=ut.id, uuid="child-uuid", name="TechMed Centre"),
+            PureOrgParent(institution_id=ut.id, org_uuid="child-uuid", parent_uuid="root-uuid"),
+            Work(
+                institution_id=ut.id,
+                pure_uuid="w2",
+                title="Org Work",
+                norm_title="org work",
+                year=2022,
+                doi_normalized="10.1000/orgwork",
+                journal_issn_l="1234-5678",
+                first_seen_run=run.id,
+                last_seen_run=run.id,
+            ),
+        ]
+    )
+    await db.flush()  # the work FK must exist before author edges resolve
+    db.add(
+        WorkPureAuthor(
+            institution_id=ut.id,
+            work_pure_uuid="w2",
+            person_uuid="bob-uuid",
+            affiliations=["child-uuid"],
+        )
+    )
+    await db.flush()
+    db.add_all(
+        [
+            # canonical-only: DOI held by no UT-affiliated pure work -> must not serve
             _oa_work(
                 ut.id,
                 "W-ghost",
@@ -95,6 +132,15 @@ async def serving_api(db, institution_factory):
                 year=2023,
                 authorships=[{"a": "a-alice", "n": "Alice Author", "o": None}],
             ),
+            # same publication as the org-closure pure copy -> merged away
+            _oa_work(
+                ut.id,
+                "W-org",
+                doi="10.1000/orgwork",
+                title="Org Work (OA twin)",
+                year=2022,
+                authorships=[],
+            ),
             # outside the publication window -> gated everywhere
             _oa_work(
                 ut.id,
@@ -104,7 +150,7 @@ async def serving_api(db, institution_factory):
                 year=2015,
                 authorships=[{"a": "a-alice", "n": "Alice Author", "o": None}],
             ),
-            # journal works tab row (journal map covers the whole table)
+            # journal-only DOI with no UT affiliation behind it -> must not serve
             _oa_work(
                 ut.id,
                 "W-journal",
@@ -127,14 +173,15 @@ async def test_journal_works_tab_serves_local_rows(serving_api):
     assert r.status_code == 200
     body = r.json()
     titles = {i["title"] for i in body["items"]}
-    # the tab lists OpenAlex-side rows only (works_stats + canonical);
-    # the Pure works table is not a tab source
-    assert titles == {"Pure Work (OA twin)", "Journal Only Work", "Ghost Work"}
+    # the tab lists OpenAlex-side rows anchored to UT-affiliated pure
+    # authors (confirmed-author or org-closure twin); rows whose DOI has
+    # no UT-affiliated pure work behind it stay out
+    assert titles == {"Pure Work (OA twin)", "Org Work (OA twin)"}
     # canonical-side item shape survives the merge unchanged
-    ghost = next(i for i in body["items"] if i["title"] == "Journal Only Work")
-    assert ghost["in_openalex"] is False
-    assert ghost["doi"] == "10.9999/journal-only"
-    assert ghost["cited_by_count"] == 4
+    twin = next(i for i in body["items"] if i["title"] == "Pure Work (OA twin)")
+    assert twin["in_openalex"] is False
+    assert twin["doi"] == "10.1000/shared"
+    assert twin["cited_by_count"] == 4
 
 
 @requires_db
@@ -142,8 +189,9 @@ async def test_journal_metrics_count_canonical_rows(serving_api):
     r = await serving_api.get("/api/v1/ut/journals/1234-5678")
     assert r.status_code == 200
     metrics = r.json()["institution_metrics"]
-    # canonical rows (3 in-window after gates) count even with no works_stats
-    assert metrics["canonical_total"] == 3
+    # canonical rows (2 in-window after the UT-affiliation filter) count
+    # even with no works_stats rows
+    assert metrics["canonical_total"] == 2
 
 
 @requires_db

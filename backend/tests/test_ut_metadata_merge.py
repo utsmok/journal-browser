@@ -273,11 +273,12 @@ async def test_works_union_and_detail_ut_metrics(api, client, monkeypatch):
     r = await client.get("/api/v1/tu/journals/1234-5678/works")
     assert r.status_code == 200
     body = r.json()
-    # 1 merged (10.1/one) + 2 ut-only + 1 stats-only = 3 in the window;
-    # ut-3 has no year and falls outside it.
-    assert body["total"] == 3
+    # 1 merged (10.1/one) + 1 ut-only = 2 in the window; ut-3 has no year
+    # and falls outside it, and the stats-only row rides the canonical DOI
+    # set (no UT-affiliated author of its own).
+    assert body["total"] == 2
     items = body["items"]
-    assert [i["id"] for i in items] == ["W1", "ut-2", "W2"]
+    assert [i["id"] for i in items] == ["W1", "ut-2"]
     merged = items[0]
     assert merged["in_openalex"] is True
     assert merged["fwci"] == 1.5
@@ -285,8 +286,6 @@ async def test_works_union_and_detail_ut_metrics(api, client, monkeypatch):
     assert merged["year"] == 2023
     assert items[1]["in_openalex"] is False
     assert items[1]["cited_by_count"] == 3
-    assert items[2]["in_openalex"] is True
-    assert items[2]["work_type"] is None
 
     r = await client.get("/api/v1/tu/journals/1234-5678")
     metrics = r.json()["institution_metrics"]

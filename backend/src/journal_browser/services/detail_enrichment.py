@@ -93,6 +93,17 @@ async def list_works(
         ut_rows = [
             r for r in ut_rows if r["year"] is not None and year_start <= r["year"] <= year_end
         ]
+        # The tab serves UT-affiliated-author works only (owner decision
+        # 2026-11-05). Stats-side items carry their payload DOI form, so
+        # the set matches both bare and https://doi.org/ forms, caseless —
+        # anything without a filtered canonical DOI behind it drops.
+        ut_dois = set()
+        for row in ut_rows:
+            if row["doi"]:
+                doi = row["doi"].lower()
+                ut_dois.add(doi)
+                ut_dois.add(f"https://doi.org/{doi}")
+        items = [i for i in items if (i.get("doi") or "").lower() in ut_dois]
         items = ut_metadata.merge_work_lists(ut_rows, items)
     return {
         "items": ut_metadata.sort_work_items(items)[(page - 1) * page_size : page * page_size],
