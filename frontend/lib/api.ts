@@ -95,6 +95,8 @@ export type JournalSearchParams = {
   oa_type?: string;
   /** OpenAlex venue type filter: "journal", "book series", ... */
   pub_type?: string;
+  /** Modal journal language, comma-separated ISO 639-1 codes ("en"). */
+  language?: string;
   /** Self-archiving route per Jisc: "submitted" | "accepted" | "published" | "none". */
   green_oa?: string;
   /** Jisc OPF funder id; annotates rows with funder_fit. */

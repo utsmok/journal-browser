@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 import { ACCESS_TEXT, DealGlyph, LockIcon, QuartileGlyph } from "@/components/badges";
 import { useSiteMeta } from "@/hooks/use-site-meta";
-import { PUB_TYPE_LABELS } from "@/lib/search-config";
+import { PUB_TYPE_LABELS, LANGUAGE_LABELS } from "@/lib/search-config";
 
 const OA_TYPE_LABELS: Record<string, string> = {
   gold: "Gold OA",
@@ -40,6 +40,8 @@ type FilterSelection = {
   oaTypes: string[];
   /** OpenAlex venue type ("journal", "book series", ...). */
   pubType: string;
+  /** Modal journal language (ISO 639-1 code). */
+  language: string;
 };
 
 export type FacetGroupDef = {
@@ -510,14 +512,24 @@ export function FilterPanel({
       key: "oa_type",
       label: "OA type",
       defaultOpen: true,
-      values: ["gold", "diamond", "generic", "hybrid", "subscription"].map((v) => ({
+      values: ["diamond", "gold", "hybrid", "generic", "subscription"].map((v) => ({
         value: v,
         count: facets.oa_type?.[v] ?? 0,
         label: OA_TYPE_LABELS[v] ?? v,
       })),
-      // Multi-select: this group ORs its values; the caller keeps every
+      // Multi-select: this group ORs values; the caller keeps every
       // active value instead of clearing the group on re-click.
       activeValues: selection.oaTypes,
+    },
+    {
+      key: "language",
+      label: "Language",
+      defaultOpen: true,
+      values: topValues(facets.language, selection.language).map((v) => ({
+        ...v,
+        label: LANGUAGE_LABELS[v.value] ?? v.value,
+      })),
+      activeValues: selection.language ? [selection.language] : [],
     },
     {
       key: "doaj",

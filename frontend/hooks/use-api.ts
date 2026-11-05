@@ -76,6 +76,7 @@ const FILTER_KEYS = [
   "topic",
   "oa_type",
   "pub_type",
+  "language",
   "green_oa",
   "funder",
   "funder_fit",

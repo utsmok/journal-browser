@@ -63,3 +63,27 @@ export const PUB_TYPE_LABELS: Record<string, string> = {
   "ebook platform": "E-book platform",
   repository: "Repository",
 };
+
+/** Display labels for the modal journal language (ISO 639-1); codes
+ * outside this list show raw. */
+export const LANGUAGE_LABELS: Record<string, string> = {
+  en: "English",
+  nl: "Dutch",
+  de: "German",
+  fr: "French",
+  es: "Spanish",
+  it: "Italian",
+  pt: "Portuguese",
+  ru: "Russian",
+  zh: "Chinese",
+  ja: "Japanese",
+  ko: "Korean",
+  ar: "Arabic",
+  la: "Latin",
+  sv: "Swedish",
+  no: "Norwegian",
+  da: "Danish",
+  fi: "Finnish",
+  pl: "Polish",
+  tr: "Turkish",
+};

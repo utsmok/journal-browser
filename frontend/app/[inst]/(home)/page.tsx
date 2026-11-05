@@ -80,6 +80,7 @@ function SearchView() {
   // server-side.
   const oaTypes = (sp.get("oa_type") ?? "").split(",").filter(Boolean);
   const pubType = sp.get("pub_type") ?? "";
+  const language = sp.get("language") ?? "";
   // mode=semantic: rank by embedding similarity instead of FTS. Filters and
   // sort do not apply to the vector ranking, so their UI is hidden. Needs a
   // real query: the UI follows the toggle so it never lies about the active
@@ -211,6 +212,7 @@ function SearchView() {
     topic: topic || undefined,
     oa_type: oaTypes.join(",") || undefined,
     pub_type: pubType || undefined,
+    language: language || undefined,
     sort,
     dir: dir ?? undefined,
     cursor,
@@ -235,6 +237,7 @@ function SearchView() {
     funderFit,
     oaTypes,
     pubType,
+    language,
   };
 
   // Single-select per group: clicking the active value clears it.
@@ -512,7 +515,8 @@ function SearchView() {
       hasWorks !== null ||
       greenOa !== null ||
       oaTypes.length > 0 ||
-      Boolean(pubType),
+      Boolean(pubType) ||
+      Boolean(language),
   );
   const hasNonQueryFilters = Boolean(
     deal ||
@@ -525,7 +529,8 @@ function SearchView() {
       hasWorks !== null ||
       greenOa !== null ||
       oaTypes.length > 0 ||
-      Boolean(pubType),
+      Boolean(pubType) ||
+      Boolean(language),
   );
   const clearFilters = () =>
     update({
@@ -542,6 +547,7 @@ function SearchView() {
       green_oa: undefined,
       oa_type: undefined,
       pub_type: undefined,
+      language: undefined,
     });
 
   // Detail pages offer a "Back to search" that restores this exact URL.
