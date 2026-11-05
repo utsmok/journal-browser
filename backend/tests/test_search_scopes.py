@@ -38,6 +38,7 @@ async def api(client, db_engine):
                     "1111-1111",
                     title="Bioinformatics Quarterly",
                     search_text="Bioinformatics Quarterly",
+                    language="en",
                 ),
                 # Topic fixture.
                 journal_factory(
@@ -45,6 +46,7 @@ async def api(client, db_engine):
                     title="Quantum Studies",
                     topics=[{"display_name": "Quantum Chemistry"}],
                     search_text="Quantum Studies",
+                    language="en",
                 ),
                 # OA-type fixtures.
                 journal_factory(
@@ -57,6 +59,7 @@ async def api(client, db_engine):
                     doaj_in_doaj=True,
                     doaj_has_apc=False,
                     search_text=None,
+                    language="nl",
                 ),
                 # DOAJ canon gold: DOAJ itself declares an APC.
                 journal_factory(
@@ -582,6 +585,36 @@ async def test_oa_type_facet_filter(api):
     # Unknown vocabulary is a 422, not a silent empty result.
     r = await api.get("/api/v1/ut/journals", params={"oa_type": "gold,bogus"})
     assert r.status_code == 422
+
+
+@requires_db
+async def test_oa_type_facet_ordered_most_open_first(api):
+    """Feedback 2026-11-05: the OA-type facet renders most open first
+    (diamond ... subscription), not in jsonb's arbitrary key order."""
+    facets = (await api.get("/api/v1/ut/journals")).json()["facets"]["oa_type"]
+    order = ["diamond", "gold", "hybrid", "generic", "subscription"]
+    assert list(facets) == [k for k in order if k in facets]
+    # The fixture corpus observes every value, so the order is total here.
+    assert list(facets) == order
+
+
+@requires_db
+async def test_language_facet_and_filter(api):
+    """Feedback 2026-11-05: filter journals by their (modal work) language."""
+    body = (await api.get("/api/v1/ut/journals")).json()
+    assert body["facets"]["language"] == {"en": 2, "nl": 1}
+
+    # The filter narrows the list; its facet drops its own filter so every
+    # observed language stays visible with counts under the remaining set.
+    r = (await api.get("/api/v1/ut/journals", params={"language": "nl"})).json()
+    assert _issns(r) == {"4444-4444"}
+    assert r["items"][0]["language"] == "nl"
+    assert r["facets"]["language"] == {"en": 2, "nl": 1}
+
+    # Comma multi-select ORs; unknown codes match nothing.
+    r = (await api.get("/api/v1/ut/journals", params={"language": "en,nl"})).json()
+    assert _issns(r) == {"1111-1111", "2222-2222", "4444-4444"}
+    assert (await api.get("/api/v1/ut/journals", params={"language": "xx"})).json()["total"] == 0
 
 
 @requires_db

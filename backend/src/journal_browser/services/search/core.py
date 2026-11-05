@@ -28,6 +28,7 @@ async def search_journals(
     oa_types: list[str] | None = None,
     green_oa: GreenOa | str | None = None,
     pub_type: str | None = None,
+    languages: list[str] | None = None,
     sort: SortKey = "relevance",
     dir: str | None = None,
     cursor: str | None = None,
@@ -53,6 +54,7 @@ async def search_journals(
         "oa_types": oa_types,
         "green_oa": green_oa,
         "pub_type": pub_type,
+        "languages": languages,
         "funder_fit_value": funder_fit,
     }
     fuzzy = False

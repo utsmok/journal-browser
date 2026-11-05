@@ -26,6 +26,7 @@ def _payload(
     oa: str | None = "gold",
     source_id: str | None = "S123",
     source_name: str | None = "Journal One",
+    language: str | None = "en",
     authorships: list[dict] | None = None,
     cited: int = 5,
     fwci: float | None = 1.2,
@@ -56,6 +57,7 @@ def _payload(
         "type": type_,
         "open_access": {"oa_status": oa},
         "primary_location": primary,
+        "language": language,
         "authorships": authorships,
         "cited_by_count": cited,
         "fwci": fwci,
@@ -70,6 +72,7 @@ def test_work_row_shape():
     assert row["venue_issn_l"] == "1234-5678"
     assert row["venue_name"] == "Journal One"
     assert row["oa_status"] == "gold"
+    assert row["language"] == "en"
     assert row["source"] == "works_stats"
     # compact authorships: bare ids, lower-cased bare orcids, name kept
     assert row["authorships"] == [
@@ -193,3 +196,36 @@ async def test_rebuild_scoped_to_institution(db, institution_factory):
     assert stats["works"] == 0
     rows = (await db.execute(select(OpenalexWork))).scalars().all()
     assert rows == []
+
+
+@requires_db
+async def test_rebuild_stamps_modal_journal_language(db, institution_factory):
+    """journals.language = modal work language per venue, over every
+    institution's stored works; ties break alphabetically (feedback
+    2026-11-05)."""
+    from journal_browser.models import Journal
+
+    inst = await institution_factory(code="ut")
+    db.add(journal_factory("2334-5678", openalex_id="S999"))
+    db.add(journal_factory("3434-3434", openalex_id="S888"))
+    db.add(journal_factory("4545-4545", openalex_id="S777"))
+    await db.flush()
+    # 2334: two nl vs one en -> nl. 3434: en/de tie -> de (alphabetical).
+    # 4545: no works at all -> never stamped.
+    await _seed_sweep(
+        db,
+        inst,
+        [
+            ("W1", _payload(w_id="W1", language="en", source_id="S999")),
+            ("W2", _payload(w_id="W2", language="nl", source_id="S999")),
+            ("W3", _payload(w_id="W3", language="nl", source_id="S999")),
+            ("W4", _payload(w_id="W4", language="de", source_id="S888")),
+            ("W5", _payload(w_id="W5", language="en", source_id="S888")),
+        ],
+        filter_set="institutions.id=I1",
+    )
+    stats = await rebuild_openalex_works(db, inst)
+    assert (await db.scalar(select(Journal.language).where(Journal.issn_l == "2334-5678"))) == "nl"
+    assert (await db.scalar(select(Journal.language).where(Journal.issn_l == "3434-3434"))) == "de"
+    assert (await db.scalar(select(Journal.language).where(Journal.issn_l == "4545-4545"))) is None
+    assert stats["journals_language_stamped"] == 2

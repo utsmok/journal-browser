@@ -64,6 +64,11 @@ class Journal(Base):
     # is_oa without saying which OA color. bronze/closed/green mean "no OA
     # color observed"; oa_type falls back to deal/subscription for them.
     oa_status_observed: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # Modal OpenAlex work language (ISO 639-1, e.g. "en", "nl") across the
+    # journal's openalex_works (harvest/openalex_works.py rebuild); NULL =
+    # never observed. Journal-level attribute: works carry the language,
+    # OpenAlex sources do not (feedback 2026-11-05).
+    language: Mapped[str | None] = mapped_column(String(8), nullable=True)
     # DOAJ journal-record canon (harvest/doaj.py): the authoritative OA-model
     # source. doaj_in_doaj is tri-state until a full DOAJ sweep stamps the
     # OA candidates that did not match; classification treats NULL as

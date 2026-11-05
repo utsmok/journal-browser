@@ -8,12 +8,16 @@ from enum import StrEnum
 
 class OaType(StrEnum):
     """Journal-level OA classification (journals.oa_type; services/search.py
-    SQL case + Python mirror, search filter vocabulary)."""
+    SQL case + Python mirror, search filter vocabulary).
 
-    GOLD = "gold"
+    Member order is the facet display order (most open first); every
+    oa_type facet/composition dict iterates OA_TYPES, so do not reorder
+    alphabetically."""
+
     DIAMOND = "diamond"
-    GENERIC = "generic"
+    GOLD = "gold"
     HYBRID = "hybrid"
+    GENERIC = "generic"
     SUBSCRIPTION = "subscription"
 
 

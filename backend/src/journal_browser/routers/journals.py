@@ -165,6 +165,13 @@ async def search_journals(
     oa_type: OaTypeFilter = None,
     green_oa: GreenOa | None = None,
     pub_type: Annotated[str | None, Query(max_length=40)] = None,
+    language: Annotated[
+        str | None,
+        Query(
+            max_length=60,
+            description="Comma-separated ISO 639-1 codes; unknown values match nothing",
+        ),
+    ] = None,
     sort: Annotated[
         str,
         Query(
@@ -199,6 +206,7 @@ async def search_journals(
         oa_types=list(oa_type) if oa_type else None,
         green_oa=green_oa,
         pub_type=pub_type,
+        languages=_split_csv(language),
         sort=sort,
         dir=dir,
         cursor=cursor,

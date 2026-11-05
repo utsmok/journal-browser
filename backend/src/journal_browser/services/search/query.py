@@ -133,6 +133,7 @@ def base_query(
     funder_fit: bool | None = None,
     funder_fit_value: str | None = None,
     pub_type: str | None = None,
+    languages: list[str] | None = None,
 ):
     """Filtered select with computed columns; search + facet counts share it.
 
@@ -196,6 +197,8 @@ def base_query(
             ),
             # OpenAlex venue type (journal, book series, conference, ...).
             J.type.label("pub_type"),
+            # Modal work language (ISO 639-1); NULL = never observed.
+            J.language.label("language"),
             # Display/sort price: OpenAlex list price (EUR, then USD), else
             # the OpenAPC latest cost. apc_prices order is unspecified, so
             # the currency match goes through jsonb_path_query_first.
@@ -306,6 +309,8 @@ def base_query(
         query = query.where(J.publisher_name == publisher)
     if pub_type:
         query = query.where(J.type == pub_type)
+    if languages:
+        query = query.where(J.language.in_(languages))
     if has_apc is not None:
         query = query.where(APC_SHOWN if has_apc else ~APC_SHOWN)
     if has_works is not None:

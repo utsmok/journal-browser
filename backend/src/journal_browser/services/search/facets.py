@@ -10,7 +10,15 @@ from ...models import Journal
 from ...vocab import GreenOa
 from .. import funder_fit as funder_fit_mod
 from ..cache import FACET_CACHE, cache_get, cache_put
+from .classify import OA_TYPES
 from .query import base_query
+
+
+def oa_facet(counts: dict[str, int] | None) -> dict[str, int]:
+    """oa_type counts in display order (most open first, the OaType member
+    order); values the filtered set never observed stay absent."""
+    src = counts or {}
+    return {t.value: src[t.value] for t in OA_TYPES if src.get(t.value)}
 
 
 async def facet_counts(
@@ -30,6 +38,7 @@ async def facet_counts(
     oa_types: list[str] | None = None,
     green_oa: GreenOa | str | None = None,
     pub_type: str | None = None,
+    languages: list[str] | None = None,
     funder_struct: dict[str, Any] | None = None,
     funder_fit_value: str | None = None,
 ) -> tuple[dict[str, dict[str, int]], int]:
@@ -59,6 +68,7 @@ async def facet_counts(
             oa_types,
             green_oa,
             pub_type,
+            languages,
             deal != "any",
             search_in != "all",
             funder_struct is not None,
@@ -96,6 +106,7 @@ async def facet_counts(
         "oa_types": oa_types,
         "green_oa": green_oa,
         "pub_type": pub_type,
+        "languages": languages,
         # Funder-fit tier column only for a structured funder (text-only
         # funders get no facet: every journal is untiered).
         "funder_fit": funder_fit_mod.policy_structured(funder_struct),
@@ -166,6 +177,7 @@ async def facet_counts(
             func.count().over(partition_by=base.c.oa_type).label("oa_n"),
             func.count().over(partition_by=base.c.publisher_name).label("pub_n"),
             func.count().over(partition_by=base.c.pub_type).label("pt_n"),
+            func.count().over(partition_by=base.c.language).label("lang_n"),
         )
         .select_from(base)
         .subquery()
@@ -187,6 +199,9 @@ async def facet_counts(
                 func.jsonb_object_agg(counted.c.pub_type, counted.c.pt_n)
                 .filter(counted.c.pub_type.is_not(None))
                 .label("pub_type_counts"),
+                func.jsonb_object_agg(counted.c.language, counted.c.lang_n)
+                .filter(counted.c.language.is_not(None))
+                .label("language_counts"),
                 func.jsonb_object_agg(counted.c.publisher_name, counted.c.pub_n)
                 .filter(counted.c.publisher_name.is_not(None))
                 .label("publisher_counts"),
@@ -224,10 +239,14 @@ async def facet_counts(
         },
         "apc": {"true": apc_true, "false": apc_false},
         "works": {"true": works_true, "false": works_false},
-        "oa_type": dict(row.oa_type_counts or {}),
+        "oa_type": oa_facet(row.oa_type_counts),
         # Venue type distribution, sorted by count then name like publisher.
         "pub_type": dict(
             sorted((row.pub_type_counts or {}).items(), key=lambda kv: (-kv[1], kv[0]))
+        ),
+        # Language distribution, sorted by count then code like pub_type.
+        "language": dict(
+            sorted((row.language_counts or {}).items(), key=lambda kv: (-kv[1], kv[0]))
         ),
         "green_oa": {
             "submitted": int(row.green_submitted or 0),
@@ -279,7 +298,7 @@ async def facet_counts(
                 select(func.jsonb_object_agg(counted_ot.c.oa_type, counted_ot.c.n))
             )
         ).scalar_one()
-        facets["oa_type"] = dict(counts or {})
+        facets["oa_type"] = oa_facet(counts)
     if pub_type:
         pt = base_sub(pub_type=None)
         counted_pt = (
@@ -297,6 +316,23 @@ async def facet_counts(
             )
         ).scalar_one()
         facets["pub_type"] = dict(sorted((counts or {}).items(), key=lambda kv: (-kv[1], kv[0])))
+    if languages:
+        lt = base_sub(languages=None)
+        counted_lt = (
+            select(lt, func.count().over(partition_by=lt.c.language).label("n"))
+            .select_from(lt)
+            .subquery()
+        )
+        counts = (
+            await session.execute(
+                select(
+                    func.jsonb_object_agg(counted_lt.c.language, counted_lt.c.n).filter(
+                        counted_lt.c.language.is_not(None)
+                    )
+                )
+            )
+        ).scalar_one()
+        facets["language"] = dict(sorted((counts or {}).items(), key=lambda kv: (-kv[1], kv[0])))
     if topic:
         tp = variant_sub("topic")
         facets["topic"] = await _topic_facet(tp)

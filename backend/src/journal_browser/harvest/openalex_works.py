@@ -16,11 +16,11 @@ re-runs fold in new sweep data automatically.
 import logging
 from typing import Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import work_type_excluded
-from ..models import HarvestRun, HarvestState, Institution, OpenalexWork, SourceRecord
+from ..models import HarvestRun, HarvestState, Institution, Journal, OpenalexWork, SourceRecord
 from .common import canonical_oa_status, normalize_doi
 
 logger = logging.getLogger(__name__)
@@ -81,6 +81,7 @@ def work_row(payload: dict[str, Any], issn_by_source: dict[str, str]) -> dict[st
         "work_type": payload.get("type"),
         "oa_status": oa_status if oa_status else None,
         "venue_issn_l": venue_issn_l,
+        "language": payload.get("language"),
         "venue_name": (
             ((payload.get("primary_location") or {}).get("source") or {}).get("display_name")
             or None
@@ -163,11 +164,36 @@ async def rebuild_openalex_works(session: AsyncSession, institution: Institution
                 for row in values[start : start + INSERT_CHUNK]
             ],
         )
+    # Modal work language per journal, over every institution's stored works
+    # (language is a journal attribute, so any rebuild refreshes the same
+    # global stamp; ties break alphabetically for determinism). Journals
+    # whose works vanished keep the last stamp.
+    modal = (
+        select(
+            OpenalexWork.venue_issn_l.label("issn_l"),
+            OpenalexWork.language.label("lang"),
+            func.row_number()
+            .over(
+                partition_by=OpenalexWork.venue_issn_l,
+                order_by=[func.count().desc(), OpenalexWork.language.asc()],
+            )
+            .label("rn"),
+        )
+        .where(OpenalexWork.venue_issn_l.is_not(None), OpenalexWork.language.is_not(None))
+        .group_by(OpenalexWork.venue_issn_l, OpenalexWork.language)
+        .subquery()
+    )
+    stamped = await session.execute(
+        update(Journal)
+        .where(Journal.issn_l == modal.c.issn_l, modal.c.rn == 1)
+        .values(language=modal.c.lang)
+    )
     stats = {
         "works": len(values),
         "parse_failures": parse_failures,
         "excluded_types": excluded_types,
         "author_sweep_rows": sum(1 for r in values if r["source"] == AUTHOR_SWEEP_PREFIX),
+        "journals_language_stamped": stamped.rowcount,
     }
     logger.info("openalex_works[%s]: %s", institution.code, stats)
     return stats

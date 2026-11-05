@@ -2319,6 +2319,8 @@ export interface components {
             oa_type: components["schemas"]["OaType"];
             /** Pub Type */
             pub_type?: string | null;
+            /** Language */
+            language?: string | null;
             /** Primary Topic */
             primary_topic?: string | null;
             /** Apc Source */
@@ -2385,9 +2387,13 @@ export interface components {
          * OaType
          * @description Journal-level OA classification (journals.oa_type; services/search.py
          *     SQL case + Python mirror, search filter vocabulary).
+         *
+         *     Member order is the facet display order (most open first); every
+         *     oa_type facet/composition dict iterates OA_TYPES, so do not reorder
+         *     alphabetically.
          * @enum {string}
          */
-        OaType: "gold" | "diamond" | "generic" | "hybrid" | "subscription";
+        OaType: "diamond" | "gold" | "hybrid" | "generic" | "subscription";
         /** OpenaireInfo */
         OpenaireInfo: {
             /**
@@ -4116,6 +4122,8 @@ export interface operations {
                 oa_type?: components["schemas"]["OaType"][] | null;
                 green_oa?: components["schemas"]["GreenOa"] | null;
                 pub_type?: string | null;
+                /** @description Comma-separated ISO 639-1 codes (modal journal language); unknown values match nothing */
+                language?: string | null;
                 sort?: string;
                 dir?: string | null;
                 cursor?: string | null;

@@ -49,6 +49,8 @@ class OpenalexWork(Base):
     oa_status: Mapped[str | None] = mapped_column(Text, nullable=True)
     venue_issn_l: Mapped[str | None] = mapped_column(Text, nullable=True)
     venue_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # OpenAlex work language (ISO 639-1); feeds the modal journals.language.
+    language: Mapped[str | None] = mapped_column(Text, nullable=True)
     authorships: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'")
     )

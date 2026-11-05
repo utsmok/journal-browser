@@ -1779,6 +1779,25 @@
             }
           },
           {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 60
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated ISO 639-1 codes (modal journal language); unknown values match nothing",
+              "title": "Language"
+            },
+            "description": "Comma-separated ISO 639-1 codes (modal journal language); unknown values match nothing"
+          },
+          {
             "name": "sort",
             "in": "query",
             "required": false,
@@ -8143,6 +8162,17 @@
             ],
             "title": "Pub Type"
           },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
           "primary_topic": {
             "anyOf": [
               {
@@ -8347,14 +8377,14 @@
       "OaType": {
         "type": "string",
         "enum": [
-          "gold",
           "diamond",
-          "generic",
+          "gold",
           "hybrid",
+          "generic",
           "subscription"
         ],
         "title": "OaType",
-        "description": "Journal-level OA classification (journals.oa_type; services/search.py\nSQL case + Python mirror, search filter vocabulary)."
+        "description": "Journal-level OA classification (journals.oa_type; services/search.py\nSQL case + Python mirror, search filter vocabulary).\n\nMember order is the facet display order (most open first); every\noa_type facet/composition dict iterates OA_TYPES, so do not reorder\nalphabetically."
       },
       "OpenaireInfo": {
         "properties": {

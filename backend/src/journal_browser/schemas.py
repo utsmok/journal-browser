@@ -55,6 +55,8 @@ class JournalListItem(BaseModel):
     # OpenAlex venue type (journal, book series, conference, ...); NULL for
     # untyped sources.
     pub_type: str | None = None
+    # Modal work language (ISO 639-1, e.g. "en"); NULL = never observed.
+    language: str | None = None
     # OpenAlex primary topic (first entry of the topics list); None when the
     # journal has no topics.
     primary_topic: str | None = None
