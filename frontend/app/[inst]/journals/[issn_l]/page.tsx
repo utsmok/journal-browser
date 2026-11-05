@@ -19,7 +19,7 @@ import { CollapsibleCard } from "@/components/collapsible-card";
 import { CardPager } from "@/components/card-pager";
 import { OaTrend } from "@/components/oa-trend";
 import { SourceNote } from "@/components/source-note";
-import { DetailSkeleton, ErrorPanel } from "@/components/states";
+import { ErrorPanel, JournalDetailSkeleton } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import { useJournal, useJournalWorks, useSimilar } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
@@ -33,6 +33,7 @@ import {
   type JournalDetailResponse,
   type OpenalexSource,
   type OpenalexTopic,
+  type WorksPage,
   encodeNamePath,
 } from "@/lib/api";
 import { dealLinkLabel, orderedDealLinks } from "@/lib/deal-links";
@@ -477,25 +478,31 @@ function doiHref(doi: string | null): string | null {
   return /^https?:\/\//.test(doi) ? doi : `https://doi.org/${doi}`;
 }
 
-/** Twente works in this journal, paginated from the /works endpoint. */
+/** Twente works in this journal, paginated from the /works endpoint. The
+ * query itself lives on the page (it races the detail request); this card
+ * renders whatever has arrived, skeleton rows while it is still loading. */
 function PublicationsCard({
-  issnL,
   title,
   openalex,
   worksNote,
+  requested,
+  worksQuery,
 }: {
-  issnL: string;
   title: string;
   openalex: OpenalexSource | null;
   worksNote: Partial<Attribution>;
+  requested: number;
+  worksQuery: {
+    data: WorksPage | undefined;
+    isPending: boolean;
+    isFetching: boolean;
+  };
 }) {
   const site = useSiteMeta();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const pParam = parseInt(searchParams.get("page") ?? "", 10);
-  const requested = Number.isFinite(pParam) && pParam > 0 ? pParam : 1;
-  const { data, isPending, isFetching } = useJournalWorks(issnL, requested);
+  const { data, isPending, isFetching } = worksQuery;
   const works = data?.items ?? [];
   const total = data?.total ?? 0;
   const pages = Math.max(1, Math.ceil(total / WORKS_PAGE_SIZE));
@@ -531,7 +538,15 @@ function PublicationsCard({
       contentClassName="space-y-3 text-sm"
     >
       {isPending && !data ? (
-        <p className="text-[var(--muted-foreground)]">Loading publications…</p>
+        <div className="space-y-2.5" aria-hidden>
+          {[92, 75, 84, 60, 70].map((w, i) => (
+            <div
+              key={i}
+              className="h-4 animate-pulse rounded bg-[var(--muted)]"
+              style={{ width: `${w}%` }}
+            />
+          ))}
+        </div>
       ) : works.length === 0 ? (
         // Also the pre-integration state: old backends 404 on /works.
         <p className="text-[var(--muted-foreground)]">
@@ -853,11 +868,17 @@ function JournalPageInner() {
   // Old backends lack /similar; the section simply stays hidden then.
   const similarQuery = useSimilar(issnL);
   const similar = similarQuery.data;
+  // Hoisted so the works request races the detail request instead of
+  // waiting for it; the card below renders whatever has arrived.
+  const searchParams = useSearchParams();
+  const pParam = parseInt(searchParams.get("page") ?? "", 10);
+  const requestedWorksPage = Number.isFinite(pParam) && pParam > 0 ? pParam : 1;
+  const worksQuery = useJournalWorks(issnL, requestedWorksPage);
   const similarEmpty =
     !similar ||
     (similar.all.length === 0 && similar.institution.length === 0 && similar.deals.length === 0);
 
-  if (isPending) return <DetailSkeleton />;
+  if (isPending) return <JournalDetailSkeleton />;
   if (isError || !data) return <ErrorPanel message={errorMessage(error)} backHref={backHref} />;
 
   const { journal, stats, deals, attribution, summary_stats, stats_totals: totals } = data;
@@ -1413,10 +1434,11 @@ function JournalPageInner() {
 
           <PublicationsCard
             key={journal.issn_l}
-            issnL={journal.issn_l}
             title={journal.title ?? journal.issn_l}
             openalex={openalex}
             worksNote={attribution.works ?? {}}
+            requested={requestedWorksPage}
+            worksQuery={worksQuery}
           />
 
           {data.alternate_titles.length > 0 && <OtherNamesCard names={data.alternate_titles} />}
