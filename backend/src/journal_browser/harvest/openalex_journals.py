@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from aletheca import AlethecaClient
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -223,6 +223,21 @@ async def _upsert_journal_page(session: AsyncSession, payloads: list[dict[str, A
     return counted
 
 
+async def prune_orphan_issn_map(session: AsyncSession) -> int:
+    """Drop issn_map rows whose issn_l has no journals row; returns count.
+
+    Map writes are not transactional with journal creation, and an
+    upstream issn_l re-key can retire a target while its map rows survive
+    (production residue since 2026-10-22: variants pointing at the absent
+    issn_l 1760-7760). The sweep re-adds rows for live targets, so pruning
+    here converges the map to the journal universe on every full sweep.
+    """
+    result = await session.execute(
+        delete(IssnMap).where(IssnMap.issn_l.not_in(select(Journal.issn_l)))
+    )
+    return result.rowcount or 0
+
+
 async def sweep_all_sources(
     client: AlethecaClient, session: AsyncSession, limit: int | None
 ) -> dict:
@@ -267,8 +282,10 @@ async def sweep_all_sources(
             logger.info("Reached --limit %s", limit)
             break
     await ingest.ingest_records(page)
-    normalized += await _upsert_journal_page(session, [p for _, p in page])
-    stats = await ingest.finish_run("completed", {"journals_normalized": normalized})
+    pruned = await prune_orphan_issn_map(session)
+    stats = await ingest.finish_run(
+        "completed", {"journals_normalized": normalized, "issn_map_pruned": pruned}
+    )
     await session.commit()
     return stats
 
