@@ -1,0 +1,193 @@
+{
+  "generatedAt": "2026-11-06",
+  "steps": [
+    {
+      "id": "journals",
+      "band": "global",
+      "script": "harvest_journals.py",
+      "deps": []
+    },
+    {
+      "id": "publishers",
+      "band": "global",
+      "script": "harvest_publishers.py",
+      "deps": [
+        "journals"
+      ]
+    },
+    {
+      "id": "deals-openaccess-nl",
+      "band": "global",
+      "script": "scrape_openaccess_nl.py",
+      "deps": []
+    },
+    {
+      "id": "deals-jct",
+      "band": "global",
+      "script": "ingest_jct.py",
+      "deps": []
+    },
+    {
+      "id": "openapc",
+      "band": "global",
+      "script": "ingest_openapc.py",
+      "deps": []
+    },
+    {
+      "id": "deals-reconcile",
+      "band": "global",
+      "script": "reconcile.py",
+      "deps": [
+        "deals-jct",
+        "deals-openaccess-nl",
+        "journals"
+      ]
+    },
+    {
+      "id": "deals-issn-l",
+      "band": "global",
+      "script": "backfill_issn_l.py",
+      "deps": [
+        "deals-reconcile"
+      ]
+    },
+    {
+      "id": "scimagojr",
+      "band": "global",
+      "script": "ingest_scimagojr.py",
+      "deps": [
+        "journals"
+      ]
+    },
+    {
+      "id": "flags",
+      "band": "global",
+      "script": "backfill_flags.py",
+      "deps": [
+        "journals"
+      ]
+    },
+    {
+      "id": "oa-colors",
+      "band": "global",
+      "script": "harvest_oa_colors.py",
+      "deps": [
+        "journals",
+        "openapc"
+      ]
+    },
+    {
+      "id": "doaj",
+      "band": "global",
+      "script": "harvest_doaj.py",
+      "deps": [
+        "journals"
+      ]
+    },
+    {
+      "id": "pure",
+      "band": "institution",
+      "script": "harvest_pure.py",
+      "deps": []
+    },
+    {
+      "id": "pure-cerif",
+      "band": "institution",
+      "script": "harvest_pure.py",
+      "deps": [
+        "pure"
+      ]
+    },
+    {
+      "id": "pure-entities",
+      "band": "institution",
+      "script": "harvest_pure_entities.py",
+      "deps": [
+        "pure"
+      ]
+    },
+    {
+      "id": "enrich",
+      "band": "institution",
+      "script": "enrich_works.py",
+      "deps": [
+        "pure"
+      ]
+    },
+    {
+      "id": "openaire",
+      "band": "institution",
+      "script": "harvest_openaire.py",
+      "deps": [
+        "deals-issn-l",
+        "pure"
+      ]
+    },
+    {
+      "id": "stats",
+      "band": "institution",
+      "script": "harvest_stats.py",
+      "deps": [
+        "enrich",
+        "flags",
+        "openaire",
+        "openapc",
+        "scimagojr"
+      ]
+    },
+    {
+      "id": "reconcile",
+      "band": "institution",
+      "script": "reconcile.py",
+      "deps": [
+        "deals-reconcile",
+        "stats"
+      ]
+    },
+    {
+      "id": "openalex-works",
+      "band": "institution",
+      "script": "build_openalex_works.py",
+      "deps": [
+        "stats"
+      ]
+    },
+    {
+      "id": "pure-authors",
+      "band": "institution",
+      "script": "backfill_pure_authors.py",
+      "deps": [
+        "openalex-works",
+        "pure-cerif"
+      ]
+    },
+    {
+      "id": "author-ids",
+      "band": "institution",
+      "script": "resolve_author_ids.py",
+      "deps": [
+        "openalex-works",
+        "pure-authors",
+        "pure-cerif",
+        "pure-entities"
+      ]
+    },
+    {
+      "id": "authors",
+      "band": "institution",
+      "script": "ingest_authors.py",
+      "deps": [
+        "author-ids",
+        "reconcile"
+      ]
+    },
+    {
+      "id": "embeddings",
+      "band": "final",
+      "script": "embed_journals.py",
+      "deps": [
+        "stats"
+      ]
+    }
+  ]
+}
