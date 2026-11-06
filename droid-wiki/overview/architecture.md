@@ -1,6 +1,6 @@
 # Architecture
 
-Journal Browser is two apps plus a database: a FastAPI backend that serves
+Open Journal Browser is two apps plus a database: a FastAPI backend that serves
 the API, a Next.js frontend that renders the UI, and a Postgres 17 database
 with pgvector. A one-shot `bootstrap` container fills the database by
 running the harvest pipeline before the backend starts. All containers are

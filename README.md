@@ -1,4 +1,4 @@
-# Journal Browser (rebuild)
+# Open Journal Browser
 
 A public search tool that helps researchers find where to publish: which
 journals are covered by open access deals, what publishing there costs, how

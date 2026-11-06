@@ -1,4 +1,4 @@
-# AGENTS.md — Journal Browser
+# AGENTS.md — Open Journal Browser
 
 Agent-facing guide. Human-facing docs: README.md (quick start) and
 DEPLOYMENT.md (configuration reference, harvest internals, operations).

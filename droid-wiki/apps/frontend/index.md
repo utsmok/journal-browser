@@ -5,7 +5,7 @@ Active contributors: utsmok
 ## Purpose
 
 The frontend is a Next.js 15 App Router application (React 19, TypeScript) that renders every
-user-facing surface of Journal Browser: journal search, author and publisher browse, org-unit
+user-facing surface of Open Journal Browser: journal search, author and publisher browse, org-unit
 pages, the deals register, the docs viewer, the about page, and the admin panel. One deployment
 hosts all institutions under `/{code}` paths over a shared data core; the path segment scopes
 navigation and every API call. Pages are client components that fetch through TanStack Query,

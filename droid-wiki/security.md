@@ -1,6 +1,6 @@
 # Security
 
-Journal Browser is a public-read tool deployed on a trusted network and
+Open Journal Browser is a public-read tool deployed on a trusted network and
 published through a host reverse proxy. It has no user accounts: every
 visitor shares one unauthenticated read surface, and one shared password
 guards the admin API. This page states the actual boundaries and mechanisms
