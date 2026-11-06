@@ -1,0 +1,4331 @@
+{
+  "generatedAt": "2026-11-06",
+  "tables": [
+    {
+      "name": "apc_evidence",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('apc_evidence_id_seq'::regclass)"
+        },
+        {
+          "name": "doi",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "period",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "euro",
+          "type": "numeric(12,2)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "is_hybrid",
+          "type": "boolean",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "agreement",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "group_id",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "issn_l",
+          "type": "character varying",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "institution_id",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "nullable": false,
+          "default": "'openapc'::text"
+        },
+        {
+          "name": "source_record_id",
+          "type": "bigint",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "primaryKey": ["id"],
+      "uniques": [],
+      "foreignKeys": [
+        {
+          "name": "apc_evidence_institution_id_fkey",
+          "columns": ["institution_id"],
+          "toTable": "institutions",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "NO ACTION"
+        },
+        {
+          "name": "apc_evidence_source_record_id_fkey",
+          "columns": ["source_record_id"],
+          "toTable": "source_records",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "NO ACTION"
+        }
+      ],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "apc_evidence_pkey",
+          "definition": "CREATE UNIQUE INDEX apc_evidence_pkey ON public.apc_evidence USING btree (id)"
+        },
+        {
+          "name": "ix_apc_evidence_doi",
+          "definition": "CREATE INDEX ix_apc_evidence_doi ON public.apc_evidence USING btree (doi)"
+        },
+        {
+          "name": "ix_apc_evidence_issn_period",
+          "definition": "CREATE INDEX ix_apc_evidence_issn_period ON public.apc_evidence USING btree (issn_l, period)"
+        }
+      ]
+    },
+    {
+      "name": "author_identities",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "institution_id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "author_pure_uuid",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "nullable": false,
+          "default": "'openalex'::text"
+        },
+        {
+          "name": "external_id",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false,
+          "default": "'candidate'::text"
+        },
+        {
+          "name": "method",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "confidence",
+          "type": "double precision",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "n_works",
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "orcid_corroborated",
+          "type": "boolean",
+          "nullable": false,
+          "default": "false"
+        },
+        {
+          "name": "evidence",
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'{}'::jsonb"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "primaryKey": ["institution_id", "author_pure_uuid", "source", "external_id"],
+      "uniques": [],
+      "foreignKeys": [
+        {
+          "name": "author_identities_institution_id_fkey",
+          "columns": ["institution_id"],
+          "toTable": "institutions",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "CASCADE"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_author_identities_source",
+          "definition": "CHECK ((source = ANY (ARRAY['openalex'::text, 'openaire'::text])))"
+        },
+        {
+          "name": "ck_author_identities_status",
+          "definition": "CHECK ((status = ANY (ARRAY['confirmed'::text, 'candidate'::text, 'rejected'::text])))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "author_identities_pkey",
+          "definition": "CREATE UNIQUE INDEX author_identities_pkey ON public.author_identities USING btree (institution_id, author_pure_uuid, source, external_id)"
+        },
+        {
+          "name": "ix_author_identities_inst_author",
+          "definition": "CREATE INDEX ix_author_identities_inst_author ON public.author_identities USING btree (institution_id, author_pure_uuid)"
+        },
+        {
+          "name": "ix_author_identities_inst_status",
+          "definition": "CREATE INDEX ix_author_identities_inst_status ON public.author_identities USING btree (institution_id, status)"
+        }
+      ]
+    },
+    {
+      "name": "author_works",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "institution_id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "author_pure_uuid",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "work_pure_uuid",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "primaryKey": ["institution_id", "author_pure_uuid", "work_pure_uuid"],
+      "uniques": [],
+      "foreignKeys": [
+        {
+          "name": "author_works_institution_id_author_pure_uuid_fkey",
+          "columns": ["institution_id", "institution_id", "author_pure_uuid", "author_pure_uuid"],
+          "toTable": "authors",
+          "toColumns": ["pure_uuid", "institution_id", "institution_id", "pure_uuid"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "CASCADE"
+        },
+        {
+          "name": "author_works_institution_id_fkey",
+          "columns": ["institution_id"],
+          "toTable": "institutions",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "CASCADE"
+        },
+        {
+          "name": "author_works_institution_id_work_pure_uuid_fkey",
+          "columns": ["institution_id", "institution_id", "work_pure_uuid", "work_pure_uuid"],
+          "toTable": "works",
+          "toColumns": ["institution_id", "pure_uuid", "institution_id", "pure_uuid"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "CASCADE"
+        }
+      ],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "author_works_pkey",
+          "definition": "CREATE UNIQUE INDEX author_works_pkey ON public.author_works USING btree (institution_id, author_pure_uuid, work_pure_uuid)"
+        }
+      ]
+    },
+    {
+      "name": "authors",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "institution_id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "pure_uuid",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "orcid",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "openalex_author_id",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "openaire_person_id",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "crossref_orcid",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "faculty",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "research_group",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "orgs",
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'[]'::jsonb"
+        },
+        {
+          "name": "n_works",
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "confirmed",
+          "type": "boolean",
+          "nullable": false,
+          "default": "false"
+        },
+        {
+          "name": "last_pub_year",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "primary_topic",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "openalex_ids",
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'[]'::jsonb"
+        },
+        {
+          "name": "institute",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "primaryKey": ["institution_id", "pure_uuid"],
+      "uniques": [],
+      "foreignKeys": [
+        {
+          "name": "authors_institution_id_fkey",
+          "columns": ["institution_id"],
+          "toTable": "institutions",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "CASCADE"
+        }
+      ],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "authors_pkey",
+          "definition": "CREATE UNIQUE INDEX authors_pkey ON public.authors USING btree (institution_id, pure_uuid)"
+        }
+      ]
+    },
+    {
+      "name": "cache_epoch",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "smallint",
+          "nullable": false,
+          "default": "nextval('cache_epoch_id_seq'::regclass)"
+        },
+        {
+          "name": "bumped_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "primaryKey": ["id"],
+      "uniques": [],
+      "foreignKeys": [],
+      "checks": [
+        {
+          "name": "cache_epoch_single_row",
+          "definition": "CHECK ((id = 1))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "cache_epoch_pkey",
+          "definition": "CREATE UNIQUE INDEX cache_epoch_pkey ON public.cache_epoch USING btree (id)"
+        }
+      ]
+    },
+    {
+      "name": "deal_institutions",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "deal_id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "institution_id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "first_seen",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "last_seen",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "participation",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "participation_note",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "journal_override",
+          "type": "boolean",
+          "nullable": false,
+          "default": "false"
+        }
+      ],
+      "primaryKey": ["deal_id", "institution_id"],
+      "uniques": [],
+      "foreignKeys": [
+        {
+          "name": "deal_institutions_deal_id_fkey",
+          "columns": ["deal_id"],
+          "toTable": "deals",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "CASCADE"
+        },
+        {
+          "name": "deal_institutions_institution_id_fkey",
+          "columns": ["institution_id"],
+          "toTable": "institutions",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "NO ACTION"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_deal_institutions_participation",
+          "definition": "CHECK ((participation = ANY (ARRAY['named'::text, 'consortium'::text])))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "deal_institutions_pkey",
+          "definition": "CREATE UNIQUE INDEX deal_institutions_pkey ON public.deal_institutions USING btree (deal_id, institution_id)"
+        }
+      ]
+    },
+    {
+      "name": "deal_journals",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "deal_id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "issn",
+          "type": "character varying",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "issn_l",
+          "type": "character varying",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "journal_name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "first_seen",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "last_seen",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "needs_curation",
+          "type": "boolean",
+          "nullable": false,
+          "default": "false"
+        },
+        {
+          "name": "institution_id",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('deal_journals_id_seq'::regclass)"
+        },
+        {
+          "name": "excluded",
+          "type": "boolean",
+          "nullable": false,
+          "default": "false"
+        },
+        {
+          "name": "needs_curation_reason",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "primaryKey": ["id"],
+      "uniques": [],
+      "foreignKeys": [
+        {
+          "name": "deal_journals_deal_id_fkey",
+          "columns": ["deal_id"],
+          "toTable": "deals",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "CASCADE"
+        },
+        {
+          "name": "deal_journals_institution_id_fkey",
+          "columns": ["institution_id"],
+          "toTable": "institutions",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "NO ACTION"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_deal_journals_curation_reason",
+          "definition": "CHECK (((needs_curation = true) OR (needs_curation_reason IS NULL)))"
+        },
+        {
+          "name": "ck_deal_journals_source",
+          "definition": "CHECK ((source = ANY (ARRAY['jct'::text, 'manual'::text, 'publisher-pattern'::text])))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "deal_journals_pkey",
+          "definition": "CREATE UNIQUE INDEX deal_journals_pkey ON public.deal_journals USING btree (id)"
+        },
+        {
+          "name": "ix_deal_journals_issn_l",
+          "definition": "CREATE INDEX ix_deal_journals_issn_l ON public.deal_journals USING btree (issn_l)"
+        },
+        {
+          "name": "uq_deal_journals_scoped",
+          "definition": "CREATE UNIQUE INDEX uq_deal_journals_scoped ON public.deal_journals USING btree (deal_id, issn, institution_id) WHERE (institution_id IS NOT NULL)"
+        },
+        {
+          "name": "uq_deal_journals_shared",
+          "definition": "CREATE UNIQUE INDEX uq_deal_journals_shared ON public.deal_journals USING btree (deal_id, issn) WHERE (institution_id IS NULL)"
+        }
+      ]
+    },
+    {
+      "name": "deals",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "default": "nextval('deals_id_seq'::regclass)"
+        },
+        {
+          "name": "publisher_id",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "esac_id",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "consortium",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false,
+          "default": "'current'::text"
+        },
+        {
+          "name": "start_year",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "end_year",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "duration_text",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "corresponding_authors_only",
+          "type": "boolean",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "summary",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "conditions_text",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "workflow_text",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "article_types_text",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "cap_text",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "cap_numbers",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "contract_url",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "openaccess_nl_url",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "jct_data_url",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "per_year_oa_counts",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "provenance",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "needs_curation",
+          "type": "boolean",
+          "nullable": false,
+          "default": "false"
+        },
+        {
+          "name": "needs_curation_reason",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "last_reviewed",
+          "type": "date",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "links",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "curation_resolved_reason",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "primaryKey": ["id"],
+      "uniques": [
+        {
+          "name": "deals_esac_id_key",
+          "columns": ["esac_id"]
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "deals_publisher_id_fkey",
+          "columns": ["publisher_id"],
+          "toTable": "publishers",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "NO ACTION"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_deals_curation_reason",
+          "definition": "CHECK (((needs_curation = true) OR (needs_curation_reason IS NULL)))"
+        },
+        {
+          "name": "ck_deals_curation_resolved",
+          "definition": "CHECK (((needs_curation = false) OR (curation_resolved_reason IS NULL)))"
+        },
+        {
+          "name": "ck_deals_status",
+          "definition": "CHECK ((status = ANY (ARRAY['current'::text, 'archive'::text])))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "deals_esac_id_key",
+          "definition": "CREATE UNIQUE INDEX deals_esac_id_key ON public.deals USING btree (esac_id)"
+        },
+        {
+          "name": "deals_pkey",
+          "definition": "CREATE UNIQUE INDEX deals_pkey ON public.deals USING btree (id)"
+        },
+        {
+          "name": "ix_deals_publisher",
+          "definition": "CREATE INDEX ix_deals_publisher ON public.deals USING btree (publisher_id, status)"
+        }
+      ]
+    },
+    {
+      "name": "doc_edits",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('doc_edits_id_seq'::regclass)"
+        },
+        {
+          "name": "doc_slug",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "block_key",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "original_hash",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "replacement",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": "now()"
+        }
+      ],
+      "primaryKey": ["id"],
+      "uniques": [
+        {
+          "name": "uq_doc_edits_block",
+          "columns": ["doc_slug", "block_key"]
+        }
+      ],
+      "foreignKeys": [],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "doc_edits_pkey",
+          "definition": "CREATE UNIQUE INDEX doc_edits_pkey ON public.doc_edits USING btree (id)"
+        },
+        {
+          "name": "uq_doc_edits_block",
+          "definition": "CREATE UNIQUE INDEX uq_doc_edits_block ON public.doc_edits USING btree (doc_slug, block_key)"
+        }
+      ]
+    },
+    {
+      "name": "feedback_items",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('feedback_items_id_seq'::regclass)"
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "category",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false,
+          "default": "'todo'::text"
+        },
+        {
+          "name": "priority",
+          "type": "text",
+          "nullable": false,
+          "default": "'normal'::text"
+        },
+        {
+          "name": "page_url",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "page_data",
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'{}'::jsonb"
+        },
+        {
+          "name": "resolution_notes",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": "now()"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": "now()"
+        }
+      ],
+      "primaryKey": ["id"],
+      "uniques": [],
+      "foreignKeys": [],
+      "checks": [
+        {
+          "name": "ck_feedback_items_category",
+          "definition": "CHECK ((category = ANY (ARRAY['bug'::text, 'data'::text, 'feature'::text, 'improvement'::text, 'other'::text])))"
+        },
+        {
+          "name": "ck_feedback_priority",
+          "definition": "CHECK ((priority = ANY (ARRAY['low'::text, 'normal'::text, 'high'::text, 'critical'::text])))"
+        },
+        {
+          "name": "ck_feedback_status",
+          "definition": "CHECK ((status = ANY (ARRAY['todo'::text, 'in_progress'::text, 'done'::text, 'wontfix'::text])))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "feedback_items_pkey",
+          "definition": "CREATE UNIQUE INDEX feedback_items_pkey ON public.feedback_items USING btree (id)"
+        }
+      ]
+    },
+    {
+      "name": "funder_links",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "funder_id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "source_id",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "via",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "primaryKey": ["funder_id", "source", "source_id"],
+      "uniques": [],
+      "foreignKeys": [
+        {
+          "name": "funder_links_funder_id_fkey",
+          "columns": ["funder_id"],
+          "toTable": "jisc_funders",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "CASCADE"
+        }
+      ],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "funder_links_pkey",
+          "definition": "CREATE UNIQUE INDEX funder_links_pkey ON public.funder_links USING btree (funder_id, source, source_id)"
+        },
+        {
+          "name": "ix_funder_links_source",
+          "definition": "CREATE INDEX ix_funder_links_source ON public.funder_links USING btree (source, source_id)"
+        }
+      ]
+    },
+    {
+      "name": "harvest_runs",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('harvest_runs_id_seq'::regclass)"
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "entity_type",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false,
+          "default": "'running'::text"
+        },
+        {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "finished_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "config_fingerprint",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "stats",
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'{}'::jsonb"
+        },
+        {
+          "name": "institution_id",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "primaryKey": ["id"],
+      "uniques": [],
+      "foreignKeys": [
+        {
+          "name": "harvest_runs_institution_id_fkey",
+          "columns": ["institution_id"],
+          "toTable": "institutions",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "NO ACTION"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_harvest_runs_status",
+          "definition": "CHECK ((status = ANY (ARRAY['running'::text, 'completed'::text, 'failed'::text])))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "harvest_runs_pkey",
+          "definition": "CREATE UNIQUE INDEX harvest_runs_pkey ON public.harvest_runs USING btree (id)"
+        },
+        {
+          "name": "ix_harvest_runs_institution",
+          "definition": "CREATE INDEX ix_harvest_runs_institution ON public.harvest_runs USING btree (institution_id, id)"
+        }
+      ]
+    },
+    {
+      "name": "harvest_state",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "source",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "entity_type",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "filter_set",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "stats",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "last_run_id",
+          "type": "bigint",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('harvest_state_id_seq'::regclass)"
+        },
+        {
+          "name": "institution_id",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "primaryKey": ["id"],
+      "uniques": [],
+      "foreignKeys": [
+        {
+          "name": "harvest_state_institution_id_fkey",
+          "columns": ["institution_id"],
+          "toTable": "institutions",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "NO ACTION"
+        },
+        {
+          "name": "harvest_state_last_run_id_fkey",
+          "columns": ["last_run_id"],
+          "toTable": "harvest_runs",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "NO ACTION"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_harvest_state_status",
+          "definition": "CHECK ((status = ANY (ARRAY['running'::text, 'completed'::text, 'failed'::text])))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "harvest_state_pkey",
+          "definition": "CREATE UNIQUE INDEX harvest_state_pkey ON public.harvest_state USING btree (id)"
+        },
+        {
+          "name": "uq_harvest_state_global",
+          "definition": "CREATE UNIQUE INDEX uq_harvest_state_global ON public.harvest_state USING btree (source, entity_type, filter_set) WHERE (institution_id IS NULL)"
+        },
+        {
+          "name": "uq_harvest_state_scoped",
+          "definition": "CREATE UNIQUE INDEX uq_harvest_state_scoped ON public.harvest_state USING btree (source, entity_type, filter_set, institution_id) WHERE (institution_id IS NOT NULL)"
+        }
+      ]
+    },
+    {
+      "name": "institution_trends",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "institution_id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "year",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "works_count",
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "corresponding_count",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "oa_gold",
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "oa_hybrid",
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "oa_green",
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "oa_bronze",
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "oa_diamond",
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "oa_closed",
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "primaryKey": ["institution_id", "year"],
+      "uniques": [],
+      "foreignKeys": [
+        {
+          "name": "institution_trends_institution_id_fkey",
+          "columns": ["institution_id"],
+          "toTable": "institutions",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "NO ACTION"
+        }
+      ],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "institution_trends_pkey",
+          "definition": "CREATE UNIQUE INDEX institution_trends_pkey ON public.institution_trends USING btree (institution_id, year)"
+        }
+      ]
+    },
+    {
+      "name": "institution_works_stats",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "institution_id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "issn_l",
+          "type": "character varying",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "year",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "works_count",
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "oa_gold",
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "oa_hybrid",
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "oa_green",
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "oa_bronze",
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "oa_diamond",
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "oa_closed",
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "nullable": false,
+          "default": "'openalex_institution_filter'::text"
+        }
+      ],
+      "primaryKey": ["institution_id", "source", "issn_l", "year"],
+      "uniques": [],
+      "foreignKeys": [
+        {
+          "name": "institution_works_stats_institution_id_fkey",
+          "columns": ["institution_id"],
+          "toTable": "institutions",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "NO ACTION"
+        }
+      ],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "institution_works_stats_pkey",
+          "definition": "CREATE UNIQUE INDEX institution_works_stats_pkey ON public.institution_works_stats USING btree (institution_id, source, issn_l, year)"
+        }
+      ]
+    },
+    {
+      "name": "institutions",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "default": "nextval('institutions_id_seq'::regclass)"
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "ror",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "openalex_id",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "code",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "short_name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "pure_oai_base_url",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "openaire_org_id",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "external_works_dsn",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "data_window_start",
+          "type": "integer",
+          "nullable": false,
+          "default": "2020"
+        },
+        {
+          "name": "data_window_end",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "library_url",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "oa_guide_url",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "support_email",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "admin_contact",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "research_portal_url",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "active",
+          "type": "boolean",
+          "nullable": false,
+          "default": "false"
+        },
+        {
+          "name": "require_confirmed_affiliation",
+          "type": "boolean",
+          "nullable": false,
+          "default": "true"
+        }
+      ],
+      "primaryKey": ["id"],
+      "uniques": [
+        {
+          "name": "institutions_name_key",
+          "columns": ["name"]
+        },
+        {
+          "name": "institutions_ror_key",
+          "columns": ["ror"]
+        },
+        {
+          "name": "uq_institutions_code",
+          "columns": ["code"]
+        }
+      ],
+      "foreignKeys": [],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "institutions_name_key",
+          "definition": "CREATE UNIQUE INDEX institutions_name_key ON public.institutions USING btree (name)"
+        },
+        {
+          "name": "institutions_pkey",
+          "definition": "CREATE UNIQUE INDEX institutions_pkey ON public.institutions USING btree (id)"
+        },
+        {
+          "name": "institutions_ror_key",
+          "definition": "CREATE UNIQUE INDEX institutions_ror_key ON public.institutions USING btree (ror)"
+        },
+        {
+          "name": "uq_institutions_code",
+          "definition": "CREATE UNIQUE INDEX uq_institutions_code ON public.institutions USING btree (code)"
+        }
+      ]
+    },
+    {
+      "name": "issn_map",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "issn",
+          "type": "character varying",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "issn_l",
+          "type": "character varying",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "primaryKey": ["issn"],
+      "uniques": [],
+      "foreignKeys": [],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "issn_map_pkey",
+          "definition": "CREATE UNIQUE INDEX issn_map_pkey ON public.issn_map USING btree (issn)"
+        },
+        {
+          "name": "ix_issn_map_issn_l",
+          "definition": "CREATE INDEX ix_issn_map_issn_l ON public.issn_map USING btree (issn_l)"
+        },
+        {
+          "name": "ix_issn_map_issn_norm",
+          "definition": "CREATE INDEX ix_issn_map_issn_norm ON public.issn_map USING btree (upper(replace((issn)::text, '-'::text, ''::text)))"
+        }
+      ]
+    },
+    {
+      "name": "jisc_funder_groups",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "funders",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "date_modified",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "harvested_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "primaryKey": ["id"],
+      "uniques": [],
+      "foreignKeys": [],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "jisc_funder_groups_pkey",
+          "definition": "CREATE UNIQUE INDEX jisc_funder_groups_pkey ON public.jisc_funder_groups USING btree (id)"
+        }
+      ]
+    },
+    {
+      "name": "jisc_funders",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "country",
+          "type": "character varying",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "url",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "identifiers",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "publications_policy",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "data_archiving_policy",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "date_modified",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "harvested_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "ror",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "fundref",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "primaryKey": ["id"],
+      "uniques": [],
+      "foreignKeys": [],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "jisc_funders_pkey",
+          "definition": "CREATE UNIQUE INDEX jisc_funders_pkey ON public.jisc_funders USING btree (id)"
+        }
+      ]
+    },
+    {
+      "name": "jisc_policies",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "publisher_id",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "open_access_prohibited",
+          "type": "boolean",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "internal_moniker",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "urls",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "workflow_dates",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "permitted_oa",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "publication_count",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "date_modified",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "harvested_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "primaryKey": ["id"],
+      "uniques": [],
+      "foreignKeys": [],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "jisc_policies_pkey",
+          "definition": "CREATE UNIQUE INDEX jisc_policies_pkey ON public.jisc_policies USING btree (id)"
+        }
+      ]
+    },
+    {
+      "name": "jisc_publications",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "pub_type",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "url",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "listed_in_doaj",
+          "type": "boolean",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "issns",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "publisher_ids",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "policy_ids",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "issn_l",
+          "type": "character varying",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "date_modified",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "harvested_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "primaryKey": ["id"],
+      "uniques": [],
+      "foreignKeys": [],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "jisc_publications_pkey",
+          "definition": "CREATE UNIQUE INDEX jisc_publications_pkey ON public.jisc_publications USING btree (id)"
+        }
+      ]
+    },
+    {
+      "name": "jisc_publishers",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "url",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "country",
+          "type": "character varying",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "ror",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "publication_count",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "imprint_of_id",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "date_modified",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "harvested_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "primaryKey": ["id"],
+      "uniques": [],
+      "foreignKeys": [],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "jisc_publishers_pkey",
+          "definition": "CREATE UNIQUE INDEX jisc_publishers_pkey ON public.jisc_publishers USING btree (id)"
+        }
+      ]
+    },
+    {
+      "name": "jisc_repositories",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "type",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "url",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "oai_url",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "software",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "content_subjects",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "content_types",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "full_text_record_count",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "metadata_record_count",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "date_modified",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "harvested_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "primaryKey": ["id"],
+      "uniques": [],
+      "foreignKeys": [],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "jisc_repositories_pkey",
+          "definition": "CREATE UNIQUE INDEX jisc_repositories_pkey ON public.jisc_repositories USING btree (id)"
+        }
+      ]
+    },
+    {
+      "name": "journal_apc_aggregates",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "issn_l",
+          "type": "character varying",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "period",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "nullable": false,
+          "default": "'openapc'::text"
+        },
+        {
+          "name": "article_count",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "euro_min",
+          "type": "numeric(12,2)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "euro_max",
+          "type": "numeric(12,2)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "euro_mean",
+          "type": "numeric(12,2)",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "primaryKey": ["issn_l", "period"],
+      "uniques": [],
+      "foreignKeys": [],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "journal_apc_aggregates_pkey",
+          "definition": "CREATE UNIQUE INDEX journal_apc_aggregates_pkey ON public.journal_apc_aggregates USING btree (issn_l, period)"
+        }
+      ]
+    },
+    {
+      "name": "journal_flags",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "institution_id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "issn_l",
+          "type": "character varying",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "works_count",
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "deal_covered",
+          "type": "boolean",
+          "nullable": false,
+          "default": "false"
+        },
+        {
+          "name": "works_window_plus",
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "browse_excluded",
+          "type": "boolean",
+          "nullable": false,
+          "default": "false"
+        }
+      ],
+      "primaryKey": ["institution_id", "issn_l"],
+      "uniques": [],
+      "foreignKeys": [
+        {
+          "name": "journal_flags_institution_id_fkey",
+          "columns": ["institution_id"],
+          "toTable": "institutions",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "CASCADE"
+        },
+        {
+          "name": "journal_flags_issn_l_fkey",
+          "columns": ["issn_l"],
+          "toTable": "journals",
+          "toColumns": ["issn_l"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "CASCADE"
+        }
+      ],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "journal_flags_pkey",
+          "definition": "CREATE UNIQUE INDEX journal_flags_pkey ON public.journal_flags USING btree (institution_id, issn_l)"
+        }
+      ]
+    },
+    {
+      "name": "journals",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "issn_l",
+          "type": "character varying",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "openalex_id",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "publisher_name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "publisher_id",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "type",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "is_oa",
+          "type": "boolean",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "is_in_doaj",
+          "type": "boolean",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "homepage_url",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "country_code",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "issns",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "alternate_titles",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "topics",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "apc_prices",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "summary_stats",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "counts_by_year",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "works_count",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "cited_by_count",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "crossref_meta",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "openaire_meta",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "harvested_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "search_text",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "search_vector",
+          "type": "tsvector",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "last_active_year",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "in_scimago",
+          "type": "boolean",
+          "nullable": false,
+          "default": "false"
+        },
+        {
+          "name": "works_2020_plus",
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "latest_quartile",
+          "type": "character varying",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "embedding",
+          "type": "vector",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "latest_apc_euro",
+          "type": "numeric",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "publisher_canonical",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "oa_status_observed",
+          "type": "character varying",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "doaj_in_doaj",
+          "type": "boolean",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "doaj_has_apc",
+          "type": "boolean",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "doaj_apc_max",
+          "type": "numeric",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "doaj_apc_currency",
+          "type": "character varying",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "doaj_homepage_url",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "doaj_harvested_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "jisc_in_opf",
+          "type": "boolean",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "jisc_oa_prohibited",
+          "type": "boolean",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "jisc_sherpa_id",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "jisc_allows_sa_submitted",
+          "type": "boolean",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "jisc_allows_sa_accepted",
+          "type": "boolean",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "jisc_allows_sa_published",
+          "type": "boolean",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "jisc_embargo_accepted_months",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "jisc_policy",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "jisc_harvested_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "language",
+          "type": "character varying",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "primaryKey": ["issn_l"],
+      "uniques": [
+        {
+          "name": "journals_openalex_id_key",
+          "columns": ["openalex_id"]
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "journals_publisher_id_fkey",
+          "columns": ["publisher_id"],
+          "toTable": "publishers",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "NO ACTION"
+        }
+      ],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "ix_journals_embedding_hnsw",
+          "definition": "CREATE INDEX ix_journals_embedding_hnsw ON public.journals USING hnsw (embedding vector_cosine_ops)"
+        },
+        {
+          "name": "ix_journals_issn_l_corpus",
+          "definition": "CREATE INDEX ix_journals_issn_l_corpus ON public.journals USING btree (issn_l) WHERE ((works_2020_plus > 3) AND (type = 'journal'::text) AND (issn_l IS NOT NULL))"
+        },
+        {
+          "name": "ix_journals_publisher_name_trgm",
+          "definition": "CREATE INDEX ix_journals_publisher_name_trgm ON public.journals USING gin (publisher_name gin_trgm_ops)"
+        },
+        {
+          "name": "ix_journals_search_text_trgm",
+          "definition": "CREATE INDEX ix_journals_search_text_trgm ON public.journals USING gin (search_text gin_trgm_ops)"
+        },
+        {
+          "name": "ix_journals_search_vector",
+          "definition": "CREATE INDEX ix_journals_search_vector ON public.journals USING gin (search_vector)"
+        },
+        {
+          "name": "ix_journals_topics_gin",
+          "definition": "CREATE INDEX ix_journals_topics_gin ON public.journals USING gin (topics jsonb_path_ops)"
+        },
+        {
+          "name": "ix_journals_topics_text_trgm",
+          "definition": "CREATE INDEX ix_journals_topics_text_trgm ON public.journals USING gin (((topics)::text) gin_trgm_ops)"
+        },
+        {
+          "name": "ix_journals_works_2020_plus",
+          "definition": "CREATE INDEX ix_journals_works_2020_plus ON public.journals USING btree (works_2020_plus) WHERE (works_2020_plus > 3)"
+        },
+        {
+          "name": "journals_openalex_id_key",
+          "definition": "CREATE UNIQUE INDEX journals_openalex_id_key ON public.journals USING btree (openalex_id)"
+        },
+        {
+          "name": "journals_pkey",
+          "definition": "CREATE UNIQUE INDEX journals_pkey ON public.journals USING btree (issn_l)"
+        }
+      ]
+    },
+    {
+      "name": "limitations",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "code",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "scope",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "hint",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "severity",
+          "type": "text",
+          "nullable": false,
+          "default": "'info'::text"
+        },
+        {
+          "name": "url",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "primaryKey": ["code"],
+      "uniques": [],
+      "foreignKeys": [],
+      "checks": [
+        {
+          "name": "ck_limitations_severity",
+          "definition": "CHECK ((severity = ANY (ARRAY['info'::text, 'warning'::text])))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "limitations_pkey",
+          "definition": "CREATE UNIQUE INDEX limitations_pkey ON public.limitations USING btree (code)"
+        }
+      ]
+    },
+    {
+      "name": "manual_overrides",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "default": "nextval('manual_overrides_id_seq'::regclass)"
+        },
+        {
+          "name": "table_name",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "row_key",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "field",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "value",
+          "type": "jsonb",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "rationale",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "set_by",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "set_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "primaryKey": ["id"],
+      "uniques": [
+        {
+          "name": "uq_manual_overrides",
+          "columns": ["table_name", "row_key", "field"]
+        }
+      ],
+      "foreignKeys": [],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "manual_overrides_pkey",
+          "definition": "CREATE UNIQUE INDEX manual_overrides_pkey ON public.manual_overrides USING btree (id)"
+        },
+        {
+          "name": "uq_manual_overrides",
+          "definition": "CREATE UNIQUE INDEX uq_manual_overrides ON public.manual_overrides USING btree (table_name, row_key, field)"
+        }
+      ]
+    },
+    {
+      "name": "openaire_funder_streams",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "funder_openaire_id",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "level0_id",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "n_projects",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "primaryKey": ["funder_openaire_id", "level0_id"],
+      "uniques": [],
+      "foreignKeys": [
+        {
+          "name": "openaire_funder_streams_funder_openaire_id_fkey",
+          "columns": ["funder_openaire_id"],
+          "toTable": "openaire_funders",
+          "toColumns": ["openaire_id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "CASCADE"
+        }
+      ],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "openaire_funder_streams_pkey",
+          "definition": "CREATE UNIQUE INDEX openaire_funder_streams_pkey ON public.openaire_funder_streams USING btree (funder_openaire_id, level0_id)"
+        }
+      ]
+    },
+    {
+      "name": "openaire_funders",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "openaire_id",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "short_name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "website_url",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "jurisdiction",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "ror",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "primaryKey": ["openaire_id"],
+      "uniques": [],
+      "foreignKeys": [],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "openaire_funders_pkey",
+          "definition": "CREATE UNIQUE INDEX openaire_funders_pkey ON public.openaire_funders USING btree (openaire_id)"
+        }
+      ]
+    },
+    {
+      "name": "openalex_funders",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "openalex_id",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "ror",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "fundref",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "display_name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "country_code",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "grant_count",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "works_count",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "cited_by_count",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "primaryKey": ["openalex_id"],
+      "uniques": [],
+      "foreignKeys": [],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "openalex_funders_pkey",
+          "definition": "CREATE UNIQUE INDEX openalex_funders_pkey ON public.openalex_funders USING btree (openalex_id)"
+        }
+      ]
+    },
+    {
+      "name": "openalex_publishers",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "openalex_id",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "display_name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "lineage",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "canonical_id",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "canonical_name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "fetched_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "primaryKey": ["openalex_id"],
+      "uniques": [],
+      "foreignKeys": [],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "openalex_publishers_pkey",
+          "definition": "CREATE UNIQUE INDEX openalex_publishers_pkey ON public.openalex_publishers USING btree (openalex_id)"
+        }
+      ]
+    },
+    {
+      "name": "openalex_works",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "institution_id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "w_id",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "doi_normalized",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "year",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "work_type",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "oa_status",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "venue_issn_l",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "venue_name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "authorships",
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'[]'::jsonb"
+        },
+        {
+          "name": "cited_by_count",
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "fwci",
+          "type": "double precision",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "is_retracted",
+          "type": "boolean",
+          "nullable": false,
+          "default": "false"
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "nullable": false,
+          "default": "'works_stats'::text"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "language",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "primaryKey": ["institution_id", "w_id"],
+      "uniques": [],
+      "foreignKeys": [
+        {
+          "name": "openalex_works_institution_id_fkey",
+          "columns": ["institution_id"],
+          "toTable": "institutions",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "CASCADE"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_openalex_works_oa_status",
+          "definition": "CHECK ((oa_status = ANY (ARRAY['gold'::text, 'hybrid'::text, 'green'::text, 'bronze'::text, 'diamond'::text, 'closed'::text])))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_openalex_works_authorships_gin",
+          "definition": "CREATE INDEX ix_openalex_works_authorships_gin ON public.openalex_works USING gin (authorships jsonb_path_ops)"
+        },
+        {
+          "name": "ix_openalex_works_inst_doi",
+          "definition": "CREATE INDEX ix_openalex_works_inst_doi ON public.openalex_works USING btree (institution_id, doi_normalized) WHERE (doi_normalized IS NOT NULL)"
+        },
+        {
+          "name": "ix_openalex_works_inst_issn",
+          "definition": "CREATE INDEX ix_openalex_works_inst_issn ON public.openalex_works USING btree (institution_id, venue_issn_l) WHERE (venue_issn_l IS NOT NULL)"
+        },
+        {
+          "name": "ix_openalex_works_inst_year",
+          "definition": "CREATE INDEX ix_openalex_works_inst_year ON public.openalex_works USING btree (institution_id, year) WHERE (year IS NOT NULL)"
+        },
+        {
+          "name": "openalex_works_pkey",
+          "definition": "CREATE UNIQUE INDEX openalex_works_pkey ON public.openalex_works USING btree (institution_id, w_id)"
+        }
+      ]
+    },
+    {
+      "name": "publishers",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "default": "nextval('publishers_id_seq'::regclass)"
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "openaccess_nl_slug",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "aliases",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "primaryKey": ["id"],
+      "uniques": [
+        {
+          "name": "publishers_name_key",
+          "columns": ["name"]
+        },
+        {
+          "name": "publishers_openaccess_nl_slug_key",
+          "columns": ["openaccess_nl_slug"]
+        }
+      ],
+      "foreignKeys": [],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "publishers_name_key",
+          "definition": "CREATE UNIQUE INDEX publishers_name_key ON public.publishers USING btree (name)"
+        },
+        {
+          "name": "publishers_openaccess_nl_slug_key",
+          "definition": "CREATE UNIQUE INDEX publishers_openaccess_nl_slug_key ON public.publishers USING btree (openaccess_nl_slug)"
+        },
+        {
+          "name": "publishers_pkey",
+          "definition": "CREATE UNIQUE INDEX publishers_pkey ON public.publishers USING btree (id)"
+        }
+      ]
+    },
+    {
+      "name": "pure_org_parents",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "institution_id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "org_uuid",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "parent_uuid",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "parent_name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "primaryKey": ["institution_id", "org_uuid", "parent_uuid"],
+      "uniques": [],
+      "foreignKeys": [
+        {
+          "name": "pure_org_parents_institution_id_fkey",
+          "columns": ["institution_id"],
+          "toTable": "institutions",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "CASCADE"
+        },
+        {
+          "name": "pure_org_parents_institution_id_org_uuid_fkey",
+          "columns": ["institution_id", "institution_id", "org_uuid", "org_uuid"],
+          "toTable": "pure_orgs",
+          "toColumns": ["uuid", "institution_id", "uuid", "institution_id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "CASCADE"
+        }
+      ],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "pure_org_parents_pkey",
+          "definition": "CREATE UNIQUE INDEX pure_org_parents_pkey ON public.pure_org_parents USING btree (institution_id, org_uuid, parent_uuid)"
+        }
+      ]
+    },
+    {
+      "name": "pure_orgs",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "institution_id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "uuid",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "org_type",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "identifiers",
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'[]'::jsonb"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "primaryKey": ["institution_id", "uuid"],
+      "uniques": [],
+      "foreignKeys": [
+        {
+          "name": "pure_orgs_institution_id_fkey",
+          "columns": ["institution_id"],
+          "toTable": "institutions",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "CASCADE"
+        }
+      ],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "pure_orgs_pkey",
+          "definition": "CREATE UNIQUE INDEX pure_orgs_pkey ON public.pure_orgs USING btree (institution_id, uuid)"
+        }
+      ]
+    },
+    {
+      "name": "pure_person_orgs",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "institution_id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "person_uuid",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "org_uuid",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "role",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "portal_person_slug",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "portal_org_slug",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "listing_kinds",
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'[]'::jsonb"
+        }
+      ],
+      "primaryKey": ["institution_id", "person_uuid", "org_uuid"],
+      "uniques": [],
+      "foreignKeys": [
+        {
+          "name": "pure_person_orgs_institution_id_org_uuid_fkey",
+          "columns": ["institution_id", "institution_id", "org_uuid", "org_uuid"],
+          "toTable": "pure_orgs",
+          "toColumns": ["uuid", "institution_id", "uuid", "institution_id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "CASCADE"
+        },
+        {
+          "name": "pure_person_orgs_institution_id_person_uuid_fkey",
+          "columns": ["institution_id", "institution_id", "person_uuid", "person_uuid"],
+          "toTable": "pure_persons",
+          "toColumns": ["uuid", "institution_id", "uuid", "institution_id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "CASCADE"
+        }
+      ],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "pure_person_orgs_pkey",
+          "definition": "CREATE UNIQUE INDEX pure_person_orgs_pkey ON public.pure_person_orgs USING btree (institution_id, person_uuid, org_uuid)"
+        }
+      ]
+    },
+    {
+      "name": "pure_persons",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "institution_id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "uuid",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "orcid",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "payload",
+          "type": "jsonb",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "primaryKey": ["institution_id", "uuid"],
+      "uniques": [],
+      "foreignKeys": [
+        {
+          "name": "pure_persons_institution_id_fkey",
+          "columns": ["institution_id"],
+          "toTable": "institutions",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "CASCADE"
+        }
+      ],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "ix_pure_persons_inst_orcid",
+          "definition": "CREATE INDEX ix_pure_persons_inst_orcid ON public.pure_persons USING btree (institution_id, orcid) WHERE (orcid IS NOT NULL)"
+        },
+        {
+          "name": "pure_persons_pkey",
+          "definition": "CREATE UNIQUE INDEX pure_persons_pkey ON public.pure_persons USING btree (institution_id, uuid)"
+        }
+      ]
+    },
+    {
+      "name": "raw_files",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('raw_files_id_seq'::regclass)"
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "entity_type",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "source_pk",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "url",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "content_hash",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "path",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "size_bytes",
+          "type": "bigint",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "fetched_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "harvest_run_id",
+          "type": "bigint",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "primaryKey": ["id"],
+      "uniques": [
+        {
+          "name": "uq_raw_files_version",
+          "columns": ["source", "entity_type", "source_pk", "content_hash"]
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "raw_files_harvest_run_id_fkey",
+          "columns": ["harvest_run_id"],
+          "toTable": "harvest_runs",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "NO ACTION"
+        }
+      ],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "raw_files_pkey",
+          "definition": "CREATE UNIQUE INDEX raw_files_pkey ON public.raw_files USING btree (id)"
+        },
+        {
+          "name": "uq_raw_files_version",
+          "definition": "CREATE UNIQUE INDEX uq_raw_files_version ON public.raw_files USING btree (source, entity_type, source_pk, content_hash)"
+        }
+      ]
+    },
+    {
+      "name": "scimagojr_metrics",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "issn_l",
+          "type": "character varying",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "year",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "sjr",
+          "type": "numeric(12,6)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "best_quartile",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "h_index",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "extras",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "primaryKey": ["issn_l", "year"],
+      "uniques": [],
+      "foreignKeys": [],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "scimagojr_metrics_pkey",
+          "definition": "CREATE UNIQUE INDEX scimagojr_metrics_pkey ON public.scimagojr_metrics USING btree (issn_l, year)"
+        }
+      ]
+    },
+    {
+      "name": "source_records",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('source_records_id_seq'::regclass)"
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "entity_type",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "source_pk",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "payload",
+          "type": "jsonb",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "content_hash",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "harvested_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "harvest_run_id",
+          "type": "bigint",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "publication_year",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "primaryKey": ["id"],
+      "uniques": [
+        {
+          "name": "uq_source_records_version",
+          "columns": ["source", "entity_type", "source_pk", "content_hash"]
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "source_records_harvest_run_id_fkey",
+          "columns": ["harvest_run_id"],
+          "toTable": "harvest_runs",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "NO ACTION"
+        }
+      ],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "ix_source_records_lookup",
+          "definition": "CREATE INDEX ix_source_records_lookup ON public.source_records USING btree (source, entity_type, source_pk, harvested_at DESC)"
+        },
+        {
+          "name": "ix_source_records_sources_issn_l",
+          "definition": "CREATE INDEX ix_source_records_sources_issn_l ON public.source_records USING btree (((payload ->> 'issn_l'::text)), harvested_at DESC) WHERE ((source = 'openalex'::text) AND (entity_type = 'sources'::text))"
+        },
+        {
+          "name": "ix_source_records_works_issn_l",
+          "definition": "CREATE INDEX ix_source_records_works_issn_l ON public.source_records USING btree (((((payload -> 'primary_location'::text) -> 'source'::text) ->> 'issn_l'::text)), source_pk, harvested_at DESC) WHERE ((source = 'openalex'::text) AND (entity_type = 'works_stats'::text))"
+        },
+        {
+          "name": "ix_source_records_works_year",
+          "definition": "CREATE INDEX ix_source_records_works_year ON public.source_records USING btree (publication_year, source_pk, harvested_at DESC) WHERE ((source = 'openalex'::text) AND (entity_type = 'works_stats'::text))"
+        },
+        {
+          "name": "source_records_pkey",
+          "definition": "CREATE UNIQUE INDEX source_records_pkey ON public.source_records USING btree (id)"
+        },
+        {
+          "name": "uq_source_records_version",
+          "definition": "CREATE UNIQUE INDEX uq_source_records_version ON public.source_records USING btree (source, entity_type, source_pk, content_hash)"
+        }
+      ]
+    },
+    {
+      "name": "status_changes",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('status_changes_id_seq'::regclass)"
+        },
+        {
+          "name": "table_name",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "row_key",
+          "type": "jsonb",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "field",
+          "type": "text",
+          "nullable": false,
+          "default": "'status'::text"
+        },
+        {
+          "name": "old_value",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "new_value",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "note",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "changed_by",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "changed_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": "now()"
+        }
+      ],
+      "primaryKey": ["id"],
+      "uniques": [],
+      "foreignKeys": [],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "ix_status_changes_table_time",
+          "definition": "CREATE INDEX ix_status_changes_table_time ON public.status_changes USING btree (table_name, changed_at)"
+        },
+        {
+          "name": "status_changes_pkey",
+          "definition": "CREATE UNIQUE INDEX status_changes_pkey ON public.status_changes USING btree (id)"
+        }
+      ]
+    },
+    {
+      "name": "usage_events",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('usage_events_id_seq'::regclass)"
+        },
+        {
+          "name": "ts",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "session_id",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "event_type",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "path",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "duration_ms",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "query",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "results_count",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "search_scope",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "filters",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "ref_type",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "ref_id",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "message",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "detail",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "referrer",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "ip",
+          "type": "inet",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "country",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "user_agent",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "tz",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "locale",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "is_browse",
+          "type": "boolean",
+          "nullable": false,
+          "default": "false"
+        }
+      ],
+      "primaryKey": ["id"],
+      "uniques": [],
+      "foreignKeys": [],
+      "checks": [
+        {
+          "name": "ck_usage_event_type",
+          "definition": "CHECK ((event_type = ANY (ARRAY['page_view'::text, 'search'::text, 'error'::text])))"
+        },
+        {
+          "name": "ck_usage_ref_pair",
+          "definition": "CHECK (((ref_type IS NULL) = (ref_id IS NULL)))"
+        },
+        {
+          "name": "ck_usage_ref_type",
+          "definition": "CHECK ((ref_type = ANY (ARRAY['journal'::text, 'funder'::text, 'author'::text, 'orgunit'::text, 'publisher'::text])))"
+        },
+        {
+          "name": "ck_usage_search_scope",
+          "definition": "CHECK ((search_scope = ANY (ARRAY['journals'::text, 'funders'::text, 'authors'::text, 'publishers'::text, 'orgunits'::text])))"
+        },
+        {
+          "name": "ck_usage_source",
+          "definition": "CHECK ((source = ANY (ARRAY['js_error'::text, 'unhandled_rejection'::text, 'api_status'::text])))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_usage_events_session",
+          "definition": "CREATE INDEX ix_usage_events_session ON public.usage_events USING btree (session_id)"
+        },
+        {
+          "name": "ix_usage_events_ts",
+          "definition": "CREATE INDEX ix_usage_events_ts ON public.usage_events USING btree (ts)"
+        },
+        {
+          "name": "ix_usage_events_type_ts",
+          "definition": "CREATE INDEX ix_usage_events_type_ts ON public.usage_events USING btree (event_type, ts)"
+        },
+        {
+          "name": "usage_events_pkey",
+          "definition": "CREATE UNIQUE INDEX usage_events_pkey ON public.usage_events USING btree (id)"
+        }
+      ]
+    },
+    {
+      "name": "work_funders",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "institution_id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "pure_uuid",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "funder_openalex_id",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "funder_name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "award",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "harvested_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "primaryKey": ["institution_id", "pure_uuid", "funder_openalex_id"],
+      "uniques": [],
+      "foreignKeys": [
+        {
+          "name": "work_funders_institution_id_pure_uuid_fkey",
+          "columns": ["institution_id", "institution_id", "pure_uuid", "pure_uuid"],
+          "toTable": "works",
+          "toColumns": ["institution_id", "pure_uuid", "pure_uuid", "institution_id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "CASCADE"
+        }
+      ],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "work_funders_pkey",
+          "definition": "CREATE UNIQUE INDEX work_funders_pkey ON public.work_funders USING btree (institution_id, pure_uuid, funder_openalex_id)"
+        }
+      ]
+    },
+    {
+      "name": "work_identity",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('work_identity_id_seq'::regclass)"
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "source_pk",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "work_id",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "matched_by",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "confidence",
+          "type": "double precision",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false,
+          "default": "'candidate'::text"
+        },
+        {
+          "name": "note",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "institution_id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "primaryKey": ["id"],
+      "uniques": [
+        {
+          "name": "uq_work_identity_source",
+          "columns": ["institution_id", "source", "source_pk"]
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "work_identity_institution_id_fkey",
+          "columns": ["institution_id"],
+          "toTable": "institutions",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "NO ACTION"
+        },
+        {
+          "name": "work_identity_work_fkey",
+          "columns": ["institution_id", "institution_id", "work_id", "work_id"],
+          "toTable": "works",
+          "toColumns": ["institution_id", "pure_uuid", "institution_id", "pure_uuid"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "CASCADE"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_work_identity_matched_by",
+          "definition": "CHECK ((matched_by ~ '^(doi|verbatim|trgm:.+)$'::text))"
+        },
+        {
+          "name": "ck_work_identity_status",
+          "definition": "CHECK ((status = ANY (ARRAY['confirmed'::text, 'missing'::text, 'candidate'::text])))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_work_identity_inst_work",
+          "definition": "CREATE INDEX ix_work_identity_inst_work ON public.work_identity USING btree (institution_id, work_id)"
+        },
+        {
+          "name": "ix_work_identity_status",
+          "definition": "CREATE INDEX ix_work_identity_status ON public.work_identity USING btree (status)"
+        },
+        {
+          "name": "ix_work_identity_ut_work",
+          "definition": "CREATE INDEX ix_work_identity_ut_work ON public.work_identity USING btree (work_id)"
+        },
+        {
+          "name": "uq_work_identity_source",
+          "definition": "CREATE UNIQUE INDEX uq_work_identity_source ON public.work_identity USING btree (institution_id, source, source_pk)"
+        },
+        {
+          "name": "work_identity_pkey",
+          "definition": "CREATE UNIQUE INDEX work_identity_pkey ON public.work_identity USING btree (id)"
+        }
+      ]
+    },
+    {
+      "name": "work_pure_authors",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "institution_id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "work_pure_uuid",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "person_uuid",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "position",
+          "type": "smallint",
+          "nullable": false,
+          "default": "'0'::smallint"
+        },
+        {
+          "name": "first_names",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "family_names",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "affiliations",
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'[]'::jsonb"
+        }
+      ],
+      "primaryKey": ["institution_id", "work_pure_uuid", "person_uuid"],
+      "uniques": [],
+      "foreignKeys": [
+        {
+          "name": "work_pure_authors_institution_id_fkey",
+          "columns": ["institution_id"],
+          "toTable": "institutions",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "CASCADE"
+        },
+        {
+          "name": "work_pure_authors_institution_id_work_pure_uuid_fkey",
+          "columns": ["institution_id", "institution_id", "work_pure_uuid", "work_pure_uuid"],
+          "toTable": "works",
+          "toColumns": ["institution_id", "pure_uuid", "pure_uuid", "institution_id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "CASCADE"
+        }
+      ],
+      "checks": [],
+      "indexes": [
+        {
+          "name": "ix_work_pure_authors_inst_person",
+          "definition": "CREATE INDEX ix_work_pure_authors_inst_person ON public.work_pure_authors USING btree (institution_id, person_uuid)"
+        },
+        {
+          "name": "work_pure_authors_pkey",
+          "definition": "CREATE UNIQUE INDEX work_pure_authors_pkey ON public.work_pure_authors USING btree (institution_id, work_pure_uuid, person_uuid)"
+        }
+      ]
+    },
+    {
+      "name": "works",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "pure_uuid",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "doi_normalized",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "norm_title",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "year",
+          "type": "smallint",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "work_type",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "publisher",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "cerif_issn",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "oa_status",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "first_seen_run",
+          "type": "bigint",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "last_seen_run",
+          "type": "bigint",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "retired_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "journal_issn_l",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "institution_id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "primaryKey": ["institution_id", "pure_uuid"],
+      "uniques": [],
+      "foreignKeys": [
+        {
+          "name": "ut_works_first_seen_run_fkey",
+          "columns": ["first_seen_run"],
+          "toTable": "harvest_runs",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "NO ACTION"
+        },
+        {
+          "name": "ut_works_journal_issn_l_fkey",
+          "columns": ["journal_issn_l"],
+          "toTable": "journals",
+          "toColumns": ["issn_l"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "NO ACTION"
+        },
+        {
+          "name": "ut_works_last_seen_run_fkey",
+          "columns": ["last_seen_run"],
+          "toTable": "harvest_runs",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "NO ACTION"
+        },
+        {
+          "name": "works_institution_id_fkey",
+          "columns": ["institution_id"],
+          "toTable": "institutions",
+          "toColumns": ["id"],
+          "onUpdate": "NO ACTION",
+          "onDelete": "NO ACTION"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_works_oa_status",
+          "definition": "CHECK ((oa_status = ANY (ARRAY['gold'::text, 'hybrid'::text, 'green'::text, 'bronze'::text, 'diamond'::text, 'closed'::text])))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_ut_works_norm_title",
+          "definition": "CREATE INDEX ix_ut_works_norm_title ON public.works USING btree (norm_title)"
+        },
+        {
+          "name": "ix_ut_works_norm_title_trgm",
+          "definition": "CREATE INDEX ix_ut_works_norm_title_trgm ON public.works USING gin (norm_title gin_trgm_ops)"
+        },
+        {
+          "name": "ix_ut_works_year",
+          "definition": "CREATE INDEX ix_ut_works_year ON public.works USING btree (year)"
+        },
+        {
+          "name": "ix_works_inst_journal",
+          "definition": "CREATE INDEX ix_works_inst_journal ON public.works USING btree (institution_id, journal_issn_l) WHERE (journal_issn_l IS NOT NULL)"
+        },
+        {
+          "name": "uq_works_inst_doi",
+          "definition": "CREATE UNIQUE INDEX uq_works_inst_doi ON public.works USING btree (institution_id, doi_normalized) WHERE (doi_normalized IS NOT NULL)"
+        },
+        {
+          "name": "works_pkey",
+          "definition": "CREATE UNIQUE INDEX works_pkey ON public.works USING btree (institution_id, pure_uuid)"
+        }
+      ]
+    }
+  ]
+}
