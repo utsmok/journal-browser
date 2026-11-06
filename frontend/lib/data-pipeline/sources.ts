@@ -11,7 +11,7 @@ export const SOURCES: SourceRow[] = [
     provides:
       "The journal universe, works, author profiles, publishers, funders, and open-access color samples.",
     transport:
-      "REST API with cursor pagination. Single-work requests are preferred over batch filters. Uses OPENALEX_API_KEY when set.",
+      "REST API. The list comes in pages, and each response includes the cursor for the next page. Single-work requests are preferred over batch filters. Uses OPENALEX_API_KEY when set.",
     usedBy:
       "Bootstrap steps journals, publishers, oa-colors, stats, enrich, and author-ids. Manual steps funder sweeps, work funders, and the Emerald contract import.",
   },

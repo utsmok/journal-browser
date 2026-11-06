@@ -35,7 +35,7 @@ const institutionFkCount = schema.tables.reduce(
 const OPENALEX_CALLS: [string, string, string][] = [
   [
     "journals",
-    "GET /sources, one page of 100 at a time, following the cursor to the end. A batched request seeds the deal journals. The institution is found by searching for its ROR id.",
+    "GET /sources, 100 records per page. Each response includes the cursor for the next page. A batched request seeds the deal journals. The institution is found by searching for its ROR id.",
     "source_records, journals, issn_map",
   ],
   [
@@ -340,8 +340,8 @@ export default function DataPipelinePage() {
         </p>
         <p className="max-w-prose">
           Bootstrap has three run modes, and auto mode is the default. Auto mode skips the whole
-          plan when two things are true. The journals table has rows, and the plan left its
-          completion marker behind. The marker is one <Code>harvest_state</Code> row with source{" "}
+          plan when two things are true. The journals table has rows, and the plan wrote its
+          completion marker. The marker is one <Code>harvest_state</Code> row with source{" "}
           <Code>local</Code> and entity <Code>bootstrap_plan</Code>, and the plan runner writes it
           after the plan finishes without error. Journals without the marker mean an earlier
           bootstrap stopped partway. In that case auto mode refuses to run and exits with error 1
@@ -378,11 +378,12 @@ export default function DataPipelinePage() {
         <div className="space-y-3">
           <h3 className="text-lg font-semibold">OpenAlex</h3>
           <p className="max-w-prose">
-            The journals job walks the OpenAlex sources list with cursor pagination. In cursor
-            pagination, each response carries a cursor, and the job follows it until the list ends.
-            The job writes one row per journal into <Code>journals</Code>, keyed by ISSN-L. ISSN-L
-            is the standard id that groups a journal&apos;s print, online, and variant ISSNs under
-            one id, and the job maps every variant ISSN to it in <Code>issn_map</Code>. With{" "}
+            The journals job retrieves the full OpenAlex sources list, 100 records per page. Each
+            response includes the cursor value for the next page. The job sends that value back on
+            every following request, until the API reports the end of the list. The job writes one
+            row per journal into <Code>journals</Code>, keyed by ISSN-L. ISSN-L is the standard id
+            that groups a journal&apos;s print, online, and variant ISSNs under one id, and the job
+            maps every variant ISSN to it in <Code>issn_map</Code>. With{" "}
             <Code>--seed-deals-only</Code>, the same job does less. It writes only the journals
             covered by a deal, in batches of 50. The publishers job runs after it and resolves each
             journal&apos;s publisher lineage from OpenAlex publisher ids, 50 at a time. It makes a
@@ -395,12 +396,12 @@ export default function DataPipelinePage() {
             per request, in chunks of 500 with 10 requests in flight. That stays far below
             OpenAlex&apos;s published limit of 100 requests per second, and each single-work request
             costs 1 credit of the 100,000 credits a free key gets per day. When OpenAlex has no work
-            for a DOI, the job records the identity as missing, so Crossref later sees only the DOIs
-            worth trying. The author-ids job sweeps authors affiliated with the institution&apos;s
-            ROR id, 200 per page, and then fetches the works of the authors it resolved, 50 author
-            ids per request, up to 2000 authors per run. The OA color job samples the 20 newest
-            works of each open-access journal, four journals at a time. It fills only colors it has
-            not observed yet, so an interrupted run can continue.
+            for a DOI, the job records the identity as missing, so the Crossref pass only covers
+            DOIs worth trying. The author-ids job sweeps authors affiliated with the
+            institution&apos;s ROR id, 200 per page, and then fetches the works of the authors it
+            resolved, 50 author ids per request, up to 2000 authors per run. The OA color job
+            samples the 20 newest works of each open-access journal, four journals at a time. It
+            fills only colors it has not observed yet, so an interrupted run can continue.
           </p>
           <CallsTable rows={OPENALEX_CALLS} />
         </div>
@@ -408,13 +409,13 @@ export default function DataPipelinePage() {
         <div className="space-y-3">
           <h3 className="text-lg font-semibold">Crossref</h3>
           <p className="max-w-prose">
-            DOIs that OpenAlex does not know go to Crossref next. The enrich job sends them in
-            batches of 50. The contact email in each request tells Crossref who is asking, which
-            puts the client in Crossref&apos;s polite pool, the pool with steadier response times. A
-            confirmed match writes the same <Code>work_identity</Code> rows as OpenAlex and resolves
-            the journal through <Code>issn_map</Code>. The third rung needs no network at all. Works
-            that still have no journal are checked against the CERIF ISSN recorded on the work
-            itself.
+            Crossref is the second identity source. The enrich job sends the DOIs that OpenAlex
+            could not resolve in batches of 50. The contact email in each request tells Crossref who
+            is asking, which puts the client in Crossref&apos;s polite pool, the pool with steadier
+            response times. A confirmed match writes the same <Code>work_identity</Code> rows as
+            OpenAlex and resolves the journal through <Code>issn_map</Code>. The third rung needs no
+            network at all. Works that still have no journal are checked against the CERIF ISSN
+            recorded on the work itself.
           </p>
           <CallsTable rows={CROSSREF_CALLS} />
         </div>
@@ -424,9 +425,9 @@ export default function DataPipelinePage() {
           <p className="max-w-prose">
             Three passes read the same Pure OAI-PMH endpoint at ris.utwente.nl. OAI-PMH is a
             standard XML protocol for harvesting repository content. The passes are anonymous, wait
-            at least one second between requests, and walk each set page by page using resumption
-            tokens, the continuation ids the protocol returns with every page. If a token goes
-            stale, the pass restarts that set, at most twice.
+            at least one second between requests, and read each set page by page. Each response
+            includes a resumption token, the id that requests the next page. If a token goes stale,
+            the pass restarts that set, at most twice.
           </p>
           <p className="max-w-prose">
             The works pass requests one OAI set per publication year in the data window, in a simple
@@ -444,11 +445,11 @@ export default function DataPipelinePage() {
         <div className="space-y-3">
           <h3 className="text-lg font-semibold">OpenAIRE</h3>
           <p className="max-w-prose">
-            The openaire job runs when the institution has an <Code>openaire_org_id</Code>. It walks
-            the OpenAIRE Graph API&apos;s research products, 100 per page, which is the API&apos;s
-            maximum, and stores every payload verbatim. When a product&apos;s DOI matches a local
-            work, the job confirms that work&apos;s identity. When only the title matches, the job
-            records a candidate row for a person to review, instead of claiming a match.
+            The openaire job runs when the institution has an <Code>openaire_org_id</Code>. It
+            retrieves the OpenAIRE Graph API&apos;s research products, 100 per page, which is the
+            API&apos;s maximum, and stores every payload verbatim. When a product&apos;s DOI matches
+            a local work, the job confirms that work&apos;s identity. When only the title matches,
+            the job records a candidate row for a person to review, instead of claiming a match.
           </p>
           <CallsTable rows={OPENAIRE_CALLS} />
         </div>
@@ -512,8 +513,8 @@ export default function DataPipelinePage() {
             confidence. An exact ORCID match scores 1.0. Equal normalized full names score 0.9.
             Matching initials forms score 0.8. A family name that is unique among the work&apos;s
             Pure authors scores 0.7. Fuzzy name similarity of at least 0.92 by Levenshtein ratio
-            scores 0.6. A rung must find exactly one unambiguous hit. When a rung is ambiguous, the
-            next rung tries.
+            scores 0.6. Each rung must produce exactly one unambiguous match. If a rung is
+            ambiguous, the next rung is used instead.
           </p>
         </div>
       </section>
@@ -622,13 +623,13 @@ export default function DataPipelinePage() {
           Every harvested payload is stored twice, first as raw bytes and then as a parsed record.
           The download helper writes the bytes under <Code>landing/</Code> and adds a{" "}
           <Code>raw_files</Code> row. An ingest session then stores the parsed payload in{" "}
-          <Code>source_records</Code>, and each record carries a SHA-256 hash of its content
-          together with the source, entity type, and source key. When a re-harvest produces
-          identical content, the job inserts nothing. When the content changed, the job adds a new
-          version. Old versions are never deleted, so this history grows without limit. The
-          normalized tables, such as journals, works, openalex_works, deals, the Pure tables, and
-          the Jisc tables, are rebuilt from these stored copies. Because the copies are kept, every
-          job can run again and reach the same result.
+          <Code>source_records</Code>, and each record stores a SHA-256 hash of its content plus the
+          source, entity type, and source key. When a re-harvest produces identical content, the job
+          inserts nothing. When the content changed, the job adds a new version. Old versions are
+          never deleted, so this history grows without limit. The normalized tables, such as
+          journals, works, openalex_works, deals, the Pure tables, and the Jisc tables, are rebuilt
+          from these stored copies. Because the copies are kept, every job can run again and reach
+          the same result.
         </p>
         <p className="max-w-prose">
           A third layer precomputes the values the site reads on every page.{" "}
