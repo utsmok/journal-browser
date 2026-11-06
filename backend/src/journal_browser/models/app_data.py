@@ -20,8 +20,8 @@ from .base import Base, _tstamp
 class CacheEpoch(Base):
     """One-row harvest counter; in-process caches key on bumped_at so any
     harvest step invalidates them across processes (services/search.py,
-    services/publishers.py). Bumped by run_harvest and the denorm
-    refreshes."""
+    services/publishers.py). Bumped when any harvest run closes
+    (IngestSession.finish_run) and by the denorm refreshes."""
 
     __tablename__ = "cache_epoch"
 

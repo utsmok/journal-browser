@@ -16,8 +16,8 @@ The SQL lives here so the alembic backfill and the jobs share one source.
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..ingest import bump_cache_epoch
 from ..models import Institution
-from .common import bump_cache_epoch
 
 # Decision 16 (docs/decisions.md): proceedings-like titles with no deal and
 # no institution works are hidden from browse. Recomputed wholesale so deal

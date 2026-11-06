@@ -19,7 +19,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import get_settings
-from .models import HarvestRun, HarvestState, ManualOverride, RawFile, SourceRecord
+from .models import CacheEpoch, HarvestRun, HarvestState, ManualOverride, RawFile, SourceRecord
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,20 @@ def content_hash(payload: Any) -> str:
 
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+async def bump_cache_epoch(session: AsyncSession) -> None:
+    """Advance the single-row cache epoch; callers commit.
+
+    Upsert rather than UPDATE so the primitive also converges on a
+    database whose seed row is missing (tests build schema with
+    create_all, not alembic).
+    """
+    await session.execute(
+        pg_insert(CacheEpoch)
+        .values(id=1, bumped_at=func.now())
+        .on_conflict_do_update(index_elements=["id"], set_={"bumped_at": func.now()})
+    )
 
 
 def _strip_nuls(value: Any) -> Any:
@@ -246,11 +260,28 @@ class IngestSession:
             .select_from(SourceRecord)
             .where(SourceRecord.harvest_run_id == self.run_id)
         )
-        run = await self.session.get(HarvestRun, self.run_id)
-        assert run is not None
-        run.status = status
-        run.finished_at = datetime.now(UTC)
-        run.stats = final
+        # Close only a run still marked running: a newer start_run of the
+        # same job key may have superseded this one to failed while this
+        # process was still working (production rows 47/50, 2026-10-26).
+        # A zombie finish must not flip that row back to completed nor
+        # rewrite harvest_state under a dead run id.
+        closed = await self.session.scalar(
+            update(HarvestRun)
+            .where(HarvestRun.id == self.run_id, HarvestRun.status == "running")
+            .values(status=status, finished_at=datetime.now(UTC), stats=final)
+            .returning(HarvestRun.id)
+        )
+        if closed is None:
+            logger.warning(
+                "Run %s finished as %r after a newer run superseded it; "
+                "discarding close (row stays failed, harvest_state untouched)",
+                self.run_id,
+                status,
+            )
+            return final
+        # Every close invalidates epoch-keyed caches: per-page commits can
+        # have changed serving state before the close, on either status.
+        await bump_cache_epoch(self.session)
         await self.session.execute(
             pg_insert(HarvestState)
             .values(
