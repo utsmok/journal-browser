@@ -1,3 +1,5 @@
+import planJson from "@/lib/data-pipeline-plan.json";
+
 export type DagBand = "global" | "institution" | "final";
 
 export type SourceKey = "openalex" | "crossref" | "openaire" | "pure" | "register" | "db";
@@ -28,6 +30,15 @@ export type DagEdge = {
   d: string;
 };
 
+export type PlanStep = {
+  id: string;
+  band: DagBand;
+  script: string;
+  deps: string[];
+};
+
+export const PLAN = planJson as { generatedAt: string; steps: PlanStep[] };
+
 export const NODE_W = 168;
 export const NODE_H = 44;
 
@@ -47,241 +58,68 @@ export const DAG_BANDS: DagBandRect[] = [
   { id: "final", label: "Final step", x: 330, y: 740, w: 420, h: 90 },
 ];
 
-export const DAG_STEPS: DagStep[] = [
-  // Global band
-  {
-    id: "journals",
-    label: "Journal sweep",
-    job: "harvest_journals.py",
-    band: "global",
-    sources: ["openalex"],
-    deps: [],
-    x: 40,
-    y: 70,
-  },
-  {
-    id: "deals-openaccess-nl",
-    label: "openaccess.nl deals",
-    job: "scrape_openaccess_nl.py",
-    band: "global",
-    sources: ["register"],
-    deps: [],
-    x: 240,
-    y: 70,
-  },
-  {
-    id: "deals-jct",
-    label: "JCT sheets",
-    job: "ingest_jct.py",
-    band: "global",
-    sources: ["register"],
-    deps: [],
-    x: 440,
-    y: 70,
-  },
-  {
-    id: "openapc",
-    label: "OpenAPC",
-    job: "ingest_openapc.py",
-    band: "global",
-    sources: ["register"],
-    deps: [],
-    x: 640,
-    y: 70,
-  },
-  {
-    id: "deals-reconcile",
-    label: "Deal reconcile",
-    job: "reconcile.py",
-    band: "global",
-    sources: ["db"],
-    deps: ["journals", "deals-openaccess-nl", "deals-jct"],
-    x: 840,
-    y: 70,
-  },
-  {
-    id: "publishers",
-    label: "Publisher lineage",
-    job: "harvest_publishers.py",
-    band: "global",
-    sources: ["openalex"],
-    deps: ["journals"],
-    x: 40,
-    y: 170,
-  },
-  {
-    id: "scimagojr",
-    label: "Scimago quartiles",
-    job: "ingest_scimagojr.py",
-    band: "global",
-    sources: ["register"],
-    deps: ["journals"],
-    x: 240,
-    y: 170,
-  },
-  {
-    id: "flags",
-    label: "Corpus flags",
-    job: "backfill_flags.py",
-    band: "global",
-    sources: ["db"],
-    deps: ["journals"],
-    x: 440,
-    y: 170,
-  },
-  {
-    id: "doaj",
-    label: "DOAJ canon",
-    job: "harvest_doaj.py",
-    band: "global",
-    sources: ["register"],
-    deps: ["journals"],
-    x: 628,
-    y: 170,
-  },
-  {
-    id: "oa-colors",
-    label: "OA color sample",
-    job: "harvest_oa_colors.py",
-    band: "global",
-    sources: ["openalex"],
-    deps: ["journals", "openapc"],
-    x: 824,
-    y: 170,
-  },
-  {
-    id: "deals-issn-l",
-    label: "Deal ISSN-L",
-    job: "backfill_issn_l.py",
-    band: "global",
-    sources: ["db"],
-    deps: ["deals-reconcile"],
-    x: 40,
-    y: 240,
-  },
-  // Institution band
-  {
-    id: "pure",
-    label: "Pure works sweep",
-    job: "harvest_pure.py",
-    band: "institution",
-    sources: ["pure"],
-    deps: [],
-    x: 40,
-    y: 390,
-  },
-  {
-    id: "pure-cerif",
+// Presentation only: display labels, source dots, and coordinates. Step ids,
+// bands, scripts, and dependencies come from the generated plan JSON and are
+// verified against the drawn edges below.
+const LAYOUT: Record<
+  string,
+  { label: string; sources: SourceKey[]; x: number; y: number; jobSuffix?: string }
+> = {
+  journals: { label: "Journal sweep", sources: ["openalex"], x: 40, y: 70 },
+  publishers: { label: "Publisher lineage", sources: ["openalex"], x: 40, y: 170 },
+  "deals-openaccess-nl": { label: "openaccess.nl deals", sources: ["register"], x: 240, y: 70 },
+  "deals-jct": { label: "JCT sheets", sources: ["register"], x: 440, y: 70 },
+  openapc: { label: "OpenAPC", sources: ["register"], x: 640, y: 70 },
+  "deals-reconcile": { label: "Deal reconcile", sources: ["db"], x: 840, y: 70 },
+  "deals-issn-l": { label: "Deal ISSN-L", sources: ["db"], x: 40, y: 240 },
+  scimagojr: { label: "Scimago quartiles", sources: ["register"], x: 240, y: 170 },
+  flags: { label: "Corpus flags", sources: ["db"], x: 440, y: 170 },
+  doaj: { label: "DOAJ canon", sources: ["register"], x: 628, y: 170 },
+  "oa-colors": { label: "OA color sample", sources: ["openalex"], x: 824, y: 170 },
+  pure: { label: "Pure works sweep", sources: ["pure"], x: 40, y: 390 },
+  "pure-cerif": {
     label: "CERIF authors",
-    job: "harvest_pure.py --cerif",
-    band: "institution",
     sources: ["pure"],
-    deps: ["pure"],
     x: 240,
     y: 340,
+    jobSuffix: " --cerif",
   },
-  {
-    id: "enrich",
-    label: "Enrich works",
-    job: "enrich_works.py",
-    band: "institution",
-    sources: ["openalex", "crossref"],
-    deps: ["pure"],
-    x: 240,
-    y: 430,
-  },
-  {
-    id: "pure-entities",
-    label: "Orgs and persons",
-    job: "harvest_pure_entities.py",
-    band: "institution",
-    sources: ["pure"],
-    deps: ["pure"],
-    x: 240,
-    y: 520,
-  },
-  {
-    id: "openaire",
-    label: "OpenAIRE products",
-    job: "harvest_openaire.py",
-    band: "institution",
-    sources: ["openaire"],
-    deps: ["pure", "deals-issn-l"],
-    x: 240,
-    y: 610,
-  },
-  {
-    id: "stats",
-    label: "Institution stats",
-    job: "harvest_stats.py",
-    band: "institution",
-    sources: ["openalex"],
-    deps: ["enrich", "openaire", "openapc", "scimagojr", "flags"],
-    x: 440,
-    y: 430,
-  },
-  {
-    id: "pure-authors",
-    label: "Pure author edges",
-    job: "backfill_pure_authors.py",
-    band: "institution",
-    sources: ["db"],
-    deps: ["pure-cerif", "openalex-works"],
-    x: 640,
-    y: 440,
-  },
-  {
-    id: "openalex-works",
-    label: "Works store",
-    job: "build_openalex_works.py",
-    band: "institution",
-    sources: ["db"],
-    deps: ["stats"],
-    x: 640,
-    y: 530,
-  },
-  {
-    id: "reconcile",
+  "pure-entities": { label: "Orgs and persons", sources: ["pure"], x: 240, y: 520 },
+  enrich: { label: "Enrich works", sources: ["openalex", "crossref"], x: 240, y: 430 },
+  openaire: { label: "OpenAIRE products", sources: ["openaire"], x: 240, y: 610 },
+  stats: { label: "Institution stats", sources: ["openalex"], x: 440, y: 430 },
+  "openalex-works": { label: "Works store", sources: ["db"], x: 640, y: 530 },
+  "pure-authors": { label: "Pure author edges", sources: ["db"], x: 640, y: 440 },
+  reconcile: {
     label: "Coverage flags",
-    job: "reconcile.py --institution",
-    band: "institution",
     sources: ["db"],
-    deps: ["stats", "deals-reconcile"],
     x: 840,
     y: 340,
+    jobSuffix: " --institution",
   },
-  {
-    id: "author-ids",
-    label: "Author identity cascade",
-    job: "resolve_author_ids.py",
-    band: "institution",
-    sources: ["openalex"],
-    deps: ["openalex-works", "pure-entities", "pure-cerif", "pure-authors"],
-    x: 840,
-    y: 430,
-  },
-  {
-    id: "authors",
-    label: "Author roster",
-    job: "ingest_authors.py",
-    band: "institution",
-    sources: ["db"],
-    deps: ["author-ids", "reconcile"],
-    x: 840,
-    y: 520,
-  },
-  // Final band
-  {
-    id: "embeddings",
-    label: "Journal embeddings",
-    job: "embed_journals.py",
-    band: "final",
-    sources: ["db"],
-    deps: ["stats"],
-    x: 440,
-    y: 760,
-  },
-];
+  "author-ids": { label: "Author identity cascade", sources: ["openalex"], x: 840, y: 430 },
+  authors: { label: "Author roster", sources: ["db"], x: 840, y: 520 },
+  embeddings: { label: "Journal embeddings", sources: ["db"], x: 440, y: 760 },
+};
+
+export const DAG_STEPS: DagStep[] = PLAN.steps.map((step) => {
+  const lay = LAYOUT[step.id];
+  if (!lay) {
+    throw new Error(
+      `plan step ${step.id} has no layout entry; regenerate or fix lib/data-pipeline/dag.ts`,
+    );
+  }
+  return {
+    id: step.id,
+    label: lay.label,
+    job: step.script + (lay.jobSuffix ?? ""),
+    band: step.band,
+    sources: lay.sources,
+    deps: step.deps,
+    x: lay.x,
+    y: lay.y,
+  };
+});
 
 // Hand-routed paths; sources exit right or bottom, targets enter left or top.
 // A few long cross-band returns run in dedicated lanes to keep nodes clear.
@@ -351,3 +189,25 @@ export const DAG_EDGES: DagEdge[] = [
   { from: "reconcile", to: "authors", d: "M 1008 368 C 1034 368 1034 542 1008 542" },
   { from: "author-ids", to: "authors", d: "M 900 474 C 900 490 900 504 900 520" },
 ];
+
+// Build-time drift check: the drawn arrows must be exactly the plan's
+// dependency pairs, and every layout entry must map to a real plan step.
+{
+  const planPairs = PLAN.steps
+    .flatMap((step) => step.deps.map((dep) => `${dep}->${step.id}`))
+    .sort();
+  const drawnPairs = DAG_EDGES.map((edge) => `${edge.from}->${edge.to}`).sort();
+  const missing = planPairs.filter((pair) => !drawnPairs.includes(pair));
+  const extra = drawnPairs.filter((pair) => !planPairs.includes(pair));
+  const orphanLayouts = Object.keys(LAYOUT).filter(
+    (id) => !PLAN.steps.some((step) => step.id === id),
+  );
+  const problems = [
+    ...missing.map((pair) => `plan edge not drawn: ${pair}`),
+    ...extra.map((pair) => `drawn edge not in plan: ${pair}`),
+    ...orphanLayouts.map((id) => `layout entry without plan step: ${id}`),
+  ];
+  if (problems.length > 0) {
+    throw new Error(`harvest plan drift detected:\n${problems.join("\n")}`);
+  }
+}
