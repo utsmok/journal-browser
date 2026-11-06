@@ -4,27 +4,27 @@ const RULES: {
   chip: string;
 }[] = [
   {
-    rule: "OA evidence plus charge evidence",
+    rule: "Open-access evidence and charge evidence both present",
     outcome: "gold",
     chip: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
   },
   {
-    rule: "DOAJ-listed with doaj_has_apc explicitly false",
+    rule: "In DOAJ, with doaj_has_apc explicitly false",
     outcome: "diamond",
     chip: "bg-sky-500/15 text-sky-700 dark:text-sky-400",
   },
   {
-    rule: "Observed work color",
+    rule: "An observed work color exists",
     outcome: "gold, diamond, or hybrid",
     chip: "border border-[var(--border)] text-[var(--muted-foreground)]",
   },
   {
-    rule: "Deal coverage",
+    rule: "The journal is covered by a deal",
     outcome: "hybrid",
     chip: "bg-violet-500/15 text-violet-700 dark:text-violet-400",
   },
   {
-    rule: "Remaining OA evidence",
+    rule: "Any other open-access evidence exists",
     outcome: "generic",
     chip: "bg-teal-500/15 text-teal-700 dark:text-teal-400",
   },

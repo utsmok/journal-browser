@@ -51,7 +51,7 @@ export function DagDiagram() {
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
         className="w-full"
         role="img"
-        aria-label="Bootstrap harvest DAG. Global band: journal sweep, publisher lineage, openaccess.nl deals, JCT sheets, OpenAPC, deal reconcile, deal ISSN-L, Scimago quartiles, corpus flags, DOAJ canon, OA color sample. Institution band, run once per hosted institution: pure works sweep, CERIF authors, orgs and persons, enrich works, OpenAIRE products, institution stats, works store, pure author edges, coverage flags, author identity cascade, author roster. Final step: journal embeddings."
+        aria-label="Bootstrap harvest plan. The global band runs once: journal sweep, publisher lineage, openaccess.nl deals, JCT sheets, OpenAPC, deal reconcile, deal ISSN-L, Scimago quartiles, corpus flags, DOAJ canon, OA color sample. The institution band runs once per hosted institution: pure works sweep, CERIF authors, orgs and persons, enrich works, OpenAIRE products, institution stats, works store, pure author edges, coverage flags, author identity cascade, author roster. The final step is journal embeddings."
       >
         <defs>
           <marker
