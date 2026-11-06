@@ -506,7 +506,9 @@ export default function DataPipelinePage() {
             never writes confirmed. A 404 from Crossref or OpenAlex writes <Code>missing</Code>,
             which means nothing was found, not that confidence was low. The only other way a row
             becomes <Code>confirmed</Code> is an admin flipping it in review, and harvest writes
-            never overwrite that decision.
+            never overwrite that decision. The vocabulary also allows matched_by{" "}
+            <Code>verbatim</Code>, a match on the shared source string. No harvest flow writes it
+            today; the value is reserved.
           </p>
           <p className="max-w-prose">
             Author identity checks five rungs in order, and each rung writes its own fixed
@@ -514,7 +516,11 @@ export default function DataPipelinePage() {
             Matching initials forms score 0.8. A family name that is unique among the work&apos;s
             Pure authors scores 0.7. Fuzzy name similarity of at least 0.92 by Levenshtein ratio
             scores 0.6. Each rung must produce exactly one unambiguous match. If a rung is
-            ambiguous, the next rung is used instead.
+            ambiguous, the next rung is used instead. Admins flip author identity rows in review,
+            with the same three statuses: confirmed, candidate, and rejected. A rejected match is
+            sticky. Later runs never re-propose the same id, and the resolver never lowers an
+            admin&apos;s confirmed or rejected decision. Every flip writes an audit row to{" "}
+            <Code>status_changes</Code>.
           </p>
         </div>
       </section>
@@ -536,7 +542,14 @@ export default function DataPipelinePage() {
           coverage flags. For live freshness, <Code>GET /api/v1/{"{code}"}/meta/freshness</Code>{" "}
           reports each source&apos;s harvest state, which is the source, entity type, filter set,
           status, last finished time, and stats. It also reports the newest row timestamps for the
-          main serving tables, and the degraded-source registry.
+          main serving tables, and the degraded list. The degraded list names serving-time helpers
+          that currently answer without their normal backing data. The deal-flag refresh loop marks
+          itself degraded when its background refresh fails, and the currency-rate helper marks
+          itself degraded when the rate table fails to load or a conversion finds no rate. The{" "}
+          <Code>limitations</Code> table is a different registry. It is a curated list of known data
+          caveats, seeded by migration, served at{" "}
+          <Code>GET /api/v1/{"{code}"}/meta/limitations</Code>, and cited by code in journal API
+          responses.
         </p>
         <p className="max-w-prose">
           The runbook below maps every bootstrap step to its script. The steps, scripts, and
@@ -569,7 +582,7 @@ export default function DataPipelinePage() {
         <p className="max-w-prose">
           All configuration lives in environment variables that start with <Code>JB_</Code>. The
           first <Code>institutions</Code> row is also seeded from them. Migration 0019 inserts the
-          default row when the database upgrades, and <Code>ensure_home_institution</Code>
+          default row when the database upgrades, and <Code>ensure_home_institution</Code>{" "}
           re-derives the same fields on the first harvest by matching on the ROR id. It fills the
           code, which is the lowercased <Code>JB_INSTITUTION_CODE</Code>, plus the names, the Pure
           OAI URL, the OpenAIRE org id, and the data window. To onboard another institution, create
