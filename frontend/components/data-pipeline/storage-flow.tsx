@@ -1,5 +1,5 @@
-const STAGES: { title: string; detail: string }[] = [
-  { title: "External APIs and files", detail: "13 services + 1 DSN" },
+const HARVEST_STAGES: { title: string; detail: string }[] = [
+  { title: "External inputs", detail: "11 network sources, 1 tracked CSV set, 1 read-only DSN" },
   { title: "download_to_landing", detail: "landing/ + raw_files" },
   { title: "source_records", detail: "verbatim payloads, SHA-256 content hash versions" },
   {
@@ -15,28 +15,49 @@ const STAGES: { title: string; detail: string }[] = [
   { title: "API responses", detail: "routers under /api/v1" },
 ];
 
+const USER_WRITES: { title: string; detail: string }[] = [
+  { title: "usage_events", detail: "page views, searches, errors" },
+  { title: "feedback_items", detail: "reporter's query state" },
+  { title: "doc_edits", detail: "admin edits over served docs" },
+  { title: "manual_overrides", detail: "reapply after every harvest" },
+  { title: "status_changes", detail: "append-only audit" },
+];
+
+function StageRow({ stages }: { stages: { title: string; detail: string }[] }) {
+  return (
+    <div className="flex flex-row flex-wrap items-stretch gap-2">
+      {stages.map((stage, i) => (
+        <div key={stage.title} className="contents">
+          {i > 0 && (
+            <span aria-hidden className="self-center text-[var(--muted-foreground)]">
+              →
+            </span>
+          )}
+          <div className="max-w-[13rem] min-w-[10rem] rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-3">
+            <p className="text-sm font-semibold">{stage.title}</p>
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">{stage.detail}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function StorageFlow() {
   return (
-    <div>
-      <div className="flex flex-row flex-wrap items-stretch gap-2">
-        {STAGES.map((stage, i) => (
-          <div key={stage.title} className="contents">
-            {i > 0 && (
-              <span aria-hidden className="self-center text-[var(--muted-foreground)]">
-                →
-              </span>
-            )}
-            <div className="max-w-[13rem] min-w-[10rem] rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-3">
-              <p className="text-sm font-semibold">{stage.title}</p>
-              <p className="mt-1 text-xs text-[var(--muted-foreground)]">{stage.detail}</p>
-            </div>
-          </div>
-        ))}
+    <div className="space-y-3">
+      <div>
+        <p className="mb-2 text-xs font-medium tracking-wide text-[var(--muted-foreground)] uppercase">
+          Harvest path
+        </p>
+        <StageRow stages={HARVEST_STAGES} />
       </div>
-      <p className="mt-3 text-sm text-[var(--muted-foreground)]">
-        User writes bypass this strip entirely: usage_events, feedback_items, doc_edits,
-        manual_overrides, and status_changes are filled by the site itself.
-      </p>
+      <div>
+        <p className="mb-2 text-xs font-medium tracking-wide text-[var(--muted-foreground)] uppercase">
+          User writes (bypass the harvest path)
+        </p>
+        <StageRow stages={USER_WRITES} />
+      </div>
     </div>
   );
 }

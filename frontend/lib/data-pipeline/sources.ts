@@ -17,7 +17,8 @@ export const SOURCES: SourceRow[] = [
   {
     name: "Crossref",
     provides: "DOI metadata for journal resolution",
-    transport: "REST, 50 DOIs per request, polite pool with mailto contact",
+    transport:
+      "REST via stavrophora, batches of 50 DOIs per request, 3 rps cap, polite pool; a 400 on one malformed DOI bisects the batch until the bad DOI stands alone",
     usedBy: "enrich (second rung)",
   },
   {

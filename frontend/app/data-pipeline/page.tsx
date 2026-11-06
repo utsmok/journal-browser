@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PLAN } from "@/lib/data-pipeline/dag";
 import { SOURCES } from "@/lib/data-pipeline/sources";
 import schema from "@/lib/data-pipeline-schema.json";
 
@@ -196,20 +197,13 @@ const MANUAL_JOBS: [string, string, string][] = [
   ],
 ];
 
-const OA_RULES: string[] = [
-  "OA evidence (is_in_doaj, is_oa, or doaj_in_doaj) plus charge evidence (a DOAJ APC flag, OpenAPC rows, latest_apc_euro, or an OpenAlex list price) gives gold.",
-  "DOAJ-listed with doaj_has_apc explicitly false gives diamond.",
-  "An observed work color of gold, diamond, or hybrid gives that value.",
-  "Deal coverage gives hybrid.",
-  "Remaining OA evidence gives generic.",
-  "Everything else is subscription.",
-];
-
 const TOC: [string, string][] = [
   ["External sources", "sources"],
   ["Harvest order", "dag"],
   ["How each source is harvested", "jobs"],
+  ["Scheduling", "scheduling"],
   ["What bootstrap does not fetch", "manual"],
+  ["Configuration", "config"],
   ["How data is stored", "storage"],
   ["Database reference", "database"],
   ["How the site serves this data", "serving"],
@@ -303,9 +297,9 @@ export default function DataPipelinePage() {
       <section id="sources" className="space-y-4">
         <h2 className="mt-2 text-2xl font-semibold">External sources</h2>
         <p className="max-w-prose">
-          Fourteen feeds supply the database. Thirteen are outside services; one is the previous
-          platform&apos;s own Postgres, read over a DSN. The Runs column names bootstrap steps;
-          anything marked manual runs only when someone starts it.
+          Fourteen inputs supply the database: eleven network sources, one tracked CSV set, one
+          read-only Postgres DSN, and one local embedding model. The Used by column names bootstrap
+          steps; anything marked manual runs only when someone starts it.
         </p>
         <DataTable
           head={["Source", "Provides", "Transport and pacing", "Used by"]}
@@ -327,6 +321,9 @@ export default function DataPipelinePage() {
           all of its dependencies have finished, so independent branches overlap. Every step is a
           subprocess. If a step fails, no new step launches, running siblings finish, and the
           process exits nonzero, which keeps the backend from starting on a half-filled database.
+          Every HTTP call shares one client policy: a 120 second timeout and up to three attempts on
+          429 and transient 5xx responses, honoring Retry-After where given or capped exponential
+          backoff.
         </p>
         <p className="max-w-prose">
           Three modes matter. Auto mode, the deployment default, exits immediately when the journals
@@ -341,6 +338,21 @@ export default function DataPipelinePage() {
           Every institution step runs once per hosted code; cross-layer dependencies pull from the
           global band.
         </p>
+        <p className="max-w-prose text-sm text-[var(--muted-foreground)]">
+          Steps, scripts, and dependencies above are generated from <Code>jobs/bootstrap.py</Code>{" "}
+          on {PLAN.generatedAt} by <Code>backend/scripts/dump_harvest_plan.py</Code>; the drawn
+          diagram asserts its arrows against that same file at build time, so neither can drift.
+        </p>
+        <details className="max-w-prose text-sm">
+          <summary className="cursor-pointer text-[var(--muted-foreground)]">
+            All {PLAN.steps.reduce((count, step) => count + step.deps.length, 0)} dependency edges
+          </summary>
+          <p className="mt-2 leading-6">
+            {PLAN.steps
+              .flatMap((step) => step.deps.map((dep) => `${dep} → ${step.id}`))
+              .join(" · ")}
+          </p>
+        </details>
       </section>
 
       <section id="jobs" className="space-y-6">
@@ -359,8 +371,9 @@ export default function DataPipelinePage() {
             Five institution-side jobs read OpenAlex. The stats job sweeps all works of the
             institution (filter <Code>institutions.id</Code>, one page per 100) and counts
             corresponding-author works per year. The enrich job resolves journals for each work DOI
-            with single-entity GETs in chunks of 500 at concurrency 10, which stays inside the free
-            key&apos;s 30 requests per second; a 404 is recorded as a missing identity so Crossref
+            with single-entity GETs in chunks of 500 at concurrency 10, far inside OpenAlex&apos;s
+            published cap of 100 requests per second, with single-entity calls costing 1 credit of
+            the 100,000 per-day free budget; a 404 is recorded as a missing identity so Crossref
             only sees true gaps. The author-ids job sweeps authors affiliated with the
             institution&apos;s ROR (200 per page) and then pulls works for resolved author ids, 50
             ids per request, up to a budget of 2000 authors. The OA color job samples the 20 most
@@ -415,8 +428,12 @@ export default function DataPipelinePage() {
             publisher-deals overview, then each publisher page, then each deal page, strictly one
             request at a time, and stores every HTML page verbatim. The JCT job reads the published
             index sheet, then one CSV per agreement at its Data URL, jittered 0.5 to 1.5 s because
-            Google throttles bursts. Reconcile merges both on ESAC id, never letting a conflict win
-            silently: conflicting rows get flagged needs_curation, admin-removed rows stay excluded,
+            Google throttles bursts. Reconcile pairs an openaccess.nl row with a JCT row when
+            publisher names match case-insensitively and their duration windows overlap, then merges
+            on ESAC id. The merge compares exactly one field, the deal status: a disagreement flags
+            the row needs_curation with both values in the reason, while the JCT-side fields (ESAC
+            id, data URL, corresponding-authors-only flag, last-reviewed date) copy over
+            unconditionally. Foreign-consortium rows never merge. Admin-removed rows stay excluded,
             and manual_overrides reapply after every run. A final pass resolves coverage ISSNs to
             ISSN-L through issn_map and flags the rows it cannot resolve.
           </p>
@@ -437,6 +454,58 @@ export default function DataPipelinePage() {
           </p>
           <CallsTable rows={CSV_CALLS} />
         </div>
+
+        <div className="space-y-3">
+          <h3 className="text-lg font-semibold">Identity resolution rules</h3>
+          <p className="max-w-prose">
+            Work identity: an exact DOI hit confirms the row outright (matched_by <Code>doi</Code>,
+            confidence 1.0). OpenAIRE title matching scores trigram similarity of at least 0.82,
+            keeps only the best-scoring work per record, and always lands as <Code>candidate</Code>,
+            never auto-confirmed. A Crossref or OpenAlex 404 records <Code>missing</Code>, which
+            means no evidence was found, not low confidence. The only other path to{" "}
+            <Code>confirmed</Code> is an admin review flip; harvest writes never overwrite one.
+          </p>
+          <p className="max-w-prose">
+            Author identity runs five rungs in order, each landing at a fixed confidence: exact
+            ORCID equality 1.0, normalized full-name equality 0.9, initials-form intersection 0.8,
+            family name unique among that work&apos;s Pure authors 0.7, and a fuzzy rung at
+            Levenshtein ratio 0.92 or better scoring 0.6. A rung must find exactly one unique hit;
+            ambiguity falls through to the next rung.
+          </p>
+        </div>
+      </section>
+
+      <section id="scheduling" className="space-y-4">
+        <h2 className="mt-2 text-2xl font-semibold">Scheduling</h2>
+        <p className="max-w-prose">
+          Nothing runs on a schedule. The only automatic invocation is the compose bootstrap
+          service: every <Code>docker compose up</Code> runs the alembic migrations and{" "}
+          <Code>bootstrap.py</Code> before the backend starts, and auto mode exits in seconds on a
+          filled database, so restarts are cheap. <Code>JB_BOOTSTRAP=always</Code> forces a full
+          rerun and repair mode reruns from one step. Any other fresh data arrives only when someone
+          starts a job by hand; the manual table below is never automatic.
+        </p>
+        <p className="max-w-prose">
+          Two serving-side loops do run continuously, and neither harvests: a nightly prune that
+          nulls usage-event IPs older than 90 days, and an in-process loop that refreshes deal
+          coverage flags. For live freshness, <Code>GET /api/v1/{"{code}"}/meta/freshness</Code>{" "}
+          reports each source&apos;s harvest state (source, entity type, filter set, status, last
+          finished time, stats), the newest row timestamps for the main serving tables, and the
+          degraded-source registry.
+        </p>
+        <p className="max-w-prose">
+          The runbook maps every bootstrap step to its script. Steps, scripts, and dependencies come
+          from the generated plan; institution-band steps take <Code>--institution CODE</Code>.
+        </p>
+        <DataTable
+          head={["Step", "Script", "Band", "Depends on"]}
+          rows={PLAN.steps.map((step) => [
+            step.id,
+            `jobs/${step.script}`,
+            step.band,
+            step.deps.length > 0 ? step.deps.join(", ") : "—",
+          ])}
+        />
       </section>
 
       <section id="manual" className="space-y-4">
@@ -449,6 +518,50 @@ export default function DataPipelinePage() {
         <DataTable head={["Job", "What it does", "Writes"]} rows={MANUAL_JOBS} />
       </section>
 
+      <section id="config" className="space-y-4">
+        <h2 className="mt-2 text-2xl font-semibold">Configuration</h2>
+        <p className="max-w-prose">
+          Everything is configured through <Code>JB_</Code>-prefixed environment variables. The
+          first <Code>institutions</Code> row is seeded from them: migration 0019 inserts the
+          default row at upgrade time, and <Code>ensure_home_institution</Code> re-derives it on
+          first harvest, matching on ROR and filling the code (lowercased{" "}
+          <Code>JB_INSTITUTION_CODE</Code>), names, Pure OAI base URL, OpenAIRE org id, and the data
+          window. Onboarding another institution is one <Code>institutions</Code> row plus{" "}
+          <Code>bootstrap --institution CODE</Code>.
+        </p>
+        <DataTable
+          head={["Variable", "Purpose"]}
+          rows={[
+            ["JB_DATABASE_URL", "main Postgres DSN (asyncpg)"],
+            [
+              "JB_UT_METADATA_DSN",
+              "read-only DSN to the previous platform's Postgres; unset keeps the authors job skipping",
+            ],
+            [
+              "JB_OPENALEX_API_KEY or OPENALEX_API_KEY",
+              "OpenAlex key; keyless runs share the keyless budget",
+            ],
+            ["JB_CONTACT_EMAIL", "polite-pool contact email sent to Crossref and OpenAlex"],
+            ["JB_JISC_API_KEY", "Jisc Open Policy Finder key for the manual Jisc jobs"],
+            [
+              "JB_DATA_WINDOW_START / _END",
+              "publication-year window (default 2020, NULL end = open); drives the Pure OAI year sets and OpenAlex from-publication-date filters",
+            ],
+            [
+              "JB_INSTITUTION_CODE / _NAME / _SHORT / _ROR",
+              "hosted institution identity; code must match [a-z0-9-]+",
+            ],
+            [
+              "JB_OPENAIRE_ORG_ID",
+              "OpenAIRE organization id; not derivable from the ROR, required for any non-default institution",
+            ],
+            ["JB_PURE_OAI_BASE_URL", "Pure OAI-PMH endpoint (anonymous)"],
+            ["JB_LANDING_DIR", "permanent raw landing zone (default landing/)"],
+            ["JB_ADMIN_PASSWORD", "admin panel password; empty disables the panel"],
+          ]}
+        />
+      </section>
+
       <section id="storage" className="space-y-4">
         <h2 className="mt-2 text-2xl font-semibold">How data is stored</h2>
         <p className="max-w-prose">
@@ -456,7 +569,8 @@ export default function DataPipelinePage() {
           bytes under <Code>landing/</Code> and records a raw_files row; an ingest session then
           stores the parsed payload in source_records with a SHA-256 content hash on (source, entity
           type, source key, hash), so re-harvesting identical content inserts nothing and every
-          version stays. Normalized tables such as journals, works, openalex_works, deals, the Pure
+          version stays. The version history is append-only and grows without bound; nothing expires
+          old versions. Normalized tables such as journals, works, openalex_works, deals, the Pure
           tables, and the Jisc tables rebuild from those stored copies, which is what makes every
           job safe to rerun.
         </p>
@@ -464,19 +578,19 @@ export default function DataPipelinePage() {
           A third layer denormalizes serving state onto the rows the site reads: journal_flags (one
           row per journal per hosted institution), works_2020_plus, latest_apc_euro,
           publisher_canonical, oa_status_observed, the persisted search_vector column, and the
-          embedding vectors. Every run is bookkept in harvest_runs and harvest_state. Runs driven
-          through the shared run_harvest runner bump the single-row cache_epoch when they complete,
-          which invalidates the in-process facet and snapshot caches (24 hour TTL, keyed on the
-          epoch). Steps that drive the ingest session directly (the pure, openalex, crossref, and
-          openaire sweeps) do not bump it; their caches age out on the TTL instead.
+          embedding vectors. Every run is bookkept in harvest_runs and harvest_state, and every
+          finished run, completed or failed, bumps the single-row cache_epoch (per-page commits can
+          change served data before the run closes), which invalidates the in-process facet and
+          snapshot caches (24 hour TTL, keyed on the epoch). The denorm refreshes bump it directly
+          as well.
         </p>
         <p className="max-w-prose">
           Not everything arrives from harvests. The site itself writes usage_events (batched page
-          views, searches, and errors; IP addresses are nulled after a retention window),
-          feedback_items (with the reporter&apos;s query state), doc_edits (admin edits applied over
-          served docs), manual_overrides (admin corrections that reapply after every harvest),
-          author_identities and work_identity review decisions, and the append-only status_changes
-          audit.
+          views, searches, and errors; raw IP addresses are nulled after 90 days by the nightly
+          prune loop, which keeps the rows and their country codes), feedback_items (with the
+          reporter&apos;s query state), doc_edits (admin edits applied over served docs),
+          manual_overrides (admin corrections that reapply after every harvest), author_identities
+          and work_identity review decisions, and the append-only status_changes audit.
         </p>
         <StorageFlow />
       </section>
@@ -524,11 +638,7 @@ export default function DataPipelinePage() {
         <p className="max-w-prose">
           Journal <Code>oa_type</Code> is derived at query time, never stored. First match wins:
         </p>
-        <ol className="max-w-prose list-decimal space-y-1 pl-5 text-sm">
-          {OA_RULES.map((rule) => (
-            <li key={rule}>{rule}</li>
-          ))}
-        </ol>
+        <OaRules />
         <p className="max-w-prose">
           NULL flags never count as false; a NULL doaj_in_doaj means the DOAJ sweep never judged the
           journal. Work-level oa_status is stored at harvest time instead, canonicalized to a
@@ -536,7 +646,6 @@ export default function DataPipelinePage() {
           green-route columns (submitted, accepted, or published versions allowed, embargo months)
           in one SQL case mirrored in Python.
         </p>
-        <OaRules />
         <p className="max-w-prose">
           Journals embed as 384-dimension vectors over cleaned title, top five topics, and up to
           three most-cited work titles, using BAAI/bge-small-en-v1.5 through fastembed ONNX on CPU.
@@ -544,6 +653,11 @@ export default function DataPipelinePage() {
           deals, all) and semantic search; author recommendations average their venues&apos; vectors
           weighted by work counts. The embeddings step is the last bootstrap step and runs once,
           after every institution&apos;s stats step.
+        </p>
+        <p className="max-w-prose">
+          The full API contract is generated, not hand-written: <Code>openapi.json</Code> at the
+          repo root is dumped from the routes and verified against drift in CI, and the
+          frontend&apos;s <Code>lib/api-types.ts</Code> is generated from it.
         </p>
       </section>
     </div>
