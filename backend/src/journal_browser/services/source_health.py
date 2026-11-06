@@ -23,6 +23,12 @@ def clear(source: str) -> None:
         _degraded.pop(source, None)
 
 
+def clear_all() -> None:
+    """Empty the registry (test isolation; also usable on operator reset)."""
+    with _lock:
+        _degraded.clear()
+
+
 def snapshot() -> list[dict]:
     with _lock:
         return [{"source": s, "detail": d, "since": ts} for s, (d, ts) in sorted(_degraded.items())]

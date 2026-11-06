@@ -55,11 +55,12 @@ else:
 async def db_engine():
     # Function-scoped: pytest-asyncio runs each test in its own event loop,
     # and an asyncpg pool must not cross loops.
-    from journal_browser.services import cache, repo_links
+    from journal_browser.services import cache, repo_links, source_health
 
     cache.FACET_CACHE.clear()
     cache.SNAPSHOT_CACHE.clear()
     repo_links.reset_canon_cache()
+    source_health.clear_all()
     conn = await asyncpg.connect(ADMIN_URL)
     await conn.execute(f'DROP DATABASE IF EXISTS "{TEST_DB}" WITH (FORCE)')
     await conn.execute(f'CREATE DATABASE "{TEST_DB}"')
