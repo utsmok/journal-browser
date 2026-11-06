@@ -22,8 +22,8 @@ const montserrat = Montserrat({
 
 export const metadata: Metadata = {
   title: {
-    default: "Journal Browser",
-    template: "%s — Journal Browser",
+    default: "Open Journal Browser",
+    template: "%s — OJB",
   },
   description:
     "Find the best home for your next article: open access deals, publication statistics, and journal information.",

@@ -1,31 +1,22 @@
-"use client";
+import type { Metadata } from "next";
 
-import { AdminShell } from "@/components/admin/admin-shell";
-import { LoginForm } from "@/components/admin/login-form";
-import { useInstitution } from "@/hooks/use-institution";
-import { useAdminToken } from "@/lib/admin";
+import { AdminGate } from "@/components/admin/admin-gate";
 
-/**
- * Login gate + chrome for the per-institution admin mirror. Same sections
- * as /admin, scoped to this institution via the basePath-prefixed routes.
- */
-export default function InstAdminLayout({ children }: { children: React.ReactNode }) {
-  const inst = useInstitution();
-  const [token, setToken] = useAdminToken();
-  if (!token) {
-    return (
-      <div className="mx-auto max-w-sm px-4 py-16">
-        <LoginForm onToken={setToken} />
-      </div>
-    );
-  }
+export const metadata: Metadata = {
+  title: "Admin",
+};
+
+export default async function InstAdminLayout({
+  children,
+  params,
+}: {
+  children: React.ReactNode;
+  params: Promise<{ inst: string }>;
+}) {
+  const { inst } = await params;
   return (
-    <AdminShell
-      basePath={`/${inst}/admin`}
-      brand={`Journal admin — ${inst}`}
-      onSignOut={() => setToken(null)}
-    >
+    <AdminGate basePath={`/${inst}/admin`} brand={`Journal admin — ${inst}`}>
       {children}
-    </AdminShell>
+    </AdminGate>
   );
 }

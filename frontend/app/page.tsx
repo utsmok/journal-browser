@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { buttonVariants } from "@/components/ui/button";
+import { OjbWordmark } from "@/components/logo";
 
 type Institution = {
   code: string;
@@ -44,8 +45,11 @@ export default function LandingPage() {
 
   if (error) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-16 text-center">
-        <h1 className="font-heading text-2xl font-bold">Journal Browser</h1>
+      <div className="mx-auto max-w-2xl px-4 pb-10 pt-6 text-center">
+        <h1 className="font-heading text-2xl font-bold">
+          <span className="sr-only">Open Journal Browser</span>
+          <OjbWordmark className="mx-auto block h-36 w-auto" />
+        </h1>
         <p className="mt-4 text-[var(--muted-foreground)]">
           The institution list is unavailable. Check that the backend is running.
         </p>
@@ -59,11 +63,14 @@ export default function LandingPage() {
   if (!institutions) {
     return (
       <div
-        className="mx-auto max-w-2xl px-4 py-16"
+        className="mx-auto max-w-2xl px-4 pb-10 pt-6"
         aria-busy="true"
         aria-label="Loading institutions"
       >
-        <h1 className="font-heading text-2xl font-bold">Journal Browser</h1>
+        <h1 className="font-heading text-2xl font-bold">
+          <span className="sr-only">Open Journal Browser</span>
+          <OjbWordmark className="mx-auto block h-36 w-auto" />
+        </h1>
         <ul className="mt-8 space-y-3">
           {[0, 1, 2].map((i) => (
             <li
@@ -80,9 +87,12 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-16">
-      <h1 className="font-heading text-2xl font-bold">Journal Browser</h1>
-      <p className="mt-2 text-[var(--muted-foreground)]">
+    <div className="mx-auto max-w-2xl px-4 pb-10 pt-6">
+      <h1 className="font-heading text-2xl font-bold">
+        <span className="sr-only">Open Journal Browser</span>
+        <OjbWordmark className="mx-auto block h-36 w-auto" />
+      </h1>
+      <p className="mt-3 text-center text-[var(--muted-foreground)]">
         Choose your institution to browse its journal deals and publication data.
       </p>
       <ul className="mt-8 space-y-3">

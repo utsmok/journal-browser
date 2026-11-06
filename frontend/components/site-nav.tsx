@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { OjbWordmark } from "@/components/logo";
 import { NavLink } from "@/components/nav-link";
 
 /** Nav links scoped to the current institution segment; the "All
@@ -39,9 +40,10 @@ export function BrandLink() {
   return (
     <Link
       href={`${prefix}/`}
-      className="font-heading whitespace-nowrap text-base sm:text-lg font-bold tracking-tight"
+      aria-label="Open Journal Browser"
+      className="flex items-center whitespace-nowrap"
     >
-      Journal Browser
+      <OjbWordmark className="h-11 w-auto" />
     </Link>
   );
 }
