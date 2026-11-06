@@ -464,9 +464,11 @@ export default function DataPipelinePage() {
           A third layer denormalizes serving state onto the rows the site reads: journal_flags (one
           row per journal per hosted institution), works_2020_plus, latest_apc_euro,
           publisher_canonical, oa_status_observed, the persisted search_vector column, and the
-          embedding vectors. Every run is bookkept in harvest_runs and harvest_state, and a
-          successful run bumps the single-row cache_epoch, which invalidates the in-process facet
-          and snapshot caches (24 hour TTL, keyed on the epoch).
+          embedding vectors. Every run is bookkept in harvest_runs and harvest_state. Runs driven
+          through the shared run_harvest runner bump the single-row cache_epoch when they complete,
+          which invalidates the in-process facet and snapshot caches (24 hour TTL, keyed on the
+          epoch). Steps that drive the ingest session directly (the pure, openalex, crossref, and
+          openaire sweeps) do not bump it; their caches age out on the TTL instead.
         </p>
         <p className="max-w-prose">
           Not everything arrives from harvests. The site itself writes usage_events (batched page
