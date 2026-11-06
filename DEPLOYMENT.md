@@ -62,7 +62,7 @@ in citation links on journal pages. Set it in `.env` before the first
 |---|---|---|
 | `JB_DATABASE_URL` | Postgres DSN | local default |
 | `JB_ADMIN_PASSWORD` | Admin panel password (`/admin`); empty disables the panel | empty |
-| `JB_BOOTSTRAP` | `auto` (only on an empty DB), `always`, or `off` | `auto` |
+| `JB_BOOTSTRAP` | `auto` (skips only a completed pipeline; refuses a partial one), `always`, or `off` | `auto` |
 | `JB_LANDING_DIR` | Raw landing zone for downloaded files. Compose pins the bind mount to `./backend/landing`; the variable applies to non-compose runs | `backend/landing` |
 | `JB_UT_METADATA_DSN` | Twente-only: read-only ut-metadata Postgres for canonical works + the author roster (`authors` bootstrap step; skips cleanly when empty). Leave empty elsewhere; the works endpoints degrade to stats-only and `/authors` reports `enabled: false` | empty |
 
@@ -84,8 +84,13 @@ served.
 
 Expect the first boot to take 1.5–2 hours, dominated by the OpenAlex journals
 sweep (~60 min for the ~177k journal universe) and journal embeddings (~45 min
-on CPU). Subsequent restarts are cheap: `auto` mode skips the pipeline when
-journals already exist.
+on CPU). Subsequent restarts are cheap: `auto` mode skips the pipeline only
+when a plan run completed and left its marker in `harvest_state` (source
+`local`, entity type `bootstrap_plan`; written by bootstrap itself on exit
+0 and seeded for pre-marker deployments by migration 0055). When journals
+exist but that marker is missing (a bootstrap died partway), `auto` exits
+nonzero and names the repair path instead of quietly serving a
+half-filled database.
 
 Useful variants (run inside the backend image, e.g.
 `docker compose run --rm bootstrap uv run python jobs/bootstrap.py --always`):

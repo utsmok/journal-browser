@@ -1,11 +1,13 @@
 """Initial-deployment pipeline: every job as a dependency DAG, one command.
 
 Designed for a fresh database. docker compose boots this once via the
-`bootstrap` service; in auto mode (default) it skips when journals already
-exist, so restarts are cheap. Independent steps run concurrently (the
-journals sweep dominates wall time while Pure/OpenAPC/deal scrapes run
-beside it). Every step is an idempotent standalone job; a failure stops
-new steps from starting and names the failed ones.
+`bootstrap` service; in auto mode (default) it exits fast when the plan
+has demonstrably completed (journals present AND the embeddings step's
+harvest_state marker), and refuses to skip a partial bootstrap. Restarts
+of a complete deployment are cheap. Independent steps run concurrently
+(the journals sweep dominates wall time while Pure/OpenAPC/deal scrapes
+run beside it). Every step is an idempotent standalone job; a failure
+stops new steps from starting and names the failed ones.
 
 Two layers: global steps build the shared core once (journals universe,
 deal register, OpenAPC, Scimago, ISSN-L); per-institution steps run once
@@ -23,11 +25,12 @@ import time
 from pathlib import Path
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
 from journal_browser.harvest.common import get_active_institutions
-from journal_browser.models import Journal
+from journal_browser.ingest import IngestSession
+from journal_browser.models import HarvestState, Journal
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 
@@ -124,13 +127,47 @@ async def hosted_codes() -> list[str]:
     return [c for c in codes if c]
 
 
-async def already_bootstrapped() -> bool:
+async def _bootstrap_progress(session: AsyncSession) -> tuple[bool, bool]:
+    """(journals_present, plan_completed) from persisted rows.
+
+    A completed plan run writes its own marker (harvest_state: local/
+    bootstrap_plan), so the signal belongs to the plan runner, not to any
+    single step: a standalone embeddings run on a partial database cannot
+    mark the plan complete. Journals without the marker means a bootstrap
+    started and died partway.
+    """
+    journals = await session.scalar(select(func.count()).select_from(Journal))
+    plan_done = await session.scalar(
+        select(func.count())
+        .select_from(HarvestState)
+        .where(
+            HarvestState.source == "local",
+            HarvestState.entity_type == "bootstrap_plan",
+            HarvestState.status == "completed",
+        )
+    )
+    return bool(journals), bool(plan_done)
+
+
+async def bootstrap_progress() -> tuple[bool, bool]:
     engine = create_async_engine(get_settings().database_url)
     maker = async_sessionmaker(engine, expire_on_commit=False)
     async with maker() as session:
-        count = await session.scalar(select(func.count()).select_from(Journal))
+        progress = await _bootstrap_progress(session)
     await engine.dispose()
-    return bool(count)
+    return progress
+
+
+async def _record_plan_complete(mode: str, step_count: int) -> None:
+    """Persist the plan-completion marker; the auto-skip keys on it."""
+    engine = create_async_engine(get_settings().database_url)
+    maker = async_sessionmaker(engine, expire_on_commit=False)
+    async with maker() as session:
+        ingest = IngestSession(session)
+        await ingest.start_run("local", "bootstrap_plan", mode, {"steps": step_count})
+        await ingest.finish_run("completed", {"steps": step_count})
+        await session.commit()
+    await engine.dispose()
 
 
 def _step_after(args: list[str]) -> str | None:
@@ -271,19 +308,29 @@ async def main() -> int:
             file=sys.stderr,
         )
         return 2
-    if (
-        "--from" not in args
-        and "--institution" not in args
-        and mode == "auto"
-        and await already_bootstrapped()
-    ):
-        print("bootstrap: journals present, nothing to do (use --always to force)")
-        return 0
+    if "--from" not in args and "--institution" not in args and mode == "auto":
+        has_journals, plan_done = await bootstrap_progress()
+        if has_journals and plan_done:
+            print("bootstrap: journals present, nothing to do (use --always to force)")
+            return 0
+        if has_journals:
+            print(
+                "bootstrap: partial bootstrap detected (journals present, "
+                "no plan ever completed); auto-skip refused. "
+                "Repair with --from <step>, or force a full rerun with --always.",
+                file=sys.stderr,
+            )
+            return 1
     steps, deps = build_plan(codes, only_institution)
     # --from is repair mode: serial, in listed order
     if resume_from is not None:
-        return await run_serial(steps, deps, normalize_from(resume_from, steps))
-    return await run_parallel(steps, deps)
+        rc = await run_serial(steps, deps, normalize_from(resume_from, steps))
+    else:
+        rc = await run_parallel(steps, deps)
+    if rc == 0:
+        mode_name = "repair" if resume_from else ("institution" if only_institution else "full")
+        await _record_plan_complete(mode_name, len(steps))
+    return rc
 
 
 if __name__ == "__main__":
