@@ -326,8 +326,12 @@ export default function DataPipelinePage() {
           backoff.
         </p>
         <p className="max-w-prose">
-          Three modes matter. Auto mode, the deployment default, exits immediately when the journals
-          table already has rows. Repair mode (<Code>--from STEP</Code>) reruns the plan serially
+          Three modes matter. Auto mode, the deployment default, skips a rerun only when the
+          journals table has rows and the plan-completion marker row does too. The marker is a{" "}
+          <Code>harvest_state</Code> row (source <Code>local</Code>, entity{" "}
+          <Code>bootstrap_plan</Code>) that the plan runner itself writes on a zero exit, so
+          journals without a marker mean a bootstrap died partway and auto mode refuses with exit
+          1 instead of skipping. Repair mode (<Code>--from STEP</Code>) reruns the plan serially
           starting at one step. <Code>--institution CODE</Code> replans for a single institution
           only, which is how a new institution joins an existing deployment.
         </p>
@@ -480,10 +484,11 @@ export default function DataPipelinePage() {
         <p className="max-w-prose">
           Nothing runs on a schedule. The only automatic invocation is the compose bootstrap
           service: every <Code>docker compose up</Code> runs the alembic migrations and{" "}
-          <Code>bootstrap.py</Code> before the backend starts, and auto mode exits in seconds on a
-          filled database, so restarts are cheap. <Code>JB_BOOTSTRAP=always</Code> forces a full
-          rerun and repair mode reruns from one step. Any other fresh data arrives only when someone
-          starts a job by hand; the manual table below is never automatic.
+          <Code>bootstrap.py</Code> before the backend starts, and auto mode exits in seconds once
+          the plan-completion marker shows a completed run, so restarts are cheap.{" "}
+          <Code>JB_BOOTSTRAP=always</Code> forces a full rerun and repair mode reruns from one
+          step. Any other fresh data arrives only when someone starts a job by hand; the manual
+          table below is never automatic.
         </p>
         <p className="max-w-prose">
           Two serving-side loops do run continuously, and neither harvests: a nightly prune that
