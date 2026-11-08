@@ -154,7 +154,24 @@ async def test_normalize_jisc_funder_rerun_idempotent(db):
     assert stats["jisc_funders"] == 1
     rows = (await db.execute(select(JiscFunder).where(JiscFunder.id == 701))).scalars().all()
     assert len(rows) == 1
-    assert (rows[0].ror, rows[0].fundref) == ("04ad7pn51", "100009795")
+
+
+@requires_db
+async def test_refresh_funder_links_dedupes_twin_matched_via_both_keys(db):
+    """Regression: one OpenAlex twin matching a jisc funder via BOTH ror and
+    fundref used to violate funder_links_pkey on the fundref INSERT."""
+    from journal_browser.harvest.funders import refresh_funder_links
+    from journal_browser.models import FunderLink, OpenalexFunder
+
+    db.add(JiscFunder(id=701, ror="04ad7pn51", fundref="100009795"))
+    db.add(OpenalexFunder(openalex_id="F1", ror="04ad7pn51", fundref="100009795"))
+    await db.flush()
+
+    links = await refresh_funder_links(db)
+    assert links == 1
+    rows = (await db.execute(select(FunderLink).where(FunderLink.funder_id == 701))).scalars().all()
+    assert len(rows) == 1
+    assert (rows[0].source, rows[0].source_id, rows[0].via) == ("openalex", "F1", "ror")
 
 
 async def test_openaire_row_from_funding_funder():
@@ -198,3 +215,92 @@ async def test_openalex_funder_upsert_idempotent(db):
     assert len(rows) == 1
     assert rows[0].grant_count == 9
     assert (rows[0].ror, rows[0].fundref) == ("04ad7pn51", "100009795")
+
+
+# ── harvest_openalex_funders: raws-driven singleton backfill ─────────────
+
+
+class _FakeFunderEntity:
+    """Shaped after an aletheca Funder entity for _openalex_row."""
+
+    def __init__(self, pk: str):
+        self.id = f"https://openalex.org/{pk}"
+        self.ids = {"ror": "https://ror.org/04ad7pn51", "doi": "10.13039/100009795"}
+        self.display_name = "NWO"
+        self.country_code = "nl"
+        self.description = None
+        self.awards_count = 10
+        self.works_count = 100
+        self.cited_by_count = 5
+
+
+@requires_db
+async def test_openalex_funders_backfilled_from_work_funders(db, institution_factory, monkeypatch):
+    from journal_browser.harvest import funders as funders_mod
+    from journal_browser.harvest.funders import harvest_openalex_funders
+    from journal_browser.models import HarvestRun, Work, WorkFunder
+
+    inst = await institution_factory()
+    run = HarvestRun(source="test", entity_type="works", config_fingerprint="t")
+    db.add(run)
+    await db.flush()
+    db.add(
+        Work(
+            institution_id=inst.id,
+            pure_uuid="uuid-f",
+            doi_normalized="10.1234/f1",
+            title="t",
+            norm_title="t",
+            year=2020,
+            first_seen_run=run.id,
+            last_seen_run=run.id,
+        )
+    )
+    db.add(
+        WorkFunder(
+            institution_id=inst.id,
+            pure_uuid="uuid-f",
+            funder_openalex_id="F1234567890",
+            funder_name="NWO",
+        )
+    )
+    await db.commit()
+
+    calls: list[str] = []
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            self.funders = self
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def get(self, url: str):
+            calls.append(url)
+            return _FakeFunderEntity(url.rsplit("/", 1)[-1])
+
+    monkeypatch.setattr(funders_mod, "AlethecaClient", _FakeClient)
+
+    stats = await harvest_openalex_funders(db)
+    assert stats["linked_ids"] == 1
+    assert stats["todo"] == 1
+    assert stats["fetched"] == 1
+    assert stats["with_ror"] == 1
+    assert stats["with_fundref"] == 1
+    assert calls == ["https://openalex.org/F1234567890"]
+
+    row = (
+        await db.execute(select(OpenalexFunder).where(OpenalexFunder.openalex_id == "F1234567890"))
+    ).scalar_one()
+    assert row.display_name == "NWO"
+    assert row.ror == "04ad7pn51"
+    assert row.fundref == "100009795"
+
+    # Rerun: id known, nothing fetched, links still rebuilt.
+    stats2 = await harvest_openalex_funders(db)
+    assert stats2["todo"] == 0
+    assert stats2["fetched"] == 0
+    assert len(calls) == 1

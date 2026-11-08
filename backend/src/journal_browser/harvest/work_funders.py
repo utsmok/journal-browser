@@ -1,14 +1,13 @@
 """Per-work funder harvest: OpenAlex works awards -> work_funders.
 
 Every OpenAlex work carries its grants/awards inline (funder id, display
-name, award number), so no funder sweep or join is needed: batch the UT
-works' DOIs through aletheca's works.batch_get_by_doi (it chunks at 50
-per round trip and returns a dict keyed by the bare DOI passed in,
-missing DOIs absent), project awards into work_funders rows, and upsert.
-Idempotent: reruns refresh every touched row and prune rows for works
-whose awards changed or whose DOI stopped resolving. Committing per
-batch follows the author_ids sweep convention, so an interrupted run
-simply resumes as a rerun.
+name, award number), so no funder sweep or join is needed: fetch each
+work's DOI as a single-entity GET (free under OpenAlex's 2026-11 credit
+pricing, unlike the pipe-OR batch filter this replaced), project awards
+into work_funders rows, and upsert. Idempotent: reruns refresh every
+touched row and prune rows for works whose awards changed or whose DOI
+stopped resolving. Committing per chunk follows the author_ids sweep
+convention, so an interrupted run simply resumes as a rerun.
 """
 
 import logging
@@ -22,12 +21,14 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
+from ..ingest import IngestSession
 from ..models import Work, WorkFunder
+from .enrich import fetch_works_by_doi
 
 logger = logging.getLogger(__name__)
 
-#: DOIs per OpenAlex round trip (batch_get_by_doi's own chunk size)
-DOI_BATCH = 50
+#: works per fetch chunk of single-entity GETs (see enrich.fetch_works_by_doi)
+WORK_CHUNK = 500
 #: asyncpg caps statements at 32,767 binds; rows here have 6 columns
 UPSERT_CHUNK = 2_000
 #: log progress every N batches
@@ -99,7 +100,9 @@ async def _prune(session: AsyncSession, works: Sequence[Any], rows: list[dict[st
 
 async def harvest_work_funders(session: AsyncSession) -> dict[str, Any]:
     """Upsert work_funders from OpenAlex awards for every work with a
-    DOI. Idempotent full refresh; stats name the sweep's shape."""
+    DOI. Idempotent full refresh; stats name the sweep's shape. Fetched
+    work payloads land verbatim in source_records via IngestSession
+    (deduped by content hash, merged W-ids included)."""
     stats: dict[str, Any] = {
         "works_attempted": 0,
         "matched_with_grants": 0,
@@ -121,24 +124,33 @@ async def harvest_work_funders(session: AsyncSession) -> dict[str, Any]:
     if api_key := get_settings().openalex_api_key:
         client_kwargs["api_key"] = api_key
 
+    fetch_stats: dict[str, int] = {}
+    ingest = IngestSession(session)
+    await ingest.start_run(
+        "openalex",
+        "work",
+        "work_funders",
+        {"via": "single_get_by_doi"},
+    )
     async with AlethecaClient(**client_kwargs) as client:
-        for at in range(0, len(works), DOI_BATCH):
-            batch = works[at : at + DOI_BATCH]
-            batch_no = at // DOI_BATCH + 1
+        for at in range(0, len(works), WORK_CHUNK):
+            batch = works[at : at + WORK_CHUNK]
+            batch_no = at // WORK_CHUNK + 1
             # works in different institutions may share a DOI
             by_doi: dict[str, list[Any]] = defaultdict(list)
             for w in batch:
                 by_doi[w.doi_normalized].append(w)
-            try:
-                found = await client.works.batch_get_by_doi(list(by_doi))
-            except Exception as exc:
-                raise RuntimeError(
-                    f"openalex fetch: doi batch {batch_no} ({len(batch)} dois): {exc}"
-                ) from exc
+            found, errored, _ = await fetch_works_by_doi(client, list(by_doi), fetch_stats)
 
             rows: list[dict[str, Any]] = []
             matched = 0
             for doi, award_payload in found.items():
+                if award_payload is None or doi in errored:
+                    continue
+                await ingest.ingest_record(
+                    str(getattr(award_payload, "id", "") or f"doi:{doi}"),
+                    award_payload.model_dump(mode="json"),
+                )
                 for w in by_doi.get(doi, ()):
                     work_rows = grants_rows(
                         w.institution_id, w.pure_uuid, getattr(award_payload, "awards", None)
@@ -147,22 +159,27 @@ async def harvest_work_funders(session: AsyncSession) -> dict[str, Any]:
                         matched += 1
                     rows.extend(work_rows)
 
+            # Prune only works whose fetch succeeded: a transient error must
+            # not wipe known-good rows as "stopped resolving".
+            prunable = [w for w in batch if w.doi_normalized not in errored]
             try:
                 stats["rows_upserted"] += await _upsert(session, rows)
-                stats["pruned"] += await _prune(session, batch, rows)
+                stats["pruned"] += await _prune(session, prunable, rows)
                 stats["matched_with_grants"] += matched
-                await session.commit()
+                await ingest.commit()
             except Exception as exc:
-                raise RuntimeError(f"upsert/prune: doi batch {batch_no}: {exc}") from exc
+                raise RuntimeError(f"upsert/prune: doi chunk {batch_no}: {exc}") from exc
 
             if batch_no % PROGRESS_EVERY == 0:
                 logger.info(
-                    "harvest_work_funders: batch %d/%d rows_upserted=%d pruned=%d",
+                    "harvest_work_funders: chunk %d/%d rows_upserted=%d pruned=%d errors=%d",
                     batch_no,
-                    (len(works) + DOI_BATCH - 1) // DOI_BATCH,
+                    (len(works) + WORK_CHUNK - 1) // WORK_CHUNK,
                     stats["rows_upserted"],
                     stats["pruned"],
+                    fetch_stats.get("fetch_errors", 0),
                 )
+    stats["fetch_errors"] = fetch_stats.get("fetch_errors", 0)
 
     stats["distinct_funders"] = await session.scalar(
         select(func.count(func.distinct(WorkFunder.funder_openalex_id)))
@@ -183,4 +200,8 @@ async def harvest_work_funders(session: AsyncSession) -> dict[str, Any]:
         {"funder_openalex_id": r.funder_openalex_id, "name": r.name, "works": r.works} for r in top
     ]
     logger.info("harvest_work_funders: %s", stats)
-    return stats
+    # Finalize after the last chunk so a mid-run crash cannot leave a
+    # "completed" run whose later chunks rolled back.
+    final = await ingest.finish_run("completed", dict(stats))
+    await session.commit()
+    return final

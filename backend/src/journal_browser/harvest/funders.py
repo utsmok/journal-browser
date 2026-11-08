@@ -22,7 +22,11 @@ from journal_browser.models import (
     OpenaireFunder,
     OpenaireFunderStream,
     OpenalexFunder,
+    WorkFunder,
 )
+
+from .common import paced_single_gets
+from .openalex_journals import openalex_id_to_pk
 
 try:
     from aireloom import AireloomClient
@@ -31,7 +35,6 @@ except ImportError:  # pragma: no cover
 
 logger = logging.getLogger(__name__)
 
-SWEEP_PAGE = 200  # aletheca cursor page size
 OPENAIRE_PAGE_SIZE = 100  # OpenAIRE graph v3 pageSize maximum
 UPSERT_CHUNK = 2_000  # asyncpg caps statements at 32,767 binds
 
@@ -91,7 +94,9 @@ def _openalex_row(f: Any) -> dict[str, Any]:
     if not openalex_id:
         raise RuntimeError("openalex sweep: funder row without id")
     return {
-        "openalex_id": openalex_id,
+        # Bare pk form ("F4320308302"), matching work_funders and the
+        # journals table; reruns key their known-set on it.
+        "openalex_id": openalex_id_to_pk(openalex_id),
         "ror": normalize_ror(_id("ror")),
         # OpenAlex has no "fundref" id key: the FundRef DOI lives under
         # ids.doi ("10.13039/...") with the bare number in ids.crossref.
@@ -106,22 +111,59 @@ def _openalex_row(f: Any) -> dict[str, Any]:
 
 
 async def harvest_openalex_funders(session: AsyncSession) -> dict[str, int]:
-    """Full OpenAlex funder sweep -> openalex_funders upsert. Idempotent:
-    reruns refresh every row."""
-    stats = {"seen": 0, "upserted": 0, "with_ror": 0, "with_fundref": 0}
-    rows: list[dict[str, Any]] = []
-    client_kwargs: dict[str, Any] = {}
-    if api_key := get_settings().openalex_api_key:
-        client_kwargs["api_key"] = api_key
-    async with AlethecaClient(**client_kwargs) as client:
-        async for f in client.funders.iterate(page_size=SWEEP_PAGE, on_error="raise"):
-            rows.append(_openalex_row(f))
-            stats["seen"] += 1
-    if not rows:
-        raise RuntimeError("openalex sweep: zero funders returned")
-    stats["upserted"] = await _upsert(session, OpenalexFunder, "openalex_id", rows)
-    stats["with_ror"] = sum(1 for r in rows if r["ror"])
-    stats["with_fundref"] = sum(1 for r in rows if r["fundref"])
+    """Backfill openalex_funders from works-linked funder ids.
+
+    work_funders rows (landed by the free per-DOI work-funder harvest)
+    carry every funder the corpus actually cites; fetch full payloads for
+    just the ids the table lacks via paced free single-entity GETs. The
+    old full-universe listing is retired: the app only resolves
+    works-linked funders, and singletons cost no credits so gap-filling
+    works even with the daily budget at zero. Idempotent: reruns fetch
+    nothing new. Ends with refresh_funder_links so canon links stay
+    fresh."""
+    stats: dict[str, int] = {
+        "linked_ids": 0,
+        "todo": 0,
+        "fetched": 0,
+        "failed": 0,
+        "with_ror": 0,
+        "with_fundref": 0,
+        "funder_links": 0,
+    }
+    ids = sorted(
+        {
+            r
+            for (r,) in (
+                await session.execute(select(WorkFunder.funder_openalex_id).distinct())
+            ).all()
+        }
+    )
+    stats["linked_ids"] = len(ids)
+    known = {r for (r,) in (await session.execute(select(OpenalexFunder.openalex_id))).all()}
+    todo = [f"https://openalex.org/{i}" for i in ids if i not in known]
+    stats["todo"] = len(todo)
+    fetched: list[dict[str, Any]] = []
+    if todo:
+        client_kwargs: dict[str, Any] = {}
+        if api_key := get_settings().openalex_api_key:
+            client_kwargs["api_key"] = api_key
+        async with AlethecaClient(**client_kwargs) as client:
+            payloads, failed = await paced_single_gets(client.funders.get, todo)
+        for _pid, payload in payloads.items():
+            if payload is not None:
+                fetched.append(_openalex_row(payload))
+        stats["fetched"] = len(fetched)
+        stats["failed"] = len(failed)
+        if failed:
+            logger.warning(
+                "openalex funder backfill: %d lookups failed, e.g. %s",
+                len(failed),
+                sorted(failed)[:5],
+            )
+        if fetched:
+            await _upsert(session, OpenalexFunder, "openalex_id", fetched)
+            stats["with_ror"] = sum(1 for r in fetched if r["ror"])
+            stats["with_fundref"] = sum(1 for r in fetched if r["fundref"])
     stats["funder_links"] = await refresh_funder_links(session)
     logger.info("harvest_openalex_funders: %s", stats)
     return stats
@@ -311,21 +353,27 @@ async def refresh_funder_links(session: AsyncSession) -> int:
 
     Called after each funder harvest so the table never goes stale; the
     API's canon links, search aliases and OpenAIRE identity blocks read it.
+    One twin matching via both ror AND fundref links once (ror wins —
+    insert order); ON CONFLICT DO NOTHING keeps the fundref pass from
+    violating funder_links_pkey on that (funder_id, source, source_id).
     """
     await session.execute(text("delete from funder_links"))
     for source_sql in (
         "INSERT INTO funder_links (funder_id, source, source_id, via)"
         " SELECT j.id, 'openalex', o.openalex_id, 'ror'"
         " FROM jisc_funders j JOIN openalex_funders o ON o.ror = j.ror"
-        " WHERE j.ror IS NOT NULL",
+        " WHERE j.ror IS NOT NULL"
+        " ON CONFLICT DO NOTHING",
         "INSERT INTO funder_links (funder_id, source, source_id, via)"
         " SELECT j.id, 'openalex', o.openalex_id, 'fundref'"
         " FROM jisc_funders j JOIN openalex_funders o ON o.fundref = j.fundref"
-        " WHERE j.fundref IS NOT NULL",
+        " WHERE j.fundref IS NOT NULL"
+        " ON CONFLICT DO NOTHING",
         "INSERT INTO funder_links (funder_id, source, source_id, via)"
         " SELECT j.id, 'openaire', a.openaire_id, 'ror'"
         " FROM jisc_funders j JOIN openaire_funders a ON a.ror = j.ror"
-        " WHERE j.ror IS NOT NULL",
+        " WHERE j.ror IS NOT NULL"
+        " ON CONFLICT DO NOTHING",
     ):
         await session.execute(text(source_sql))
     await session.commit()

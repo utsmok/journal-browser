@@ -8,8 +8,14 @@ upsert/prune path on the throwaway test database.
 from sqlalchemy import select
 
 from conftest import requires_db
-from journal_browser.harvest.work_funders import _prune, _upsert, grants_rows
-from journal_browser.models import HarvestRun, Institution, Work, WorkFunder
+from journal_browser.harvest import work_funders as work_funders_mod
+from journal_browser.harvest.work_funders import (
+    _prune,
+    _upsert,
+    grants_rows,
+    harvest_work_funders,
+)
+from journal_browser.models import HarvestRun, Institution, SourceRecord, Work, WorkFunder
 
 
 def _award(funder_id: str | None, name: str | None = None, award_id: str | None = None):
@@ -111,3 +117,63 @@ async def test_work_funder_upsert_idempotent_and_prunes_stale(db, institution_fa
     assert await _prune(db, [work], []) == 1
     await db.commit()
     assert await _all_funders(db) == []
+
+
+# ── raw payload storage (DB) ──────────────────────────────────────────────
+
+
+class _FakeAwardWork:
+    """Shape harvest_work_funders reads: id, awards, model_dump."""
+
+    id = "W999"
+
+    def __init__(self):
+        self.awards = [
+            {
+                "funder_id": "https://openalex.org/F1",
+                "funder_display_name": "NWO",
+                "funder_award_id": "100",
+            }
+        ]
+
+    def model_dump(self, mode: str = "json"):
+        return {"id": self.id, "awards": self.awards}
+
+
+@requires_db
+async def test_harvest_work_funders_stores_raw_payloads(db, institution_factory, monkeypatch):
+    inst = await institution_factory(code="ut")
+    await _land_work(db, inst, "10.1234/wf-raw")
+
+    async def _fake_fetch(client, dois, stats=None):
+        return {doi: _FakeAwardWork() for doi in dois}, set(), None
+
+    class _FakeClient:
+        def __init__(self, **kwargs): ...
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(work_funders_mod, "fetch_works_by_doi", _fake_fetch)
+    monkeypatch.setattr(work_funders_mod, "AlethecaClient", _FakeClient)
+
+    stats = await harvest_work_funders(db)
+    assert stats["rows_upserted"] == 1
+    assert stats["records_stored"] == 1
+
+    raw = (
+        await db.execute(
+            select(SourceRecord).where(
+                SourceRecord.source == "openalex",
+                SourceRecord.entity_type == "work",
+                SourceRecord.source_pk == "W999",
+            )
+        )
+    ).scalar_one()
+    assert raw.payload["id"] == "W999"
+    run = await db.get(HarvestRun, raw.harvest_run_id)
+    assert run.status == "completed"
+    assert run.entity_type == "work"
