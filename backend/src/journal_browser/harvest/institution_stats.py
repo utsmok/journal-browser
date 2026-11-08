@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import EXCLUDED_WORK_TYPES, get_settings, work_type_excluded
 from ..ingest import IngestSession
 from ..models import Institution, InstitutionTrend, InstitutionWorksStats, Journal, Work
-from .common import OA_STATUSES
+from .common import OA_STATUSES, openalex_credits_remaining
 from .openalex_journals import resolve_institution_openalex_id
 
 logger = logging.getLogger(__name__)
@@ -50,6 +50,13 @@ async def harvest_institution_stats(
 ) -> dict[str, Any]:
     """One hosted institution's per-journal/year stats + trends from the
     OpenAlex works filter; window and ids come from the institution row."""
+    remaining = await openalex_credits_remaining()
+    if remaining is not None and remaining <= 0:
+        # The institution works filter listing is credit-priced; at a zero
+        # budget every page 429s and used to crash the wave. Skip and
+        # surface; run at the top of the post-reset wave instead.
+        logger.info("institution stats skipped: daily credit budget exhausted")
+        return {"skipped": "daily credit budget exhausted (resets 00:00 UTC)"}
     settings = get_settings()
     client_kwargs: dict[str, Any] = {}
     if settings.openalex_api_key:

@@ -112,3 +112,47 @@ async def test_start_run_supersede_respects_institution_scope(db, institution_fa
     await again.start_run("src", "ent", "f1", {}, institution_id=inst.id)
     await db.commit()
     assert (await db.get(HarvestRun, scoped_id)).status == "failed"
+
+
+@requires_db
+async def test_flush_tolerates_concurrently_committed_version(db):
+    """Regression: a row committed between the dedupe SELECT and _flush
+    (two sweeps fetching the same merged work) used to abort the batch on
+    uq_source_records_version; the flush must no-op instead."""
+    from sqlalchemy import func, select
+
+    from journal_browser.models import SourceRecord
+
+    ingest = IngestSession(db)
+    run_id = await ingest.start_run("racesrc", "thing", "filter", {})
+    payload = {"v": 1}
+    h = content_hash(payload)
+    db.add(
+        SourceRecord(
+            source="racesrc",
+            entity_type="thing",
+            source_pk="pk1",
+            payload=payload,
+            content_hash=h,
+            harvest_run_id=run_id,
+        )
+    )
+    await db.flush()  # the other run committed this version first
+    ingest._pending.append(
+        {
+            "source": "racesrc",
+            "entity_type": "thing",
+            "source_pk": "pk1",
+            "payload": payload,
+            "publication_year": None,
+            "content_hash": h,
+            "harvest_run_id": run_id,
+        }
+    )
+    await ingest._flush()
+    stored = await db.scalar(
+        select(func.count())
+        .select_from(SourceRecord)
+        .where(SourceRecord.source == "racesrc", SourceRecord.source_pk == "pk1")
+    )
+    assert stored == 1

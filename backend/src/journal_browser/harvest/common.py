@@ -4,6 +4,7 @@ import asyncio
 import csv
 import io
 import logging
+import os
 import re
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -361,3 +362,76 @@ async def run_harvest(
         await ingest.finish_run("failed", {"error": "see logs"})
         await session.commit()
         raise
+
+
+async def openalex_credits_remaining() -> float | None:
+    """Remaining daily USD credit budget from OpenAlex's rate-limit
+    endpoint; None when the check fails (gate stays open)."""
+    api_key = get_settings().openalex_api_key
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                "https://api.openalex.org/rate-limit",
+                params={"api_key": api_key} if api_key else None,
+            )
+        bucket = (resp.json() or {}).get("rate_limit") or {}
+        remaining = bucket.get("daily_remaining_usd")
+        return float(remaining) if remaining is not None else None
+    except Exception:
+        return None
+
+
+async def paced_single_gets(
+    get: Callable[[str], Awaitable[Any]],
+    ids: list[str],
+    *,
+    concurrency: int = 10,
+    min_interval_s: float | None = None,
+) -> tuple[dict[str, Any | None], dict[str, Exception]]:
+    """Free single-entity GETs paced to the OpenAlex tier cap.
+
+    Free singleton lookups work even with the credit budget at zero, so
+    gap-filling (journals, funders) never needs a listing sweep. Claims
+    each request's start slot synchronously before sleeping — assigning
+    after the sleep lets every coroutine read the same stale slot and
+    fire as an unspaced burst (see enrich.fetch_works_by_doi). 404s and
+    per-id failures isolate: misses map to None, other exceptions land
+    in the failed dict; only every id failing raises, so systemic
+    breakage never masquerades as an empty sweep.
+    """
+    if not ids:
+        return {}, {}
+    if min_interval_s is None:
+        min_interval_s = float(os.environ.get("JB_OPENALEX_MIN_INTERVAL_S", "0.08"))
+    sem = asyncio.Semaphore(concurrency)
+    next_slot = 0.0
+    loop = asyncio.get_running_loop()
+
+    async def one(iid: str) -> tuple[str, Any | None, Exception | None]:
+        nonlocal next_slot
+        async with sem:
+            now = loop.time()
+            start = max(now, next_slot)
+            next_slot = start + min_interval_s
+            if start > now:
+                await asyncio.sleep(start - now)
+            try:
+                return iid, await get(iid), None
+            except Exception as exc:
+                status = getattr(getattr(exc, "response", None), "status_code", None)
+                if status == 404:
+                    return iid, None, None
+                return iid, None, exc
+
+    out: dict[str, Any | None] = {}
+    failed: dict[str, Exception] = {}
+    for iid, payload, exc in await asyncio.gather(*(one(i) for i in ids)):
+        out[iid] = payload
+        if exc is not None:
+            failed[iid] = exc
+    if len(failed) == len(ids):
+        first = next(iter(failed.values()))
+        raise RuntimeError(
+            f"paced_single_gets: all {len(ids)} lookups failed (first: {first!r})"
+        ) from first
+    return out, failed

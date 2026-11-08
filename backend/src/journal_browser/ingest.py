@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import func, insert, select, text, tuple_, update
+from sqlalchemy import func, select, text, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -332,7 +332,22 @@ class IngestSession:
 
     async def _flush(self) -> None:
         if self._pending:
-            await self.session.execute(insert(SourceRecord), self._pending)
+            # DO NOTHING on the version constraint: a concurrent run (or a
+            # run racing our own dedupe SELECT) can commit the identical
+            # (source, entity_type, source_pk, content_hash) row between
+            # the check and this insert; skipping is the correct outcome —
+            # the version is already recorded, just under another run id.
+            await self.session.execute(
+                pg_insert(SourceRecord).on_conflict_do_nothing(
+                    index_elements=[
+                        "source",
+                        "entity_type",
+                        "source_pk",
+                        "content_hash",
+                    ]
+                ),
+                self._pending,
+            )
             self._pending.clear()
 
 

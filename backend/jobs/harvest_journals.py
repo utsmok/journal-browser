@@ -1,6 +1,11 @@
-"""Full OpenAlex sources sweep + corpus-cutoff counts (decisions.md #15).
+"""Refresh journals: seed deal ISSNs + delta of works-referenced journals.
 
-Usage: uv run python jobs/harvest_journals.py [--seed-deals-only]
+Usage: uv run python jobs/harvest_journals.py [--seed-deals-only] [--sweep-all]
+
+Default is the credit-free route: keyless deal seed + paced singleton
+delta for works-referenced journals missing from the table. --sweep-all
+runs the full listing sweep (costs credits) — a rare manual operation,
+not a per-refresh step.
 """
 
 import asyncio
@@ -25,10 +30,11 @@ async def main() -> None:
     import sys
 
     seed_only = "--seed-deals-only" in sys.argv
+    sweep_all = "--sweep-all" in sys.argv
     engine = create_async_engine(get_settings().database_url)
     maker = async_sessionmaker(engine, expire_on_commit=False)
     async with maker() as session:
-        stats = await harvest_journals(session, seed_only=seed_only)
+        stats = await harvest_journals(session, seed_only=seed_only, sweep_all=sweep_all)
         linked = await refresh_publisher_links(session)
         counts = await corpus_counts(session)
         await session.commit()
