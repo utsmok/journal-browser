@@ -17,11 +17,7 @@ export function DetailSkeleton() {
  */
 export function JournalDetailSkeleton() {
   return (
-    <div
-      className="mx-auto max-w-5xl px-4 py-10"
-      aria-busy="true"
-      aria-live="polite"
-    >
+    <div className="mx-auto max-w-5xl px-4 py-10" aria-busy="true" aria-live="polite">
       <span className="sr-only">Loading journal details…</span>
       <div className="flex flex-wrap items-center gap-2">
         <div className="h-8 w-72 max-w-full animate-pulse rounded bg-[var(--muted)]" />
