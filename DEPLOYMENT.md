@@ -2,7 +2,7 @@
 
 Everything beyond the README quick start: configuration reference, what the
 first boot does, how the deal register is built, admin panel, second-institute
-deployment, and maintenance.
+deployment, the daily refresh wave, and maintenance.
 
 Written for the operator of an instance. All commands run from the repository
 root unless noted.
@@ -201,6 +201,76 @@ column on the row — the env var will not propagate on its own:
 UPDATE institutions SET openaire_org_id = 'openorgs____::...'
 WHERE code = 'ut' AND openaire_org_id IS NULL;
 ```
+
+## Daily refresh wave
+
+Harvested data goes stale, and rerunning the pipeline one job at a time is
+easy to get wrong. `backend/scripts/refresh_wave.sh` runs the repeating set
+of harvest and derivation jobs as one sequence, in the order that matters.
+Every job in it is idempotent, so rerunning the whole wave or any stage is
+safe. Run it right after the daily OpenAlex credit reset (00:00 UTC):
+
+```bash
+cd backend
+bash scripts/refresh_wave.sh
+```
+
+The script prints the remaining daily credit budget before the first stage,
+because the credit-priced stages must run while that budget is fresh. On
+2026-11-07 a manually ordered wave spent about seven hours of the fresh
+budget on the then credit-priced oa colors step. The funder harvest after it
+crashed five seconds in, and the wave's exit gate stopped the remaining
+stages. The wave encodes both lessons. Credit-priced stages run at the top,
+while the budget is fresh. A failing stage names itself and stops the wave,
+and `--from` resumes past the stages that already completed.
+
+The stages, in order:
+
+1. `harvest_stats` and `resolve_author_ids`. Both touch credit-priced
+   OpenAlex works filters. Both also check `openalex_credits_remaining()`
+   before spending credits, and at a zero budget each skips cleanly and
+   notes the skip in its stats output.
+2. `harvest_oa_colors`, `build_openalex_works`, and `backfill_pure_authors`.
+   The three derive from locally stored data and make no API calls. oa
+   colors reads only locally held works today, so it spends no credits.
+3. The funder backfills. `harvest_work_funders` fetches each work by DOI as
+   a free single-entity GET, and it commits per chunk. An interrupted run
+   therefore resumes as a rerun. `harvest_openalex_funders` fetches full
+   funder payloads only for ids the table lacks. `harvest_openaire_funders`
+   pulls the curated funder canon from the OpenAIRE graph.
+4. `harvest_publishers`. It resolves journal host organizations in
+   credit-priced 50-id pipe-filter batches. Results cache in
+   `openalex_publishers`, so only a fresh install pays for the full
+   ~16k-host sweep once.
+5. `embed_journals` last. It re-embeds journals from the stats-built text,
+   and on CPU it is the slow step of the wave, at about 45 minutes for a
+   full run.
+
+A failed stage prints `wave: <stage> failed` and the wave exits with code 1.
+Fix the cause and resume without rerunning completed stages. `--from STAGE`
+starts at the named stage and runs it and everything after it; stage names
+match the `backend/jobs/` script names, and an unknown name exits with code
+2 and prints the valid list:
+
+```bash
+bash scripts/refresh_wave.sh --from harvest_openalex_funders
+```
+
+Each stage prints a stats summary as JSON to stdout when it finishes, and
+tracebacks go to stderr. Five stages also record runs in the `harvest_runs`
+table, which the admin panel's run history lists: `harvest_stats`,
+`resolve_author_ids`, `harvest_oa_colors`, `harvest_work_funders`, and
+`embed_journals`. The wave keeps no log file of its own, so pipe the output
+through `tee` when you want a record:
+
+```bash
+bash scripts/refresh_wave.sh 2>&1 | tee wave.log
+```
+
+`harvest_stats` and `backfill_pure_authors` cover the default institution
+only. `resolve_author_ids` and `build_openalex_works` cover every active
+institution. On a multi-institution deployment, run the first pair with
+`--institution <code>` for each additional institute after the wave.
 
 ## Maintenance
 
