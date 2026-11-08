@@ -98,10 +98,21 @@ fails if the committed file drifted.
 - When executing a plan from `plans/`: read the plan fully first, honor its
   STOP conditions, run every verify line, and update the status row in
   `plans/README.md` when done.
-- The compose project `journal-browser` (ports 3000/8000) is a LIVE
-  deployment: never restart, redeploy, or write to it. The live
-  `journalbrowser` database is read-only for agents — SELECT ok, never DDL.
-  Tests use their own throwaway databases; test stacks go on free ports
+- The live deployment runs on the media VM `192.168.2.153` (Proxmox LXC 101
+  "media") since 2026-11-06: frontend published on **3001**, backend on
+  `127.0.0.1:8001`, db on `127.0.0.1:5434` (see `compose.override.yml`
+  there — 3000/8000 are taken by linkwarden/portainer on that host). Never
+  restart, redeploy, or write to it. The live `journalbrowser` database is
+  read-only for agents — SELECT ok, never DDL. From the workstation, reach
+  the VM over tailscale: `ssh dockeruser@100.120.223.117` (node `media`,
+  joined 2026-11-06); fallback via servtop jump
+  `ssh -J sam@100.114.158.13 dockeruser@192.168.2.153` (direct LAN doesn't
+  work from WSL). Public ingress
+  is Caddy on the Proxmox host `192.168.2.122` (`/home/root/Caddyfile`),
+  reverse-proxying `journalbrowser.samuelmok.cc` to `192.168.2.153:3001`.
+  The workstation copy of the stack is stopped; local containers are not
+  the live deployment.
+- Tests use their own throwaway databases; test stacks go on free ports
   (`compose.test.yml`: db 5533, backend 8001).
 - `JB_SKIP_EMBEDDING_WARMUP=1` skips the ~130 MB ONNX model preload on app
   import (offline schema dumps, CI). Leave unset in deployments.
