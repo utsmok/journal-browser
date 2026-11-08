@@ -17,9 +17,10 @@ from aletheca import AlethecaClient
 from sqlalchemy import delete, func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..config import EXCLUDED_WORK_TYPES, get_settings, work_type_excluded
+from ..config import get_settings, work_type_excluded
 from ..ingest import IngestSession
 from ..models import Institution, InstitutionTrend, InstitutionWorksStats, Journal, Work
+from ..services.works_query import work_type_not_excluded
 from .common import OA_STATUSES, openalex_credits_remaining
 from .openalex_journals import resolve_institution_openalex_id
 
@@ -205,17 +206,8 @@ async def write_pure_canon_stats(session: AsyncSession, institution: Institution
                     if institution.data_window_end is not None
                     else 9999,
                 ),
-                # Same exclusion as the OpenAlex stats pass; normalized
-                # inline because the comparison runs in SQL.
-                func.lower(
-                    func.replace(
-                        func.replace(
-                            func.coalesce(Work.work_type, ""), "info:eu-repo/semantics/", ""
-                        ),
-                        "-",
-                        "",
-                    )
-                ).not_in(sorted(EXCLUDED_WORK_TYPES)),
+                # Same exclusion as the OpenAlex stats pass.
+                work_type_not_excluded(Work.work_type),
             )
             .group_by(Work.journal_issn_l, Work.year)
         )

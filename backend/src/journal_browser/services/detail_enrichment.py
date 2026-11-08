@@ -1,11 +1,12 @@
 """Detail enrichment: raw OpenAlex source/works rows + OpenAIRE match counts.
 
-The journal works list and institution metrics read the openalex_works
-store — plain indexed columns. They used to re-read the underlying
-works_stats payloads (~8 KB JSONB per work) on every request, which
-detoasting turned into seconds per journal page; the store projection
-carries every served field already. The venue source card keeps reading
-its sources payload (one small row).
+The journal works list, institution metrics, and the venue source card
+read plain indexed columns / one small payload row. The works list serves
+the same population the stats count — the works table (Pure canonical,
+windowed, journal output types only) — so the search card, the detail
+totals, and the publications tab always describe one number; the
+openalex_works store joins in per DOI only as enrichment (citations,
+FWCI, retraction, most-open OA record), never as the population.
 """
 
 from typing import Any
@@ -13,40 +14,138 @@ from typing import Any
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import Institution, OpenalexWork, SourceRecord, Work, WorkIdentity
+from ..config import normalize_work_type
+from ..harvest.common import oa_openness_desc
+from ..models import (
+    Author,
+    Institution,
+    OpenalexWork,
+    SourceRecord,
+    Work,
+    WorkIdentity,
+    WorkPureAuthor,
+)
 from . import ut_metadata
+from .works_query import work_type_not_excluded, year_end
 
 OPENALEX_URL = "https://openalex.org"
 
+#: One works-table row plus the store enrichment columns for its DOI.
+_WORK_COLUMNS = (
+    Work.pure_uuid,
+    Work.doi_normalized,
+    Work.title,
+    Work.year,
+    Work.work_type,
+    Work.oa_status,
+)
 
-def _store_work_item(row: OpenalexWork) -> dict[str, Any]:
-    """Tab item from store columns; doi keeps the payload path's URL form."""
+
+async def _venue_work_rows(
+    session: AsyncSession, issn_l: str, institution: Institution
+) -> list[Any]:
+    """The stats population: this institution's Pure canonical works for
+    the journal inside the publication-year window, retired dropped,
+    never-journal-output types excluded — the exact write_pure_canon_stats
+    row set (and therefore journal_flags.works_count, the search card)."""
+    return list(
+        (
+            await session.execute(
+                select(*_WORK_COLUMNS)
+                .where(
+                    Work.institution_id == institution.id,
+                    Work.journal_issn_l == issn_l,
+                    Work.retired_at.is_(None),
+                    Work.year.between(institution.data_window_start, year_end(institution)),
+                    work_type_not_excluded(Work.work_type),
+                )
+                .order_by(Work.pure_uuid)
+            )
+        ).all()
+    )
+
+
+async def _store_by_doi(
+    session: AsyncSession, institution_id: int, dois: list[str]
+) -> dict[str, OpenalexWork]:
+    """Most-open store row per DOI (ties keep the lowest W-id) — the
+    merged-profile dedupe works_for_journal used to apply, applied to the
+    enrichment join so one Pure work still yields one list item."""
+    if not dois:
+        return {}
+    rows = (
+        await session.execute(
+            select(OpenalexWork)
+            .where(
+                OpenalexWork.institution_id == institution_id,
+                OpenalexWork.doi_normalized.in_(dois),
+            )
+            .order_by(oa_openness_desc(OpenalexWork.oa_status), OpenalexWork.w_id)
+        )
+    ).scalars()
+    out: dict[str, OpenalexWork] = {}
+    for row in rows:
+        if row.doi_normalized is not None:
+            out.setdefault(row.doi_normalized, row)
+    return out
+
+
+def _work_item(row: Any, store: OpenalexWork | None) -> dict[str, Any]:
+    """Tab item from a works-table row; store columns enrich when the DOI
+    matched (id/url/type/oa_status stay OpenAlex's, as before). doi keeps
+    the payload path's URL form."""
+    doi = row.doi_normalized
     return {
-        "id": row.w_id,
-        "url": f"{OPENALEX_URL}/{row.w_id}" if row.w_id else None,
-        "doi": f"https://doi.org/{row.doi_normalized}" if row.doi_normalized else None,
+        "id": store.w_id if store else None,
+        "url": f"{OPENALEX_URL}/{store.w_id}" if store and store.w_id else None,
+        "doi": f"https://doi.org/{doi}" if doi else None,
         "title": row.title,
         "year": row.year,
-        "oa_status": row.oa_status,
-        "fwci": row.fwci,
-        "cited_by_count": row.cited_by_count or 0,
-        "is_retracted": row.is_retracted,
-        "type": row.work_type,
+        "oa_status": (store.oa_status if store and store.oa_status else None) or row.oa_status,
+        "fwci": store.fwci if store else None,
+        "cited_by_count": (store.cited_by_count if store else 0) or 0,
+        "is_retracted": store.is_retracted if store else None,
+        "type": store.work_type if store else None,
+        "work_type": normalize_work_type(row.work_type) or None,
+        "in_openalex": store is not None,
     }
 
 
-def _venue_works(issn_l: str, institution_id: int, year_start: int, year_end: int):
-    """The institution's store rows for the journal, inside the
-    publication-year window (NULL years drop out via the BETWEEN)."""
-    return (
-        select(OpenalexWork)
-        .where(
-            OpenalexWork.institution_id == institution_id,
-            OpenalexWork.venue_issn_l == issn_l,
-            OpenalexWork.year.between(year_start, year_end),
+async def _page_authors(
+    session: AsyncSession, institution_id: int, pure_uuids: list[str]
+) -> dict[str, dict[str, list[dict[str, str]]]]:
+    """Pure authors (roster order) per work for one page of works, with
+    each author's research group where the roster knows one."""
+    if not pure_uuids:
+        return {}
+    rows = (
+        await session.execute(
+            select(
+                WorkPureAuthor.work_pure_uuid,
+                Author.pure_uuid,
+                Author.name,
+                Author.research_group,
+            )
+            .join(
+                Author,
+                (Author.institution_id == WorkPureAuthor.institution_id)
+                & (Author.pure_uuid == WorkPureAuthor.person_uuid),
+            )
+            .where(
+                WorkPureAuthor.institution_id == institution_id,
+                WorkPureAuthor.work_pure_uuid.in_(pure_uuids),
+            )
+            .order_by(WorkPureAuthor.work_pure_uuid, WorkPureAuthor.position, Author.name)
         )
-        .order_by(OpenalexWork.w_id)
-    )
+    ).all()
+    out: dict[str, dict[str, list[dict[str, str]]]] = {}
+    for work_uuid, author_uuid, name, group in rows:
+        entry = out.setdefault(work_uuid, {"ut_authors": [], "ut_groups": []})
+        if author_uuid not in {a["id"] for a in entry["ut_authors"]}:
+            entry["ut_authors"].append({"id": author_uuid, "name": name})
+        if group and group not in {g["name"] for g in entry["ut_groups"]}:
+            entry["ut_groups"].append({"name": group})
+    return out
 
 
 async def list_works(
@@ -55,38 +154,30 @@ async def list_works(
     institution: Institution,
     page: int,
     page_size: int,
-    ut_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Paginated works: ut-metadata union when available, works_stats only
-    otherwise. publication_year desc nulls last, cited_by_count desc, title
-    asc; slicing happens in Python (bounded per journal). Both sides are
-    bounded to the institution's publication-year window."""
-    year_start = institution.data_window_start
-    year_end = institution.data_window_end if institution.data_window_end is not None else 9999
-    rows = await session.execute(_venue_works(issn_l, institution.id, year_start, year_end))
-    items = [_store_work_item(r) for r in rows.scalars()]
-    for item in items:
-        item["work_type"] = None
-        item["in_openalex"] = True
-    if ut_rows is not None:
-        # Canonical rows carry their own year: same window applies.
-        ut_rows = [
-            r for r in ut_rows if r["year"] is not None and year_start <= r["year"] <= year_end
-        ]
-        # The tab serves UT-affiliated-author works only (owner decision
-        # 2026-11-05). Stats-side items carry their payload DOI form, so
-        # the set matches both bare and https://doi.org/ forms, caseless —
-        # anything without a filtered canonical DOI behind it drops.
-        ut_dois = set()
-        for row in ut_rows:
-            if row["doi"]:
-                doi = row["doi"].lower()
-                ut_dois.add(doi)
-                ut_dois.add(f"https://doi.org/{doi}")
-        items = [i for i in items if (i.get("doi") or "").lower() in ut_dois]
-        items = ut_metadata.merge_work_lists(ut_rows, items)
+    """Paginated works over the stats population (see _venue_work_rows),
+    store-enriched per DOI. Sorting stays in Python (bounded per journal):
+    publication_year desc nulls last, cited_by_count desc, title asc.
+    Page rows carry their Pure authors and research groups; pure_uuid
+    rides along for the author lookup and WorkItem drops it on render."""
+    rows = await _venue_work_rows(session, issn_l, institution)
+    store_by_doi = await _store_by_doi(
+        session, institution.id, sorted({r.doi_normalized for r in rows if r.doi_normalized})
+    )
+    items = []
+    for row in rows:
+        item = _work_item(row, store_by_doi.get(row.doi_normalized))
+        item["pure_uuid"] = row.pure_uuid
+        items.append(item)
+    items = ut_metadata.sort_work_items(items)
+    page_items = items[(page - 1) * page_size : page * page_size]
+    authors = await _page_authors(session, institution.id, [i["pure_uuid"] for i in page_items])
+    for item in page_items:
+        entry = authors.get(item["pure_uuid"]) or {"ut_authors": [], "ut_groups": []}
+        item["ut_authors"] = entry["ut_authors"]
+        item["ut_groups"] = entry["ut_groups"]
     return {
-        "items": ut_metadata.sort_work_items(items)[(page - 1) * page_size : page * page_size],
+        "items": page_items,
         "total": len(items),
         "page": page,
         "page_size": page_size,
@@ -97,11 +188,12 @@ async def institution_metrics(
     session: AsyncSession,
     issn_l: str,
     institution: Institution,
-    ut_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Aggregates over the journal's stored OpenAlex works (SQL, one pass),
-    plus canonical-store totals when the external works store is reachable.
-    Both sides bounded to the institution's publication-year window."""
+    """Aggregates over the journal's works (both sides bounded to the
+    institution's publication-year window): the OpenAlex-side metrics come
+    from the venue store rows (SQL, one pass); the canonical side describes
+    the same stats population the works list and the search card serve —
+    works-table rows, store-enriched per DOI for retraction/OA status."""
     year_start = institution.data_window_start
     year_end = institution.data_window_end if institution.data_window_end is not None else 9999
     total, fwci_avg, fwci_n, retracted, cited_total = (
@@ -129,14 +221,23 @@ async def institution_metrics(
         "canonical_retracted": None,
         "canonical_oa": None,
     }
-    if ut_rows is not None:
-        # Canonical rows carry their own year: same window applies.
-        ut_rows = [
-            r for r in ut_rows if r["year"] is not None and year_start <= r["year"] <= year_end
+    base = await _venue_work_rows(session, issn_l, institution)
+    store_by_doi = await _store_by_doi(
+        session, institution.id, sorted({r.doi_normalized for r in base if r.doi_normalized})
+    )
+    metrics["canonical_total"] = len(base)
+    metrics["canonical_retracted"] = sum(
+        1 for r in base if (s := store_by_doi.get(r.doi_normalized)) is not None and s.is_retracted
+    )
+    metrics["canonical_oa"] = ut_metadata.oa_buckets(
+        [
+            {
+                "oa_status": (s.oa_status if (s := store_by_doi.get(r.doi_normalized)) else None)
+                or r.oa_status
+            }
+            for r in base
         ]
-        metrics["canonical_total"] = len(ut_rows)
-        metrics["canonical_retracted"] = sum(1 for r in ut_rows if r["is_retracted"])
-        metrics["canonical_oa"] = ut_metadata.oa_buckets(ut_rows)
+    )
     return metrics
 
 

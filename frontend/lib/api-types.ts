@@ -3085,6 +3085,28 @@ export interface components {
             work_type?: string | null;
             /** In Openalex */
             in_openalex?: boolean | null;
+            /**
+             * Ut Authors
+             * @default []
+             */
+            ut_authors: components["schemas"]["WorkUtAuthor"][];
+            /**
+             * Ut Groups
+             * @default []
+             */
+            ut_groups: components["schemas"]["WorkUtGroup"][];
+        };
+        /** WorkUtAuthor */
+        WorkUtAuthor: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /** WorkUtGroup */
+        WorkUtGroup: {
+            /** Name */
+            name: string;
         };
         /** WorksPage */
         WorksPage: {
@@ -4122,7 +4144,7 @@ export interface operations {
                 oa_type?: components["schemas"]["OaType"][] | null;
                 green_oa?: components["schemas"]["GreenOa"] | null;
                 pub_type?: string | null;
-                /** @description Comma-separated ISO 639-1 codes (modal journal language); unknown values match nothing */
+                /** @description Comma-separated ISO 639-1 codes; unknown values match nothing */
                 language?: string | null;
                 sort?: string;
                 dir?: string | null;

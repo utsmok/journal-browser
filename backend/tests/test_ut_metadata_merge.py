@@ -1,12 +1,10 @@
-"""ut-metadata integration tests.
+"""Works-tab population tests (services.ut_metadata helpers + API path).
 
-The pure merge/bucket/sort logic and the API union path run everywhere (no
-ut-metadata dependency). The live-database test only runs when
-JB_TEST_UT_METADATA is set (its value is the ut-metadata DSN) — mirroring
-the conftest loud opt-out convention.
+The pure bucket/sort logic runs everywhere (no ut-metadata dependency). The
+tab itself serves the works-table population (see test_data_windows.py for
+the card-vs-tab parity regression); here the API path is exercised through
+the request cycle, including the detail metrics.
 """
-
-import os
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -16,21 +14,16 @@ from conftest import journal_factory, requires_db
 from journal_browser.db import get_session
 from journal_browser.main import app
 from journal_browser.models import (
+    Author,
     HarvestRun,
     Institution,
     OpenalexWork,
+    Work,
+    WorkPureAuthor,
 )
-from journal_browser.services import ut_metadata
+from journal_browser.services import ut_metadata as utmd
 
 # ── Pure logic (no database) ───────────────────────────────────────────────
-
-
-def test_normalize_doi():
-    assert ut_metadata.normalize_doi("HTTPS://DOI.org/10.1/ABC") == "10.1/abc"
-    assert ut_metadata.normalize_doi("doi:10.1/x") == "10.1/x"
-    assert ut_metadata.normalize_doi("  10.1/x  ") == "10.1/x"
-    assert ut_metadata.normalize_doi("") is None
-    assert ut_metadata.normalize_doi(None) is None
 
 
 def test_oa_buckets():
@@ -41,7 +34,7 @@ def test_oa_buckets():
         {"oa_status": None},
         {"oa_status": "exotic-new-value"},
     ]
-    assert ut_metadata.oa_buckets(rows) == {
+    assert utmd.oa_buckets(rows) == {
         "gold": 2,
         "hybrid": 0,
         "green": 0,
@@ -52,108 +45,6 @@ def test_oa_buckets():
     }
 
 
-def _stats_item(**kw) -> dict:
-    base = {
-        "id": "W1",
-        "url": "https://openalex.org/W1",
-        "doi": "https://doi.org/10.1/one",
-        "title": "Stats Title",
-        "year": 2021,
-        "oa_status": "green",
-        "fwci": 1.5,
-        "cited_by_count": 5,
-        "is_retracted": False,
-        "type": "article",
-        "work_type": None,
-        "in_openalex": True,
-    }
-    base.update(kw)
-    return base
-
-
-def _ut_row(**kw) -> dict:
-    base = {
-        "id": 42,
-        "doi": "10.1/ONE",
-        "title": "Canonical Title",
-        "year": 2023,
-        "work_type": "article",
-        "oa_status": "gold",
-        "cited_by_count": 12,
-        "is_retracted": True,
-    }
-    base.update(kw)
-    return base
-
-
-def test_merge_doi_match_ut_wins_enriched_from_stats():
-    merged = ut_metadata.merge_work_lists([_ut_row()], [_stats_item()])
-    assert merged == [
-        {
-            "id": "W1",  # from works_stats
-            "url": "https://openalex.org/W1",
-            "doi": "10.1/ONE",  # ut-metadata row wins
-            "title": "Canonical Title",
-            "year": 2023,
-            "oa_status": "gold",
-            "fwci": 1.5,  # enrichment from works_stats
-            "cited_by_count": 5,
-            "is_retracted": True,
-            "type": "article",
-            "work_type": "article",
-            "in_openalex": True,
-        }
-    ]
-
-
-def test_merge_keeps_stats_only_and_doi_less_ut_rows():
-    ut = [
-        _ut_row(id=7, doi=None),
-        _ut_row(id=8, doi="10.2/only-ut", cited_by_count=None),
-    ]
-    stats = [_stats_item(doi="https://doi.org/10.1/one")]
-    merged = ut_metadata.merge_work_lists(ut, stats)
-    assert merged == [
-        {
-            "id": "ut-7",
-            "url": None,
-            "doi": None,
-            "title": "Canonical Title",
-            "year": 2023,
-            "oa_status": "gold",
-            "fwci": None,
-            "cited_by_count": 12,
-            "is_retracted": True,
-            "type": None,
-            "work_type": "article",
-            "in_openalex": False,
-        },
-        {
-            "id": "ut-8",
-            "url": "https://doi.org/10.2/only-ut",
-            "doi": "10.2/only-ut",
-            "title": "Canonical Title",
-            "year": 2023,
-            "oa_status": "gold",
-            "fwci": None,
-            "cited_by_count": 0,
-            "is_retracted": True,
-            "type": None,
-            "work_type": "article",
-            "in_openalex": False,
-        },
-        _stats_item(),
-    ]
-
-
-def test_merge_case_insensitive_doi_dedupes():
-    merged = ut_metadata.merge_work_lists(
-        [_ut_row(doi="10.9/same")], [_stats_item(doi="https://doi.org/10.9/SAME")]
-    )
-    assert len(merged) == 1
-    assert merged[0]["in_openalex"] is True
-
-
 def test_sort_order_year_cited_title():
     items = [
         {"year": 2023, "cited_by_count": 1, "title": "zzz"},
@@ -162,7 +53,7 @@ def test_sort_order_year_cited_title():
         {"year": 2023, "cited_by_count": 9, "title": "a title"},
         {"year": 2021, "cited_by_count": 5, "title": "old"},
     ]
-    ordered = ut_metadata.sort_work_items(items)
+    ordered = utmd.sort_work_items(items)
     assert ordered == [
         {"year": 2023, "cited_by_count": 9, "title": "a title"},
         {"year": 2023, "cited_by_count": 9, "title": "B title"},
@@ -172,11 +63,11 @@ def test_sort_order_year_cited_title():
     ]
 
 
-# ── API path: union via a faked ut_works_for_journal ──────────────────────
+# ── API path: works tab + detail metrics over the works-table corpus ──────
 
 
 @pytest.fixture
-async def api(db_engine, monkeypatch):
+async def api(db_engine):
     maker = async_sessionmaker(db_engine, expire_on_commit=False)
 
     async def _override():
@@ -184,57 +75,123 @@ async def api(db_engine, monkeypatch):
             yield session
 
     app.dependency_overrides[get_session] = _override
-    # The DSN fallback serves the configured default institution only;
-    # this fixture's "tu" is that owner, and author_source=utmd forces
-    # the mocked DSN path even though the store has rows.
-    from types import SimpleNamespace
-
-    from journal_browser.services import work_sources
-
-    monkeypatch.setattr(
-        work_sources,
-        "get_settings",
-        lambda: SimpleNamespace(institution_code="tu", author_source="utmd"),
-    )
     async with maker() as session:
-        home = Institution(name="Test U", code="tu", active=True)
+        home = Institution(name="Test U", code="tu", active=True, data_window_start=2020)
         session.add(home)
         await session.flush()
-        # works_stats records resolve their institution through the run.
+        session.add(journal_factory("1234-5678", search_text=None))
         run = HarvestRun(
-            source="openalex",
-            entity_type="test",
-            config_fingerprint="t",
+            source="pure",
+            entity_type="work",
+            status="completed",
             institution_id=home.id,
+            config_fingerprint="t",
         )
         session.add(run)
-        session.add(journal_factory("1234-5678", search_text=None))
         await session.flush()
         session.add_all(
             [
-                # Store rows — what the stats side serves now. W1 merges
-                # with the faked ut-metadata row via DOI 10.1/one; W2 is
-                # the pure works_stats-only row (no ut-metadata twin).
+                Work(
+                    institution_id=home.id,
+                    pure_uuid="w-doi",
+                    title="Doi Work",
+                    norm_title="doi work",
+                    year=2021,
+                    work_type="article",
+                    doi_normalized="10.1/one",
+                    oa_status="green",
+                    journal_issn_l="1234-5678",
+                    first_seen_run=run.id,
+                    last_seen_run=run.id,
+                ),
+                Work(
+                    institution_id=home.id,
+                    pure_uuid="w-nodoi",
+                    title="No Doi Work",
+                    norm_title="no doi work",
+                    year=2020,
+                    work_type="article",
+                    oa_status="green",
+                    journal_issn_l="1234-5678",
+                    first_seen_run=run.id,
+                    last_seen_run=run.id,
+                ),
+            ]
+        )
+        session.add_all(
+            [
+                # Store enrichment for the DOI'd work (most-open record).
                 OpenalexWork(
                     institution_id=home.id,
                     w_id="W1",
                     doi_normalized="10.1/one",
-                    title="Stats One",
+                    title="Doi Work",
                     year=2021,
                     work_type="article",
                     venue_issn_l="1234-5678",
+                    oa_status="gold",
                     fwci=1.5,
                     cited_by_count=5,
+                    is_retracted=True,
                 ),
+                # Merged-profile twin of W1: lower openness, must lose.
                 OpenalexWork(
                     institution_id=home.id,
-                    w_id="W2",
-                    doi_normalized="10.5/stats-only",
-                    title="Stats Only",
+                    w_id="W1b",
+                    doi_normalized="10.1/one",
+                    title="Doi Work (closed copy)",
                     year=2021,
                     work_type="article",
                     venue_issn_l="1234-5678",
+                    oa_status="closed",
                     cited_by_count=5,
+                ),
+                # Store-only row: not in Pure, never ours.
+                OpenalexWork(
+                    institution_id=home.id,
+                    w_id="W9",
+                    doi_normalized="10.9/store-only",
+                    title="Store Only",
+                    year=2021,
+                    work_type="article",
+                    venue_issn_l="1234-5678",
+                    cited_by_count=99,
+                ),
+            ]
+        )
+        session.add_all(
+            [
+                Author(
+                    institution_id=home.id,
+                    pure_uuid="a1",
+                    name="Alice Alpha",
+                    research_group="Group X",
+                    confirmed=True,
+                    n_works=1,
+                ),
+                Author(
+                    institution_id=home.id,
+                    pure_uuid="a2",
+                    name="Bob Beta",
+                    confirmed=True,
+                    n_works=1,
+                ),
+            ]
+        )
+        await session.flush()
+        session.add_all(
+            [
+                WorkPureAuthor(
+                    institution_id=home.id,
+                    work_pure_uuid="w-doi",
+                    person_uuid="a1",
+                    position=0,
+                ),
+                WorkPureAuthor(
+                    institution_id=home.id,
+                    work_pure_uuid="w-nodoi",
+                    person_uuid="a2",
+                    position=0,
                 ),
             ]
         )
@@ -250,102 +207,47 @@ async def client(api):
 
 
 @requires_db
-async def test_works_union_and_detail_ut_metrics(api, client, monkeypatch):
-    async def fake_ut_rows(issn_l, dsn=None):
-        return [
-            _ut_row(id=1, doi="10.1/one", oa_status="gold", is_retracted=True),
-            _ut_row(id=2, doi="10.9/ut-only", cited_by_count=3, oa_status=None),
-            _ut_row(id=3, doi="10.8/beyond-stats", year=None, cited_by_count=1, oa_status="hybrid"),
-        ]
-
-    monkeypatch.setattr(ut_metadata, "ut_works_for_journal", fake_ut_rows)
-
+async def test_works_tab_enrichment_and_authors(api, client):
     r = await client.get("/api/v1/tu/journals/1234-5678/works")
     assert r.status_code == 200
     body = r.json()
-    # 1 merged (10.1/one) + 1 ut-only = 2 in the window; ut-3 has no year
-    # and falls outside it, and the stats-only row rides the canonical DOI
-    # set (no UT-affiliated author of its own).
+    # The Pure population: DOI'd + DOI-less; the store-only row stays out.
     assert body["total"] == 2
     items = body["items"]
-    assert [i["id"] for i in items] == ["W1", "ut-2"]
-    merged = items[0]
-    assert merged["in_openalex"] is True
-    assert merged["fwci"] == 1.5
-    assert merged["is_retracted"] is True
-    assert merged["year"] == 2023
-    assert items[1]["in_openalex"] is False
-    assert items[1]["cited_by_count"] == 3
+    assert [i["title"] for i in items] == ["Doi Work", "No Doi Work"]
+    doi_item, nodoi_item = items
+    assert doi_item["in_openalex"] is True
+    assert doi_item["id"] == "W1"  # most-open record wins the merged twin
+    assert doi_item["oa_status"] == "gold"
+    assert doi_item["fwci"] == 1.5
+    assert doi_item["is_retracted"] is True
+    assert doi_item["doi"] == "https://doi.org/10.1/one"
+    assert doi_item["ut_authors"] == [{"id": "a1", "name": "Alice Alpha"}]
+    assert doi_item["ut_groups"] == [{"name": "Group X"}]
+    assert nodoi_item["in_openalex"] is False
+    assert nodoi_item["id"] is None
+    assert nodoi_item["oa_status"] == "green"  # Pure's own OA status fallback
+    assert nodoi_item["ut_authors"] == [{"id": "a2", "name": "Bob Beta"}]
+    assert nodoi_item["ut_groups"] == []
 
+
+@requires_db
+async def test_detail_metrics_canonical_side_matches_tab(api, client):
     r = await client.get("/api/v1/tu/journals/1234-5678")
+    assert r.status_code == 200
     metrics = r.json()["institution_metrics"]
-    assert metrics["canonical_total"] == 2
-    assert metrics["canonical_retracted"] == 2
+    works = await client.get("/api/v1/tu/journals/1234-5678/works")
+    assert metrics["canonical_total"] == works.json()["total"] == 2
+    assert metrics["canonical_retracted"] == 1
     assert metrics["canonical_oa"] == {
-        "gold": 1,
+        "gold": 1,  # store OA status wins for the DOI'd work
         "hybrid": 0,
-        "green": 0,
+        "green": 1,  # Pure's own status for the DOI-less work
         "bronze": 0,
         "diamond": 0,
         "closed": 0,
-        "unknown": 1,
+        "unknown": 0,
     }
     # Existing OpenAlex-view numbers untouched.
-    assert metrics["openalex_matched"] == 2
+    assert metrics["openalex_matched"] == 3
     assert metrics["fwci_n"] == 1
-
-
-@requires_db
-async def test_ut_metadata_unavailable_degrades_to_stats_only(api, client, monkeypatch):
-    async def unavailable(issn_l, dsn=None):
-        return None  # what ut_works_for_journal returns when unset/unreachable
-
-    monkeypatch.setattr(ut_metadata, "ut_works_for_journal", unavailable)
-
-    r = await client.get("/api/v1/tu/journals/1234-5678/works")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["total"] == 2
-    assert all(i["in_openalex"] is True for i in body["items"])
-
-    r = await client.get("/api/v1/tu/journals/1234-5678")
-    metrics = r.json()["institution_metrics"]
-    assert (
-        metrics["canonical_total"],
-        metrics["canonical_retracted"],
-        metrics["canonical_oa"],
-    ) == (
-        None,
-        None,
-        None,
-    )
-
-
-@requires_db
-async def test_unreachable_dsn_returns_none():
-    # Refused connection (closed port) must degrade, not raise: the
-    # works endpoints keep serving works_stats-only.
-    assert (
-        await ut_metadata.ut_works_for_journal(
-            "0043-1354", dsn="postgresql://ut_metadata:ut_metadata@localhost:5999/ut_metadata"
-        )
-        is None
-    )
-
-
-# ── Live ut-metadata (opt-in: JB_TEST_UT_METADATA=<dsn>) ──────────────────
-
-requires_ut = pytest.mark.skipif(
-    not os.environ.get("JB_TEST_UT_METADATA"),
-    reason="JB_TEST_UT_METADATA unset: ut-metadata database tests skipped by explicit opt-out",
-)
-
-
-@requires_ut
-async def test_ut_works_for_journal_live():
-    rows = await ut_metadata.ut_works_for_journal("0043-1354")
-    assert rows is not None
-    assert len(rows) >= 50  # 60 on the current snapshot
-    assert all(r["doi"] for r in rows)
-    buckets = ut_metadata.oa_buckets(rows)
-    assert sum(buckets.values()) == len(rows)

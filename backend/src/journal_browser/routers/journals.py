@@ -42,7 +42,7 @@ from ..schemas import (
     StatsYear,
     WorksPage,
 )
-from ..services import detail_enrichment, repo_links, work_sources
+from ..services import detail_enrichment, repo_links
 from ..services import search as search_service
 from ..services.deal_coverage import deal_institution_join, dj_scope
 from ..services.funder_fit import JournalFacts, compute_funder_fit
@@ -266,11 +266,8 @@ async def journal_works(
     known = await session.scalar(select(Journal.issn_l).where(Journal.issn_l == issn_l.upper()))
     if known is None or _is_ignored(known):
         raise HTTPException(status_code=404, detail="journal not found")
-    ut_rows = await work_sources.works_for_journal(session, institution, known)
     return WorksPage(
-        **await detail_enrichment.list_works(
-            session, known, institution, page, page_size, ut_rows=ut_rows
-        )
+        **await detail_enrichment.list_works(session, known, institution, page, page_size)
     )
 
 
@@ -408,7 +405,6 @@ async def journal_detail(
 
     summary_stats = journal.summary_stats or {}
     openalex_info = await detail_enrichment.openalex_info(session, journal.issn_l)
-    ut_rows = await work_sources.works_for_journal(session, institution, journal.issn_l)
     # Jisc Open Policy Finder green-OA bundle; null when never swept
     # (jisc_policy NULL, DOAJ tri-state convention).
     policy = journal.jisc_policy
@@ -535,9 +531,7 @@ async def journal_detail(
         green_oa=green_oa,
         funder_fit=funder_fit,
         institution_metrics=InstitutionMetrics(
-            **await detail_enrichment.institution_metrics(
-                session, journal.issn_l, institution, ut_rows
-            )
+            **await detail_enrichment.institution_metrics(session, journal.issn_l, institution)
         ),
         attribution={
             **ATTRIBUTION,

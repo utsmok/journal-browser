@@ -1792,10 +1792,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Comma-separated ISO 639-1 codes (modal journal language); unknown values match nothing",
+              "description": "Comma-separated ISO 639-1 codes; unknown values match nothing",
               "title": "Language"
             },
-            "description": "Comma-separated ISO 639-1 codes (modal journal language); unknown values match nothing"
+            "description": "Comma-separated ISO 639-1 codes; unknown values match nothing"
           },
           {
             "name": "sort",
@@ -10498,10 +10498,57 @@
               }
             ],
             "title": "In Openalex"
+          },
+          "ut_authors": {
+            "items": {
+              "$ref": "#/components/schemas/WorkUtAuthor"
+            },
+            "type": "array",
+            "title": "Ut Authors",
+            "default": []
+          },
+          "ut_groups": {
+            "items": {
+              "$ref": "#/components/schemas/WorkUtGroup"
+            },
+            "type": "array",
+            "title": "Ut Groups",
+            "default": []
           }
         },
         "type": "object",
         "title": "WorkItem"
+      },
+      "WorkUtAuthor": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "WorkUtAuthor"
+      },
+      "WorkUtGroup": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "WorkUtGroup"
       },
       "WorksPage": {
         "properties": {

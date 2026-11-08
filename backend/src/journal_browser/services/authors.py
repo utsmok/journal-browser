@@ -11,10 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings, work_type_excluded
 from ..harvest.authors import topic_mass
+from ..harvest.common import normalize_doi
 from ..models import Author, AuthorWork, Institution, Journal, JournalFlags, Work
 from .facets import author_facets
 from .search import _like, _oa_type, base_query
-from .ut_metadata import normalize_doi
 from .work_sources import openalex_only_works_for_author
 from .works_query import (
     YEAR_BUCKETS,

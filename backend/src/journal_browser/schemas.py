@@ -297,6 +297,15 @@ class InstitutionMetrics(BaseModel):
     canonical_oa: CanonicalOa | None = None
 
 
+class WorkUtAuthor(BaseModel):
+    id: str
+    name: str
+
+
+class WorkUtGroup(BaseModel):
+    name: str
+
+
 class WorkItem(BaseModel):
     id: str | None = None
     url: str | None = None
@@ -308,10 +317,13 @@ class WorkItem(BaseModel):
     cited_by_count: int = 0
     is_retracted: bool | None = None
     type: str | None = None
-    # ut-metadata provenance: canonical work type, and whether the item is
-    # backed by an OpenAlex works_stats row.
+    # work_type is the canonical (Pure) type; in_openalex marks whether the
+    # DOI matched a store row (OpenAlex metrics available).
     work_type: str | None = None
     in_openalex: bool | None = None
+    # The work's Pure authors (roster order) and their research groups.
+    ut_authors: list[WorkUtAuthor] = []
+    ut_groups: list[WorkUtGroup] = []
 
 
 class WorksPage(BaseModel):

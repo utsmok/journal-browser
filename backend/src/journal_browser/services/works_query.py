@@ -4,9 +4,10 @@ copies get rejected in review."""
 
 from typing import Any
 
-from sqlalchemy import and_, false, or_
+from sqlalchemy import and_, false, func, or_
 from sqlalchemy.sql.elements import ColumnElement
 
+from ..config import EXCLUDED_WORK_TYPES
 from ..models import Author, AuthorWork, Work
 
 WORKS_STRATA = ("1-4", "5-19", "20-49", "50+")
@@ -24,6 +25,20 @@ def year_end(institution: Any) -> int:
     """Window end as a plain year; NULL (open) fills to WINDOW_OPEN_END."""
     end = institution.data_window_end
     return end if end is not None else WINDOW_OPEN_END
+
+
+def work_type_not_excluded(column: Any) -> ColumnElement:
+    """SQL twin of config.work_type_excluded: the normalized work type
+    (lower-cased, info:eu-repo/semantics/ stripped, hyphens collapsed) is
+    not one of the never-journal-output types. One definition for every
+    query that must describe the same population as the pure_canon stats
+    (write_pure_canon_stats was the first consumer)."""
+    normalized = func.lower(
+        func.replace(
+            func.replace(func.coalesce(column, ""), "info:eu-repo/semantics/", ""), "-", ""
+        )
+    )
+    return normalized.not_in(sorted(EXCLUDED_WORK_TYPES))
 
 
 def author_works_join(institution_id: int, author_uuid: str) -> ColumnElement:

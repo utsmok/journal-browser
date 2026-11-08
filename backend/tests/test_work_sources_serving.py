@@ -75,6 +75,7 @@ async def serving_api(db, institution_factory):
             name="Alice Author",
             openalex_author_id="a-alice",
             openalex_ids=["a-alice"],
+            research_group="Group X",
             n_works=1,
             confirmed=True,
         )
@@ -184,18 +185,24 @@ async def test_journal_works_tab_serves_local_rows(serving_api):
     assert r.status_code == 200
     body = r.json()
     titles = {i["title"] for i in body["items"]}
-    # the tab lists OpenAlex-side rows anchored to UT-affiliated pure
-    # authors (confirmed-author or org-closure twin); rows whose DOI has
-    # no UT-affiliated pure work behind it stay out
-    assert titles == {"Pure Work (OA twin)", "Org Work (OA twin)"}
-    # canonical-side item shape survives the merge unchanged; the DOI
-    # dedup keeps the most open of the two W-id records (gold over closed),
-    # and a twin with a store copy reports in_openalex True
-    twin = next(i for i in body["items"] if i["title"] == "Pure Work (OA twin)")
+    # the tab lists the Pure works-table population; store-only rows whose
+    # DOI has no Pure work behind it (ghost, journal-only) stay out, and
+    # the out-of-window row is gated
+    assert titles == {"Pure Work", "Org Work"}
+    # the store copy only enriches: the DOI dedup keeps the most open of
+    # the two W-id records (gold over closed), and a Pure work with a
+    # store copy reports in_openalex True; Pure authors/groups ride along
+    twin = next(i for i in body["items"] if i["title"] == "Pure Work")
     assert twin["in_openalex"] is True
-    assert twin["doi"] == "10.1000/shared"
+    assert twin["id"] == "W-twin"
+    assert twin["doi"] == "https://doi.org/10.1000/shared"
     assert twin["cited_by_count"] == 4
     assert twin["oa_status"] == "gold"
+    assert twin["ut_authors"] == [{"id": "alice-uuid", "name": "Alice Author"}]
+    assert twin["ut_groups"] == [{"name": "Group X"}]
+    org = next(i for i in body["items"] if i["title"] == "Org Work")
+    assert org["oa_status"] == "gold"
+    assert org["ut_authors"] == []
 
 
 @requires_db
@@ -250,18 +257,34 @@ async def test_foreign_institution_never_reads_dsn(
 
     Regression: /api/v1/rug/journals/{issn}/works fell through to the
     ut-metadata DSN (one deployment's database) and rendered another
-    site's publications as RUG works."""
+    site's publications as RUG works. The tab no longer reads the DSN at
+    all; the author page's openalex-only merge still can, so it is the
+    patched tripwire."""
     from journal_browser.services import work_sources
 
-    async def _boom(issn_l):
+    async def _boom(*args, **kwargs):
         raise AssertionError("DSN works must not be read for a foreign institution")
 
-    monkeypatch.setattr(work_sources.ut_metadata, "ut_works_for_journal", _boom)
+    monkeypatch.setattr(work_sources.ut_metadata, "ut_openalex_only_works_for_author", _boom)
     rug = await institution_factory(code="rug", data_window_start=2025)
+    db.add(
+        Author(
+            institution_id=rug.id,
+            pure_uuid="rug-uuid",
+            name="Rug Author",
+            openalex_ids=["a-rug"],
+            n_works=0,
+            confirmed=True,
+        )
+    )
     await db.commit()  # the request runs in its own session
     assert rug.active is True
     r = await serving_api.get("/api/v1/rug/journals/1234-5678/works")
     assert r.status_code == 200
-    # no local store, no DSN read -> honest empty tab, not foreign rows
+    # no local store rows for RUG, no DSN read -> honest empty tab, not
+    # foreign rows
     assert r.json()["total"] == 0
     assert r.json()["items"] == []
+    # the author path must not read the DSN for a foreign institution either
+    r = await serving_api.get("/api/v1/rug/authors/rug-uuid")
+    assert r.status_code == 200

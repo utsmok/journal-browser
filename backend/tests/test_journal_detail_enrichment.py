@@ -145,6 +145,7 @@ async def api(client, db_engine):
                     title="Pure W1",
                     norm_title="pure w1",
                     year=2021,
+                    work_type="article",
                     doi_normalized="10.1/w1",
                     journal_issn_l=MAIN_ISSN,
                     first_seen_run=run.id,
@@ -156,6 +157,7 @@ async def api(client, db_engine):
                     title="Pure W2",
                     norm_title="pure w2",
                     year=2023,
+                    work_type="article",
                     doi_normalized="10.5/w2",
                     journal_issn_l=MAIN_ISSN,
                     first_seen_run=run.id,
@@ -273,19 +275,24 @@ async def test_works_pagination_and_sort(api):
     r = await api.get(f"/api/v1/tu/journals/{MAIN_ISSN}/works", params={"page_size": 2})
     assert r.status_code == 200
     body = r.json()
-    # W3 has no year and falls outside the data window.
+    # The works-table population: the two store-anchored works, then the
+    # two identity-sourced works (no DOI, no store row). Sorted year desc,
+    # cited_by desc, title asc.
     assert [i["id"] for i in body["items"]] == ["W2", "W1"]
-    assert body["total"] == 2
+    assert body["total"] == 4
     assert body["page"] == 1
     assert body["page_size"] == 2
 
     r = await api.get(f"/api/v1/tu/journals/{MAIN_ISSN}/works", params={"page": 2, "page_size": 2})
     body = r.json()
-    assert [i["id"] for i in body["items"]] == []
+    assert [(i["title"], i["year"]) for i in body["items"]] == [
+        ("T u1", 2021),
+        ("T u2", 2021),
+    ]
 
     r = await api.get(f"/api/v1/tu/journals/{MAIN_ISSN}/works", params={"page": 4, "page_size": 2})
     assert r.json()["items"] == []
-    assert r.json()["total"] == 2
+    assert r.json()["total"] == 4
 
 
 @requires_db
@@ -303,12 +310,12 @@ async def test_works_404_unknown_journal(api):
 @requires_db
 async def test_works_item_shape(api):
     r = await api.get(f"/api/v1/tu/journals/{MAIN_ISSN}/works")
-    item = r.json()["items"][0]  # W2
+    item = r.json()["items"][0]  # pw2 via store row W2
     assert item == {
         "id": "W2",
         "url": "https://openalex.org/W2",
-        "doi": "10.5/w2",
-        "title": "New Retracted",
+        "doi": "https://doi.org/10.5/w2",
+        "title": "Pure W2",
         "year": 2023,
         "oa_status": "closed",
         "fwci": None,
@@ -317,13 +324,15 @@ async def test_works_item_shape(api):
         "type": "article",
         "work_type": "article",
         "in_openalex": True,
+        "ut_authors": [{"id": "anchor-author", "name": "Anchor Author"}],
+        "ut_groups": [],
     }
-    # W1: authorships must never surface; merged items serve the
-    # canonical (bare) DOI form.
+    # W1: authorships must never surface; the DOI keeps the URL form and
+    # store metrics enrich the Pure row.
     w1 = next(i for i in r.json()["items"] if i["id"] == "W1")
     assert w1["cited_by_count"] == 5
     assert w1["url"] == "https://openalex.org/W1"
-    assert w1["doi"] == "10.1/w1"
+    assert w1["doi"] == "https://doi.org/10.1/w1"
     assert w1["oa_status"] == "gold"
     assert "authorships" not in r.text
 
@@ -356,7 +365,9 @@ async def test_detail_enrichment(api):
         "fwci_n": 1,
         "retracted": 1,
         "cited_total": 14,
-        "canonical_total": 2,
+        # canonical side = the works-table population (pw1, pw2, u1, u2),
+        # retraction/OA via the DOI-joined store rows
+        "canonical_total": 4,
         "canonical_retracted": 1,
         "canonical_oa": {
             "gold": 1,
@@ -365,7 +376,7 @@ async def test_detail_enrichment(api):
             "bronze": 0,
             "diamond": 0,
             "closed": 1,
-            "unknown": 0,
+            "unknown": 2,
         },
     }
 
@@ -426,15 +437,15 @@ async def test_detail_enrichment_without_source_rows(api):
     assert body["openalex"] is None
     # u3 matched once for this journal.
     assert body["openaire"] == {"matched_works": 1}
-    # Only W4 (no fwci) belongs to this journal; the venue filter keeps
-    # nothing (no UT-affiliated pure work behind W4's DOI).
+    # Only W4 (no fwci) belongs to this journal; identity work u3 has no
+    # store row, so the canonical side lists just it.
     assert body["institution_metrics"] == {
         "openalex_matched": 1,
         "fwci_avg": None,
         "fwci_n": 0,
         "retracted": 0,
         "cited_total": 3,
-        "canonical_total": 0,
+        "canonical_total": 1,
         "canonical_retracted": 0,
         "canonical_oa": {
             "gold": 0,
@@ -443,7 +454,7 @@ async def test_detail_enrichment_without_source_rows(api):
             "bronze": 0,
             "diamond": 0,
             "closed": 0,
-            "unknown": 0,
+            "unknown": 1,
         },
     }
 
