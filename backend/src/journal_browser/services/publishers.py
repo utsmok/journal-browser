@@ -39,6 +39,7 @@ from ..models import (
     JournalFlags,
     Publisher,
 )
+from .authorship import venue_authorship, venue_openalex_only
 from .cache import SNAPSHOT_CACHE, SNAPSHOT_TTL, cache_get, cache_put
 from .deal_coverage import deal_institution_join, dj_scope
 from .facets import passes, publisher_facets, publisher_predicates, publisher_topic_facet
@@ -641,4 +642,6 @@ async def publisher_detail(
         ],
         "n_discrepancies": len(latest),
         "works_by_year": works_by_year,
+        "ut_authorship": await venue_authorship(session, institution, issns=issns),
+        "openalex_only": await venue_openalex_only(session, institution, issns=issns),
     }

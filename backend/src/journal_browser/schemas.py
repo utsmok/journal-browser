@@ -297,6 +297,54 @@ class InstitutionMetrics(BaseModel):
     canonical_oa: CanonicalOa | None = None
 
 
+class UTBucket(BaseModel):
+    """Distinct works attributed to one faculty or research group."""
+
+    name: str
+    works: int
+
+
+class UTAuthorRow(BaseModel):
+    pure_uuid: str
+    name: str
+    faculty: str | None = None
+    research_group: str | None = None
+    works: int
+
+
+class UTAuthorship(BaseModel):
+    """Who at this institution authors the venue's canonical works:
+    distinct works per faculty / research group and the top authors,
+    over the same population the search card counts (so the numbers
+    reconcile with journal_flags.works_count). n_ut_works counts rows
+    with at least one UT author edge; venue totals can exceed it."""
+
+    n_ut_works: int = 0
+    faculties: list[UTBucket] = []
+    research_groups: list[UTBucket] = []
+    top_authors: list[UTAuthorRow] = []
+
+
+class OpenalexOnlyWork(BaseModel):
+    title: str | None = None
+    year: int | None = None
+    doi: str | None = None
+    oa_status: str | None = None
+    work_type: str | None = None
+    venue: str | None = None
+
+
+class OpenalexOnly(BaseModel):
+    """OpenAlex store works attributed to the venue or to the unit's
+    member authors whose DOI matches no Pure work — candidates missing
+    from the CRIS. items is capped; total is exact. available=False when
+    the openalex_works projection never ran (frontend hides the card)."""
+
+    total: int = 0
+    items: list[OpenalexOnlyWork] = []
+    available: bool = True
+
+
 class WorkUtAuthor(BaseModel):
     id: str
     name: str
@@ -387,7 +435,11 @@ class JournalDetailResponse(BaseModel):
     green_oa: GreenOaPolicy | None = None
     # Present only when the detail query passes ?funder=<jisc funder id>.
     funder_fit: FunderFitOut | None = None
-    institution_metrics: InstitutionMetrics = InstitutionMetrics()
+    institution_metrics: InstitutionMetrics
+    # Who at this institution authors the journal's canonical works.
+    ut_authorship: UTAuthorship
+    # Store works in this journal missing from the Pure population.
+    openalex_only: OpenalexOnly
     attribution: dict[str, Attribution] = {}
 
 
@@ -550,6 +602,10 @@ class AuthorProfileResponse(BaseModel):
     similar: AuthorSimilarBundle
     alternatives: list[AuthorAlternative]
     works: list[AuthorWorkItem]
+    # Exact count of OpenAlex-only works after gating; None when the
+    # source could not answer (DSN path). The works list carries the
+    # capped merged items, in_pure=False marking them.
+    openalex_only_count: int | None = None
 
 
 # ── Publisher browsing (journals grouped per publisher_name) ───────────────
@@ -616,6 +672,10 @@ class PublisherDetailResponse(BaseModel):
     deal_discrepancies: list[DealDiscrepancyRow] = []
     n_discrepancies: int = 0
     works_by_year: list[StatsYear] = []
+    # Who at this institution authors the group's canonical works.
+    ut_authorship: UTAuthorship
+    # Store works in the group's journals missing from the Pure population.
+    openalex_only: OpenalexOnly
 
 
 # ── Org-unit browsing (faculties + research groups) ────────────────────────
@@ -673,6 +733,9 @@ class OrgUnitDetailResponse(BaseModel):
     authors: list[OrgUnitAuthorRow] = []
     works_by_year: list[StatsYear] = []
     deal_usage: list[DealUsageRow] = []
+    # Store works attributed to the unit's member authors and missing
+    # from the Pure population.
+    openalex_only: OpenalexOnly
 
 
 # ── Admin responses (dict payload shapes in routers/admin.py) ──────────────

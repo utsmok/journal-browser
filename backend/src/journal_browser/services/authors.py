@@ -351,23 +351,28 @@ async def _similar_sections(
     return similar, alternatives
 
 
-async def _openalex_only_items(
+async def _openalex_only_merge(
     session: AsyncSession, institution: Institution, author: Author, work_rows: Any
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], int | None]:
     """OpenAlex-attributed works the Pure population does not hold, as
     profile work items with in_pure False, appended after the local ones.
+
+    Returns the capped merge items plus the exact gated count (None when
+    the source could not answer — the caller then leaves
+    openalex_only_count unset and the page degrades to Pure-only).
 
     Quality gates keep the merge honest: the institution's publication-year
     window applies, excluded work types (preprints/books) drop out, and a
     DOI that matches a local work is skipped (same publication; the Pure
-    copy stays the display record). Unavailable source degrades to a
-    Pure-only page."""
+    copy stays the display record)."""
     rows = await openalex_only_works_for_author(session, institution, author)
+    if rows is None:
+        return [], None
     if not rows:
-        return []
+        return [], 0
     year_end = institution.data_window_end if institution.data_window_end is not None else 9999
     seen_dois = {doi for row in work_rows if (doi := normalize_doi(row.doi_normalized))}
-    items: list[dict[str, Any]] = []
+    gated: list[dict[str, Any]] = []
     for row in sorted(
         rows,
         key=lambda r: (r["year"] is None, -(r["year"] or 0), (r["title"] or "").lower()),
@@ -382,7 +387,7 @@ async def _openalex_only_items(
             if doi in seen_dois:
                 continue
             seen_dois.add(doi)
-        items.append(
+        gated.append(
             {
                 "pure_uuid": None,
                 "title": row["title"] or "Untitled",
@@ -394,7 +399,7 @@ async def _openalex_only_items(
                 "in_pure": False,
             }
         )
-    return items[: max(WORKS_CAP - len(work_rows), 0)]
+    return gated[: max(WORKS_CAP - len(work_rows), 0)], len(gated)
 
 
 async def author_profile(
@@ -484,6 +489,10 @@ async def author_profile(
         embeddings = {row.issn_l: row.embedding for row in emb_rows if row.embedding is not None}
     similar, alternatives = await _similar_sections(session, iid, journal_rows, embeddings)
 
+    openalex_items, openalex_only_count = await _openalex_only_merge(
+        session, institution, author, work_rows
+    )
+
     return {
         "author": {
             "pure_uuid": author.pure_uuid,
@@ -524,5 +533,6 @@ async def author_profile(
             }
             for row in work_rows
         ]
-        + await _openalex_only_items(session, institution, author, work_rows),
+        + openalex_items,
+        "openalex_only_count": openalex_only_count,
     }

@@ -1229,6 +1229,8 @@ export interface components {
             alternatives: components["schemas"]["AuthorAlternative"][];
             /** Works */
             works: components["schemas"]["AuthorWorkItem"][];
+            /** Openalex Only Count */
+            openalex_only_count?: number | null;
         };
         /** AuthorSearchResponse */
         AuthorSearchResponse: {
@@ -2263,15 +2265,9 @@ export interface components {
             openaire: components["schemas"]["OpenaireInfo"];
             green_oa?: components["schemas"]["GreenOaPolicy"] | null;
             funder_fit?: components["schemas"]["FunderFitOut"] | null;
-            /**
-             * @default {
-             *       "openalex_matched": 0,
-             *       "fwci_n": 0,
-             *       "retracted": 0,
-             *       "cited_total": 0
-             *     }
-             */
             institution_metrics: components["schemas"]["InstitutionMetrics"];
+            ut_authorship: components["schemas"]["UTAuthorship"];
+            openalex_only: components["schemas"]["OpenalexOnly"];
             /**
              * Attribution
              * @default {}
@@ -2428,6 +2424,45 @@ export interface components {
             topics: components["schemas"]["OpenalexTopicOut"][];
         };
         /**
+         * OpenalexOnly
+         * @description OpenAlex store works attributed to the venue or to the unit's
+         *     member authors whose DOI matches no Pure work — candidates missing
+         *     from the CRIS. items is capped; total is exact. available=False when
+         *     the openalex_works projection never ran (frontend hides the card).
+         */
+        OpenalexOnly: {
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["OpenalexOnlyWork"][];
+            /**
+             * Available
+             * @default true
+             */
+            available: boolean;
+        };
+        /** OpenalexOnlyWork */
+        OpenalexOnlyWork: {
+            /** Title */
+            title?: string | null;
+            /** Year */
+            year?: number | null;
+            /** Doi */
+            doi?: string | null;
+            /** Oa Status */
+            oa_status?: string | null;
+            /** Work Type */
+            work_type?: string | null;
+            /** Venue */
+            venue?: string | null;
+        };
+        /**
          * OpenalexTopicOut
          * @description Topic entry of an OpenAlex source object (sorted count desc).
          */
@@ -2491,6 +2526,7 @@ export interface components {
              * @default []
              */
             deal_usage: components["schemas"]["DealUsageRow"][];
+            openalex_only: components["schemas"]["OpenalexOnly"];
         };
         /** OrgUnitItem */
         OrgUnitItem: {
@@ -2608,6 +2644,8 @@ export interface components {
              * @default []
              */
             works_by_year: components["schemas"]["StatsYear"][];
+            ut_authorship: components["schemas"]["UTAuthorship"];
+            openalex_only: components["schemas"]["OpenalexOnly"];
         };
         /**
          * PublisherExternalIds
@@ -2798,6 +2836,59 @@ export interface components {
             name: string;
             /** N */
             n: number;
+        };
+        /** UTAuthorRow */
+        UTAuthorRow: {
+            /** Pure Uuid */
+            pure_uuid: string;
+            /** Name */
+            name: string;
+            /** Faculty */
+            faculty?: string | null;
+            /** Research Group */
+            research_group?: string | null;
+            /** Works */
+            works: number;
+        };
+        /**
+         * UTAuthorship
+         * @description Who at this institution authors the venue's canonical works:
+         *     distinct works per faculty / research group and the top authors,
+         *     over the same population the search card counts (so the numbers
+         *     reconcile with journal_flags.works_count). n_ut_works counts rows
+         *     with at least one UT author edge; venue totals can exceed it.
+         */
+        UTAuthorship: {
+            /**
+             * N Ut Works
+             * @default 0
+             */
+            n_ut_works: number;
+            /**
+             * Faculties
+             * @default []
+             */
+            faculties: components["schemas"]["UTBucket"][];
+            /**
+             * Research Groups
+             * @default []
+             */
+            research_groups: components["schemas"]["UTBucket"][];
+            /**
+             * Top Authors
+             * @default []
+             */
+            top_authors: components["schemas"]["UTAuthorRow"][];
+        };
+        /**
+         * UTBucket
+         * @description Distinct works attributed to one faculty or research group.
+         */
+        UTBucket: {
+            /** Name */
+            name: string;
+            /** Works */
+            works: number;
         };
         /** UsageBatchIn */
         UsageBatchIn: {

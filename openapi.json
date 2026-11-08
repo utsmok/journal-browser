@@ -5011,6 +5011,17 @@
             },
             "type": "array",
             "title": "Works"
+          },
+          "openalex_only_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Only Count"
           }
         },
         "type": "object",
@@ -8015,13 +8026,13 @@
             ]
           },
           "institution_metrics": {
-            "$ref": "#/components/schemas/InstitutionMetrics",
-            "default": {
-              "openalex_matched": 0,
-              "fwci_n": 0,
-              "retracted": 0,
-              "cited_total": 0
-            }
+            "$ref": "#/components/schemas/InstitutionMetrics"
+          },
+          "ut_authorship": {
+            "$ref": "#/components/schemas/UTAuthorship"
+          },
+          "openalex_only": {
+            "$ref": "#/components/schemas/OpenalexOnly"
           },
           "attribution": {
             "additionalProperties": {
@@ -8034,7 +8045,10 @@
         },
         "type": "object",
         "required": [
-          "journal"
+          "journal",
+          "institution_metrics",
+          "ut_authorship",
+          "openalex_only"
         ],
         "title": "JournalDetailResponse"
       },
@@ -8489,6 +8503,103 @@
         "title": "OpenalexInfo",
         "description": "Venue-level OpenAlex source object (topics sorted count desc, nulls last)."
       },
+      "OpenalexOnly": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OpenalexOnlyWork"
+            },
+            "type": "array",
+            "title": "Items",
+            "default": []
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "OpenalexOnly",
+        "description": "OpenAlex store works attributed to the venue or to the unit's\nmember authors whose DOI matches no Pure work \u2014 candidates missing\nfrom the CRIS. items is capped; total is exact. available=False when\nthe openalex_works projection never ran (frontend hides the card)."
+      },
+      "OpenalexOnlyWork": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "oa_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Status"
+          },
+          "work_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Type"
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue"
+          }
+        },
+        "type": "object",
+        "title": "OpenalexOnlyWork"
+      },
       "OpenalexTopicOut": {
         "properties": {
           "id": {
@@ -8673,11 +8784,15 @@
             "type": "array",
             "title": "Deal Usage",
             "default": []
+          },
+          "openalex_only": {
+            "$ref": "#/components/schemas/OpenalexOnly"
           }
         },
         "type": "object",
         "required": [
-          "unit"
+          "unit",
+          "openalex_only"
         ],
         "title": "OrgUnitDetailResponse"
       },
@@ -9002,12 +9117,20 @@
             "type": "array",
             "title": "Works By Year",
             "default": []
+          },
+          "ut_authorship": {
+            "$ref": "#/components/schemas/UTAuthorship"
+          },
+          "openalex_only": {
+            "$ref": "#/components/schemas/OpenalexOnly"
           }
         },
         "type": "object",
         "required": [
           "publisher",
-          "journals"
+          "journals",
+          "ut_authorship",
+          "openalex_only"
         ],
         "title": "PublisherDetailResponse"
       },
@@ -9554,6 +9677,106 @@
           "n"
         ],
         "title": "TopicMassRow"
+      },
+      "UTAuthorRow": {
+        "properties": {
+          "pure_uuid": {
+            "type": "string",
+            "title": "Pure Uuid"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "faculty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Faculty"
+          },
+          "research_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Group"
+          },
+          "works": {
+            "type": "integer",
+            "title": "Works"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pure_uuid",
+          "name",
+          "works"
+        ],
+        "title": "UTAuthorRow"
+      },
+      "UTAuthorship": {
+        "properties": {
+          "n_ut_works": {
+            "type": "integer",
+            "title": "N Ut Works",
+            "default": 0
+          },
+          "faculties": {
+            "items": {
+              "$ref": "#/components/schemas/UTBucket"
+            },
+            "type": "array",
+            "title": "Faculties",
+            "default": []
+          },
+          "research_groups": {
+            "items": {
+              "$ref": "#/components/schemas/UTBucket"
+            },
+            "type": "array",
+            "title": "Research Groups",
+            "default": []
+          },
+          "top_authors": {
+            "items": {
+              "$ref": "#/components/schemas/UTAuthorRow"
+            },
+            "type": "array",
+            "title": "Top Authors",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "UTAuthorship",
+        "description": "Who at this institution authors the venue's canonical works:\ndistinct works per faculty / research group and the top authors,\nover the same population the search card counts (so the numbers\nreconcile with journal_flags.works_count). n_ut_works counts rows\nwith at least one UT author edge; venue totals can exceed it."
+      },
+      "UTBucket": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "works": {
+            "type": "integer",
+            "title": "Works"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "works"
+        ],
+        "title": "UTBucket",
+        "description": "Distinct works attributed to one faculty or research group."
       },
       "UsageBatchIn": {
         "properties": {

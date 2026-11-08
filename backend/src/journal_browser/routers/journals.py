@@ -36,13 +36,15 @@ from ..schemas import (
     JournalSearchResponse,
     OpenaireInfo,
     OpenalexInfo,
+    OpenalexOnly,
     ScimagojrOut,
     SimilarJournalItem,
     SimilarJournalsBundle,
     StatsYear,
+    UTAuthorship,
     WorksPage,
 )
-from ..services import detail_enrichment, repo_links
+from ..services import authorship, detail_enrichment, repo_links
 from ..services import search as search_service
 from ..services.deal_coverage import deal_institution_join, dj_scope
 from ..services.funder_fit import JournalFacts, compute_funder_fit
@@ -532,6 +534,12 @@ async def journal_detail(
         funder_fit=funder_fit,
         institution_metrics=InstitutionMetrics(
             **await detail_enrichment.institution_metrics(session, journal.issn_l, institution)
+        ),
+        ut_authorship=UTAuthorship(
+            **await authorship.venue_authorship(session, institution, issn_l=journal.issn_l)
+        ),
+        openalex_only=OpenalexOnly(
+            **await authorship.venue_openalex_only(session, institution, issn_l=journal.issn_l)
         ),
         attribution={
             **ATTRIBUTION,

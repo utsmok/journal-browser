@@ -228,6 +228,8 @@ async def test_author_profile_merges_openalex_only(serving_api):
     assert ghost["doi"] == "10.9999/ghost"
     assert ghost["journal_title"] == "Journal One"
     assert ghost["year"] == 2024
+    # the exact gated count rides beside the capped merged list
+    assert r.json()["openalex_only_count"] == 1
 
 
 @requires_db

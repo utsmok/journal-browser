@@ -27,6 +27,7 @@ from ..models import (
     JournalFlags,
     Work,
 )
+from .authorship import author_ids_openalex_only
 from .cache import SNAPSHOT_CACHE, SNAPSHOT_TTL, cache_get, cache_put
 from .search import _oa_type
 from .works_query import (
@@ -606,6 +607,11 @@ async def orgunit_detail(
         )
     ).all()
 
+    # Member authors' resolved OpenAlex A-ids (uncapped, unlike
+    # author_rows) drive the CRIS-gap query.
+    aid_rows = (await session.execute(select(Author.openalex_ids).where(*membership))).all()
+    member_aids = [aid for (ids,) in aid_rows for aid in (ids or [])]
+
     return {
         "unit": _item(unit, level, topics),
         "groups": groups,
@@ -631,6 +637,7 @@ async def orgunit_detail(
             for r in author_rows
         ],
         "works_by_year": works_by_year,
+        "openalex_only": await author_ids_openalex_only(session, institution, member_aids),
         "deal_usage": [
             {"label": r.label, "n_works": int(r.n_works), "euro": float(r.euro)} for r in usage_rows
         ],

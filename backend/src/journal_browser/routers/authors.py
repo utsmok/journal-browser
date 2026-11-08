@@ -93,4 +93,5 @@ async def author_profile(
             for alt in profile["alternatives"]
         ],
         works=profile["works"],
+        openalex_only_count=profile["openalex_only_count"],
     )

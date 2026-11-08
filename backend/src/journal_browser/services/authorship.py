@@ -1,0 +1,252 @@
+"""UT authorship aggregates and CRIS-gap (OpenAlex-only) queries shared
+by the journal, publisher, org-unit, and author detail views.
+
+Two views over the same two stores:
+
+- UT authorship: who at this institution authors a venue's canonical
+  works. The population is the works-table set the search card counts
+  (windowed, retired dropped, never-journal-output types excluded),
+  joined through work_pure_authors → authors for faculty and research
+  group attribution — the reverse view of the author and org-unit pages.
+- OpenAlex-only ("not registered in Pure"): openalex_works store rows
+  attributed to the venue (issn) or to the unit's member authors whose
+  DOI matches no Pure work, gated like the author page's openalex-only
+  merge: publication-year window, never-journal-output types dropped,
+  NULL types kept (the store's vocabulary is sparser than Pure's).
+
+Store-backed queries return available=False when the local
+openalex_works projection has never run for the institution (the same
+degradation the author page applies); the frontend hides the card
+instead of showing a misleading zero.
+"""
+
+from typing import Any
+
+from sqlalchemy import exists, func, or_, select, type_coerce
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..models import Author, Institution, OpenalexWork, Work, WorkPureAuthor
+from .works_query import work_type_not_excluded, year_end
+
+TOP_AUTHORS = 10
+#: Items served per OpenalexOnly payload; total stays exact beyond it.
+GAP_ITEM_CAP = 50
+
+
+async def local_store_ready(session: AsyncSession, institution: Institution) -> bool:
+    """True when the openalex_works projection has run for this
+    institution at least once (store-backed cards may answer)."""
+    return (
+        await session.scalar(
+            select(1).where(OpenalexWork.institution_id == institution.id).limit(1)
+        )
+    ) is not None
+
+
+def _unavailable() -> dict[str, Any]:
+    return {"total": 0, "items": [], "available": False}
+
+
+def _store_gates(institution: Institution) -> list[Any]:
+    """Window + type gates for store rows, mirroring the author page's
+    openalex-only merge: NULL years drop (outside any window), NULL types
+    stay (OpenAlex's vocabulary is sparser than Pure's)."""
+    return [
+        OpenalexWork.year.between(institution.data_window_start, year_end(institution)),
+        func.coalesce(work_type_not_excluded(OpenalexWork.work_type), True),
+    ]
+
+
+def _not_in_pure() -> Any:
+    """Anti-join: no Pure work holds this DOI. DOI-less store rows cannot
+    match and therefore count — same rule the author page applies."""
+    return ~exists(
+        select(1).where(
+            Work.institution_id == OpenalexWork.institution_id,
+            Work.doi_normalized == OpenalexWork.doi_normalized,
+        )
+    )
+
+
+async def _store_gap_payload(
+    session: AsyncSession, institution: Institution, predicate: list[Any]
+) -> dict[str, Any]:
+    """Shared shape: exact total + capped items over one store predicate
+    (gates + attribution + anti-join), most recent first."""
+    if not await local_store_ready(session, institution):
+        return _unavailable()
+    where = [OpenalexWork.institution_id == institution.id, *predicate]
+    total = await session.scalar(select(func.count()).select_from(OpenalexWork).where(*where))
+    rows = (
+        await session.execute(
+            select(
+                OpenalexWork.title,
+                OpenalexWork.year,
+                OpenalexWork.doi_normalized,
+                OpenalexWork.oa_status,
+                OpenalexWork.work_type,
+                OpenalexWork.venue_name,
+            )
+            .where(*where)
+            .order_by(OpenalexWork.year.desc().nulls_last(), func.lower(OpenalexWork.title))
+            .limit(GAP_ITEM_CAP)
+        )
+    ).all()
+    items = [
+        {
+            "title": r.title,
+            "year": r.year,
+            "doi": r.doi_normalized,
+            "oa_status": r.oa_status,
+            "work_type": r.work_type,
+            "venue": r.venue_name,
+        }
+        for r in rows
+    ]
+    return {"total": int(total or 0), "items": items, "available": True}
+
+
+async def venue_openalex_only(
+    session: AsyncSession,
+    institution: Institution,
+    *,
+    issn_l: str | None = None,
+    issns: list[str] | None = None,
+) -> dict[str, Any]:
+    """Store works in the venue(s) the Pure population does not hold.
+
+    One issn for the journal view, the publisher group's issn set for the
+    publisher view. Attribution key is venue_issn_l — the same key the
+    OpenAlex-side institution metrics use."""
+    venue_issns = [issn_l] if issn_l is not None else sorted(set(issns or []))
+    if not venue_issns:
+        return {"total": 0, "items": [], "available": True}
+    return await _store_gap_payload(
+        session,
+        institution,
+        [OpenalexWork.venue_issn_l.in_(venue_issns), *_store_gates(institution), _not_in_pure()],
+    )
+
+
+async def author_ids_openalex_only(
+    session: AsyncSession, institution: Institution, aids: list[str]
+) -> dict[str, Any]:
+    """Store works attributed to any of the given OpenAlex author ids the
+    Pure population does not hold (org-unit gap card).
+
+    Attribution is jsonb containment per bare A-id — the same expression
+    the author page's openalex-only merge uses — so a work counts once
+    however many of the unit's authors it names."""
+    flat = sorted(
+        {aid.lower() for row in aids for aid in (row if isinstance(row, list) else [row]) if aid}
+    )
+    if not flat:
+        return {"total": 0, "items": [], "available": await local_store_ready(session, institution)}
+    attributed = or_(
+        *[OpenalexWork.authorships.op("@>")(type_coerce([{"a": aid}], JSONB)) for aid in flat]
+    )
+    return await _store_gap_payload(
+        session,
+        institution,
+        [attributed, *_store_gates(institution), _not_in_pure()],
+    )
+
+
+async def venue_authorship(
+    session: AsyncSession,
+    institution: Institution,
+    *,
+    issn_l: str | None = None,
+    issns: list[str] | None = None,
+) -> dict[str, Any]:
+    """Who at this institution authors the venue's canonical works.
+
+    Distinct works per faculty and per research group plus the top
+    authors, all over one population: the works-table rows the search
+    card counts, restricted to rows with at least one UT author edge.
+    Rows whose faculty/research_group attribute is missing stay in
+    n_ut_works but form no bucket."""
+    venue_issns = [issn_l] if issn_l is not None else sorted(set(issns or []))
+    empty: dict[str, Any] = {
+        "n_ut_works": 0,
+        "faculties": [],
+        "research_groups": [],
+        "top_authors": [],
+    }
+    if not venue_issns:
+        return empty
+    population = [
+        Work.institution_id == institution.id,
+        Work.journal_issn_l.in_(venue_issns),
+        Work.retired_at.is_(None),
+        Work.year.between(institution.data_window_start, year_end(institution)),
+        work_type_not_excluded(Work.work_type),
+    ]
+    pairs = (
+        select(
+            Work.pure_uuid.label("work_uuid"),
+            Author.faculty.label("faculty"),
+            Author.research_group.label("research_group"),
+            Author.pure_uuid.label("author_uuid"),
+            Author.name.label("name"),
+        )
+        .join(
+            WorkPureAuthor,
+            (WorkPureAuthor.institution_id == Work.institution_id)
+            & (WorkPureAuthor.work_pure_uuid == Work.pure_uuid),
+        )
+        .join(
+            Author,
+            (Author.institution_id == WorkPureAuthor.institution_id)
+            & (Author.pure_uuid == WorkPureAuthor.person_uuid),
+        )
+        .where(*population)
+        .subquery()
+    )
+    n_ut_works = await session.scalar(select(func.count(func.distinct(pairs.c.work_uuid))))
+
+    async def _buckets(column: Any) -> list[dict[str, Any]]:
+        rows = (
+            await session.execute(
+                select(column, func.count(func.distinct(pairs.c.work_uuid)).label("works"))
+                .select_from(pairs)
+                .where(column.is_not(None), column != "")
+                .group_by(column)
+                .order_by(func.count(func.distinct(pairs.c.work_uuid)).desc(), column)
+            )
+        ).all()
+        return [{"name": name, "works": int(n)} for name, n in rows]
+
+    faculties = await _buckets(pairs.c.faculty)
+    research_groups = await _buckets(pairs.c.research_group)
+    author_rows = (
+        await session.execute(
+            select(
+                pairs.c.author_uuid,
+                pairs.c.name,
+                pairs.c.faculty,
+                pairs.c.research_group,
+                func.count(func.distinct(pairs.c.work_uuid)).label("works"),
+            )
+            .select_from(pairs)
+            .group_by(pairs.c.author_uuid, pairs.c.name, pairs.c.faculty, pairs.c.research_group)
+            .order_by(func.count(func.distinct(pairs.c.work_uuid)).desc(), func.lower(pairs.c.name))
+            .limit(TOP_AUTHORS)
+        )
+    ).all()
+    return {
+        "n_ut_works": int(n_ut_works or 0),
+        "faculties": faculties,
+        "research_groups": research_groups,
+        "top_authors": [
+            {
+                "pure_uuid": r.author_uuid,
+                "name": r.name,
+                "faculty": r.faculty,
+                "research_group": r.research_group,
+                "works": int(r.works),
+            }
+            for r in author_rows
+        ],
+    }

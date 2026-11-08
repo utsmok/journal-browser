@@ -12,8 +12,10 @@ from ..schemas import (
     DealDiscrepancyRow,
     DealOut,
     JournalListItem,
+    OpenalexOnly,
     PublisherDetailResponse,
     PublisherSearchResponse,
+    UTAuthorship,
 )
 from ..services import publishers as publishers_service
 from ..vocab import OaType
@@ -114,4 +116,6 @@ async def publisher_detail(
         deal_discrepancies=[DealDiscrepancyRow(**row) for row in detail["deal_discrepancies"]],
         n_discrepancies=detail["n_discrepancies"],
         works_by_year=detail["works_by_year"],
+        ut_authorship=UTAuthorship(**detail["ut_authorship"]),
+        openalex_only=OpenalexOnly(**detail["openalex_only"]),
     )

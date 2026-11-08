@@ -224,6 +224,7 @@ async def test_profile_shape(authors_api):
         "similar",
         "alternatives",
         "works",
+        "openalex_only_count",
     }
     author = body["author"]
     assert author["orgs"] == ["Quantum Transport in Matter", "University of Twente"]
