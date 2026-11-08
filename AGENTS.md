@@ -47,9 +47,10 @@ All commands run from the repo root unless noted.
 - `pytest -m "not live"` is the CI default; `-m live` hits real network
   APIs and must be run deliberately.
 - CI (`.github/workflows/ci.yml`) runs: ruff check + format, ty, alembic
-  upgrade, pytest, the openapi drift check, eslint, biome format:check, and
-  `next build`. The `deps-hygiene` job (deptry + depcheck) reports unused
-  or unlisted dependencies and is advisory: it never blocks a merge.
+  upgrade, pytest, the openapi drift check, eslint, biome format:check, the
+  vitest suite (`npm run test`), and `next build`. The `deps-hygiene` job
+  (deptry + depcheck) reports unused or unlisted dependencies and is
+  advisory: it never blocks a merge.
 - Logging: `logging_setup.configure_logging()` runs at app start; every
   request gets an `X-Request-ID` (honored inbound, echoed out) that lands
   on every log line, and credential-looking substrings are redacted.

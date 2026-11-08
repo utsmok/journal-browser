@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "format": "biome format --write .",
     "format:check": "biome format .",
+    "test": "vitest run",
     "generate": "openapi-typescript ../openapi.json -o lib/api-types.ts"
   },
   "dependencies": {
@@ -27,13 +28,17 @@
     "@biomejs/biome": "^2.6.4",
     "@eslint/eslintrc": "^3.3.7",
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9.39.5",
     "eslint-config-next": "15.5.6",
+    "jsdom": "^29.1.1",
     "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4",
-    "typescript": "^5.7"
+    "typescript": "^5.7",
+    "vitest": "^4.1.12"
   }
 }

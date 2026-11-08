@@ -42,7 +42,7 @@ frontend/
 ├── scripts/                  # empty placeholder
 ├── next.config.mjs           # /api rewrite proxy
 ├── Dockerfile                # API_PROXY_URL + NEXT_PUBLIC_SITE_URL build args
-└── biome.json, eslint.config.mjs, tsconfig.json
+└── biome.jsonc, eslint.config.mjs, tsconfig.json
 ```
 
 ## Key abstractions
