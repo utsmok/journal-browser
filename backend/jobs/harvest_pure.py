@@ -13,6 +13,8 @@ import datetime as dt
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
+from journal_browser.harvest.denorm import refresh_institution_stats
+from journal_browser.harvest.institution_stats import write_pure_canon_stats
 from journal_browser.harvest.pure import (
     harvest_pure_cerif,
     harvest_pure_years,
@@ -40,6 +42,15 @@ async def main(session, institution, limit: int | None, years=None, cerif=False,
         stats = await harvest_pure_years(
             session, institution, years, limit=limit, full_sweep=full_sweep
         )
+        if full_sweep:
+            # The sweep inserted/retired works, so journal_flags.works_count
+            # (the search card) is stale the moment the tab serves the new
+            # corpus — rebuild both in this run instead of waiting for the
+            # stats job. --years partial runs skip this: only the
+            # re-baseline path refreshes.
+            stats["pure_canon_rows"] = await write_pure_canon_stats(session, institution)
+            await refresh_institution_stats(session, institution)
+            await session.commit()
     print(stats)
     return stats
 

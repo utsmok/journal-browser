@@ -5,7 +5,9 @@ per-institution journal_flags rows (works_count, deal_covered,
 works_window_plus, browse_excluded). One idempotent statement per column.
 Call the matching refresh at the end of any job that changes the underlying
 rows:
-- refresh_institution_stats   after stats writes (jobs/harvest_stats.py)
+- refresh_institution_stats   after stats writes (jobs/harvest_stats.py,
+                              the pure full sweep in jobs/harvest_pure.py,
+                              admin window edits)
 - refresh_quartiles           after scimago ingest (jobs/ingest_scimagojr.py)
 - refresh_deal_flags          after deal-register changes (curation)
 - refresh_apcs                after OpenAPC ingest
@@ -52,22 +54,20 @@ MATERIALIZE_SQL = text(
     """
 )
 
-# Pure-canonical primary per year (phase 10): one row per (issn_l, year),
-# the pure_canon row when the year has one. The LEFT JOIN supplies 0 for
-# journals without stats rows (the former reset statement's job) so one
-# guarded write replaces two full-table rewrites.
+# The card counts the canonical (Pure) corpus only — the same population the
+# works tab serves. openalex_institution_filter rows stay in the table for
+# the OA split; letting them fill years the canon pass has no row for is what
+# made the card show 1112 where the tab showed 1018 (LNCS, 2026-11-08). The
+# LEFT JOIN supplies 0 for journals without canon stats rows (the former
+# reset statement's job) so one guarded write replaces two full-table rewrites.
 WORKS_COUNT_SQL = text(
     """
     UPDATE journal_flags f SET works_count = coalesce(s.n, 0)
     FROM journals j
     LEFT JOIN (
         SELECT issn_l, sum(works_count) AS n
-        FROM (
-            SELECT DISTINCT ON (issn_l, year) issn_l, year, works_count
-            FROM institution_works_stats
-            WHERE institution_id = :iid
-            ORDER BY issn_l, year, (source = 'pure_canon') DESC
-        ) per_year
+        FROM institution_works_stats
+        WHERE institution_id = :iid AND source = 'pure_canon'
         GROUP BY issn_l
     ) s ON s.issn_l = j.issn_l
     WHERE f.issn_l = j.issn_l AND f.institution_id = :iid
