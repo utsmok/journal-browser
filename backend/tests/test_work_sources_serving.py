@@ -122,7 +122,7 @@ async def serving_api(db, institution_factory):
                 doi="10.9999/ghost",
                 title="Ghost Work",
                 year=2024,
-                authorships=[{"a": "a-alice", "n": "Alice Author", "o": None}],
+                authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": None}],
             ),
             # same publication as the Pure copy -> merged away; a second
             # W-id record for the same DOI carries the stale closed color,
@@ -133,7 +133,7 @@ async def serving_api(db, institution_factory):
                 doi="10.1000/shared",
                 title="Pure Work (OA twin)",
                 year=2023,
-                authorships=[{"a": "a-alice", "n": "Alice Author", "o": None}],
+                authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": None}],
             ),
             _oa_work(
                 ut.id,
@@ -141,7 +141,7 @@ async def serving_api(db, institution_factory):
                 doi="10.1000/shared",
                 title="Pure Work (OA twin)",
                 year=2023,
-                authorships=[{"a": "a-alice", "n": "Alice Author", "o": None}],
+                authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": None}],
                 oa="closed",
             ),
             # same publication as the org-closure pure copy -> merged away
@@ -160,7 +160,7 @@ async def serving_api(db, institution_factory):
                 doi="10.9999/old",
                 title="Old Work",
                 year=2015,
-                authorships=[{"a": "a-alice", "n": "Alice Author", "o": None}],
+                authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": None}],
             ),
             # journal-only DOI with no UT affiliation behind it -> must not serve
             _oa_work(

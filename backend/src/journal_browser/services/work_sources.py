@@ -14,13 +14,13 @@ population directly — services.detail_enrichment.)
 import logging
 from typing import Any
 
-from sqlalchemy import or_, select, type_coerce
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..models import Author, Institution, OpenalexWork
 from . import ut_metadata
+from .authorship import attributed_to_any
 
 logger = logging.getLogger(__name__)
 
@@ -67,14 +67,11 @@ async def openalex_only_works_for_author(
         )
     if not aids:
         return []
-    conditions = [
-        OpenalexWork.authorships.op("@>")(type_coerce([{"a": aid}], JSONB)) for aid in aids
-    ]
     rows = (
         await session.execute(
             select(OpenalexWork).where(
                 OpenalexWork.institution_id == institution.id,
-                or_(*conditions),
+                attributed_to_any(aids),
             )
         )
     ).scalars()

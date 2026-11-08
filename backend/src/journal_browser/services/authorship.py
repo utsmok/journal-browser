@@ -22,7 +22,7 @@ instead of showing a misleading zero.
 
 from typing import Any
 
-from sqlalchemy import exists, func, or_, select, type_coerce
+from sqlalchemy import column, exists, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -66,6 +66,19 @@ def _not_in_pure() -> Any:
             Work.institution_id == OpenalexWork.institution_id,
             Work.doi_normalized == OpenalexWork.doi_normalized,
         )
+    )
+
+
+def attributed_to_any(aids: list[str]) -> Any:
+    """True when the store row names any of the given (lowercase) bare
+    OpenAlex A-ids in its authorships array.
+
+    Ids compare case-insensitively: authors.openalex_ids stores
+    lowercase ids while the harvested authorships carry OpenAlex's
+    canonical uppercase form (A1234567890)."""
+    ash = func.jsonb_array_elements(OpenalexWork.authorships).table_valued(column("value", JSONB))
+    return exists(
+        select(1).select_from(ash).where(func.lower(ash.c.value.op("->>")("a")).in_(aids))
     )
 
 
@@ -135,21 +148,17 @@ async def author_ids_openalex_only(
     """Store works attributed to any of the given OpenAlex author ids the
     Pure population does not hold (org-unit gap card).
 
-    Attribution is jsonb containment per bare A-id — the same expression
-    the author page's openalex-only merge uses — so a work counts once
-    however many of the unit's authors it names."""
+    Attribution unnests the authorships array and compares bare A-ids
+    case-insensitively: authors.openalex_ids stores lowercase ids while
+    the store's authorships carry OpenAlex's canonical uppercase form, so
+    a work counts once however many of the unit's authors it names."""
     flat = sorted(
         {aid.lower() for row in aids for aid in (row if isinstance(row, list) else [row]) if aid}
     )
     if not flat:
         return {"total": 0, "items": [], "available": await local_store_ready(session, institution)}
-    attributed = or_(
-        *[OpenalexWork.authorships.op("@>")(type_coerce([{"a": aid}], JSONB)) for aid in flat]
-    )
     return await _store_gap_payload(
-        session,
-        institution,
-        [attributed, *_store_gates(institution), _not_in_pure()],
+        session, institution, [attributed_to_any(flat), *_store_gates(institution), _not_in_pure()]
     )
 
 

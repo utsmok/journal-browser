@@ -23,7 +23,7 @@ def _oa_work(
     year,
     doi=None,
     work_type="article",
-    authorships=None,
+    authorships=(),
     venue="1234-5678",
 ):
     return OpenalexWork(
@@ -141,7 +141,7 @@ async def authorship_db(db, institution_factory):
                 doi="10.9.0/7",
                 title="Other Venue",
                 year=2024,
-                authorships=[{"a": "a-alice"}],
+                authorships=[{"a": "A-ALICE"}],
             ),
         ]
     )
@@ -160,7 +160,7 @@ async def authorship_db(db, institution_factory):
                 title="Unit Gap One",
                 year=2024,
                 venue="7777-7777",
-                authorships=[{"a": "a-alice"}],
+                authorships=[{"a": "A-ALICE"}],
             ),
             _oa_work(
                 ut.id,
@@ -169,7 +169,7 @@ async def authorship_db(db, institution_factory):
                 title="Unit Gap Two",
                 year=2023,
                 venue="7777-7777",
-                authorships=[{"a": "a-alice"}, {"a": "a-bob"}],
+                authorships=[{"a": "A-ALICE"}, {"a": "A-BOB"}],
             ),
             _oa_work(
                 ut.id,
@@ -178,7 +178,7 @@ async def authorship_db(db, institution_factory):
                 title="Unit Matched",
                 year=2022,
                 venue="7777-7777",
-                authorships=[{"a": "a-alice"}],
+                authorships=[{"a": "A-ALICE"}],
             ),
         ]
     )
