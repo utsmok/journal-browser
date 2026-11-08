@@ -9,7 +9,7 @@ and admin-flip stickiness.
 from sqlalchemy import select
 
 from conftest import journal_factory, requires_db
-from journal_browser.harvest.author_ids import resolve_author_ids
+from journal_browser.harvest.author_ids import openaire_author_orcid, resolve_author_ids
 from journal_browser.models import (
     AuthorIdentity,
     HarvestRun,
@@ -31,6 +31,29 @@ ORCID_J2 = "0000-0009-0007-0007"
 ORCID_KARL = "0000-0009-0008-0008"
 ORCID_M1 = "0000-0009-0009-0009"
 ORCID_M2 = "0000-0009-0001-0002"
+
+
+def test_openaire_pending_orcid_is_ignored():
+    entry = {
+        "pid": {"id": {"scheme": "orcid_pending", "value": f"https://orcid.org/{ORCID_ALICE}"}}
+    }
+    assert openaire_author_orcid(entry) is None
+
+
+def test_openaire_confirmed_orcid_is_kept():
+    entry = {"pid": {"id": {"scheme": "orcid", "value": ORCID_ALICE}}}
+    assert openaire_author_orcid(entry) == ORCID_ALICE
+
+
+def test_openaire_schemeless_pid_still_counts():
+    entry = {"pid": {"id": {"value": ORCID_ALICE}}}
+    assert openaire_author_orcid(entry) == ORCID_ALICE
+
+
+def test_openaire_missing_or_empty_pid_is_none():
+    assert openaire_author_orcid({"pid": None}) is None
+    assert openaire_author_orcid({"fullName": "No Pid"}) is None
+    assert openaire_author_orcid({"pid": {"id": {"scheme": "orcid", "value": ""}}}) is None
 
 
 async def _fixture(db, institution_factory):
@@ -482,3 +505,133 @@ async def test_admin_flips_are_sticky(db, institution_factory):
     }
     assert rows["a-alice"].status == "rejected"  # evidence can't resurrect it
     assert rows["a-alice2"].status == "confirmed"  # never silently demoted
+
+
+# ── gather_openalex_authors: local authorships + singleton gap-fill ───────
+
+
+class _FakeAuthorEntity:
+    def __init__(self, pk: str):
+        self.id = f"https://openalex.org/{pk}"
+        self.orcid = "https://orcid.org/0000-0002-1825-0097"
+        self.display_name = "Alice Author"
+
+    def model_dump(self, mode: str = "json"):
+        return {"id": self.id, "orcid": self.orcid, "display_name": self.display_name}
+
+
+class _FakeAuthorsClient:
+    def __init__(self, known: dict[str, object]):
+        self.known = known
+        self.calls: list[str] = []
+        self.authors = self
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def get(self, url: str):
+        self.calls.append(url)
+        entity = self.known.get(url.rsplit("/", 1)[-1])
+        if entity is None:
+            raise type("E", (), {"response": type("R", (), {"status_code": 404})()})()
+        return entity
+
+
+@requires_db
+async def test_gather_openalex_authors_from_work_authorships(db, institution_factory):
+    from journal_browser.harvest.author_ids import gather_openalex_authors
+
+    inst = await institution_factory(openalex_id="https://openalex.org/I111")
+    run = HarvestRun(
+        source="openalex", entity_type="work", config_fingerprint="t", institution_id=inst.id
+    )
+    db.add(run)
+    await db.flush()
+    db.add(
+        SourceRecord(
+            source="openalex",
+            entity_type="work",
+            source_pk="W1",
+            payload={
+                "authorships": [
+                    {
+                        "author": {
+                            "id": "https://openalex.org/A1",
+                            "orcid": "https://orcid.org/0000-0002-1825-0097",
+                            "display_name": "Alice",
+                        }
+                    },
+                    {"author": {"id": "https://openalex.org/A2", "display_name": "Bob"}},
+                ]
+            },
+            content_hash="h1",
+            harvest_run_id=run.id,
+        )
+    )
+    # A3 is already stored but cites no work of ours: not a gather target.
+    db.add(
+        SourceRecord(
+            source="openalex",
+            entity_type="authors",
+            source_pk="A3",
+            payload={"id": "https://openalex.org/A3"},
+            content_hash="h3",
+            harvest_run_id=run.id,
+        )
+    )
+    await db.commit()
+
+    client = _FakeAuthorsClient({"A1": _FakeAuthorEntity("A1")})  # A2 -> 404
+    stats = await gather_openalex_authors(client, db, inst)
+
+    assert stats["authors_in_works"] == 2
+    assert stats["todo"] == 2
+    assert stats["fetched"] == 1
+    assert stats["stubs"] == 1
+    assert sorted(c.rsplit("/", 1)[-1] for c in client.calls) == ["A1", "A2"]
+
+    a1 = (
+        await db.execute(
+            select(SourceRecord).where(
+                SourceRecord.source == "openalex",
+                SourceRecord.entity_type == "authors",
+                SourceRecord.source_pk == "A1",
+            )
+        )
+    ).scalar_one()
+    assert a1.payload["display_name"] == "Alice Author"
+    a2 = (
+        await db.execute(
+            select(SourceRecord).where(
+                SourceRecord.source == "openalex",
+                SourceRecord.entity_type == "authors",
+                SourceRecord.source_pk == "A2",
+            )
+        )
+    ).scalar_one()
+    assert a2.payload["display_name"] == "Bob"
+
+    # Rerun: everything known, nothing fetched.
+    stats2 = await gather_openalex_authors(client, db, inst)
+    assert stats2["todo"] == 0
+    assert len(client.calls) == 2
+
+
+async def test_author_works_sweep_skipped_at_zero_budget(db, institution_factory, monkeypatch):
+    from journal_browser.config import get_settings
+    from journal_browser.harvest.author_ids import sweep_author_works
+
+    inst = await institution_factory()
+    settings = get_settings()
+    monkeypatch.setattr(settings, "openalex_author_sweep_max_authors", 5)
+
+    async def _zero():
+        return 0.0
+
+    monkeypatch.setattr("journal_browser.harvest.author_ids.openalex_credits_remaining", _zero)
+    stats = await sweep_author_works(object(), db, inst, ["A1"])
+    assert stats["queried_authors"] == 0
+    assert stats["skipped"] is not None

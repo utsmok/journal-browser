@@ -90,6 +90,10 @@ class SourceData:
     persons: dict[str, dict[str, Any]] = field(default_factory=dict)
     # org key -> (pure_uuid, display_name).
     orgs: dict[Any, tuple[str, str]] = field(default_factory=dict)
+    # pure_uuid -> org key (lazy reverse of orgs): the affiliation helper
+    # runs per person, so it must not rebuild the reverse map per call —
+    # O(persons x orgs) stalled for hours on rug's 533k x 196k corpus.
+    _org_key_by_uuid_cache: dict[str, Any] | None = field(default=None, repr=False, compare=False)
     # org key -> bare ROR id (None when the org has none).
     org_rors: dict[Any, str | None] = field(default_factory=dict)
     # org_tree closure: org key -> [(depth, ancestor_key)].
@@ -108,6 +112,15 @@ class SourceData:
     person_by_pure: dict[str, Any] = field(default_factory=dict)
     # person_org: person key -> [org keys] (profile + work-level arms).
     person_orgs: dict[Any, list[Any]] = field(default_factory=dict)
+
+    def org_key_by_uuid(self) -> dict[str, Any]:
+        """pure_uuid -> org key, derived from orgs on first use."""
+        if self._org_key_by_uuid_cache is None:
+            self._org_key_by_uuid_cache = {
+                pure_uuid: key for key, (pure_uuid, _) in self.orgs.items()
+            }
+        return self._org_key_by_uuid_cache
+
     # pure_person_orgs portal bindings: person key -> [org keys]. Kept
     # separate from person_orgs: the gap-fill arms consult these only
     # after native evidence fails — profiles, work-level affiliations,
@@ -253,7 +266,9 @@ async def fetch_local_source(session: AsyncSession, institution: Institution) ->
     # person_org: merged profile + work-level arms (known orgs only).
     for person_key, payload in data.persons.items():
         known = [
-            org_id for org_id in _affiliation_org_ids(payload, data.orgs) if org_id in data.orgs
+            org_id
+            for org_id in _affiliation_org_ids(payload, data.org_key_by_uuid())
+            if org_id in data.orgs
         ]
         known.extend(ref for ref in work_orgs.get(person_key, []) if ref in data.orgs)
         if known:
@@ -403,12 +418,11 @@ def faculty_from_chains(chains: list[list[tuple[int, str]]]) -> str | None:
     return None
 
 
-def _affiliation_org_ids(payload: dict[str, Any], orgs: dict[int, tuple[str, str]]) -> list[int]:
-    """Affiliation uuids that resolve to an org row, in payload order."""
-    by_uuid = {pure_uuid: org_id for org_id, (pure_uuid, _name) in orgs.items()}
-    ids: list[int] = []
+def _affiliation_org_ids(payload: dict[str, Any], org_key_by_uuid: dict[str, Any]) -> list[Any]:
+    """Org keys for a payload's affiliation uuids, in payload order."""
+    ids: list[Any] = []
     for affiliation in (payload.get("cerif") or {}).get("affiliations") or []:
-        org_id = by_uuid.get(affiliation.get("affiliation_id"))
+        org_id = org_key_by_uuid.get(affiliation.get("affiliation_id"))
         if org_id is not None:
             ids.append(org_id)
     return ids
@@ -425,7 +439,7 @@ def derive_identity(
     closure reaches a faculty. orgs: distinct affiliation display names,
     most specific first (largest closure depth = furthest from the
     root) — institutes stay in the display list."""
-    org_ids = _affiliation_org_ids(payload, data.orgs)
+    org_ids = _affiliation_org_ids(payload, data.org_key_by_uuid())
     evidence_ids = _faculty_evidence(org_ids, data)
     chains = [chain(data, org_id) for org_id in evidence_ids]
     faculty = faculty_from_chains(chains)
@@ -454,7 +468,7 @@ def derive_identity(
 def derive_institute(payload: dict[str, Any], data: SourceData) -> str | None:
     """The person's institute from one CERIF payload: the first profile
     affiliation (payload order) that is an institute-typed org."""
-    for org_id in _affiliation_org_ids(payload, data.orgs):
+    for org_id in _affiliation_org_ids(payload, data.org_key_by_uuid()):
         if org_id in data.institute_orgs:
             return data.orgs[org_id][1]
     return None
@@ -547,7 +561,7 @@ def is_confirmed(payload: dict[str, Any], data: SourceData, ror: str | None) -> 
     target = _ror_id(ror)
     if target is None or not payload:
         return False
-    return _resolves_to_ror(_affiliation_org_ids(payload, data.orgs), data, target)
+    return _resolves_to_ror(_affiliation_org_ids(payload, data.org_key_by_uuid()), data, target)
 
 
 def canonical_confirmed(author: dict[str, Any], data: SourceData, ror: str | None) -> bool:
