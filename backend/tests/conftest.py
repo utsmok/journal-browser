@@ -36,10 +36,10 @@ def _db_reachable() -> bool:
         return False
 
 
+SKIP_DB_REASON = "JB_SKIP_DB_TESTS=1 set: database tests skipped by explicit opt-out"
+
 if os.environ.get("JB_SKIP_DB_TESTS") == "1":
-    requires_db = pytest.mark.skip(
-        reason="JB_SKIP_DB_TESTS=1 set: database tests skipped by explicit opt-out"
-    )
+    requires_db = pytest.mark.skip(reason=SKIP_DB_REASON)
 elif not _db_reachable():
     raise RuntimeError(
         "Database tests require Postgres on localhost:5433 (journal/journal). "
@@ -53,6 +53,8 @@ else:
 
 @pytest.fixture
 async def db_engine():
+    if os.environ.get("JB_SKIP_DB_TESTS") == "1":
+        pytest.skip(SKIP_DB_REASON)
     # Function-scoped: pytest-asyncio runs each test in its own event loop,
     # and an asyncpg pool must not cross loops.
     from journal_browser.services import cache, repo_links, source_health

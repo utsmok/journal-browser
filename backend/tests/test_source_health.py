@@ -26,7 +26,6 @@ def test_registry_round_trip():
     assert source_health.snapshot() == []
 
 
-@requires_db
 @pytest.fixture
 async def health_api(client, db_engine):
     maker = async_sessionmaker(db_engine, expire_on_commit=False)

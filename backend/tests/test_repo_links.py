@@ -59,7 +59,6 @@ def test_unmatched_names_absent():
     assert match_repositories(["Cosis", "EathArXiv"], CANON) == {}
 
 
-@requires_db
 @pytest.fixture
 async def repo_api(client, db_engine):
     maker = async_sessionmaker(db_engine, expire_on_commit=False)

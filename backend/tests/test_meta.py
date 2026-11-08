@@ -3,11 +3,9 @@
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from conftest import requires_db
 from journal_browser.models import Institution
 
 
-@requires_db
 @pytest.fixture
 async def meta_api(client, db_engine):
     maker = async_sessionmaker(db_engine, expire_on_commit=False)
