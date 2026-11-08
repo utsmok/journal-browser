@@ -1,10 +1,11 @@
 "use client";
 
+import { ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
-import { DealBadge, OaTypeBadge, QuartileBadge } from "@/components/badges";
+import { DealBadge, OaStatusChip, OaTypeBadge, QuartileBadge } from "@/components/badges";
 import { BackLink } from "@/components/back-link";
 import { CardPager } from "@/components/card-pager";
 import { CollapsibleCard } from "@/components/collapsible-card";
@@ -32,6 +33,69 @@ import {
 import { formatEur } from "@/lib/format";
 
 const PAGE_SIZE = 20;
+
+type OpenalexOnly = OrgUnitDetailResponse["openalex_only"];
+
+/** OpenAlex works attributed to this unit's members that match no Pure
+ * record: candidates missing from the research information system. */
+function CrisGapsCard({ openalexOnly }: { openalexOnly: OpenalexOnly }) {
+  const { total, items } = openalexOnly;
+  return (
+    <CollapsibleCard
+      id="cris-gaps"
+      title="Not registered in Pure"
+      description={
+        <p className="text-sm text-[var(--muted-foreground)]">
+          OpenAlex attributes {total.toLocaleString("en")} work(s) to this unit&apos;s members that
+          match no Pure record — likely missing from the research information system.
+          {total > items.length && ` Showing ${items.length.toLocaleString("en")} most recent.`}
+        </p>
+      }
+      contentClassName="text-sm"
+    >
+      {total === 0 ? (
+        <p className="text-[var(--muted-foreground)]">
+          None found — every OpenAlex work here has a Pure record.
+        </p>
+      ) : (
+        <ul className="divide-y divide-[var(--border)]">
+          {items.map((w, i) => {
+            const href = w.doi ? `https://doi.org/${w.doi}` : null;
+            return (
+              <li
+                key={i}
+                className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 py-2 first:pt-0 last:pb-0"
+              >
+                {href ? (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-w-0 w-full min-[480px]:w-auto min-[480px]:flex-1 items-center gap-1 font-medium text-[var(--primary-text)] underline-offset-2 hover:underline"
+                  >
+                    {w.title ?? w.doi} <ExternalLink aria-hidden className="size-3.5 shrink-0" />
+                  </a>
+                ) : (
+                  <span className="min-w-0 w-full min-[480px]:w-auto min-[480px]:flex-1 font-medium">
+                    {w.title ?? "Untitled"}
+                  </span>
+                )}
+                {w.year != null && (
+                  <span className="tabular-nums text-[var(--muted-foreground)]">{w.year}</span>
+                )}
+                {w.venue && (
+                  <span className="min-w-0 text-xs text-[var(--muted-foreground)]">{w.venue}</span>
+                )}
+                {w.work_type && <span className="text-xs">{w.work_type}</span>}
+                <OaStatusChip status={w.oa_status} />
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </CollapsibleCard>
+  );
+}
 
 /** Unit headline stats: authors, works, deal-covered share, APC spend. */
 function UnitStats({ unit }: { unit: OrgUnitItem }) {
@@ -270,6 +334,8 @@ function OrgUnitDetail({
             )}
           </CollapsibleCard>
         )}
+
+        {data.openalex_only.available && <CrisGapsCard openalexOnly={data.openalex_only} />}
 
         {journals.length > 0 && (
           <CollapsibleCard id="journals" title="Journals" contentClassName="text-sm">

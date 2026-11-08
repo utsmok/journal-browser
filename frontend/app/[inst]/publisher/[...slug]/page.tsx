@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
-import { DealBadge, OaTypeBadge, QuartileBadge } from "@/components/badges";
+import { DealBadge, OaStatusChip, OaTypeBadge, QuartileBadge } from "@/components/badges";
 import { CardPager } from "@/components/card-pager";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { OaCompositionBar, OaCompositionLegend } from "@/components/oa-composition";
@@ -23,7 +23,12 @@ import {
 } from "@/components/ui/table";
 import { usePublisher } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
-import { errorMessage, type DealOut, type PublisherListItem } from "@/lib/api";
+import {
+  errorMessage,
+  type DealOut,
+  type PublisherDetailResponse,
+  type PublisherListItem,
+} from "@/lib/api";
 import { formatEur, journalApcText } from "@/lib/format";
 import { dealLinkLabel, displayPublisherName, orderedDealLinks } from "@/lib/deal-links";
 
@@ -133,6 +138,177 @@ function AggregateCards({ publisher }: { publisher: PublisherListItem }) {
         )}
       </div>
     </div>
+  );
+}
+
+type UtAuthorship = PublisherDetailResponse["ut_authorship"];
+type UtAuthorRow = UtAuthorship["top_authors"][number];
+type OpenalexOnly = PublisherDetailResponse["openalex_only"];
+
+/** Who at this institution authors the publisher's journals' works:
+ * distinct works per faculty and research group, plus the most prolific
+ * UT authors. */
+function UtAuthorshipCard({ authorship, inst }: { authorship: UtAuthorship; inst: string }) {
+  const empty =
+    authorship.faculties.length === 0 &&
+    authorship.research_groups.length === 0 &&
+    authorship.top_authors.length === 0;
+  return (
+    <CollapsibleCard
+      id="ut-authorship"
+      title="UT authorship"
+      description={
+        <p className="text-sm text-[var(--muted-foreground)]">
+          Distinct works with UT authors: {authorship.n_ut_works.toLocaleString("en")} of the works
+          counted across this publisher&apos;s journals.
+        </p>
+      }
+      contentClassName="space-y-5 text-sm"
+    >
+      {empty ? (
+        <p className="text-[var(--muted-foreground)]">
+          No UT-authorship records for this publisher.
+        </p>
+      ) : (
+        <>
+          {(
+            [
+              { heading: "Faculties", rows: authorship.faculties },
+              { heading: "Research groups", rows: authorship.research_groups },
+            ] as const
+          ).map(
+            (t) =>
+              t.rows.length > 0 && (
+                <div key={t.heading}>
+                  <h3 className="mb-1 text-sm font-semibold">{t.heading}</h3>
+                  <Table>
+                    <caption className="sr-only">
+                      Distinct works with UT authors per{" "}
+                      {t.heading === "Faculties" ? "faculty" : "research group"}
+                    </caption>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead className="text-right">Works</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {t.rows.map((row) => (
+                        <TableRow key={row.name}>
+                          <TableCell className="font-medium">{row.name}</TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {row.works.toLocaleString("en")}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ),
+          )}
+          {authorship.top_authors.length > 0 && (
+            <div>
+              <h3 className="mb-1 text-sm font-semibold">Top authors</h3>
+              <Table>
+                <caption className="sr-only">
+                  Most prolific UT authors across this publisher&apos;s journals
+                </caption>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Author</TableHead>
+                    <TableHead className="text-right">Works</TableHead>
+                    <TableHead>Affiliation</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {authorship.top_authors.map((a: UtAuthorRow) => (
+                    <TableRow key={a.pure_uuid}>
+                      <TableCell className="font-medium">
+                        <Link
+                          href={`/${inst}/author/${a.pure_uuid}`}
+                          className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                        >
+                          {a.name}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {a.works.toLocaleString("en")}
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-[var(--muted-foreground)]">
+                          {a.research_group ?? a.faculty ?? "—"}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </>
+      )}
+    </CollapsibleCard>
+  );
+}
+
+/** OpenAlex works attributed to this publisher's journals that match no
+ * Pure record: candidates missing from the research information system. */
+function CrisGapsCard({ openalexOnly }: { openalexOnly: OpenalexOnly }) {
+  const { total, items } = openalexOnly;
+  return (
+    <CollapsibleCard
+      id="cris-gaps"
+      title="Not registered in Pure"
+      description={
+        <p className="text-sm text-[var(--muted-foreground)]">
+          OpenAlex attributes {total.toLocaleString("en")} work(s) to this publisher&apos;s journals
+          that match no Pure record — likely missing from the research information system.
+          {total > items.length && ` Showing ${items.length.toLocaleString("en")} most recent.`}
+        </p>
+      }
+      contentClassName="text-sm"
+    >
+      {total === 0 ? (
+        <p className="text-[var(--muted-foreground)]">
+          None found — every OpenAlex work here has a Pure record.
+        </p>
+      ) : (
+        <ul className="divide-y divide-[var(--border)]">
+          {items.map((w, i) => {
+            const href = w.doi ? `https://doi.org/${w.doi}` : null;
+            return (
+              <li
+                key={i}
+                className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 py-2 first:pt-0 last:pb-0"
+              >
+                {href ? (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-w-0 w-full min-[480px]:w-auto min-[480px]:flex-1 items-center gap-1 font-medium text-[var(--primary-text)] underline-offset-2 hover:underline"
+                  >
+                    {w.title ?? w.doi} <ExternalLink aria-hidden className="size-3.5 shrink-0" />
+                  </a>
+                ) : (
+                  <span className="min-w-0 w-full min-[480px]:w-auto min-[480px]:flex-1 font-medium">
+                    {w.title ?? "Untitled"}
+                  </span>
+                )}
+                {w.year != null && (
+                  <span className="tabular-nums text-[var(--muted-foreground)]">{w.year}</span>
+                )}
+                {w.venue && (
+                  <span className="min-w-0 text-xs text-[var(--muted-foreground)]">{w.venue}</span>
+                )}
+                {w.work_type && <span className="text-xs">{w.work_type}</span>}
+                <OaStatusChip status={w.oa_status} />
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </CollapsibleCard>
   );
 }
 
@@ -344,6 +520,10 @@ export default function PublisherPage() {
             )}
           </CollapsibleCard>
         )}
+
+        <UtAuthorshipCard authorship={data.ut_authorship} inst={inst} />
+
+        {data.openalex_only.available && <CrisGapsCard openalexOnly={data.openalex_only} />}
       </div>
     </div>
   );

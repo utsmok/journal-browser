@@ -424,6 +424,12 @@ export default function AuthorPage() {
 
           {works.length > 0 && (
             <CollapsibleCard id="publications" title="Publications" contentClassName="text-sm">
+              {data.openalex_only_count != null && (
+                <p className="mb-3 text-xs text-[var(--muted-foreground)]">
+                  {data.openalex_only_count.toLocaleString("en")} work(s) attributed by OpenAlex
+                  only are missing from Pure (badged below).
+                </p>
+              )}
               <Table>
                 <caption className="sr-only">This author&apos;s publications</caption>
                 <TableHeader>
