@@ -499,6 +499,7 @@ function PublicationsCard({
   };
 }) {
   const site = useSiteMeta();
+  const inst = useInstitution();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -609,6 +610,36 @@ function PublicationsCard({
                   >
                     Retracted
                   </Badge>
+                )}
+                {(w.ut_authors.length > 0 || w.ut_groups.length > 0) && (
+                  <div className="w-full text-xs text-[var(--muted-foreground)]">
+                    {w.ut_authors.length > 0 && (
+                      <span>
+                        {w.ut_authors.map((a, i) => (
+                          <React.Fragment key={a.id}>
+                            {i > 0 && ", "}
+                            <Link
+                              href={`/${inst}/author/${a.id}`}
+                              className="underline decoration-dotted underline-offset-2 hover:text-[var(--foreground)]"
+                            >
+                              {a.name}
+                            </Link>
+                          </React.Fragment>
+                        ))}
+                      </span>
+                    )}
+                    {w.ut_groups.map((g, i) => (
+                      <React.Fragment key={g.name}>
+                        {(w.ut_authors.length > 0 || i > 0) && " · "}
+                        <Link
+                          href={`/${inst}/orgunit/group/${encodeNamePath(g.name)}`}
+                          className="underline decoration-dotted underline-offset-2 hover:text-[var(--foreground)]"
+                        >
+                          {g.name}
+                        </Link>
+                      </React.Fragment>
+                    ))}
+                  </div>
                 )}
               </li>
             );
