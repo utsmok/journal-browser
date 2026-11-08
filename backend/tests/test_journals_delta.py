@@ -1,5 +1,7 @@
 """harvest_journals_delta: works-referenced journal gaps via free singletons."""
 
+from types import SimpleNamespace
+
 from sqlalchemy import select
 
 from conftest import requires_db
@@ -31,6 +33,13 @@ def _source_payload(pk: str) -> dict:
     }
 
 
+class _NotFound(Exception):
+    """Client 404; paced_single_gets reads only response.status_code to
+    treat a missing source as a journal gap instead of a failure."""
+
+    response = SimpleNamespace(status_code=404)
+
+
 class _FakeSourcesClient:
     def __init__(self, payloads: dict[str, dict]):
         self.payloads = payloads
@@ -48,8 +57,7 @@ class _FakeSourcesClient:
         pk = url.rsplit("/", 1)[-1]
         payload = self.payloads.get(pk)
         if payload is None:
-            exc = type("E", (), {"response": type("R", (), {"status_code": 404})()})()
-            raise exc
+            raise _NotFound()
         return _FakeSourceEntity(payload)
 
 

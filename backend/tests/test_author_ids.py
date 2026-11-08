@@ -6,6 +6,8 @@ openalex_works projection, then assert rung outcomes, status policy,
 and admin-flip stickiness.
 """
 
+from types import SimpleNamespace
+
 from sqlalchemy import select
 
 from conftest import journal_factory, requires_db
@@ -520,6 +522,13 @@ class _FakeAuthorEntity:
         return {"id": self.id, "orcid": self.orcid, "display_name": self.display_name}
 
 
+class _NotFound(Exception):
+    """Client 404; paced_single_gets reads only response.status_code to
+    treat a missing entity as a gap instead of a failure."""
+
+    response = SimpleNamespace(status_code=404)
+
+
 class _FakeAuthorsClient:
     def __init__(self, known: dict[str, object]):
         self.known = known
@@ -536,7 +545,7 @@ class _FakeAuthorsClient:
         self.calls.append(url)
         entity = self.known.get(url.rsplit("/", 1)[-1])
         if entity is None:
-            raise type("E", (), {"response": type("R", (), {"status_code": 404})()})()
+            raise _NotFound()
         return entity
 
 
