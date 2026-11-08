@@ -15,9 +15,9 @@ from datetime import date
 from pathlib import Path
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(BACKEND_ROOT / "jobs"))
+sys.path.insert(0, str(BACKEND_ROOT))
 
-from bootstrap import GLOBAL_DEPS, INST_STEPS, build_plan  # noqa: E402
+from jobs.bootstrap import GLOBAL_DEPS, INST_STEPS, build_plan  # noqa: E402
 
 PLACEHOLDER_CODE = "code"
 
