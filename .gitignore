@@ -40,6 +40,10 @@ backups/
 # Live settings overlay (admin panel writes here; may hold secrets)
 backend/settings.yaml
 
+# Local operator override mirroring the live VM's ports (5434/8001/3001);
+# compose auto-merges this file, so it must not leak into other checkouts
+compose.override.yml
+
 # Wiki-video generation workspace: TTS models, narration audio, node
 # modules, and intermediate renders. Regenerable; the deliverable mp4 is
 # committed under droid-wiki/video/.
