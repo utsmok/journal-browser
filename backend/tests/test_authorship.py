@@ -25,6 +25,7 @@ def _oa_work(
     work_type="article",
     authorships=(),
     venue="1234-5678",
+    source="works_stats",
 ):
     return OpenalexWork(
         institution_id=inst_id,
@@ -37,6 +38,7 @@ def _oa_work(
         venue_issn_l=venue,
         venue_name="Journal One",
         authorships=authorships,
+        source=source,
     )
 
 
@@ -135,6 +137,17 @@ async def authorship_db(db, institution_factory):
                 ut.id, "W-pre", doi="10.9.0/9", title="Preprint", year=2024, work_type="preprint"
             ),
             _oa_work(ut.id, "W-old", doi="10.9.0/8", title="Old", year=2019),
+            # author-sweep row: in-venue, in-window, unmatched DOI, but
+            # harvested from an author profile — OpenAlex attributes it
+            # elsewhere, so the venue gap card must not count it
+            _oa_work(
+                ut.id,
+                "W-sweep",
+                doi="10.9.0/6",
+                title="Sweep Only",
+                year=2024,
+                source="author-sweep",
+            ),
             _oa_work(
                 ut.id,
                 "W-other",

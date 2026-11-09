@@ -26,6 +26,7 @@ from sqlalchemy import column, exists, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..harvest.openalex_works import AUTHOR_SWEEP_PREFIX
 from ..models import Author, Institution, OpenalexWork, Work, WorkPureAuthor
 from .works_query import work_type_not_excluded, year_end
 
@@ -131,14 +132,26 @@ async def venue_openalex_only(
 
     One issn for the journal view, the publisher group's issn set for the
     publisher view. Attribution key is venue_issn_l — the same key the
-    OpenAlex-side institution metrics use."""
+    OpenAlex-side institution metrics use.
+
+    Restricted to the institution-filter corpus (source != author-sweep):
+    those rows were harvested under OpenAlex's institutions.id filter, so
+    OpenAlex itself attributes them to this institution. Author-sweep rows
+    carry an author's full profile — works OpenAlex attributes elsewhere
+    or to no institution — and counting those here would report the
+    venue's global output as a CRIS gap."""
     venue_issns = [issn_l] if issn_l is not None else sorted(set(issns or []))
     if not venue_issns:
         return {"total": 0, "items": [], "available": True}
     return await _store_gap_payload(
         session,
         institution,
-        [OpenalexWork.venue_issn_l.in_(venue_issns), *_store_gates(institution), _not_in_pure()],
+        [
+            OpenalexWork.venue_issn_l.in_(venue_issns),
+            OpenalexWork.source != AUTHOR_SWEEP_PREFIX,
+            *_store_gates(institution),
+            _not_in_pure(),
+        ],
     )
 
 
