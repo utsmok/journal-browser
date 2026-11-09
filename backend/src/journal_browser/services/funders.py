@@ -120,19 +120,37 @@ async def _work_funders_ready(session: AsyncSession) -> bool:
     return bool(await session.scalar(text("select to_regclass('public.work_funders') is not null")))
 
 
-async def ut_work_counts(session: AsyncSession, institution_id: int) -> dict[str, int]:
+async def ut_work_counts(
+    session: AsyncSession, institution_id: int, year_range: tuple[int, int] | None = None
+) -> dict[str, int]:
     """UT works per funder_openalex_id for this institution. Keys are bare
     OpenAlex ids (no https://openalex.org/ prefix); work_funders stores
-    whatever the grants payload carried, so normalize both sides."""
+    whatever the grants payload carried, so normalize both sides. An
+    explicit year_range joins works and keeps only works published inside
+    the clamped window; None stays today's unscoped count."""
     if not await _work_funders_ready(session):
         return {}
-    rows = await session.execute(
-        text(
-            "select funder_openalex_id, count(distinct pure_uuid) as n"
-            " from work_funders where institution_id = :i group by 1"
-        ),
-        {"i": institution_id},
-    )
+    if year_range is None:
+        rows = await session.execute(
+            text(
+                "select funder_openalex_id, count(distinct pure_uuid) as n"
+                " from work_funders where institution_id = :i group by 1"
+            ),
+            {"i": institution_id},
+        )
+    else:
+        lo, hi = year_range
+        rows = await session.execute(
+            text(
+                "select wf.funder_openalex_id, count(distinct wf.pure_uuid) as n"
+                " from work_funders wf"
+                " join works w on w.institution_id = wf.institution_id"
+                "  and w.pure_uuid = wf.pure_uuid"
+                " where wf.institution_id = :i and w.year >= :lo and w.year <= :hi"
+                " group by 1"
+            ),
+            {"i": institution_id, "lo": lo, "hi": hi},
+        )
     counts: dict[str, int] = {}
     for funder_id, n in rows:
         bare = str(funder_id).rsplit("/", 1)[-1]
@@ -141,20 +159,27 @@ async def ut_work_counts(session: AsyncSession, institution_id: int) -> dict[str
 
 
 async def top_journals(
-    session: AsyncSession, institution_id: int, openalex_funder_id: str | None, limit: int = 5
+    session: AsyncSession,
+    institution_id: int,
+    openalex_funder_id: str | None,
+    limit: int = 5,
+    year_range: tuple[int, int] | None = None,
 ) -> list[dict[str, Any]]:
-    """Journals with the most works crediting this funder."""
+    """Journals with the most works crediting this funder; an explicit
+    year_range keeps only works published inside the clamped window."""
     if not await _work_funders_ready(session) or openalex_funder_id is None:
         return []
-    rows = await session.execute(
-        text(
-            "select j.title, j.issn_l, count(distinct wf.pure_uuid) as n"
-            " from work_funders wf"
-            " join works w on w.institution_id = wf.institution_id and w.pure_uuid = wf.pure_uuid"
-            " join journals j on j.issn_l = w.journal_issn_l"
-            " where wf.institution_id = :i and wf.funder_openalex_id = :f"
-            " group by j.title, j.issn_l order by n desc limit :l"
-        ),
-        {"i": institution_id, "f": openalex_funder_id, "l": limit},
+    sql = (
+        "select j.title, j.issn_l, count(distinct wf.pure_uuid) as n"
+        " from work_funders wf"
+        " join works w on w.institution_id = wf.institution_id and w.pure_uuid = wf.pure_uuid"
+        " join journals j on j.issn_l = w.journal_issn_l"
+        " where wf.institution_id = :i and wf.funder_openalex_id = :f"
     )
+    params: dict[str, Any] = {"i": institution_id, "f": openalex_funder_id, "l": limit}
+    if year_range is not None:
+        sql += " and w.year >= :lo and w.year <= :hi"
+        params["lo"], params["hi"] = year_range
+    sql += " group by j.title, j.issn_l order by n desc limit :l"
+    rows = await session.execute(text(sql), params)
     return [{"title": r[0], "issn_l": r[1], "n_works": int(r[2])} for r in rows]
