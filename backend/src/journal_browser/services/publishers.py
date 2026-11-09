@@ -718,6 +718,10 @@ async def publisher_detail(
         ],
         "n_discrepancies": len(latest),
         "works_by_year": works_by_year,
-        "ut_authorship": await venue_authorship(session, institution, issns=issns),
-        "openalex_only": await venue_openalex_only(session, institution, issns=issns),
+        "ut_authorship": await venue_authorship(
+            session, institution, issns=issns, year_range=years
+        ),
+        "openalex_only": await venue_openalex_only(
+            session, institution, issns=issns, year_range=years
+        ),
     }

@@ -307,6 +307,11 @@ async def test_publisher_detail_scoped(details_api):
     assert scoped["publisher"]["deal_journals"] == 1  # attribute stays
     assert scoped["journals"][0]["issn_l"] == MAIN
     assert scoped["journals"][0]["works"] == 6
+    # The UT-authorship and gap cards follow the same range: one work and
+    # one gap row in 2023+ on this venue.
+    assert scoped["ut_authorship"]["n_ut_works"] == 1
+    assert scoped["openalex_only"]["total"] == 1
+    assert [i["title"] for i in scoped["openalex_only"]["items"]] == ["Gap New"]
 
 
 @requires_db
