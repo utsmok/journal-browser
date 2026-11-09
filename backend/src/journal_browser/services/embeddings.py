@@ -91,6 +91,10 @@ async def warm_journal_vector_index(session: AsyncSession, seeds: int = VECTOR_W
     await session.execute(text("SET LOCAL hnsw.iterative_scan = strict_order"))
     ran = 0
     for vec in seed_rows:
+        # Raw SQL bypasses pgvector's result processor: the value can be
+        # the text form "[0.1,0.2,...]" rather than a list/ndarray.
+        if isinstance(vec, str):
+            vec = [float(x) for x in vec.strip("[]").split(",") if x.strip()]
         await session.execute(
             select(Journal.issn_l)
             .where(Journal.embedding.is_not(None))
