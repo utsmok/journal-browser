@@ -427,7 +427,9 @@ async def orgunit_detail(
     topics_by_unit = await _unit_topics(
         session, iid, level, require_confirmed, [name], TOPICS_PER_DETAIL
     )
-    topics = topics_by_unit[name]
+    # Units whose members all lack a primary topic have no query rows at
+    # all, so the key is simply absent (KeyError was a 500).
+    topics = topics_by_unit.get(name, [])
 
     groups = None
     if level == "faculty":

@@ -521,3 +521,28 @@ async def test_orgunit_institution_isolation(orgunits_api):
     groups = (await client.get("/api/v1/rug/orgunits", params={"level": "group"})).json()
     assert [i["name"] for i in groups["items"]] == ["RUG Lab"]
     assert (await client.get("/api/v1/nonsense/orgunits")).status_code == 404
+
+
+@requires_db
+async def test_orgunit_detail_without_primary_topics(orgunits_api, db):
+    """A unit whose members all lack authors.primary_topic used to 500:
+    _unit_topics returns no rows for it and the detail path indexed the
+    dict directly. The list path already used .get() with a default."""
+    client, ids = orgunits_api
+    db.add(
+        Author(
+            institution_id=ids["ut"],
+            pure_uuid="no-topic-uuid",
+            name="Nora Notopic",
+            faculty="Faculty of Lost Topics",
+            n_works=2,
+            confirmed=True,
+        )
+    )
+    await db.commit()
+    r = await client.get("/api/v1/ut/orgunits/faculty/Faculty%20of%20Lost%20Topics")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["unit"]["name"] == "Faculty of Lost Topics"
+    assert body["unit"]["topics"] == []
+    assert [(a["pure_uuid"], a["n_works"]) for a in body["authors"]] == [("no-topic-uuid", 2)]
