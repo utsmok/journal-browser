@@ -480,19 +480,29 @@ async def harvest_people_utwente(
             if outcome is None:
                 continue
             if not dry_run:
-                await _store_outcome(
-                    session,
-                    institution,
-                    author,
-                    outcome,
-                    existing.get(author.pure_uuid),
-                    refresh=refresh,
-                    stats=stats,
-                    org_candidates=org_candidates,
-                    org_candidates_bare=org_candidates_bare,
-                    org_aliases=org_aliases,
-                    ingest=ingest,
-                )
+                try:
+                    await _store_outcome(
+                        session,
+                        institution,
+                        author,
+                        outcome,
+                        existing.get(author.pure_uuid),
+                        refresh=refresh,
+                        stats=stats,
+                        org_candidates=org_candidates,
+                        org_candidates_bare=org_candidates_bare,
+                        org_aliases=org_aliases,
+                        ingest=ingest,
+                    )
+                except Exception:
+                    # One bad outcome must not kill the run: roll the
+                    # session back (losing at most the current uncommitted
+                    # batch — those authors stay unattempted and re-run
+                    # next time) and carry on.
+                    await session.rollback()
+                    stats["errors"] += 1
+                    logger.exception("people-utwente: storing %s failed", author.pure_uuid)
+                    continue
                 stored += 1
                 # Batched commit every 50 stored outcomes: a crash loses
                 # at most the last 50, and the run never holds an
@@ -617,6 +627,26 @@ async def _store_outcome(
     row = prior or PeopleUtwentePerson(institution_id=institution.id, person_uuid=author.pure_uuid)
     row.status = status
     row.slug = profile["slug"] if profile else None
+    if row.slug is not None:
+        # Homonyms happen: two roster authors can match the same people
+        # page (a fuzzy-name candidate whose page has no portal link).
+        # The (institution, slug) unique constraint allows one claim; a
+        # second author stores the same profile data slug-less.
+        slug_owner = await session.scalar(
+            select(PeopleUtwentePerson.person_uuid).where(
+                PeopleUtwentePerson.institution_id == institution.id,
+                PeopleUtwentePerson.slug == row.slug,
+                PeopleUtwentePerson.person_uuid != author.pure_uuid,
+            )
+        )
+        if slug_owner is not None:
+            logger.warning(
+                "people-utwente: slug %s already claimed by %s; storing %s without slug",
+                row.slug,
+                slug_owner,
+                author.pure_uuid,
+            )
+            row.slug = None
     row.canonical_name = profile["canonical_name"] if profile else None
     row.email = profile["email"] if profile else None
     row.orgs = profile["orgs"] if profile else []
