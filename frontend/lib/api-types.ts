@@ -660,6 +660,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/{institution_code}/authors/{pure_uuid}/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Author Avatar
+         * @description The author's people.utwente.nl portrait: uuid-verified matches
+         *     (or admin-confirmed candidates) only; 404 otherwise.
+         */
+        get: operations["author_avatar_api_v1__institution_code__authors__pure_uuid__avatar_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/{institution_code}/authors/{pure_uuid}/works.csv": {
         parameters: {
             query?: never;
@@ -1337,6 +1358,31 @@ export interface components {
             orgs: string[];
             /** N Works */
             n_works: number;
+            people?: components["schemas"]["AuthorPeopleProfile"] | null;
+            /** Research Portal Url */
+            research_portal_url?: string | null;
+        };
+        /**
+         * AuthorPeopleProfile
+         * @description people.utwente.nl profile linked to the author: uuid-verified via
+         *     the profile's research.utwente.nl portal link, or an admin-promoted
+         *     name match. has_photo gates the avatar endpoint URL.
+         */
+        AuthorPeopleProfile: {
+            /** Slug */
+            slug: string;
+            /** Url */
+            url: string;
+            /** Canonical Name */
+            canonical_name: string | null;
+            /** Email */
+            email: string | null;
+            /** Orgs */
+            orgs: string[];
+            /** Faculty Abbr */
+            faculty_abbr: string | null;
+            /** Has Photo */
+            has_photo: boolean;
         };
         /** AuthorProfileResponse */
         AuthorProfileResponse: {
@@ -4786,6 +4832,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthorProfileResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    author_avatar_api_v1__institution_code__authors__pure_uuid__avatar_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pure_uuid: string;
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

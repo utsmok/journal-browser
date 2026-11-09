@@ -39,6 +39,7 @@ from ..models import (
     Institution,
     Journal,
     OpenalexWork,
+    PeopleUtwentePersonOrg,
     PurePerson,
     PurePersonOrg,
     Work,
@@ -127,6 +128,10 @@ class SourceData:
     # the roster, and ROR confirmation stay untouched (bind contract).
     # Empty on the ut-metadata path (no portal harvest there).
     portal_person_orgs: dict[Any, list[Any]] = field(default_factory=dict)
+    # people_utwente_person_orgs (people.utwente.nl profiles, uuid-verified
+    # matches): person key -> [org keys]. Last gap-fill arm — consulted
+    # after the portal arm, same contract: never a native override.
+    people_person_orgs: dict[Any, list[Any]] = field(default_factory=dict)
     # Org keys typed institute (MESA+ Institute, TechMed Centre, Digital
     # Society Institute): separate from faculties — they never contribute
     # faculty or research-group evidence, and instead fill the author's
@@ -284,6 +289,18 @@ async def fetch_local_source(session: AsyncSession, institution: Institution) ->
     ).scalars():
         if row.org_uuid in data.orgs:
             data.portal_person_orgs.setdefault(row.person_uuid, []).append(row.org_uuid)
+
+    # People-pages arm (people_utwente_person_orgs, uuid-verified profile
+    # orgs): the last gap-fill arm, after the portal bindings.
+    for row in (
+        await session.execute(
+            select(PeopleUtwentePersonOrg).where(
+                PeopleUtwentePersonOrg.institution_id == institution.id
+            )
+        )
+    ).scalars():
+        if row.org_uuid in data.orgs:
+            data.people_person_orgs.setdefault(row.person_uuid, []).append(row.org_uuid)
 
     # OpenAlex ids from the resolved identity rows (confirmed only).
     rank_of = METHOD_RANK
@@ -480,8 +497,10 @@ def augment_institute(author: dict[str, Any], data: SourceData) -> str | None:
     own CERIF payload names no institute — the mirror of augment_faculty
     for institute-only members whose profiles are empty."""
     for person_id in canonical_person_ids(author, data):
-        for org_id in data.person_orgs.get(person_id, []) + data.portal_person_orgs.get(
-            person_id, []
+        for org_id in (
+            data.person_orgs.get(person_id, [])
+            + data.portal_person_orgs.get(person_id, [])
+            + data.people_person_orgs.get(person_id, [])
         ):
             if org_id in data.institute_orgs:
                 return data.orgs[org_id][1]
@@ -508,12 +527,15 @@ def canonical_person_ids(author: dict[str, Any], data: SourceData) -> list[int]:
 
 
 def portal_org_ids(author: dict[str, Any], data: SourceData) -> list[Any]:
-    """Portal-binding org ids for an author's canonical persons (the
-    pure_person_orgs arm — consulted only by the gap-fill paths)."""
+    """Portal-binding and people-page org ids for an author's canonical
+    persons (the pure_person_orgs + people_utwente_person_orgs arms —
+    consulted only by the gap-fill paths)."""
     return [
         org_id
         for person_id in canonical_person_ids(author, data)
-        for org_id in data.portal_person_orgs.get(person_id, [])
+        for org_id in (
+            data.portal_person_orgs.get(person_id, []) + data.people_person_orgs.get(person_id, [])
+        )
     ]
 
 
@@ -528,7 +550,9 @@ def augment_faculty(author: dict[str, Any], data: SourceData) -> str | None:
         chain(data, org_id)
         for person_id in person_ids
         for org_id in _faculty_evidence(
-            data.person_orgs.get(person_id, []) + data.portal_person_orgs.get(person_id, []),
+            data.person_orgs.get(person_id, [])
+            + data.portal_person_orgs.get(person_id, [])
+            + data.people_person_orgs.get(person_id, []),
             data,
         )
     ]

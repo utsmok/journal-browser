@@ -2961,6 +2961,56 @@
         }
       }
     },
+    "/api/v1/{institution_code}/authors/{pure_uuid}/avatar": {
+      "get": {
+        "tags": [
+          "authors"
+        ],
+        "summary": "Author Avatar",
+        "description": "The author's people.utwente.nl portrait: uuid-verified matches\n(or admin-confirmed candidates) only; 404 otherwise.",
+        "operationId": "author_avatar_api_v1__institution_code__authors__pure_uuid__avatar_get",
+        "parameters": [
+          {
+            "name": "pure_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pure Uuid"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/{institution_code}/authors/{pure_uuid}/works.csv": {
       "get": {
         "tags": [
@@ -5917,6 +5967,27 @@
           "n_works": {
             "type": "integer",
             "title": "N Works"
+          },
+          "people": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthorPeopleProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "research_portal_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Portal Url"
           }
         },
         "type": "object",
@@ -5934,6 +6005,74 @@
           "n_works"
         ],
         "title": "AuthorOut"
+      },
+      "AuthorPeopleProfile": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "canonical_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "orgs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Orgs"
+          },
+          "faculty_abbr": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Faculty Abbr"
+          },
+          "has_photo": {
+            "type": "boolean",
+            "title": "Has Photo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "url",
+          "canonical_name",
+          "email",
+          "orgs",
+          "faculty_abbr",
+          "has_photo"
+        ],
+        "title": "AuthorPeopleProfile",
+        "description": "people.utwente.nl profile linked to the author: uuid-verified via\nthe profile's research.utwente.nl portal link, or an admin-promoted\nname match. has_photo gates the avatar endpoint URL."
       },
       "AuthorProfileResponse": {
         "properties": {

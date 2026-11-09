@@ -548,6 +548,20 @@ class AuthorSearchResponse(BaseModel):
     facets: dict[str, list[AuthorFacet]] = {}
 
 
+class AuthorPeopleProfile(BaseModel):
+    """people.utwente.nl profile linked to the author: uuid-verified via
+    the profile's research.utwente.nl portal link, or an admin-promoted
+    name match. has_photo gates the avatar endpoint URL."""
+
+    slug: str
+    url: str
+    canonical_name: str | None
+    email: str | None
+    orgs: list[str]
+    faculty_abbr: str | None
+    has_photo: bool
+
+
 class AuthorOut(BaseModel):
     pure_uuid: str
     name: str
@@ -560,6 +574,11 @@ class AuthorOut(BaseModel):
     institute: str | None
     orgs: list[str]
     n_works: int
+    people: AuthorPeopleProfile | None = None
+    # The author's public Pure portal page: the people profile's own
+    # link, else constructed when portal persons listings carry the
+    # author (portal visibility), else None.
+    research_portal_url: str | None = None
 
 
 class AuthorYearRow(BaseModel):

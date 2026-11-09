@@ -573,3 +573,113 @@ async def test_sort_keys_and_offset_paging(authors_api):
     # Unknown sort key: 422 (Literal validation); negative offset too.
     assert (await authors_api.get("/api/v1/ut/authors", params={"sort": "nope"})).status_code == 422
     assert (await authors_api.get("/api/v1/ut/authors", params={"offset": -1})).status_code == 422
+
+
+@requires_db
+async def test_profile_people_and_avatar(authors_api, db):
+    """people.utwente profile: matched rows serve the profile section and
+    the avatar endpoint; candidates stay hidden until an admin confirms
+    the source='people' identity row."""
+    from sqlalchemy import select
+
+    from journal_browser.models import (
+        AuthorIdentity,
+        Institution,
+        PeopleUtwentePerson,
+        PurePerson,
+    )
+
+    ut = (await db.execute(select(Institution).where(Institution.code == "ut"))).scalar_one()
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 16
+    # people rows FK onto pure_persons (the roster), like pure_person_orgs.
+    db.add_all(
+        [
+            PurePerson(institution_id=ut.id, uuid=uuid, name=name, payload={})
+            for uuid, name in (
+                ("alice-uuid", "Alice Author"),
+                ("carol-uuid", "Carol Navigator"),
+                ("dan-uuid", "Dan D"),
+            )
+        ]
+    )
+    # No relationship() between the mappers: flush the roster first or
+    # the people-row FK inserts run ahead of it.
+    await db.flush()
+    db.add_all(
+        [
+            PeopleUtwentePerson(
+                institution_id=ut.id,
+                person_uuid="alice-uuid",
+                status="matched",
+                slug="alice.author",
+                canonical_name="dr. Alice Author (ALiCe)",
+                email="a.author@utwente.nl",
+                orgs=[{"name": "Faculty of Science and Technology", "abbr": "TNW"}],
+                faculty_abbr="TNW",
+                portal_person_url="https://research.utwente.nl/en/persons/alice-uuid",
+                photo_url="https://people.utwente.nl/.wh/ea/uc/x/alice.avif",
+                photo_media_type="image/png",
+                photo_bytes=png,
+            ),
+            # Candidate without an identity decision: never served.
+            PeopleUtwentePerson(
+                institution_id=ut.id,
+                person_uuid="carol-uuid",
+                status="candidate",
+                slug="carol.navigator",
+                canonical_name="Carol Navigator",
+                orgs=[],
+                portal_person_url=None,
+            ),
+            # Candidate promoted by an admin: served despite status.
+            PeopleUtwentePerson(
+                institution_id=ut.id,
+                person_uuid="dan-uuid",
+                status="candidate",
+                slug="dan.d",
+                canonical_name="Dan D",
+                orgs=[],
+                portal_person_url=None,
+                photo_media_type="image/png",
+                photo_bytes=png,
+            ),
+            AuthorIdentity(
+                institution_id=ut.id,
+                author_pure_uuid="dan-uuid",
+                source="people",
+                external_id="dan.d",
+                status="confirmed",
+                method="name",
+                confidence=0.9,
+            ),
+        ]
+    )
+    await db.commit()
+
+    author = (await authors_api.get("/api/v1/ut/authors/alice-uuid")).json()["author"]
+    assert author["people"] == {
+        "slug": "alice.author",
+        "url": "https://people.utwente.nl/alice.author",
+        "canonical_name": "dr. Alice Author (ALiCe)",
+        "email": "a.author@utwente.nl",
+        "orgs": ["Faculty of Science and Technology"],
+        "faculty_abbr": "TNW",
+        "has_photo": True,
+    }
+    assert author["research_portal_url"] == ("https://research.utwente.nl/en/persons/alice-uuid")
+    avatar = await authors_api.get("/api/v1/ut/authors/alice-uuid/avatar")
+    assert avatar.status_code == 200
+    assert avatar.content == png
+    assert avatar.headers["content-type"] == "image/png"
+
+    # Candidate rows are invisible until confirmed; a missed row serves
+    # nothing and unknown authors 404.
+    carol_body = (await authors_api.get("/api/v1/ut/authors/carol-uuid")).json()
+    assert carol_body["author"]["people"] is None
+    assert (await authors_api.get("/api/v1/ut/authors/carol-uuid/avatar")).status_code == 404
+    dan = (await authors_api.get("/api/v1/ut/authors/dan-uuid")).json()["author"]
+    assert dan["people"]["slug"] == "dan.d"
+    assert dan["people"]["has_photo"] is True
+    # dan has no people portal url and no portal bindings: constructed
+    # url falls away, None.
+    assert dan["research_portal_url"] is None

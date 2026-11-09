@@ -12,7 +12,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import get_settings, work_type_excluded
 from ..harvest.authors import topic_mass
 from ..harvest.common import normalize_doi
-from ..models import Author, AuthorWork, Institution, Journal, JournalFlags, Work
+from ..harvest.people_utwente import PEOPLE_BASE_URL
+from ..models import (
+    Author,
+    AuthorIdentity,
+    AuthorWork,
+    Institution,
+    Journal,
+    JournalFlags,
+    PeopleUtwentePerson,
+    PurePersonOrg,
+    Work,
+)
 from .authorship import (
     OPENALEX_URL,
     journal_publisher_map,
@@ -509,6 +520,38 @@ async def _openalex_only_section(
     return {"total": total, "items": items[:OPENALEX_ONLY_CAP], "available": True}, total
 
 
+async def author_avatar(
+    session: AsyncSession, institution: Institution, pure_uuid: str
+) -> tuple[bytes, str] | None:
+    """The author's people.utwente.nl portrait bytes + media type: served
+    for uuid-verified matches (or admin-confirmed candidates); None when
+    absent or unverified."""
+    iid = institution.id
+    people_row = await session.scalar(
+        select(PeopleUtwentePerson).where(
+            PeopleUtwentePerson.institution_id == iid,
+            PeopleUtwentePerson.person_uuid == pure_uuid,
+        )
+    )
+    if people_row is None or not people_row.slug or people_row.photo_bytes is None:
+        return None
+    if people_row.status != "matched":
+        confirmed = (
+            await session.scalar(
+                select(AuthorIdentity.author_pure_uuid).where(
+                    AuthorIdentity.institution_id == iid,
+                    AuthorIdentity.author_pure_uuid == pure_uuid,
+                    AuthorIdentity.source == "people",
+                    AuthorIdentity.status == "confirmed",
+                )
+            )
+            is not None
+        )
+        if not confirmed:
+            return None
+    return people_row.photo_bytes, people_row.photo_media_type or "application/octet-stream"
+
+
 async def author_profile(
     session: AsyncSession,
     institution: Institution,
@@ -526,6 +569,55 @@ async def author_profile(
     )
     if author is None:
         return None
+
+    # people.utwente.nl profile: served when uuid-verified, or when the
+    # admin confirmed the (name-only) candidate identity row.
+    people_row = await session.scalar(
+        select(PeopleUtwentePerson).where(
+            PeopleUtwentePerson.institution_id == iid,
+            PeopleUtwentePerson.person_uuid == pure_uuid,
+        )
+    )
+    people_confirmed = people_row is not None and people_row.status == "matched"
+    if not people_confirmed and people_row is not None:
+        people_confirmed = (
+            await session.scalar(
+                select(AuthorIdentity.author_pure_uuid).where(
+                    AuthorIdentity.institution_id == iid,
+                    AuthorIdentity.author_pure_uuid == pure_uuid,
+                    AuthorIdentity.source == "people",
+                    AuthorIdentity.status == "confirmed",
+                )
+            )
+            is not None
+        )
+    people_section = None
+    research_portal_url = None
+    if people_row is not None and people_confirmed and people_row.slug:
+        people_section = {
+            "slug": people_row.slug,
+            "url": f"{PEOPLE_BASE_URL}{people_row.slug}",
+            "canonical_name": people_row.canonical_name,
+            "email": people_row.email,
+            "orgs": [o.get("name") for o in people_row.orgs or [] if o.get("name")],
+            "faculty_abbr": people_row.faculty_abbr,
+            "has_photo": people_row.photo_bytes is not None,
+        }
+        research_portal_url = people_row.portal_person_url
+    if research_portal_url is None:
+        # No people profile (or unverified): the portal page still exists
+        # when the portal persons listings carried this person.
+        has_portal_binding = (
+            await session.scalar(
+                select(PurePersonOrg.person_uuid).where(
+                    PurePersonOrg.institution_id == iid,
+                    PurePersonOrg.person_uuid == pure_uuid,
+                )
+            )
+            is not None
+        )
+        if has_portal_binding and institution.research_portal_url:
+            research_portal_url = f"{institution.research_portal_url}/en/persons/{pure_uuid}"
 
     work_join = author_works_join(iid, pure_uuid)
     in_window = (
@@ -619,6 +711,8 @@ async def author_profile(
             "institute": author.institute,
             "orgs": author.orgs or [],
             "n_works": author.n_works,
+            "people": people_section,
+            "research_portal_url": research_portal_url,
         },
         "oa_by_year": oa_by_year,
         "journals": [

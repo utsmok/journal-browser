@@ -3,7 +3,7 @@
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
@@ -143,6 +143,23 @@ async def author_profile(
         works=profile["works"],
         openalex_only=AuthorOpenalexOnly(**profile["openalex_only"]),
         openalex_only_count=profile["openalex_only_count"],
+    )
+
+
+@router.get("/{pure_uuid}/avatar")
+async def author_avatar(
+    pure_uuid: str, session: SessionDep, institution: InstitutionDep
+) -> Response:
+    """The author's people.utwente.nl portrait: uuid-verified matches
+    (or admin-confirmed candidates) only; 404 otherwise."""
+    avatar = await authors_service.author_avatar(session, institution, pure_uuid)
+    if avatar is None:
+        raise HTTPException(status_code=404, detail="no avatar")
+    content, media_type = avatar
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Cache-Control": "public, max-age=3600"},
     )
 
 
