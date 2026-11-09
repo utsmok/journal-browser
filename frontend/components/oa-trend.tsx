@@ -86,6 +86,10 @@ export function OaTrend({ stats }: { stats: StatsYear[] }) {
         ))}
         {stats.some((s) => s.year === currentYear) && <li>* year in progress</li>}
       </ul>
+      <p className="mt-1.5 text-xs text-[var(--muted-foreground)]">
+        Bronze: free to read on the publisher&apos;s site without an explicit open license — OA, but
+        not guaranteed free to share.
+      </p>
     </div>
   );
 }

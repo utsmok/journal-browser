@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import { useOrgUnit } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
+import { useYearRange } from "@/hooks/use-year-filter";
 import {
   encodeNamePath,
   errorMessage,
@@ -149,7 +150,11 @@ export default function OrgUnitPage() {
   const name = nameSegs.map(decodeURIComponent).join("/");
 
   const backHref = level === "faculty" ? `/${inst}/orgunit` : `/${inst}/orgunit?level=${level}`;
-  const { data, isPending, isError, error } = useOrgUnit(level, level && name ? name : undefined);
+  const { year_from, year_to } = useYearRange();
+  const { data, isPending, isError, error } = useOrgUnit(level, level && name ? name : undefined, {
+    year_from,
+    year_to,
+  });
 
   if (!level)
     return (
@@ -186,7 +191,13 @@ function OrgUnitDetail({
   backHref: string;
   data: OrgUnitDetailResponse;
 }) {
+  const { year_from, year_to } = useYearRange();
   const { unit, groups, journals, authors, works_by_year, deal_usage } = data;
+  const trendYears = works_by_year.filter(
+    (s) =>
+      (year_from === undefined || s.year >= year_from) &&
+      (year_to === undefined || s.year <= year_to),
+  );
   const [groupPage, setGroupPage] = React.useState(1);
   const [authorPage, setAuthorPage] = React.useState(1);
   const groupRows = (groups ?? []).slice((groupPage - 1) * PAGE_SIZE, groupPage * PAGE_SIZE);
@@ -380,14 +391,24 @@ function OrgUnitDetail({
           </CollapsibleCard>
         )}
 
-        {works_by_year.length > 0 && (
+        {trendYears.length > 0 && (
           <CollapsibleCard id="oa-over-time" title="Open access over time">
-            <OaTrend stats={works_by_year} />
+            <OaTrend stats={trendYears} />
           </CollapsibleCard>
         )}
 
         {deal_usage.length > 0 && (
-          <CollapsibleCard id="deal-usage" title="Deal usage" contentClassName="text-sm">
+          <CollapsibleCard
+            id="deal-usage"
+            title="Deal usage"
+            description={
+              <p className="text-sm text-[var(--muted-foreground)]">
+                Publications in journals that are currently part of each deal (not historical deal
+                usage).
+              </p>
+            }
+            contentClassName="text-sm"
+          >
             <Table>
               <caption className="sr-only">Open access deals used by this unit</caption>
               <TableHeader>

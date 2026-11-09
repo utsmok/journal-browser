@@ -543,16 +543,6 @@ export function FilterPanel({
       activeValues: selection.doaj !== null ? [selection.doaj] : [],
     },
     {
-      key: "quartile",
-      label: "Quartile",
-      defaultOpen: true,
-      values: ["Q1", "Q2", "Q3", "Q4"].map((q) => ({
-        value: q,
-        count: facets.quartile?.[q] ?? 0,
-      })),
-      activeValues: selection.quartile ? [selection.quartile] : [],
-    },
-    {
       key: "has_apc",
       label: "APC",
       defaultOpen: true,
@@ -629,6 +619,18 @@ export function FilterPanel({
           },
         ]
       : []),
+    // Quartile sits last: it is the least decision-relevant facet and the
+    // list reads better with it at the bottom of both panel variants.
+    {
+      key: "quartile",
+      label: "Quartile",
+      defaultOpen: true,
+      values: ["Q1", "Q2", "Q3", "Q4"].map((q) => ({
+        value: q,
+        count: facets.quartile?.[q] ?? 0,
+      })),
+      activeValues: selection.quartile ? [selection.quartile] : [],
+    },
   ];
 
   return <FacetGroupList groups={groups} onToggle={onToggle} variant={variant} />;

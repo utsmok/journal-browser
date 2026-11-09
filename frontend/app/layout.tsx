@@ -5,6 +5,7 @@ import "./globals.css";
 import { SiteFooter } from "@/components/site-footer";
 import { BrandLink, SiteNav } from "@/components/site-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { YearFilterControl } from "@/components/year-filter";
 import { FeedbackWidget } from "@/components/feedback/feedback-widget";
 import { Providers } from "./providers";
 
@@ -56,7 +57,10 @@ function SiteHeader() {
       <div className="mx-auto flex min-h-16 max-w-screen-2xl flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2 sm:flex-nowrap sm:py-0">
         <BrandLink />
         <SiteNav />
-        <ThemeToggle />
+        <div className="flex items-center gap-1 sm:gap-2">
+          <YearFilterControl />
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );

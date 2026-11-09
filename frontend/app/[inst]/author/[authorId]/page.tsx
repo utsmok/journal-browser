@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import { DetailSkeleton, ErrorPanel } from "@/components/states";
 import { useInstitution } from "@/hooks/use-institution";
+import { useYearRange, yearQuery } from "@/hooks/use-year-filter";
 import {
   errorMessage,
   encodeNamePath,
@@ -124,7 +125,9 @@ function SectionNav({ sections }: { sections: { id: string; label: string }[] })
           <ArrowLeft aria-hidden className="size-4" /> Back to search
         </Link>
         <span aria-hidden className="h-4 w-px shrink-0 bg-[var(--border)]" />
-        <ul className="flex min-w-0 items-center gap-1">
+        {/* Wrap instead of a single clipped line: long section lists stay
+            fully reachable on narrow screens. */}
+        <ul className="flex min-w-0 flex-wrap items-center gap-1">
           {sections.map((s) => (
             <li key={s.id}>
               <a
@@ -196,9 +199,10 @@ export default function AuthorPage() {
   const inst = useInstitution();
   const authorId = params?.authorId ? decodeURIComponent(params.authorId) : undefined;
   const backHref = useLastSearchHref();
+  const { year_from, year_to } = useYearRange();
   const { data, isPending, isError, error } = useQuery({
-    queryKey: ["author", inst, authorId ?? ""],
-    queryFn: () => fetchAuthor(inst, authorId ?? ""),
+    queryKey: ["author", inst, authorId ?? "", year_from ?? null, year_to ?? null],
+    queryFn: () => fetchAuthor(inst, authorId ?? "", { year_from, year_to }),
     enabled: Boolean(authorId),
   });
 
@@ -221,7 +225,11 @@ export default function AuthorPage() {
   const workPages = Math.max(1, Math.ceil(works.length / PAGE_SIZE));
   const journalRows = journals.slice((journalPage - 1) * PAGE_SIZE, journalPage * PAGE_SIZE);
   const workRows = works.slice((workPage - 1) * PAGE_SIZE, workPage * PAGE_SIZE);
-  const trendStats = toStatsYear(oa_by_year);
+  const trendStats = toStatsYear(oa_by_year).filter(
+    (s) =>
+      (year_from === undefined || s.year >= year_from) &&
+      (year_to === undefined || s.year <= year_to),
+  );
   const hasSimilar =
     similar.all.length > 0 || similar.deals.length > 0 || similar.diamond.length > 0;
 
@@ -441,7 +449,7 @@ export default function AuthorPage() {
                     </p>
                   )}
                   <GapCsvButton
-                    href={`/api/v1/${inst}/authors/${encodeURIComponent(author.pure_uuid)}/works.csv?scope=canon`}
+                    href={`/api/v1/${inst}/authors/${encodeURIComponent(author.pure_uuid)}/works.csv?scope=canon${yearQuery("&", year_from, year_to)}`}
                   />
                 </div>
               }
@@ -517,7 +525,7 @@ export default function AuthorPage() {
                   </p>
                   {data.openalex_only.total > 0 && (
                     <GapCsvButton
-                      href={`/api/v1/${inst}/authors/${encodeURIComponent(author.pure_uuid)}/works.csv?scope=missed`}
+                      href={`/api/v1/${inst}/authors/${encodeURIComponent(author.pure_uuid)}/works.csv?scope=missed${yearQuery("&", year_from, year_to)}`}
                     />
                   )}
                 </div>

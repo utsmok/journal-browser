@@ -132,7 +132,10 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
           ok={deal.corresponding_authors_only === true}
           label="Corresponding authors only"
         />
-        <ConditionLine ok={Boolean(deal.cap_text || capNumbers.length > 0)} label="Cost capped" />
+        <ConditionLine
+          ok={Boolean(deal.cap_text || capNumbers.length > 0)}
+          label="Discounted articles capped"
+        />
       </div>
       {summary && summary !== preview && <p className="max-w-prose text-pretty">{summary}</p>}
       {deal.cap_text && (

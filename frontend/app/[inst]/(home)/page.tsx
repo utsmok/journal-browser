@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/table";
 import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
+import { useYearRange } from "@/hooks/use-year-filter";
 import { useFacets, useInstitutionsDirectory, useJournals } from "@/hooks/use-api";
 import { useFunderPrefs } from "@/lib/funder-prefs";
 import {
@@ -92,6 +93,9 @@ function SearchView() {
   // other facets.
   const [funder] = useFunderPrefs();
   const funderFit = sp.get("funder_fit") ?? "";
+  // Same idea for the publication-year lens (header control): context
+  // state, not URL state, scoped per institution.
+  const { year_from, year_to } = useYearRange();
 
   const [input, setInput] = React.useState(spQ);
   const [stack, setStack] = React.useState<string[]>([]);
@@ -161,6 +165,18 @@ function SearchView() {
     router.replace(`${pathname}?${next}`, { scroll: false });
   };
 
+  // The year lens is context state, so it bypasses the URL-filter reset
+  // above; a lens change must also drop the keyset position, or the next
+  // page would mix two different ranges.
+  const yearsKey = `${year_from ?? ""}-${year_to ?? ""}`;
+  const prevYearsKey = React.useRef(yearsKey);
+  React.useEffect(() => {
+    if (prevYearsKey.current === yearsKey) return;
+    prevYearsKey.current = yearsKey;
+    if (cursor !== undefined || sp.get("p") !== null) update({ cursor: undefined, p: undefined });
+    // update/sp/cursor are read once per lens change; only the lens drives this.
+  }, [yearsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Live search with debounce; keep the input in sync with back/forward nav.
   React.useEffect(() => {
     setInput(spQ);
@@ -213,6 +229,8 @@ function SearchView() {
     oa_type: oaTypes.join(",") || undefined,
     pub_type: pubType || undefined,
     language: language || undefined,
+    year_from,
+    year_to,
     sort,
     dir: dir ?? undefined,
     cursor,
@@ -363,7 +381,7 @@ function SearchView() {
             label="Works"
             title={`${instShort} works in this journal${
               site.windowStart === undefined ? "" : `, ${site.windowStart} onwards`
-            }. Click to sort, again to reverse, again to reset`}
+            }${year_from === undefined ? "" : ` (${year_from}–${year_to})`}. Click to sort, again to reverse, again to reset`}
             state={sortRef.current}
           />
         ),
@@ -481,7 +499,7 @@ function SearchView() {
         },
       },
     ],
-    [site, instShort, inst, update],
+    [site, instShort, inst, update, year_from, year_to],
   );
 
   // Backend fields the generated types trail (see lib/api.ts).

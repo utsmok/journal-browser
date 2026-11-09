@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import * as React from "react";
 
 import { UsageTracker } from "@/components/usage-tracker";
+import { YearFilterProvider } from "@/hooks/use-year-filter";
 
 export type SiteFallback = {
   name: string;
@@ -47,8 +48,10 @@ export function Providers({
   return (
     <SiteMetaContext.Provider value={siteFallback}>
       <QueryClientProvider client={client}>
-        <UsageTracker />
-        {children}
+        <YearFilterProvider>
+          <UsageTracker />
+          {children}
+        </YearFilterProvider>
       </QueryClientProvider>
     </SiteMetaContext.Provider>
   );

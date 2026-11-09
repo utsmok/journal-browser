@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/table";
 import { usePublisher } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
+import { useYearRange, yearQuery } from "@/hooks/use-year-filter";
 import {
   errorMessage,
   encodeNamePath,
@@ -265,6 +266,7 @@ function CrisGapsCard({
   inst: string;
   name: string;
 }) {
+  const { year_from, year_to } = useYearRange();
   const { total, items } = openalexOnly;
   return (
     <CollapsibleCard
@@ -280,7 +282,7 @@ function CrisGapsCard({
           </p>
           {total > 0 && (
             <GapCsvButton
-              href={`/api/v1/${inst}/publishers/${encodeNamePath(name)}/openalex-only.csv`}
+              href={`/api/v1/${inst}/publishers/${encodeNamePath(name)}/openalex-only.csv${yearQuery("?", year_from, year_to)}`}
             />
           )}
         </div>
@@ -345,6 +347,7 @@ export default function PublisherPage() {
   const inst = useInstitution();
   const backHref = `/${inst}/publisher`;
   const name = params?.slug?.map(decodeURIComponent).join("/") ?? "";
+  const { year_from, year_to } = useYearRange();
   const { data, isPending, isError, error } = usePublisher(name || undefined);
 
   // Per-card pagination, author-detail style (the list is capped at 200).
@@ -365,6 +368,13 @@ export default function PublisherPage() {
     );
 
   const { publisher, journals, deals, deal_discrepancies, n_discrepancies, works_by_year } = data;
+  // Publisher detail has no year params, so the trend is filtered here;
+  // OaTrend shows its empty state when the span holds no years.
+  const trendYears = works_by_year.filter(
+    (s) =>
+      (year_from === undefined || s.year >= year_from) &&
+      (year_to === undefined || s.year <= year_to),
+  );
   const journalPages = Math.max(1, Math.ceil(journals.length / PAGE_SIZE));
   const journalRows = journals.slice((journalPage - 1) * PAGE_SIZE, journalPage * PAGE_SIZE);
 
@@ -476,9 +486,9 @@ export default function PublisherPage() {
           </CollapsibleCard>
         )}
 
-        {works_by_year.length > 0 && (
+        {trendYears.length > 0 && (
           <CollapsibleCard id="oa-over-time" title="Open access over time">
-            <OaTrend stats={works_by_year} />
+            <OaTrend stats={trendYears} />
           </CollapsibleCard>
         )}
 

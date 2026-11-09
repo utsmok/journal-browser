@@ -277,7 +277,8 @@ function OrgUnitsView() {
           <h1 className="mb-3 text-3xl font-bold text-balance">Faculties</h1>
           <p className="mb-6 max-w-2xl text-[var(--muted-foreground)]">
             Browse the organisational units of {site.name}: faculties, their research groups, and
-            the interdisciplinary institutes, with publishing output, deal usage, and APC spend.
+            the interdisciplinary institutes, with publishing output, works in journals currently
+            covered by a deal, and APC spend.
           </p>
           <form
             className="flex max-w-2xl gap-2"

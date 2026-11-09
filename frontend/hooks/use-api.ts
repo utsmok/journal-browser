@@ -24,6 +24,7 @@ import {
   type PublisherSearchParams,
   type SimilarJournalsBundle,
   type WorksPage,
+  type YearParams,
 } from "@/lib/api";
 import type { InstitutionDirectoryEntry } from "@/lib/admin";
 
@@ -179,13 +180,24 @@ export function useSimilar(issnL: string | undefined) {
 
 /**
  * Institution works for a journal (OpenAlex). The section renders its
- * empty state on error, so failures stay quiet.
+ * empty state on error, so failures stay quiet. The year lens, when set,
+ * scopes the list and joins the cache key.
  */
-export function useJournalWorks(issnL: string | undefined, page: number) {
+export function useJournalWorks(issnL: string | undefined, page: number, years?: YearParams) {
   const inst = useInstitution();
   return useQuery({
-    queryKey: qk.works(inst, issnL ?? "", page),
-    queryFn: () => apiGet<WorksPage>(`/${inst}/journals/${issnL}/works`, { page, page_size: 20 }),
+    queryKey: [
+      ...qk.works(inst, issnL ?? "", page),
+      years?.year_from ?? null,
+      years?.year_to ?? null,
+    ] as const,
+    queryFn: () =>
+      apiGet<WorksPage>(`/${inst}/journals/${issnL}/works`, {
+        page,
+        page_size: 20,
+        year_from: years?.year_from,
+        year_to: years?.year_to,
+      }),
     enabled: Boolean(issnL),
     placeholderData: keepPreviousData,
     retry: false,
@@ -261,11 +273,19 @@ export function useOrgUnits(params: OrgUnitSearchParams) {
   });
 }
 
-export function useOrgUnit(level: OrgUnitLevel | undefined, name: string | undefined) {
+export function useOrgUnit(
+  level: OrgUnitLevel | undefined,
+  name: string | undefined,
+  years?: YearParams,
+) {
   const inst = useInstitution();
   return useQuery({
-    queryKey: qk.orgunit(inst, level ?? "faculty", name ?? ""),
-    queryFn: () => fetchOrgUnit(inst, level ?? "faculty", name ?? ""),
+    queryKey: [
+      ...qk.orgunit(inst, level ?? "faculty", name ?? ""),
+      years?.year_from ?? null,
+      years?.year_to ?? null,
+    ] as const,
+    queryFn: () => fetchOrgUnit(inst, level ?? "faculty", name ?? "", years),
     enabled: Boolean(level && name),
   });
 }

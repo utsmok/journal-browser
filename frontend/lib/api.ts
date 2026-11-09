@@ -83,6 +83,10 @@ export type SortKey =
 
 export type SearchIn = "all" | "title" | "publisher" | "topic";
 
+/** Publication-year range params accepted by the works/profile/detail/CSV
+ * endpoints; the global year lens feeds these. */
+export type YearParams = { year_from?: number; year_to?: number };
+
 export type JournalSearchParams = {
   q?: string;
   search_in?: SearchIn;
@@ -106,6 +110,10 @@ export type JournalSearchParams = {
   funder?: number;
   /** Funder-fit tier filter; needs `funder` set. */
   funder_fit?: string;
+  /** Publication-year range start (global year lens; server clamps to the data window). */
+  year_from?: number;
+  /** Publication-year range end (global year lens; server clamps to the data window). */
+  year_to?: number;
   sort?: SortKey;
   /** Sort direction; omitted = each key's natural direction. */
   dir?: "asc" | "desc";
@@ -193,8 +201,15 @@ export async function fetchAuthors(
   return data;
 }
 
-export async function fetchAuthor(inst: string, pureUuid: string): Promise<AuthorProfile> {
-  return apiGet<AuthorProfile>(`/${inst}/authors/${encodeURIComponent(pureUuid)}`);
+export async function fetchAuthor(
+  inst: string,
+  pureUuid: string,
+  years?: YearParams,
+): Promise<AuthorProfile> {
+  return apiGet<AuthorProfile>(`/${inst}/authors/${encodeURIComponent(pureUuid)}`, {
+    year_from: years?.year_from,
+    year_to: years?.year_to,
+  });
 }
 
 // --- Publishers + org units (browse facets) ---
@@ -338,6 +353,10 @@ export async function fetchOrgUnit(
   inst: string,
   level: OrgUnitLevel,
   name: string,
+  years?: YearParams,
 ): Promise<OrgUnitDetailResponse> {
-  return apiGet<OrgUnitDetailResponse>(`/${inst}/orgunits/${level}/${encodeNamePath(name)}`);
+  return apiGet<OrgUnitDetailResponse>(`/${inst}/orgunits/${level}/${encodeNamePath(name)}`, {
+    year_from: years?.year_from,
+    year_to: years?.year_to,
+  });
 }

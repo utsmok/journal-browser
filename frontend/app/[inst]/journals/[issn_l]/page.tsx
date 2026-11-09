@@ -34,6 +34,7 @@ import {
 import { useJournal, useJournalWorks, useSimilar } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
+import { useYearRange, yearQuery } from "@/hooks/use-year-filter";
 import {
   errorMessage,
   type Attribution,
@@ -602,6 +603,7 @@ function CrisGapsCard({
   inst: string;
   issnL: string;
 }) {
+  const { year_from, year_to } = useYearRange();
   const { total, items } = openalexOnly;
   return (
     <CollapsibleCard
@@ -616,7 +618,9 @@ function CrisGapsCard({
             {total > items.length && ` Showing ${items.length.toLocaleString("en")} most recent.`}
           </p>
           {total > 0 && (
-            <GapCsvButton href={`/api/v1/${inst}/journals/${issnL}/openalex-only.csv`} />
+            <GapCsvButton
+              href={`/api/v1/${inst}/journals/${issnL}/openalex-only.csv${yearQuery("?", year_from, year_to)}`}
+            />
           )}
         </div>
       }
@@ -687,6 +691,7 @@ function PublicationsCard({
 }) {
   const site = useSiteMeta();
   const inst = useInstitution();
+  const { year_from, year_to } = useYearRange();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -719,8 +724,12 @@ function PublicationsCard({
       description={
         <p className="text-pretty text-sm text-[var(--muted-foreground)]">
           {site.short} works from Pure merged with OpenAlex venue works
-          {site.windowStart === undefined ? "" : `, ${site.windowStart} onwards`}. Citations and
-          FWCI come from OpenAlex; works not matched there are marked.
+          {year_from !== undefined
+            ? `, ${year_from}–${year_to}`
+            : site.windowStart === undefined
+              ? ""
+              : `, ${site.windowStart} onwards`}
+          . Citations and FWCI come from OpenAlex; works not matched there are marked.
         </p>
       }
       contentClassName="space-y-3 text-sm"
@@ -924,7 +933,9 @@ function SectionNav({ sections }: { sections: { id: string; label: string; hint?
           <ArrowLeft aria-hidden className="size-4" /> Back to search
         </Link>
         <span aria-hidden className="h-4 w-px shrink-0 bg-[var(--border)]" />
-        <ul className="flex min-w-0 items-center gap-1">
+        {/* Wrap instead of a single clipped line: long section lists stay
+            fully reachable on narrow screens. */}
+        <ul className="flex min-w-0 flex-wrap items-center gap-1">
           {sections.map((s) => (
             <li key={s.id}>
               <a
@@ -1091,7 +1102,8 @@ function JournalPageInner() {
   const searchParams = useSearchParams();
   const pParam = parseInt(searchParams.get("page") ?? "", 10);
   const requestedWorksPage = Number.isFinite(pParam) && pParam > 0 ? pParam : 1;
-  const worksQuery = useJournalWorks(issnL, requestedWorksPage);
+  const { year_from, year_to } = useYearRange();
+  const worksQuery = useJournalWorks(issnL, requestedWorksPage, { year_from, year_to });
   const similarEmpty =
     !similar ||
     (similar.all.length === 0 && similar.institution.length === 0 && similar.deals.length === 0);
@@ -1101,7 +1113,17 @@ function JournalPageInner() {
 
   const { journal, stats, deals, attribution, summary_stats, stats_totals: totals } = data;
   const greenOa = data.green_oa ?? null;
-  const recent = stats.filter((s) => s.year >= (site.windowStart ?? 0));
+  const recent = stats.filter(
+    (s) =>
+      s.year >= (site.windowStart ?? 0) &&
+      (year_from === undefined || s.year >= year_from) &&
+      (year_to === undefined || s.year <= year_to),
+  );
+  // With the year lens on, the Pure total is the sum over the visible
+  // years; the OpenAlex cross-check total stays a full-window figure and
+  // is not shown then.
+  const pureTotal =
+    year_from === undefined ? totals.pure_canon : recent.reduce((acc, s) => acc + s.works_count, 0);
   const openalex = data.openalex ?? null;
   const openaire = data.openaire ?? null;
   const metrics = data.institution_metrics ?? null;
@@ -1122,7 +1144,6 @@ function JournalPageInner() {
   const hasApc = data.apc_aggregates.length > 0 || data.apc_evidence.length > 0;
   // One nav entry per rendered section, in DOM order.
   const sections: { id: string; label: string; hint?: string }[] = [
-    { id: "metrics", label: "Key stats" },
     { id: "oa-per-year", label: "Open access per year" },
     ...(deals.length > 0
       ? deals.map((deal) => ({
@@ -1136,6 +1157,7 @@ function JournalPageInner() {
       : []),
     ...(!similarEmpty ? [{ id: "similar", label: "Similar journals" }] : []),
     ...(topics.length > 0 || oaTopics.length > 0 ? [{ id: "topics", label: "Topics" }] : []),
+    { id: "metrics", label: "Key stats" },
     { id: "ut-authorship", label: "UT authorship" },
     { id: "publications", label: "Publications" },
     ...(data.openalex_only.available ? [{ id: "cris-gaps", label: "Not registered in Pure" }] : []),
@@ -1216,142 +1238,6 @@ function JournalPageInner() {
         </header>
 
         <div className="space-y-6">
-          <CollapsibleCard id="metrics" title="Key stats" contentClassName="space-y-4 text-sm">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <Metric
-                label="2-year mean citedness"
-                hint="Average number of citations that works from the last two years have received, as counted by OpenAlex."
-                value={
-                  journal.twoyr_mean_citedness != null
-                    ? journal.twoyr_mean_citedness.toFixed(1)
-                    : "—"
-                }
-              />
-              <Metric
-                label="h-index"
-                hint="h works of this journal have received at least h citations each (OpenAlex)."
-                value={num("h_index")?.toLocaleString("en") ?? "—"}
-                note="OpenAlex"
-              />
-              <Metric
-                label="i10 index"
-                hint="Number of works of this journal with at least 10 citations (OpenAlex)."
-                value={num("i10_index")?.toLocaleString("en") ?? "—"}
-                note="OpenAlex"
-              />
-            </div>
-            <SourceNote
-              {...(attribution.metrics ?? {})}
-              codes={attribution.metrics?.caveat_codes}
-            />
-            {(openalex || metrics || openaire) && (
-              <div className="border-t border-[var(--border)] pt-4">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  {openalex?.cited_by_count != null && (
-                    <Metric
-                      label="Total citations"
-                      hint="All citations to works of this journal that OpenAlex has recorded."
-                      value={openalex.cited_by_count.toLocaleString("en")}
-                      note={
-                        <SourceNote
-                          {...(attribution.openalex ?? {})}
-                          codes={attribution.openalex?.caveat_codes}
-                        />
-                      }
-                    />
-                  )}
-                  {openalex?.works_count != null && (
-                    <Metric
-                      label="Works count"
-                      hint="Number of works of this journal known to OpenAlex."
-                      value={openalex.works_count.toLocaleString("en")}
-                      note={
-                        <SourceNote
-                          {...(attribution.openalex ?? {})}
-                          codes={attribution.openalex?.caveat_codes}
-                        />
-                      }
-                    />
-                  )}
-                  {metrics && (
-                    <Metric
-                      label={`FWCI (${site.short} works)`}
-                      hint={`Field-weighted citation impact of ${site.short} works: citations relative to the average for works of the same year, type, and field. 1.0 means average.`}
-                      value={
-                        metrics.fwci_avg != null && metrics.fwci_n > 0
-                          ? metrics.fwci_avg.toFixed(2)
-                          : "—"
-                      }
-                      note={
-                        <>
-                          n = {metrics.fwci_n} works{" "}
-                          <SourceNote
-                            {...(attribution.openalex ?? {})}
-                            codes={attribution.openalex?.caveat_codes}
-                          />
-                        </>
-                      }
-                    />
-                  )}
-                  {metrics && metrics.retracted > 0 && (
-                    <Metric
-                      label={`Retracted ${site.short} works`}
-                      hint={`${site.short} works in this journal that OpenAlex marks as retracted.`}
-                      value={metrics.retracted.toLocaleString("en")}
-                      note={
-                        <SourceNote
-                          {...(attribution.openalex ?? {})}
-                          codes={attribution.openalex?.caveat_codes}
-                        />
-                      }
-                    />
-                  )}
-                  {openaire && (
-                    <Metric
-                      label="Matched publications"
-                      hint={`${site.name} publications that OpenAIRE matched to this journal.`}
-                      value={openaire.matched_works.toLocaleString("en")}
-                      note={
-                        <SourceNote
-                          {...(attribution.openaire ?? {})}
-                          codes={attribution.openaire?.caveat_codes}
-                        />
-                      }
-                    />
-                  )}
-                </div>
-              </div>
-            )}
-            {latestSjr && (
-              <div className="border-t border-[var(--border)] pt-4">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <Metric
-                    label="SJR"
-                    hint="SCImago Journal Rank: prestige-weighted average citations per recent work. Higher is better."
-                    value={latestSjr.sjr !== null ? latestSjr.sjr.toFixed(3) : "—"}
-                    note={latestSjr.year ? String(latestSjr.year) : undefined}
-                  />
-                  <Metric
-                    label="Best quartile"
-                    hint="Best quartile the journal reaches in any of its SCImago subject categories."
-                    value={latestSjr.best_quartile ?? "—"}
-                  />
-                  <Metric
-                    label="SJR h-index"
-                    hint="h-index of the journal as computed by SCImago."
-                    value={latestSjr.h_index?.toLocaleString("en") ?? "—"}
-                  />
-                </div>
-                <div className="mt-3">
-                  <SourceNote
-                    {...(attribution.scimagojr ?? {})}
-                    codes={attribution.scimagojr?.caveat_codes}
-                  />
-                </div>
-              </div>
-            )}
-          </CollapsibleCard>
-
           <CollapsibleCard
             id="oa-per-year"
             title={
@@ -1359,7 +1245,12 @@ function JournalPageInner() {
                 Open access per year{" "}
                 <span className="text-sm font-normal text-[var(--muted-foreground)]">
                   ({site.short}
-                  {site.windowStart === undefined ? "" : `, ${site.windowStart}+`})
+                  {year_from !== undefined
+                    ? `, ${year_from}–${year_to}`
+                    : site.windowStart === undefined
+                      ? ""
+                      : `, ${site.windowStart}+`}
+                  )
                 </span>
               </>
             }
@@ -1372,15 +1263,24 @@ function JournalPageInner() {
               </p>
             )}
             <p className="mt-3 text-sm">
-              {totals.pure_canon.toLocaleString("en")} {site.short} works total
-              {site.windowStart === undefined ? "" : ` since ${site.windowStart}`}{" "}
-              <span className="text-[var(--muted-foreground)]">(Pure)</span> · OpenAlex institution
-              filter:{" "}
-              <span className="whitespace-nowrap">
-                {totals.openalex_institution_filter.toLocaleString("en")}{" "}
-                <span className="text-[var(--muted-foreground)]">(cross-check)</span>
-              </span>
-              .
+              {year_from === undefined ? (
+                <>
+                  {totals.pure_canon.toLocaleString("en")} {site.short} works total
+                  {site.windowStart === undefined ? "" : ` since ${site.windowStart}`}{" "}
+                  <span className="text-[var(--muted-foreground)]">(Pure)</span> · OpenAlex
+                  institution filter:{" "}
+                  <span className="whitespace-nowrap">
+                    {totals.openalex_institution_filter.toLocaleString("en")}{" "}
+                    <span className="text-[var(--muted-foreground)]">(cross-check)</span>
+                  </span>
+                  .
+                </>
+              ) : (
+                <>
+                  {pureTotal.toLocaleString("en")} {site.short} works in {year_from}–{year_to}{" "}
+                  <span className="text-[var(--muted-foreground)]">(Pure)</span>.
+                </>
+              )}
             </p>
             <div className="mt-2 flex flex-wrap gap-x-4">
               <SourceNote {...(attribution.stats ?? {})} codes={attribution.stats?.caveat_codes} />
@@ -1651,6 +1551,142 @@ function JournalPageInner() {
               )}
             </CollapsibleCard>
           )}
+
+          <CollapsibleCard id="metrics" title="Key stats" contentClassName="space-y-4 text-sm">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Metric
+                label="2-year mean citedness"
+                hint="Average number of citations that works from the last two years have received, as counted by OpenAlex."
+                value={
+                  journal.twoyr_mean_citedness != null
+                    ? journal.twoyr_mean_citedness.toFixed(1)
+                    : "—"
+                }
+              />
+              <Metric
+                label="h-index"
+                hint="h works of this journal have received at least h citations each (OpenAlex)."
+                value={num("h_index")?.toLocaleString("en") ?? "—"}
+                note="OpenAlex"
+              />
+              <Metric
+                label="i10 index"
+                hint="Number of works of this journal with at least 10 citations (OpenAlex)."
+                value={num("i10_index")?.toLocaleString("en") ?? "—"}
+                note="OpenAlex"
+              />
+            </div>
+            <SourceNote
+              {...(attribution.metrics ?? {})}
+              codes={attribution.metrics?.caveat_codes}
+            />
+            {(openalex || metrics || openaire) && (
+              <div className="border-t border-[var(--border)] pt-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  {openalex?.cited_by_count != null && (
+                    <Metric
+                      label="Total citations"
+                      hint="All citations to works of this journal that OpenAlex has recorded."
+                      value={openalex.cited_by_count.toLocaleString("en")}
+                      note={
+                        <SourceNote
+                          {...(attribution.openalex ?? {})}
+                          codes={attribution.openalex?.caveat_codes}
+                        />
+                      }
+                    />
+                  )}
+                  {openalex?.works_count != null && (
+                    <Metric
+                      label="Works count"
+                      hint="Number of works of this journal known to OpenAlex."
+                      value={openalex.works_count.toLocaleString("en")}
+                      note={
+                        <SourceNote
+                          {...(attribution.openalex ?? {})}
+                          codes={attribution.openalex?.caveat_codes}
+                        />
+                      }
+                    />
+                  )}
+                  {metrics && (
+                    <Metric
+                      label={`FWCI (${site.short} works)`}
+                      hint={`Field-weighted citation impact of ${site.short} works: citations relative to the average for works of the same year, type, and field. 1.0 means average.`}
+                      value={
+                        metrics.fwci_avg != null && metrics.fwci_n > 0
+                          ? metrics.fwci_avg.toFixed(2)
+                          : "—"
+                      }
+                      note={
+                        <>
+                          n = {metrics.fwci_n} works{" "}
+                          <SourceNote
+                            {...(attribution.openalex ?? {})}
+                            codes={attribution.openalex?.caveat_codes}
+                          />
+                        </>
+                      }
+                    />
+                  )}
+                  {metrics && metrics.retracted > 0 && (
+                    <Metric
+                      label={`Retracted ${site.short} works`}
+                      hint={`${site.short} works in this journal that OpenAlex marks as retracted.`}
+                      value={metrics.retracted.toLocaleString("en")}
+                      note={
+                        <SourceNote
+                          {...(attribution.openalex ?? {})}
+                          codes={attribution.openalex?.caveat_codes}
+                        />
+                      }
+                    />
+                  )}
+                  {openaire && (
+                    <Metric
+                      label="Matched publications"
+                      hint={`${site.name} publications that OpenAIRE matched to this journal.`}
+                      value={openaire.matched_works.toLocaleString("en")}
+                      note={
+                        <SourceNote
+                          {...(attribution.openaire ?? {})}
+                          codes={attribution.openaire?.caveat_codes}
+                        />
+                      }
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+            {latestSjr && (
+              <div className="border-t border-[var(--border)] pt-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <Metric
+                    label="SJR"
+                    hint="SCImago Journal Rank: prestige-weighted average citations per recent work. Higher is better."
+                    value={latestSjr.sjr !== null ? latestSjr.sjr.toFixed(3) : "—"}
+                    note={latestSjr.year ? String(latestSjr.year) : undefined}
+                  />
+                  <Metric
+                    label="Best quartile"
+                    hint="Best quartile the journal reaches in any of its SCImago subject categories."
+                    value={latestSjr.best_quartile ?? "—"}
+                  />
+                  <Metric
+                    label="SJR h-index"
+                    hint="h-index of the journal as computed by SCImago."
+                    value={latestSjr.h_index?.toLocaleString("en") ?? "—"}
+                  />
+                </div>
+                <div className="mt-3">
+                  <SourceNote
+                    {...(attribution.scimagojr ?? {})}
+                    codes={attribution.scimagojr?.caveat_codes}
+                  />
+                </div>
+              </div>
+            )}
+          </CollapsibleCard>
 
           <UtAuthorshipCard authorship={data.ut_authorship} inst={inst} />
 
