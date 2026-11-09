@@ -51,9 +51,12 @@ SIMILAR_FILTERED_LIMIT = 5
 ALTERNATIVE_JOURNALS = 5
 ALTERNATIVE_OPTIONS = 3
 WORKS_CAP = 200
-#: Safety cap for the openalex_only section's item list; the author-scoped
-#: query is small, and total stays exact beyond it.
-OPENALEX_ONLY_CAP = 1000
+#: Safety cap for the openalex_only section's item list, mirroring the
+#: venue gap-list cap (authorship.GAP_ITEM_CAP): the UI renders "Showing
+#: N most recent" and links works.csv?scope=missed for the full list.
+#: total stays exact beyond the cap; enriching only the shown slice also
+#: keeps prolific authors (600+ missed works) fast to serve.
+OPENALEX_ONLY_CAP = 50
 
 # European diacritics folded to plain ASCII on both sides of author-name
 # search, so umlaut-free queries match umlauted names ("follmer" -> "Föllmer").
@@ -491,6 +494,10 @@ async def _openalex_only_section(
                 "authorships": row.get("authorships") or [],
             }
         )
+    # total is the exact gated count; publisher/roster enrichment only
+    # covers the slice that ships to the client.
+    total = len(gated)
+    gated = gated[:OPENALEX_ONLY_CAP]
     publishers = await journal_publisher_map(session, [g["journal_issn_l"] for g in gated])
     roster = await ut_roster_by_aids(
         session,
@@ -516,8 +523,7 @@ async def _openalex_only_section(
                 "ut_authors": ut_authors_for_authorships(authorships, roster),
             }
         )
-    total = len(items)
-    return {"total": total, "items": items[:OPENALEX_ONLY_CAP], "available": True}, total
+    return {"total": total, "items": items, "available": True}, total
 
 
 async def author_avatar(
