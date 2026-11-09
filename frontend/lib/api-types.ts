@@ -4425,6 +4425,10 @@ export interface operations {
                 funder?: number | null;
                 /** @description Funder-fit tier filter */
                 funder_fit?: string | null;
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
             };
             header?: never;
             path: {
@@ -4526,6 +4530,10 @@ export interface operations {
             query?: {
                 page?: number;
                 page_size?: number;
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
             };
             header?: never;
             path: {
@@ -4558,7 +4566,12 @@ export interface operations {
     };
     journal_openalex_only_csv_api_v1__institution_code__journals__issn_l__openalex_only_csv_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+            };
             header?: never;
             path: {
                 issn_l: string;
@@ -4734,7 +4747,12 @@ export interface operations {
     };
     author_profile_api_v1__institution_code__authors__pure_uuid__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+            };
             header?: never;
             path: {
                 pure_uuid: string;
@@ -4768,6 +4786,10 @@ export interface operations {
         parameters: {
             query?: {
                 scope?: string;
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
             };
             header?: never;
             path: {
@@ -4845,7 +4867,12 @@ export interface operations {
     };
     publisher_openalex_only_csv_api_v1__institution_code__publishers__name__openalex_only_csv_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+            };
             header?: never;
             path: {
                 name: string;
@@ -4951,7 +4978,12 @@ export interface operations {
     };
     faculty_detail_api_v1__institution_code__orgunits_faculty__name__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+            };
             header?: never;
             path: {
                 name: string;
@@ -4983,7 +5015,12 @@ export interface operations {
     };
     group_detail_api_v1__institution_code__orgunits_group__name__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+            };
             header?: never;
             path: {
                 name: string;
@@ -5015,7 +5052,12 @@ export interface operations {
     };
     institute_detail_api_v1__institution_code__orgunits_institute__name__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+            };
             header?: never;
             path: {
                 name: string;

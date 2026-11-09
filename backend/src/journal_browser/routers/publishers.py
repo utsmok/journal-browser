@@ -20,6 +20,7 @@ from ..schemas import (
 )
 from ..services import exports
 from ..services import publishers as publishers_service
+from ..services.works_query import clamped_year_range
 from ..vocab import OaType
 
 router = APIRouter(prefix="/publishers", tags=["publishers"])
@@ -101,10 +102,35 @@ async def search_publishers(
 # swallow the export suffix.
 @router.get("/{name:path}/openalex-only.csv")
 async def publisher_openalex_only_csv(
-    name: str, session: SessionDep, institution: InstitutionDep
+    name: str,
+    session: SessionDep,
+    institution: InstitutionDep,
+    year_from: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range start (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    year_to: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range end (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
 ) -> StreamingResponse:
     """Uncapped CSV of the publisher group's CRIS-gap (OpenAlex-only) list."""
-    return await exports.publisher_openalex_only_csv(session, institution, name)
+    return await exports.publisher_openalex_only_csv(
+        session,
+        institution,
+        name,
+        year_range=clamped_year_range(institution, year_from, year_to),
+    )
 
 
 @router.get("/{name:path}", response_model=PublisherDetailResponse)

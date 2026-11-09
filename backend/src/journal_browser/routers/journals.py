@@ -49,6 +49,7 @@ from ..services import authorship, detail_enrichment, exports, repo_links
 from ..services import search as search_service
 from ..services.deal_coverage import deal_institution_join, dj_scope
 from ..services.funder_fit import JournalFacts, compute_funder_fit
+from ..services.works_query import clamped_year_range
 from ..vocab import GreenOa, OaType
 from .deals import DEAL_FIELDS
 
@@ -189,10 +190,29 @@ async def search_journals(
     funder_fit: Annotated[
         str | None, Query(pattern="^(compliant|check|no)$", description="Funder-fit tier filter")
     ] = None,
+    year_from: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range start (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    year_to: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range end (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
 ) -> JournalSearchResponse:
     # oa_type is a comma-separated multi-select, OR'd together server-side;
     # values validate against OaType at the boundary (422).
     funder_policy = await _funder_policy(session, funder)
+    year_range = clamped_year_range(institution, year_from, year_to)
     result = await search_service.search_journals(
         session,
         institution_id=institution.id,
@@ -217,6 +237,8 @@ async def search_journals(
         include_facets=include_facets,
         funder_struct=funder_policy,
         funder_fit=funder_fit if funder_policy is not None else None,
+        year_from=year_range[0] if year_range else None,
+        year_to=year_range[1] if year_range else None,
     )
     return JournalSearchResponse(
         items=[_to_list_item(item) for item in result["items"]],
@@ -265,21 +287,71 @@ async def journal_works(
     institution: InstitutionDep,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=50)] = 20,
+    year_from: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range start (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    year_to: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range end (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
 ) -> WorksPage:
     known = await session.scalar(select(Journal.issn_l).where(Journal.issn_l == issn_l.upper()))
     if known is None or _is_ignored(known):
         raise HTTPException(status_code=404, detail="journal not found")
     return WorksPage(
-        **await detail_enrichment.list_works(session, known, institution, page, page_size)
+        **await detail_enrichment.list_works(
+            session,
+            known,
+            institution,
+            page,
+            page_size,
+            year_range=clamped_year_range(institution, year_from, year_to),
+        )
     )
 
 
 @router.get("/{issn_l}/openalex-only.csv")
 async def journal_openalex_only_csv(
-    issn_l: str, session: SessionDep, institution: InstitutionDep
+    issn_l: str,
+    session: SessionDep,
+    institution: InstitutionDep,
+    year_from: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range start (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    year_to: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range end (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
 ) -> StreamingResponse:
     """Uncapped CSV of the journal's CRIS-gap (OpenAlex-only) list."""
-    return await exports.journal_openalex_only_csv(session, institution, issn_l)
+    return await exports.journal_openalex_only_csv(
+        session,
+        institution,
+        issn_l,
+        year_range=clamped_year_range(institution, year_from, year_to),
+    )
 
 
 @router.get("/{issn_l}", response_model=JournalDetailResponse)

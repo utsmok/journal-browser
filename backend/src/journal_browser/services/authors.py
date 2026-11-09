@@ -28,6 +28,7 @@ from .works_query import (
     empty_year_buckets,
     strata_cond,
     work_window,
+    work_year_window,
 )
 
 #: Search page + recommendation list sizes.
@@ -361,7 +362,11 @@ async def _similar_sections(
 
 
 async def _openalex_only_section(
-    session: AsyncSession, institution: Institution, author: Author, work_rows: Any
+    session: AsyncSession,
+    institution: Institution,
+    author: Author,
+    work_rows: Any,
+    year_range: tuple[int, int] | None = None,
 ) -> tuple[dict[str, Any], int | None]:
     """The profile's openalex_only section: OpenAlex-attributed works the
     Pure population does not hold, as their own list — never truncated by
@@ -374,7 +379,8 @@ async def _openalex_only_section(
     and the section degrades to available=False).
 
     Quality gates keep the section honest: the institution's
-    publication-year window applies, excluded work types (preprints/books)
+    publication-year window applies (an explicit clamped range replaces
+    the bounds), excluded work types (preprints/books)
     drop out, and a DOI that matches a local work is skipped (same
     publication; the Pure copy stays the display record)."""
     rows = await openalex_only_works_for_author(session, institution, author)
@@ -382,7 +388,13 @@ async def _openalex_only_section(
         return {"total": 0, "items": [], "available": False}, None
     if not rows:
         return {"total": 0, "items": [], "available": True}, 0
-    year_end = institution.data_window_end if institution.data_window_end is not None else 9999
+    if year_range is not None:
+        year_start, year_end_bound = year_range
+    else:
+        year_start = institution.data_window_start
+        year_end_bound = (
+            institution.data_window_end if institution.data_window_end is not None else 9999
+        )
     seen_dois = {doi for row in work_rows if (doi := normalize_doi(row.doi_normalized))}
     gated: list[dict[str, Any]] = []
     for row in sorted(
@@ -390,7 +402,7 @@ async def _openalex_only_section(
         key=lambda r: (r["year"] is None, -(r["year"] or 0), (r["title"] or "").lower()),
     ):
         year = row["year"]
-        if year is None or not institution.data_window_start <= year <= year_end:
+        if year is None or not year_start <= year <= year_end_bound:
             continue
         if work_type_excluded(row["work_type"]):
             continue
@@ -442,10 +454,16 @@ async def _openalex_only_section(
 
 
 async def author_profile(
-    session: AsyncSession, institution: Institution, pure_uuid: str
+    session: AsyncSession,
+    institution: Institution,
+    pure_uuid: str,
+    year_range: tuple[int, int] | None = None,
 ) -> dict[str, Any] | None:
     """Full profile bundle; None = unknown author (404 upstream). All
-    per-author work views are bounded to the institution's data window."""
+    per-author work views are bounded to the institution's data window,
+    or to the explicit publication-year range when one is active (the
+    journals list, suggestions and topics keep the window: journal
+    attributes stay unfiltered by the year range)."""
     iid = institution.id
     author = await session.scalar(
         select(Author).where(Author.institution_id == iid, Author.pure_uuid == pure_uuid)
@@ -457,7 +475,7 @@ async def author_profile(
     in_window = (
         Work.institution_id == iid,
         Work.retired_at.is_(None),
-        *work_window(institution),
+        *work_year_window(institution, year_range),
     )
     work_rows = (
         await session.execute(
@@ -529,7 +547,7 @@ async def author_profile(
     similar, alternatives = await _similar_sections(session, iid, journal_rows, embeddings)
 
     openalex_section, openalex_only_count = await _openalex_only_section(
-        session, institution, author, work_rows
+        session, institution, author, work_rows, year_range
     )
 
     return {

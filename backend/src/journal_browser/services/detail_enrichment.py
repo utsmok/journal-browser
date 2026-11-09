@@ -26,7 +26,7 @@ from ..models import (
     WorkPureAuthor,
 )
 from . import ut_metadata
-from .works_query import work_type_not_excluded, year_end
+from .works_query import work_type_not_excluded, work_year_window
 
 OPENALEX_URL = "https://openalex.org"
 
@@ -42,10 +42,14 @@ _WORK_COLUMNS = (
 
 
 async def _venue_work_rows(
-    session: AsyncSession, issn_l: str, institution: Institution
+    session: AsyncSession,
+    issn_l: str,
+    institution: Institution,
+    year_range: tuple[int, int] | None = None,
 ) -> list[Any]:
     """The stats population: this institution's Pure canonical works for
-    the journal inside the publication-year window, retired dropped,
+    the journal inside the publication-year window (or the explicit clamped
+    range the search card filters by), retired dropped,
     never-journal-output types excluded — the exact write_pure_canon_stats
     row set (and therefore journal_flags.works_count, the search card)."""
     return list(
@@ -56,7 +60,7 @@ async def _venue_work_rows(
                     Work.institution_id == institution.id,
                     Work.journal_issn_l == issn_l,
                     Work.retired_at.is_(None),
-                    Work.year.between(institution.data_window_start, year_end(institution)),
+                    *work_year_window(institution, year_range),
                     work_type_not_excluded(Work.work_type),
                 )
                 .order_by(Work.pure_uuid)
@@ -154,13 +158,14 @@ async def list_works(
     institution: Institution,
     page: int,
     page_size: int,
+    year_range: tuple[int, int] | None = None,
 ) -> dict[str, Any]:
     """Paginated works over the stats population (see _venue_work_rows),
     store-enriched per DOI. Sorting stays in Python (bounded per journal):
     publication_year desc nulls last, cited_by_count desc, title asc.
     Page rows carry their Pure authors and research groups; pure_uuid
     rides along for the author lookup and WorkItem drops it on render."""
-    rows = await _venue_work_rows(session, issn_l, institution)
+    rows = await _venue_work_rows(session, issn_l, institution, year_range)
     store_by_doi = await _store_by_doi(
         session, institution.id, sorted({r.doi_normalized for r in rows if r.doi_normalized})
     )

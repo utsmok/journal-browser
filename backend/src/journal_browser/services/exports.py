@@ -43,7 +43,7 @@ from .authorship import (
     work_authors_of,
 )
 from .publishers import group_issns
-from .works_query import author_works_join, work_window
+from .works_query import author_works_join, work_year_window
 
 #: CSV column order; every export uses exactly this header row.
 CSV_COLUMNS = (
@@ -329,7 +329,10 @@ def _csv_response(filename: str, rows: Iterable[list[str]]) -> StreamingResponse
 
 
 async def journal_openalex_only_csv(
-    session: AsyncSession, institution: Institution, issn_l: str
+    session: AsyncSession,
+    institution: Institution,
+    issn_l: str,
+    year_range: tuple[int, int] | None = None,
 ) -> StreamingResponse:
     """Uncapped CSV of the journal's CRIS-gap list (same gates as the
     on-screen card)."""
@@ -339,7 +342,7 @@ async def journal_openalex_only_csv(
     predicate = [
         OpenalexWork.venue_issn_l.in_([issn]),
         OpenalexWork.source != AUTHOR_SWEEP_PREFIX,
-        *store_gates(institution),
+        *store_gates(institution, year_range),
         not_in_pure(),
     ]
     rows = (await session.execute(_export_stmt(institution, predicate))).all()
@@ -349,7 +352,10 @@ async def journal_openalex_only_csv(
 
 
 async def publisher_openalex_only_csv(
-    session: AsyncSession, institution: Institution, name: str
+    session: AsyncSession,
+    institution: Institution,
+    name: str,
+    year_range: tuple[int, int] | None = None,
 ) -> StreamingResponse:
     """Uncapped CSV of the publisher group's CRIS-gap list (same issn
     resolution and gates as the on-screen card)."""
@@ -359,7 +365,7 @@ async def publisher_openalex_only_csv(
     predicate = [
         OpenalexWork.venue_issn_l.in_(sorted(set(issns))),
         OpenalexWork.source != AUTHOR_SWEEP_PREFIX,
-        *store_gates(institution),
+        *store_gates(institution, year_range),
         not_in_pure(),
     ]
     rows = (await session.execute(_export_stmt(institution, predicate))).all()
@@ -369,7 +375,11 @@ async def publisher_openalex_only_csv(
 
 
 async def author_works_csv(
-    session: AsyncSession, institution: Institution, pure_uuid: str, scope: str
+    session: AsyncSession,
+    institution: Institution,
+    pure_uuid: str,
+    scope: str,
+    year_range: tuple[int, int] | None = None,
 ) -> StreamingResponse:
     """The author's works as an uncapped CSV: scope=missed serves the
     openalex-only list (same gates as the profile section), scope=canon
@@ -382,17 +392,24 @@ async def author_works_csv(
     if author is None:
         raise HTTPException(status_code=404, detail="author not found")
     if scope == "canon":
-        return await _canon_csv(session, institution, author)
-    return await _missed_csv(session, institution, author)
+        return await _canon_csv(session, institution, author, year_range)
+    return await _missed_csv(session, institution, author, year_range)
 
 
 async def _missed_csv(
-    session: AsyncSession, institution: Institution, author: Author
+    session: AsyncSession,
+    institution: Institution,
+    author: Author,
+    year_range: tuple[int, int] | None = None,
 ) -> StreamingResponse:
     aids = sorted({a.lower() for a in (author.openalex_ids or []) if a})
     rows: list[Any] = []
     if aids:
-        predicate = [attributed_to_any(aids), *store_gates(institution), not_in_pure()]
+        predicate = [
+            attributed_to_any(aids),
+            *store_gates(institution, year_range),
+            not_in_pure(),
+        ]
         rows = (await session.execute(_export_stmt(institution, predicate))).all()
     return await _store_csv_response(
         session, institution, rows, f"{_safe_filename(author.pure_uuid)}-works-missed.csv"
@@ -400,7 +417,10 @@ async def _missed_csv(
 
 
 async def _canon_csv(
-    session: AsyncSession, institution: Institution, author: Author
+    session: AsyncSession,
+    institution: Institution,
+    author: Author,
+    year_range: tuple[int, int] | None = None,
 ) -> StreamingResponse:
     rows = (
         await session.execute(
@@ -419,7 +439,7 @@ async def _canon_csv(
             .where(
                 Work.institution_id == institution.id,
                 Work.retired_at.is_(None),
-                *work_window(institution),
+                *work_year_window(institution, year_range),
             )
             .order_by(Work.year.desc(), func.lower(Work.title))
         )

@@ -9,10 +9,32 @@ from ..db import get_session
 from ..deps import InstitutionDep
 from ..schemas import OrgUnitDetailResponse, OrgUnitSearchResponse
 from ..services import orgunits as orgunits_service
+from ..services.works_query import clamped_year_range
 
 router = APIRouter(prefix="/orgunits", tags=["orgunits"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+#: Publication-year range for the detail works counts; clamped to the
+#: institution's data window, None = full window (today's behavior).
+YearFrom = Annotated[
+    int | None,
+    Query(
+        ge=1900,
+        le=2100,
+        description="Publication-year range start (clamped to the "
+        "institution's data window; default: the full window)",
+    ),
+]
+YearTo = Annotated[
+    int | None,
+    Query(
+        ge=1900,
+        le=2100,
+        description="Publication-year range end (clamped to the "
+        "institution's data window; default: the full window)",
+    ),
+]
 
 
 def _split(raw: str | None) -> list[str] | None:
@@ -60,9 +82,19 @@ async def search_orgunits(
 
 @router.get("/faculty/{name:path}", response_model=OrgUnitDetailResponse)
 async def faculty_detail(
-    name: str, session: SessionDep, institution: InstitutionDep
+    name: str,
+    session: SessionDep,
+    institution: InstitutionDep,
+    year_from: YearFrom = None,
+    year_to: YearTo = None,
 ) -> OrgUnitDetailResponse:
-    detail = await orgunits_service.orgunit_detail(session, institution, "faculty", name)
+    detail = await orgunits_service.orgunit_detail(
+        session,
+        institution,
+        "faculty",
+        name,
+        year_range=clamped_year_range(institution, year_from, year_to),
+    )
     if detail is None:
         raise HTTPException(status_code=404, detail="orgunit not found")
     return OrgUnitDetailResponse(**detail)
@@ -70,9 +102,19 @@ async def faculty_detail(
 
 @router.get("/group/{name:path}", response_model=OrgUnitDetailResponse)
 async def group_detail(
-    name: str, session: SessionDep, institution: InstitutionDep
+    name: str,
+    session: SessionDep,
+    institution: InstitutionDep,
+    year_from: YearFrom = None,
+    year_to: YearTo = None,
 ) -> OrgUnitDetailResponse:
-    detail = await orgunits_service.orgunit_detail(session, institution, "group", name)
+    detail = await orgunits_service.orgunit_detail(
+        session,
+        institution,
+        "group",
+        name,
+        year_range=clamped_year_range(institution, year_from, year_to),
+    )
     if detail is None:
         raise HTTPException(status_code=404, detail="orgunit not found")
     return OrgUnitDetailResponse(**detail)
@@ -80,9 +122,19 @@ async def group_detail(
 
 @router.get("/institute/{name:path}", response_model=OrgUnitDetailResponse)
 async def institute_detail(
-    name: str, session: SessionDep, institution: InstitutionDep
+    name: str,
+    session: SessionDep,
+    institution: InstitutionDep,
+    year_from: YearFrom = None,
+    year_to: YearTo = None,
 ) -> OrgUnitDetailResponse:
-    detail = await orgunits_service.orgunit_detail(session, institution, "institute", name)
+    detail = await orgunits_service.orgunit_detail(
+        session,
+        institution,
+        "institute",
+        name,
+        year_range=clamped_year_range(institution, year_from, year_to),
+    )
     if detail is None:
         raise HTTPException(status_code=404, detail="orgunit not found")
     return OrgUnitDetailResponse(**detail)

@@ -52,12 +52,16 @@ def _unavailable() -> dict[str, Any]:
     return {"total": 0, "items": [], "available": False}
 
 
-def store_gates(institution: Institution) -> list[Any]:
+def store_gates(institution: Institution, year_range: tuple[int, int] | None = None) -> list[Any]:
     """Window + type gates for store rows, mirroring the author page's
     openalex-only merge: NULL years drop (outside any window), NULL types
-    stay (OpenAlex's vocabulary is sparser than Pure's)."""
+    stay (OpenAlex's vocabulary is sparser than Pure's). An explicit
+    clamped year range replaces the window bounds."""
+    start, end = (
+        year_range if year_range else (institution.data_window_start, year_end(institution))
+    )
     return [
-        OpenalexWork.year.between(institution.data_window_start, year_end(institution)),
+        OpenalexWork.year.between(start, end),
         func.coalesce(work_type_not_excluded(OpenalexWork.work_type), True),
     ]
 
@@ -251,6 +255,7 @@ async def venue_openalex_only(
     *,
     issn_l: str | None = None,
     issns: list[str] | None = None,
+    year_range: tuple[int, int] | None = None,
 ) -> dict[str, Any]:
     """Store works in the venue(s) the Pure population does not hold.
 
@@ -273,14 +278,17 @@ async def venue_openalex_only(
         [
             OpenalexWork.venue_issn_l.in_(venue_issns),
             OpenalexWork.source != AUTHOR_SWEEP_PREFIX,
-            *store_gates(institution),
+            *store_gates(institution, year_range),
             not_in_pure(),
         ],
     )
 
 
 async def author_ids_openalex_only(
-    session: AsyncSession, institution: Institution, aids: list[str]
+    session: AsyncSession,
+    institution: Institution,
+    aids: list[str],
+    year_range: tuple[int, int] | None = None,
 ) -> dict[str, Any]:
     """Store works attributed to any of the given OpenAlex author ids the
     Pure population does not hold (org-unit gap card).
@@ -295,7 +303,9 @@ async def author_ids_openalex_only(
     if not flat:
         return {"total": 0, "items": [], "available": await local_store_ready(session, institution)}
     return await _store_gap_payload(
-        session, institution, [attributed_to_any(flat), *store_gates(institution), not_in_pure()]
+        session,
+        institution,
+        [attributed_to_any(flat), *store_gates(institution, year_range), not_in_pure()],
     )
 
 

@@ -27,6 +27,30 @@ def year_end(institution: Any) -> int:
     return end if end is not None else WINDOW_OPEN_END
 
 
+def clamped_year_range(
+    institution: Any,
+    year_from: int | None,
+    year_to: int | None,
+) -> tuple[int, int] | None:
+    """Explicit publication-year range clamped inside the institution's
+    data window; None when no bound was passed (the default view, exactly
+    today's behavior).
+
+    Both bounds come back concrete so callers can replace the window gates
+    wholesale when a range is active. An open window end fills to
+    WINDOW_OPEN_END like year_end; from > to raises ValueError (the
+    app-level handler answers 400)."""
+    if year_from is None and year_to is None:
+        return None
+    if year_from is not None and year_to is not None and year_from > year_to:
+        raise ValueError("year_from must not be after year_to")
+    start = institution.data_window_start
+    end = year_end(institution)
+    lo = start if year_from is None else max(year_from, start)
+    hi = end if year_to is None else min(year_to, end)
+    return (lo, hi)
+
+
 def work_type_not_excluded(column: Any) -> ColumnElement:
     """SQL twin of config.work_type_excluded: the normalized work type
     (lower-cased, info:eu-repo/semantics/ stripped, hyphens collapsed) is
@@ -68,6 +92,18 @@ def work_window(institution: Any) -> tuple[ColumnElement, ColumnElement]:
         Work.year >= institution.data_window_start,
         Work.year <= year_end(institution),
     )
+
+
+def work_year_window(
+    institution: Any, year_range: tuple[int, int] | None
+) -> tuple[ColumnElement, ColumnElement]:
+    """Work year bounds for the explicit clamped range, or work_window's
+    default when no range is active. One definition for every works-list
+    query the publication-year filter threads through."""
+    if year_range is None:
+        return work_window(institution)
+    lo, hi = year_range
+    return (Work.year >= lo, Work.year <= hi)
 
 
 def strata_bound(column: Any, stratum: str) -> ColumnElement:

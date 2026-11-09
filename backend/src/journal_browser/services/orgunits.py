@@ -38,6 +38,7 @@ from .works_query import (
     unit_author_join,
     unit_work_join,
     work_window,
+    work_year_window,
 )
 
 DEFAULT_LIMIT = 20
@@ -407,9 +408,16 @@ async def search_orgunits(
 
 
 async def orgunit_detail(
-    session: AsyncSession, institution: Institution, level: str, name: str
+    session: AsyncSession,
+    institution: Institution,
+    level: str,
+    name: str,
+    year_range: tuple[int, int] | None = None,
 ) -> dict[str, Any] | None:
-    """Full unit bundle; None = unknown unit (404 upstream)."""
+    """Full unit bundle; None = unknown unit (404 upstream). An explicit
+    publication-year range narrows the venue works counts and the CRIS-gap
+    card; per-year rows (works_by_year), the author rollups and deal usage
+    keep the data window (journal attributes stay unfiltered)."""
     iid = institution.id
     require_confirmed = institution.require_confirmed_affiliation
     unit = (await _snapshot(session, institution)).get(level, {}).get(name)
@@ -468,7 +476,7 @@ async def orgunit_detail(
             .where(
                 *membership,
                 Work.retired_at.is_(None),
-                *work_window(institution),
+                *work_year_window(institution, year_range),
                 *([Journal.issn_l.not_in(sorted(set(ignored)))] if ignored else []),
             )
             .group_by(
@@ -637,7 +645,9 @@ async def orgunit_detail(
             for r in author_rows
         ],
         "works_by_year": works_by_year,
-        "openalex_only": await author_ids_openalex_only(session, institution, member_aids),
+        "openalex_only": await author_ids_openalex_only(
+            session, institution, member_aids, year_range
+        ),
         "deal_usage": [
             {"label": r.label, "n_works": int(r.n_works), "euro": float(r.euro)} for r in usage_rows
         ],

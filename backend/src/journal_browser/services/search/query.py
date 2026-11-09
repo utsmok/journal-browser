@@ -15,7 +15,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...models import IssnMap, Journal, JournalApcAggregate, JournalFlags
+from ...models import InstitutionWorksStats, IssnMap, Journal, JournalApcAggregate, JournalFlags
 from ...vocab import GreenOa
 from ..funder_fit import fit_case
 from .classify import _oa_type
@@ -134,6 +134,8 @@ def base_query(
     funder_fit_value: str | None = None,
     pub_type: str | None = None,
     languages: list[str] | None = None,
+    year_from: int | None = None,
+    year_to: int | None = None,
 ):
     """Filtered select with computed columns; search + facet counts share it.
 
@@ -141,7 +143,15 @@ def base_query(
     (works_window_plus > 3), plus every other OpenAlex venue type with at
     least one institution work (book series, conference, ...; owner
     decision 2026-11-04). Scoped to one institution's journal_flags row,
-    and the proceedings exclusion always applies."""
+    and the proceedings exclusion always applies.
+
+    An explicit publication-year range (clamped by the caller, both bounds
+    set or both None) swaps the denormalized per-journal works count for a
+    year-scoped SUM over institution_works_stats. The stats source mirrors
+    the flags column's own pipeline (harvest.denorm WORKS_COUNT_SQL:
+    pure_canon rows only, LEFT JOIN semantics -> 0 without rows); journal
+    attributes, the corpus cutoff (works_window_plus) and the relevance
+    rank's global-prominence term stay unfiltered."""
     J = Journal
     F = JournalFlags
     # Admin ignore-list (settings.yaml): hidden from every listing, detail
@@ -158,6 +168,27 @@ def base_query(
         .where(F.institution_id == institution_id)
         .subquery()
     )
+    # Year-scoped per-journal works (same pure_canon-only population the
+    # denormalized column sums, bounded to the clamped range). Outer join:
+    # journals without in-range stats rows keep their zero.
+    year_active = year_from is not None
+    yearly = None
+    if year_active:
+        yearly = (
+            select(
+                InstitutionWorksStats.issn_l.label("issn_l"),
+                func.sum(InstitutionWorksStats.works_count).label("works_count"),
+            )
+            .where(
+                InstitutionWorksStats.institution_id == institution_id,
+                InstitutionWorksStats.source == "pure_canon",
+                InstitutionWorksStats.year >= year_from,
+                InstitutionWorksStats.year <= year_to,
+            )
+            .group_by(InstitutionWorksStats.issn_l)
+            .subquery()
+        )
+    year_works = func.coalesce(yearly.c.works_count, 0) if year_active else flags.c.works_count
     covered = flags.c.deal_covered
     if q and not fuzzy:
         qstr = q.strip()
@@ -186,7 +217,7 @@ def base_query(
             J.in_scimago,
             J.last_active_year,
             covered.label("deal_covered"),
-            flags.c.works_count.label("works"),
+            year_works.label("works"),
             J.latest_quartile.label("quartile"),
             twoyr,
             oa_type,
@@ -238,6 +269,10 @@ def base_query(
             *([J.issn_l.not_in(sorted(set(ignored)))] if ignored else []),
         )
     )
+    if year_active:
+        # Journals without in-range stats rows must stay listed (works: 0),
+        # so the year sum joins outside.
+        query = query.outerjoin(yearly, yearly.c.issn_l == J.issn_l)
     if oa_types:
         query = query.where(oa_type.in_(oa_types))
     if funder_fit_value:
@@ -314,7 +349,7 @@ def base_query(
     if has_apc is not None:
         query = query.where(APC_SHOWN if has_apc else ~APC_SHOWN)
     if has_works is not None:
-        query = query.where(flags.c.works_count > 0 if has_works else flags.c.works_count == 0)
+        query = query.where(year_works > 0 if has_works else year_works == 0)
     if green_oa:
         query = query.where(GREEN_OA_CONDS[GreenOa(green_oa)])
     return query

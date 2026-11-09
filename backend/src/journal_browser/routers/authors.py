@@ -18,6 +18,7 @@ from ..schemas import (
 )
 from ..services import authors as authors_service
 from ..services import exports as exports_service
+from ..services.works_query import clamped_year_range
 
 router = APIRouter(prefix="/authors", tags=["authors"])
 
@@ -70,9 +71,34 @@ async def search_authors(
 
 @router.get("/{pure_uuid}", response_model=AuthorProfileResponse)
 async def author_profile(
-    pure_uuid: str, session: SessionDep, institution: InstitutionDep
+    pure_uuid: str,
+    session: SessionDep,
+    institution: InstitutionDep,
+    year_from: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range start (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    year_to: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range end (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
 ) -> AuthorProfileResponse:
-    profile = await authors_service.author_profile(session, institution, pure_uuid)
+    profile = await authors_service.author_profile(
+        session,
+        institution,
+        pure_uuid,
+        year_range=clamped_year_range(institution, year_from, year_to),
+    )
     if profile is None:
         raise HTTPException(status_code=404, detail="author not found")
     return AuthorProfileResponse(
@@ -107,7 +133,31 @@ async def author_works_csv(
     session: SessionDep,
     institution: InstitutionDep,
     scope: str = "missed",
+    year_from: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range start (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    year_to: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range end (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
 ) -> StreamingResponse:
     """Uncapped CSV of the author's works: scope=missed (default) serves
     the openalex-only list, scope=canon the Pure works; 400 otherwise."""
-    return await exports_service.author_works_csv(session, institution, pure_uuid, scope)
+    return await exports_service.author_works_csv(
+        session,
+        institution,
+        pure_uuid,
+        scope,
+        year_range=clamped_year_range(institution, year_from, year_to),
+    )

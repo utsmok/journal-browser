@@ -41,6 +41,8 @@ async def facet_counts(
     languages: list[str] | None = None,
     funder_struct: dict[str, Any] | None = None,
     funder_fit_value: str | None = None,
+    year_from: int | None = None,
+    year_to: int | None = None,
 ) -> tuple[dict[str, dict[str, int]], int]:
     """Facet counts over the query-filtered set. Each facet's own filter is
     excluded so a chip shows what selecting it would yield; all other active
@@ -81,11 +83,16 @@ async def facet_counts(
     # (tests/test_admin_deals.py) live.
     from journal_browser.services import search
 
+    # An active publication-year range joins the key (inactive: (None, None)
+    # leaves the landing-view key untouched); the router clamps both bounds
+    # to the institution window, so the pair fully identifies the counts.
     cache_key = (
         "facets",
         institution_id,
         hash(tuple(sorted(search.get_settings().ignored_issns))),
         await cache_epoch(session),
+        year_from,
+        year_to,
     )
     if cacheable:
         hit = cache_get(FACET_CACHE, cache_key, 86400)
@@ -111,6 +118,8 @@ async def facet_counts(
         # funders get no facet: every journal is untiered).
         "funder_fit": funder_fit_mod.policy_structured(funder_struct),
         "funder_fit_value": funder_fit_value,
+        "year_from": year_from,
+        "year_to": year_to,
     }
 
     def base_sub(**override: Any) -> Any:
