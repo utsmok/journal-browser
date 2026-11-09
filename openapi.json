@@ -2349,6 +2349,46 @@
               "title": "Funder"
             },
             "description": "Jisc OPF funder id"
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
           }
         ],
         "responses": {
@@ -2431,6 +2471,46 @@
               "default": 25,
               "title": "Limit"
             }
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
           }
         ],
         "responses": {
@@ -2482,6 +2562,46 @@
               "type": "string",
               "title": "Institution Code"
             }
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
           }
         ],
         "responses": {
@@ -3170,6 +3290,46 @@
               "default": true,
               "title": "Include Facets"
             }
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
           }
         ],
         "responses": {
@@ -3311,6 +3471,46 @@
               "type": "string",
               "title": "Institution Code"
             }
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
           }
         ],
         "responses": {
@@ -3502,6 +3702,46 @@
               "default": true,
               "title": "Include Facets"
             }
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
           }
         ],
         "responses": {

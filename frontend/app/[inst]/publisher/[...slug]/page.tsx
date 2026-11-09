@@ -348,7 +348,10 @@ export default function PublisherPage() {
   const backHref = `/${inst}/publisher`;
   const name = params?.slug?.map(decodeURIComponent).join("/") ?? "";
   const { year_from, year_to } = useYearRange();
-  const { data, isPending, isError, error } = usePublisher(name || undefined);
+  const { data, isPending, isError, error } = usePublisher(name || undefined, {
+    year_from,
+    year_to,
+  });
 
   // Per-card pagination, author-detail style (the list is capped at 200).
   const PAGE_SIZE = 20;
@@ -368,8 +371,9 @@ export default function PublisherPage() {
     );
 
   const { publisher, journals, deals, deal_discrepancies, n_discrepancies, works_by_year } = data;
-  // Publisher detail has no year params, so the trend is filtered here;
-  // OaTrend shows its empty state when the span holds no years.
+  // works_by_year stays full-window rows; the trend filters to the lens
+  // client-side (orgunit/author convention). OaTrend shows its empty
+  // state when the span holds no years.
   const trendYears = works_by_year.filter(
     (s) =>
       (year_from === undefined || s.year >= year_from) &&

@@ -360,10 +360,33 @@ async def journal_detail(
     session: SessionDep,
     institution: InstitutionDep,
     funder: Annotated[int | None, Query(description="Jisc OPF funder id")] = None,
+    year_from: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range start (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    year_to: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range end (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
 ) -> JournalDetailResponse:
     journal = await session.scalar(select(Journal).where(Journal.issn_l == issn_l.upper()))
     if journal is None or _is_ignored(journal.issn_l):
         raise HTTPException(status_code=404, detail="journal not found")
+    # Works-derived detail sections (UT authorship, OpenAIRE matches, the
+    # canonical institution metrics, the CRIS gap) narrow to the range; the
+    # venue registry aggregates (OpenAlex venue metrics, SJR, deals, APC
+    # evidence) stay window/attribute-based.
+    year_range = clamped_year_range(institution, year_from, year_to)
 
     # Publisher registry links (Open Access NL deals profile), keyed by the
     # same canonical grouping the publisher directory uses.
@@ -608,19 +631,25 @@ async def journal_detail(
         openalex=OpenalexInfo(**openalex_info) if openalex_info else None,
         openaire=OpenaireInfo(
             matched_works=await detail_enrichment.openaire_matched(
-                session, journal.issn_l, institution.id
+                session, journal.issn_l, institution.id, year_range
             )
         ),
         green_oa=green_oa,
         funder_fit=funder_fit,
         institution_metrics=InstitutionMetrics(
-            **await detail_enrichment.institution_metrics(session, journal.issn_l, institution)
+            **await detail_enrichment.institution_metrics(
+                session, journal.issn_l, institution, year_range
+            )
         ),
         ut_authorship=UTAuthorship(
-            **await authorship.venue_authorship(session, institution, issn_l=journal.issn_l)
+            **await authorship.venue_authorship(
+                session, institution, issn_l=journal.issn_l, year_range=year_range
+            )
         ),
         openalex_only=OpenalexOnly(
-            **await authorship.venue_openalex_only(session, institution, issn_l=journal.issn_l)
+            **await authorship.venue_openalex_only(
+                session, institution, issn_l=journal.issn_l, year_range=year_range
+            )
         ),
         attribution={
             **ATTRIBUTION,

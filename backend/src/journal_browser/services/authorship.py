@@ -29,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..harvest.openalex_works import AUTHOR_SWEEP_PREFIX
 from ..models import Author, Institution, Journal, OpenalexWork, Work, WorkPureAuthor
-from .works_query import work_type_not_excluded, year_end
+from .works_query import work_type_not_excluded, work_year_window, year_end
 
 TOP_AUTHORS = 10
 #: Items served per OpenalexOnly payload; total stays exact beyond it.
@@ -315,6 +315,7 @@ async def venue_authorship(
     *,
     issn_l: str | None = None,
     issns: list[str] | None = None,
+    year_range: tuple[int, int] | None = None,
 ) -> dict[str, Any]:
     """Who at this institution authors the venue's canonical works.
 
@@ -322,7 +323,9 @@ async def venue_authorship(
     authors, all over one population: the works-table rows the search
     card counts, restricted to rows with at least one UT author edge.
     Rows whose faculty/research_group attribute is missing stay in
-    n_ut_works but form no bucket."""
+    n_ut_works but form no bucket. An explicit publication-year range
+    replaces the data-window bounds (the works-derived numbers scope;
+    None keeps the window, byte-identical)."""
     venue_issns = [issn_l] if issn_l is not None else sorted(set(issns or []))
     empty: dict[str, Any] = {
         "n_ut_works": 0,
@@ -336,7 +339,7 @@ async def venue_authorship(
         Work.institution_id == institution.id,
         Work.journal_issn_l.in_(venue_issns),
         Work.retired_at.is_(None),
-        Work.year.between(institution.data_window_start, year_end(institution)),
+        *work_year_window(institution, year_range),
         work_type_not_excluded(Work.work_type),
     ]
     pairs = (

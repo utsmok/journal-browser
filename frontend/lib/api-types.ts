@@ -4606,6 +4606,10 @@ export interface operations {
             query?: {
                 /** @description Jisc OPF funder id */
                 funder?: number | null;
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
             };
             header?: never;
             path: {
@@ -4642,6 +4646,10 @@ export interface operations {
                 q?: string | null;
                 offset?: number;
                 limit?: number;
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
             };
             header?: never;
             path: {
@@ -4673,7 +4681,12 @@ export interface operations {
     };
     funder_detail_api_v1__institution_code__funders__funder_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+            };
             header?: never;
             path: {
                 funder_id: number;
@@ -4840,6 +4853,10 @@ export interface operations {
                 offset?: number;
                 limit?: number;
                 include_facets?: boolean;
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
             };
             header?: never;
             path: {
@@ -4908,7 +4925,12 @@ export interface operations {
     };
     publisher_detail_api_v1__institution_code__publishers__name__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+            };
             header?: never;
             path: {
                 name: string;
@@ -4951,6 +4973,10 @@ export interface operations {
                 offset?: number;
                 limit?: number;
                 include_facets?: boolean;
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
             };
             header?: never;
             path: {

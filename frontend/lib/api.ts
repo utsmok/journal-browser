@@ -325,8 +325,15 @@ export async function fetchPublishers(
   return data;
 }
 
-export async function fetchPublisher(inst: string, name: string): Promise<PublisherDetailResponse> {
-  return apiGet<PublisherDetailResponse>(`/${inst}/publishers/${encodeNamePath(name)}`);
+export async function fetchPublisher(
+  inst: string,
+  name: string,
+  years?: YearParams,
+): Promise<PublisherDetailResponse> {
+  return apiGet<PublisherDetailResponse>(`/${inst}/publishers/${encodeNamePath(name)}`, {
+    year_from: years?.year_from,
+    year_to: years?.year_to,
+  });
 }
 
 export async function fetchOrgUnits(

@@ -481,13 +481,21 @@ async def group_issns(session: AsyncSession, institution_id: int, name: str) -> 
 
 
 async def publisher_detail(
-    session: AsyncSession, institution: Institution, name: str
+    session: AsyncSession,
+    institution: Institution,
+    name: str,
+    years: tuple[int, int] | None = None,
 ) -> dict[str, Any] | None:
     """Full publisher bundle; None = no browsable journal under this
     canonical key (404 upstream). Deals reuse the journal-detail
-    participation join."""
+    participation join.
+
+    An active publication-year range serves the year-scoped snapshot
+    (search convention): the header's works sum and the journal table's
+    works column become the year-scoped pure_canon stats sums, while the
+    roster membership and every journal attribute stay unfiltered."""
     iid = institution.id
-    snapshot = await _snapshot(session, iid)
+    snapshot = await _snapshot(session, iid, years)
     pub = snapshot.get(name)
     if pub is None:
         # Sub-brand name requested (e.g. "Cambridge University Press" groups
@@ -518,8 +526,14 @@ async def publisher_detail(
 
     # Same page assembly as search_journals (no facets, no cursor), scoped
     # to the canonical key so sub-brand publisher_names join the group.
+    # The year range swaps the works column for the year-scoped stats sum,
+    # exactly like the search (base_query convention).
     subq = (
-        base_query(institution_id=iid)
+        base_query(
+            institution_id=iid,
+            year_from=years[0] if years else None,
+            year_to=years[1] if years else None,
+        )
         .where(
             grouping_key() == name,
             Journal.publisher_name.is_not(None),

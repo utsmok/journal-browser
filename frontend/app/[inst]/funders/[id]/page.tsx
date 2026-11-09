@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { useFunder } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
+import { useYearRange } from "@/hooks/use-year-filter";
 import { errorMessage, type FunderDetailResponse } from "@/lib/api";
 import { useFunderPrefs } from "@/lib/funder-prefs";
 
@@ -238,7 +239,8 @@ export default function FunderPage() {
   const site = useSiteMeta();
   const [funder, setFunder] = useFunderPrefs();
   const id = params?.id ? Number(params.id) : undefined;
-  const { data, isPending, isError, error, refetch } = useFunder(id);
+  const { year_from, year_to } = useYearRange();
+  const { data, isPending, isError, error, refetch } = useFunder(id, { year_from, year_to });
 
   return (
     <div className="mx-auto max-w-screen-2xl px-4 py-10">

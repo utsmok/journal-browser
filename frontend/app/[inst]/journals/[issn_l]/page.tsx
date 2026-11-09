@@ -1090,10 +1090,14 @@ function JournalPageInner() {
   const issnL = params?.issn_l ? decodeURIComponent(params.issn_l) : undefined;
   const backHref = useLastSearchHref();
   const [funder] = useFunderPrefs();
+  const { year_from, year_to } = useYearRange();
   // Expanded-list state: topics chips and similar-journal groups.
   const [allTopics, setAllTopics] = React.useState(false);
   const [openSimilar, setOpenSimilar] = React.useState<Record<string, boolean>>({});
-  const { data, isPending, isError, error } = useJournal(issnL, funder?.id);
+  const { data, isPending, isError, error } = useJournal(issnL, funder?.id, {
+    year_from,
+    year_to,
+  });
   // Old backends lack /similar; the section simply stays hidden then.
   const similarQuery = useSimilar(issnL);
   const similar = similarQuery.data;
@@ -1102,7 +1106,6 @@ function JournalPageInner() {
   const searchParams = useSearchParams();
   const pParam = parseInt(searchParams.get("page") ?? "", 10);
   const requestedWorksPage = Number.isFinite(pParam) && pParam > 0 ? pParam : 1;
-  const { year_from, year_to } = useYearRange();
   const worksQuery = useJournalWorks(issnL, requestedWorksPage, { year_from, year_to });
   const similarEmpty =
     !similar ||

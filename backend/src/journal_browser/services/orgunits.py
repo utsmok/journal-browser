@@ -509,15 +509,23 @@ async def orgunit_detail(
     year_range: tuple[int, int] | None = None,
 ) -> dict[str, Any] | None:
     """Full unit bundle; None = unknown unit (404 upstream). An explicit
-    publication-year range narrows the venue works counts, the CRIS-gap
-    card and the faculty's child-group roster (same scoping as the
-    groups list); per-year rows (works_by_year), the author rollups and
-    deal usage keep the data window (journal attributes stay unfiltered)."""
+    publication-year range narrows the works-derived sections — the unit
+    header (works/deal/authors counts via the _scoped_units merge), the
+    venue works counts, the member authors' in-range works counts, the
+    deal-usage work set and the CRIS-gap card (same scoping as the groups
+    list); per-year rows (works_by_year) keep the data window, the unit's
+    APC rollups stay snapshot, and the deal-usage euro follows the
+    narrowed work set (journal attributes stay unfiltered)."""
     iid = institution.id
     require_confirmed = institution.require_confirmed_affiliation
     unit = (await _snapshot(session, institution)).get(level, {}).get(name)
     if unit is None:
         return None
+    if year_range is not None:
+        # Works-derived header counts recomputed inside the range (the
+        # list's merge, applied to the one unit); attribute columns and
+        # the APC rollups stay snapshot.
+        unit = (await _scoped_units(session, institution, level, year_range, {name: unit}))[name]
 
     topics_by_unit = await _unit_topics(
         session, iid, level, require_confirmed, [name], TOPICS_PER_DETAIL
@@ -590,18 +598,41 @@ async def orgunit_detail(
         )
     ).all()
 
+    # Member rows: the denormalized n_works answers by default; an active
+    # range recomputes it from the stored work edges (the authors-list
+    # convention, same aggregation as search_authors' scoped subquery —
+    # edge population, confirmed gate unchanged).
+    scoped_n = None
+    if year_range is not None:
+        lo, hi = year_range
+        scoped_n = (
+            select(
+                AuthorWork.author_pure_uuid.label("author_pure_uuid"),
+                func.count().label("n"),
+            )
+            .select_from(AuthorWork)
+            .join(Work, unit_work_join(iid))
+            .where(AuthorWork.institution_id == iid, Work.year.between(lo, hi))
+            .group_by(AuthorWork.author_pure_uuid)
+            .subquery()
+        )
+    n_col = func.coalesce(scoped_n.c.n, 0) if scoped_n is not None else Author.n_works
+    author_stmt = select(
+        Author.pure_uuid,
+        Author.name,
+        n_col.label("n_works"),
+        Author.orcid,
+        Author.primary_topic,
+    ).where(*membership)
+    if scoped_n is not None:
+        author_stmt = author_stmt.outerjoin(
+            scoped_n, scoped_n.c.author_pure_uuid == Author.pure_uuid
+        )
     author_rows = (
         await session.execute(
-            select(
-                Author.pure_uuid,
-                Author.name,
-                Author.n_works,
-                Author.orcid,
-                Author.primary_topic,
+            author_stmt.order_by(n_col.desc(), func.lower(Author.name), Author.pure_uuid).limit(
+                AUTHOR_CAP
             )
-            .where(*membership)
-            .order_by(Author.n_works.desc(), func.lower(Author.name), Author.pure_uuid)
-            .limit(AUTHOR_CAP)
         )
     ).all()
 
@@ -645,6 +676,9 @@ async def orgunit_detail(
 
     # Deal-covered output grouped by agreement, falling back to the
     # journal's publisher when the evidence carries no agreement label.
+    # An active range narrows the work set (n_works and the euro sum both
+    # describe the in-range works; the best-period evidence join itself is
+    # unchanged).
     unit_works = (
         select(
             Work.pure_uuid.label("work_uuid"),
@@ -664,7 +698,7 @@ async def orgunit_detail(
         .where(
             *membership,
             Work.retired_at.is_(None),
-            *work_window(institution),
+            *work_year_window(institution, year_range),
         )
         .subquery()
     )

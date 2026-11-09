@@ -154,9 +154,34 @@ async def publisher_openalex_only_csv(
 
 @router.get("/{name:path}", response_model=PublisherDetailResponse)
 async def publisher_detail(
-    name: str, session: SessionDep, institution: InstitutionDep
+    name: str,
+    session: SessionDep,
+    institution: InstitutionDep,
+    year_from: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range start (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    year_to: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range end (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
 ) -> PublisherDetailResponse:
-    detail = await publishers_service.publisher_detail(session, institution, name)
+    detail = await publishers_service.publisher_detail(
+        session,
+        institution,
+        name,
+        years=clamped_year_range(institution, year_from, year_to),
+    )
     if detail is None:
         raise HTTPException(status_code=404, detail="publisher not found")
     return PublisherDetailResponse(

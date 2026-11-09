@@ -193,12 +193,18 @@ async def institution_metrics(
     session: AsyncSession,
     issn_l: str,
     institution: Institution,
+    year_range: tuple[int, int] | None = None,
 ) -> dict[str, Any]:
     """Aggregates over the journal's works (both sides bounded to the
     institution's publication-year window): the OpenAlex-side metrics come
     from the venue store rows (SQL, one pass); the canonical side describes
     the same stats population the works list and the search card serve —
-    works-table rows, store-enriched per DOI for retraction/OA status."""
+    works-table rows, store-enriched per DOI for retraction/OA status.
+
+    An explicit publication-year range narrows the canonical (UT works
+    derived) side via the same year-scoped works join the works tab uses;
+    the OpenAlex-side block stays the venue-level store cross-check at the
+    data window (OpenAlex citations/FWCI keep the registry convention)."""
     year_start = institution.data_window_start
     year_end = institution.data_window_end if institution.data_window_end is not None else 9999
     total, fwci_avg, fwci_n, retracted, cited_total = (
@@ -226,7 +232,7 @@ async def institution_metrics(
         "canonical_retracted": None,
         "canonical_oa": None,
     }
-    base = await _venue_work_rows(session, issn_l, institution)
+    base = await _venue_work_rows(session, issn_l, institution, year_range)
     store_by_doi = await _store_by_doi(
         session, institution.id, sorted({r.doi_normalized for r in base if r.doi_normalized})
     )
@@ -278,8 +284,15 @@ async def openalex_info(session: AsyncSession, issn_l: str) -> dict[str, Any] | 
     }
 
 
-async def openaire_matched(session: AsyncSession, issn_l: str, institution_id: int) -> int:
-    """Distinct works of the institution matched in OpenAIRE for the journal."""
+async def openaire_matched(
+    session: AsyncSession,
+    issn_l: str,
+    institution_id: int,
+    year_range: tuple[int, int] | None = None,
+) -> int:
+    """Distinct works of the institution matched in OpenAIRE for the journal
+    (inside the explicit publication-year range when one is active; the
+    unfiltered default keeps today's query)."""
     return (
         await session.scalar(
             select(func.count(func.distinct(WorkIdentity.work_id)))
@@ -292,6 +305,7 @@ async def openaire_matched(session: AsyncSession, issn_l: str, institution_id: i
                 WorkIdentity.institution_id == institution_id,
                 WorkIdentity.source == "openaire",
                 Work.journal_issn_l == issn_l,
+                *([Work.year.between(year_range[0], year_range[1])] if year_range else []),
             )
         )
     ) or 0

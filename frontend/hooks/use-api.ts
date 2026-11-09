@@ -150,13 +150,20 @@ export function useFacets(
   });
 }
 
-export function useJournal(issnL: string | undefined, funderId?: number) {
+export function useJournal(issnL: string | undefined, funderId?: number, years?: YearParams) {
   const inst = useInstitution();
   return useQuery({
-    queryKey: [...qk.journal(inst, issnL ?? ""), funderId ?? null] as const,
+    queryKey: [
+      ...qk.journal(inst, issnL ?? ""),
+      funderId ?? null,
+      years?.year_from ?? null,
+      years?.year_to ?? null,
+    ] as const,
     queryFn: () =>
       apiGet<JournalDetailResponse>(`/${inst}/journals/${issnL}`, {
         funder: funderId,
+        year_from: years?.year_from,
+        year_to: years?.year_to,
       }),
     enabled: Boolean(issnL),
   });
@@ -254,11 +261,19 @@ export function usePublishers(params: PublisherSearchParams) {
   });
 }
 
-export function usePublisher(name: string | undefined) {
+/**
+ * Publisher detail bundle. The year lens, when set, scopes the works
+ * numbers (header sum + journal table) and joins the cache key.
+ */
+export function usePublisher(name: string | undefined, years?: YearParams) {
   const inst = useInstitution();
   return useQuery({
-    queryKey: qk.publisher(inst, name ?? ""),
-    queryFn: () => fetchPublisher(inst, name ?? ""),
+    queryKey: [
+      ...qk.publisher(inst, name ?? ""),
+      years?.year_from ?? null,
+      years?.year_to ?? null,
+    ] as const,
+    queryFn: () => fetchPublisher(inst, name ?? "", years),
     enabled: Boolean(name),
   });
 }
@@ -322,11 +337,19 @@ export function useFunderDirectory(q: string, offset: number, limit: number) {
   });
 }
 
-export function useFunder(id: number | undefined) {
+export function useFunder(id: number | undefined, years?: YearParams) {
   const inst = useInstitution();
   return useQuery({
-    queryKey: qk.funder(inst, id ?? 0),
-    queryFn: () => apiGet<FunderDetailResponse>(`/${inst}/funders/${id}`),
+    queryKey: [
+      ...qk.funder(inst, id ?? 0),
+      years?.year_from ?? null,
+      years?.year_to ?? null,
+    ] as const,
+    queryFn: () =>
+      apiGet<FunderDetailResponse>(`/${inst}/funders/${id}`, {
+        year_from: years?.year_from,
+        year_to: years?.year_to,
+      }),
     enabled: Boolean(id) && inst !== "",
   });
 }
