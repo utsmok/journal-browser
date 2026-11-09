@@ -1,12 +1,13 @@
 """people.utwente.nl profile sweep -> people_utwente_persons / _orgs.
 
 Usage: uv run python jobs/harvest_people_utwente.py [--institution ut]
-    [--limit N] [--retry-missed] [--refresh] [--dry-run]
+    [--limit N] [--retry-missed] [--refresh] [--concurrency N] [--dry-run]
 
-Paces ~0.5 s per author (search + up to 5 profile fetches + optional
-portrait); a full first run over the confirmed roster takes hours — run
-it in chunks with --limit. Per-author outcomes are stamped, so re-runs
-only see new authors (--retry-missed / --refresh re-open old ones).
+Runs `--concurrency` (default 20, matching ea-cli's proven rate against
+the same endpoint) author pipelines in flight; the confirmed roster
+completes in roughly 30-45 minutes. Per-author outcomes are stamped in
+batches of 50, so re-runs only see new authors (--retry-missed /
+--refresh re-open old ones) and a crash loses at most the last batch.
 """
 
 import argparse
@@ -17,7 +18,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
 from journal_browser.harvest.common import resolve_institution, run_harvest
-from journal_browser.harvest.people_utwente import harvest_people_utwente
+from journal_browser.harvest.people_utwente import CONCURRENCY, harvest_people_utwente
 from journal_browser.ingest import IngestSession
 
 
@@ -32,6 +33,12 @@ async def main() -> None:
         action="store_true",
         help="skip unconfirmed roster authors (mostly external co-authors)",
     )
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=CONCURRENCY,
+        help="author pipelines kept in flight (default: %(default)s)",
+    )
     parser.add_argument("--dry-run", action="store_true", help="match and report, write nothing")
     args = parser.parse_args()
 
@@ -45,6 +52,7 @@ async def main() -> None:
             "retry_missed": args.retry_missed,
             "refresh": args.refresh,
             "confirmed_only": args.confirmed_only,
+            "concurrency": args.concurrency,
         }
         if args.dry_run:
             stats = await harvest_people_utwente(
@@ -55,6 +63,7 @@ async def main() -> None:
                 retry_missed=args.retry_missed,
                 refresh=args.refresh,
                 confirmed_only=args.confirmed_only,
+                concurrency=args.concurrency,
                 dry_run=True,
             )
             await session.rollback()
@@ -72,6 +81,7 @@ async def main() -> None:
                     retry_missed=args.retry_missed,
                     refresh=args.refresh,
                     confirmed_only=args.confirmed_only,
+                    concurrency=args.concurrency,
                 ),
                 session,
                 institution_id=institution.id,

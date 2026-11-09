@@ -75,9 +75,10 @@ MAX_DETAIL_FETCHES = 5
 #: Portrait cap (avatar budget) and image magic sniffing.
 MAX_AVATAR_BYTES = 1_000_000
 
-#: Sleep between authors / between detail fetches of one author.
-PACE_SECONDS = 0.5
-DETAIL_PACE_SECONDS = 0.2
+#: Author pipelines kept in flight (search + profile fetches + portrait
+#: share one slot each). ea-cli-refactor hammers the same endpoint at
+#: 20 concurrent requests by default; this matches that proven rate.
+CONCURRENCY = 20
 
 
 # ── Parsing (pure functions) ───────────────────────────────────────────────
@@ -393,6 +394,7 @@ async def harvest_people_utwente(
     retry_missed: bool = False,
     refresh: bool = False,
     confirmed_only: bool = False,
+    concurrency: int = CONCURRENCY,
     dry_run: bool = False,
 ) -> dict[str, int]:
     """Walk the author roster, resolve people.utwente.nl profiles.
@@ -456,17 +458,27 @@ async def harvest_people_utwente(
         org_candidates_bare.setdefault(org_bare_key(org.name), []).append(uuid)
     org_aliases: dict[str, str] = {}
 
-    stats_before_loop = stats["searched"]
     async with httpx.AsyncClient(timeout=30) as client:
-        for author in pool:
-            stats["searched"] += 1
-            try:
-                outcome = await _resolve_author(client, author)
-            except Exception as exc:
-                stats["errors"] += 1
-                logger.exception("people-utwente: author %s failed: %s", author.pure_uuid, exc)
-                continue
+        semaphore = asyncio.Semaphore(concurrency)
 
+        async def _worker(author: Author) -> tuple[Author, dict[str, Any] | None]:
+            # HTTP only (search, profile fetches, portrait): the AsyncClient
+            # is concurrent-safe; the shared AsyncSession is not, so every
+            # DB write stays in the sequential store loop below.
+            async with semaphore:
+                try:
+                    return author, await _resolve_author(client, author)
+                except Exception as exc:
+                    stats["errors"] += 1
+                    logger.exception("people-utwente: author %s failed: %s", author.pure_uuid, exc)
+                    return author, None
+
+        stored = 0
+        for coro in asyncio.as_completed([_worker(author) for author in pool]):
+            author, outcome = await coro
+            stats["searched"] += 1
+            if outcome is None:
+                continue
             if not dry_run:
                 await _store_outcome(
                     session,
@@ -474,7 +486,6 @@ async def harvest_people_utwente(
                     author,
                     outcome,
                     existing.get(author.pure_uuid),
-                    client=client,
                     refresh=refresh,
                     stats=stats,
                     org_candidates=org_candidates,
@@ -482,14 +493,23 @@ async def harvest_people_utwente(
                     org_aliases=org_aliases,
                     ingest=ingest,
                 )
-                # Batched commit every 50 authors: a crash loses at most
-                # the last 50 outcomes, and the run never holds an
+                stored += 1
+                # Batched commit every 50 stored outcomes: a crash loses
+                # at most the last 50, and the run never holds an
                 # hours-long open transaction on the live db.
-                if (stats["searched"] - stats_before_loop) % 50 == 0:
+                if stored % 50 == 0:
                     await ingest.commit()
+                    logger.info(
+                        "people-utwente: %d/%d (matched=%d candidate=%d missed=%d errors=%d)",
+                        stored,
+                        len(pool),
+                        stats["matched"],
+                        stats["candidate"],
+                        stats["missed"],
+                        stats["errors"],
+                    )
             else:
                 stats[outcome["status"]] += 1
-            await asyncio.sleep(PACE_SECONDS)
 
     return stats
 
@@ -515,7 +535,6 @@ async def _resolve_author(client: httpx.AsyncClient, author: Author) -> dict[str
     best_unverified: tuple[int, dict[str, Any], dict[str, Any]] | None = None
     mismatch_seen = False
     for tile in ranked[:MAX_DETAIL_FETCHES]:
-        await asyncio.sleep(DETAIL_PACE_SECONDS)
         profile = await fetch_profile(client, tile)
         if profile is None:
             continue
@@ -532,28 +551,45 @@ async def _resolve_author(client: httpx.AsyncClient, author: Author) -> dict[str
                 )
             continue
         if uuid.lower() == author.pure_uuid.lower():
-            return {
-                "status": "matched",
-                "profile": profile,
-                "tier": name_match_tier(author_key, author_reversed, tile),
-                "reason": None,
-            }
+            return await _outcome_with_photo(
+                client,
+                {
+                    "status": "matched",
+                    "profile": profile,
+                    "tier": name_match_tier(author_key, author_reversed, tile),
+                    "reason": None,
+                },
+            )
         mismatch_seen = True
 
     if best_unverified is not None:
         tier, tile, profile = best_unverified
-        return {
-            "status": "candidate",
-            "profile": profile,
-            "tier": tier,
-            "reason": "no_portal_link",
-        }
+        return await _outcome_with_photo(
+            client,
+            {
+                "status": "candidate",
+                "profile": profile,
+                "tier": tier,
+                "reason": "no_portal_link",
+            },
+        )
     return {
         "status": "missed",
         "profile": None,
         "tier": 0,
         "reason": "uuid_mismatch" if mismatch_seen else "fetch_failed",
     }
+
+
+async def _outcome_with_photo(client: httpx.AsyncClient, outcome: dict[str, Any]) -> dict[str, Any]:
+    """Fetch the portrait alongside the profile (HTTP stays in the
+    worker; the store phase is DB only). Served rows only: matched and
+    candidate outcomes carry a profile, misses never reach here."""
+    outcome["photo"] = None
+    photo_url = (outcome.get("profile") or {}).get("photo_url")
+    if photo_url:
+        outcome["photo"] = await fetch_photo(client, photo_url)
+    return outcome
 
 
 async def _store_outcome(
@@ -563,7 +599,6 @@ async def _store_outcome(
     outcome: dict[str, Any],
     prior: PeopleUtwentePerson | None,
     *,
-    client: httpx.AsyncClient,
     refresh: bool,
     stats: dict[str, int],
     org_candidates: dict[str, list[str]],
@@ -595,13 +630,12 @@ async def _store_outcome(
     row.reason = outcome.get("reason")
     row.synced_at = datetime.now(UTC)
 
-    # Photo bytes: matched/candidate pages only; skip when already stored
-    # unless --refresh (portrait URLs are stable across refreshes).
-    if profile and profile.get("photo_url") and (refresh or row.photo_bytes is None):
-        photo = await fetch_photo(client, profile["photo_url"])
-        if photo is not None:
-            row.photo_bytes, row.photo_media_type = photo
-            stats["photos"] += 1
+    # Photo bytes arrive with the outcome (fetched in the worker); store
+    # them when new or on --refresh.
+    photo = outcome.get("photo")
+    if photo is not None and (refresh or row.photo_bytes is None):
+        row.photo_bytes, row.photo_media_type = photo
+        stats["photos"] += 1
 
     session.add(row)
 
