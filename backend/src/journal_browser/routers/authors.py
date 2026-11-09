@@ -41,6 +41,24 @@ async def search_authors(
         "works_desc"
     ),
     offset: Annotated[int, Query(ge=0)] = 0,
+    year_from: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range start (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    year_to: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range end (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
 ) -> AuthorSearchResponse:
     # Comma-separated multi-selects, OR'd within a dimension, AND'd across
     # dimensions (the journals oa_type convention). Unknown values match
@@ -65,6 +83,7 @@ async def search_authors(
             topic=_split(topic),
             sort=sort,
             offset=offset,
+            year_range=clamped_year_range(institution, year_from, year_to),
         )
     )
 

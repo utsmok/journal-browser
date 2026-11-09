@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
+import { useYearRange } from "@/hooks/use-year-filter";
 import {
   errorMessage,
   fetchAuthors,
@@ -89,6 +90,9 @@ function AuthorsView() {
   const sp = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  // The publication-year lens is context state (header control), like the
+  // journal search: it scopes the counts, not the URL.
+  const { year_from, year_to } = useYearRange();
 
   const q = sp.get("q") ?? "";
   const [input, setInput] = React.useState(q);
@@ -159,12 +163,14 @@ function AuthorsView() {
   };
 
   const { data, isPending, isFetching, isError, error, refetch } = useQuery({
-    queryKey: ["authors", inst, sp.toString()],
+    queryKey: ["authors", inst, sp.toString(), year_from ?? null, year_to ?? null] as const,
     queryFn: () =>
       fetchAuthors(inst, q || undefined, filters, {
         sort: sort === "works_desc" ? undefined : sort,
         offset: offset > 0 ? offset : undefined,
         limit: pageSize === 50 ? undefined : pageSize,
+        year_from,
+        year_to,
       }),
     placeholderData: keepPreviousData,
   });

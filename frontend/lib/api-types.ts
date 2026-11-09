@@ -4716,6 +4716,10 @@ export interface operations {
                 topic?: string | null;
                 sort?: "works_desc" | "name_asc" | "name_desc" | "last_pub_desc";
                 offset?: number;
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
             };
             header?: never;
             path: {

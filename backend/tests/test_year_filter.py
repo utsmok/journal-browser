@@ -1,6 +1,7 @@
 """Global publication-year filter (year_from/year_to): year-scoped
 per-journal UT works counts on the search list, institution_works sort and
-has_works facet; works tab, gap lists, author profile and CSV exports.
+has_works facet; works tab, gap lists, author profile, authors list
+(n_works/last_pub aggregates + facets) and CSV exports.
 
 The year-scoped count sums institution_works_stats pure_canon rows — the
 same pipeline the denormalized journal_flags.works_count column mirrors
@@ -418,3 +419,230 @@ async def test_orgunit_detail_year_scoped(year_api, db):
     assert narrowed is not None
     assert narrowed["journals"][0]["n_works"] == 1
     assert narrowed["openalex_only"]["total"] == 1
+
+
+BMS = "Faculty of Behavioural, Management and Social Sciences"
+
+
+@pytest.fixture
+async def authors_year_api(client, db, institution_factory):
+    """uu (window 2020-2024) with three confirmed authors over stored work
+    edges: Mia spans the 2022 boundary (2021 + 2023 works), Noah's only
+    work sits outside a 2022+ range, Pia has no works at all."""
+    uu = await institution_factory(
+        code="uu", data_window_start=WINDOW_START, data_window_end=WINDOW_END
+    )
+    run = HarvestRun(source="pure", entity_type="works", status="completed", config_fingerprint="t")
+    db.add(run)
+    await db.flush()
+
+    def _work(uuid: str, year: int) -> Work:
+        return Work(
+            institution_id=uu.id,
+            pure_uuid=uuid,
+            title=f"Work {uuid}",
+            norm_title=f"work {uuid}",
+            year=year,
+            work_type="info:eu-repo/semantics/article",
+            first_seen_run=run.id,
+            last_seen_run=run.id,
+        )
+
+    db.add_all([_work("aw2021", 2021), _work("aw2023", 2023)])
+    await db.flush()
+    db.add_all(
+        [
+            Author(
+                institution_id=uu.id,
+                pure_uuid="mia-uuid",
+                name="Mia Mixed",
+                faculty=FACULTY,
+                research_group="Group A",
+                n_works=2,
+                confirmed=True,
+                last_pub_year=2023,
+            ),
+            Author(
+                institution_id=uu.id,
+                pure_uuid="noah-uuid",
+                name="Noah Outside",
+                faculty=FACULTY,
+                research_group="Group B",
+                n_works=1,
+                confirmed=True,
+                last_pub_year=2021,
+            ),
+            Author(
+                institution_id=uu.id,
+                pure_uuid="pia-uuid",
+                name="Pia Noworks",
+                faculty=BMS,
+                research_group="Group C",
+                n_works=0,
+                confirmed=True,
+            ),
+        ]
+    )
+    await db.flush()
+    db.add_all(
+        [
+            AuthorWork(institution_id=uu.id, author_pure_uuid="mia-uuid", work_pure_uuid="aw2021"),
+            AuthorWork(institution_id=uu.id, author_pure_uuid="mia-uuid", work_pure_uuid="aw2023"),
+            AuthorWork(institution_id=uu.id, author_pure_uuid="noah-uuid", work_pure_uuid="aw2021"),
+        ]
+    )
+    await db.commit()
+    return client
+
+
+def _year_items(body: dict) -> list[tuple[str, int, int | None]]:
+    return [(i["pure_uuid"], i["n_works"], i["last_pub_year"]) for i in body["items"]]
+
+
+@requires_db
+async def test_author_list_default_reads_snapshot(authors_year_api):
+    """No params: the denormalized columns answer, exactly the pre-filter
+    behavior."""
+    body = (await authors_year_api.get("/api/v1/uu/authors")).json()
+    assert body["enabled"] is True
+    assert body["total"] == 3
+    assert _year_items(body) == [
+        ("mia-uuid", 2, 2023),
+        ("noah-uuid", 1, 2021),
+        ("pia-uuid", 0, None),
+    ]
+    assert body["facets"]["works"] == [{"value": "1-4", "count": 2}]
+    assert body["facets"]["last_pub"] == [
+        {"value": "2020-2021", "count": 1},
+        {"value": "2022-2024", "count": 1},
+        {"value": "none", "count": 1},
+    ]
+
+
+@requires_db
+async def test_author_list_counts_year_scoped(authors_year_api):
+    """With an active range, payload n_works / last_pub_year come from the
+    in-range aggregates; authors without in-range works stay listed at 0
+    (LEFT JOIN, not a filter)."""
+    ranged = (await authors_year_api.get("/api/v1/uu/authors", params={"year_from": 2022})).json()
+    assert ranged["total"] == 3
+    assert _year_items(ranged) == [
+        ("mia-uuid", 1, 2023),
+        ("noah-uuid", 0, None),
+        ("pia-uuid", 0, None),
+    ]
+    # A window-covering range clamps onto the window and reproduces the
+    # snapshot columns.
+    wide = (
+        await authors_year_api.get(
+            "/api/v1/uu/authors", params={"year_from": 1900, "year_to": 2100}
+        )
+    ).json()
+    assert _year_items(wide) == [
+        ("mia-uuid", 2, 2023),
+        ("noah-uuid", 1, 2021),
+        ("pia-uuid", 0, None),
+    ]
+
+
+@requires_db
+async def test_author_list_sort_year_scoped(authors_year_api):
+    """last_pub_desc orders on the scoped year with NULLs (no in-range
+    works) last; the q-boost sort carries the scoped count into the item."""
+    default = (
+        await authors_year_api.get("/api/v1/uu/authors", params={"sort": "last_pub_desc"})
+    ).json()
+    assert [i["pure_uuid"] for i in default["items"]] == ["mia-uuid", "noah-uuid", "pia-uuid"]
+    ranged = (
+        await authors_year_api.get(
+            "/api/v1/uu/authors", params={"sort": "last_pub_desc", "year_from": 2022}
+        )
+    ).json()
+    assert [i["pure_uuid"] for i in ranged["items"]] == ["mia-uuid", "noah-uuid", "pia-uuid"]
+    q_ranged = (
+        await authors_year_api.get("/api/v1/uu/authors", params={"q": "mia", "year_from": 2022})
+    ).json()
+    assert _year_items(q_ranged) == [("mia-uuid", 1, 2023)]
+
+
+@requires_db
+async def test_author_list_filters_year_scoped(authors_year_api):
+    """Strata and last-pub filters evaluate the in-range aggregates, so
+    the same filter value answers a different total."""
+    works_default = (
+        await authors_year_api.get("/api/v1/uu/authors", params={"works": "1-4"})
+    ).json()
+    assert works_default["total"] == 2
+    assert [i["pure_uuid"] for i in works_default["items"]] == ["mia-uuid", "noah-uuid"]
+    works_ranged = (
+        await authors_year_api.get("/api/v1/uu/authors", params={"works": "1-4", "year_from": 2022})
+    ).json()
+    assert works_ranged["total"] == 1
+    assert [i["pure_uuid"] for i in works_ranged["items"]] == ["mia-uuid"]
+
+    # Noah's snapshot last_pub_year is 2021; inside 2022+ he has none.
+    bucket_default = (
+        await authors_year_api.get("/api/v1/uu/authors", params={"last_pub": "2020-2021"})
+    ).json()
+    assert bucket_default["total"] == 1
+    bucket_ranged = (
+        await authors_year_api.get(
+            "/api/v1/uu/authors", params={"last_pub": "2020-2021", "year_from": 2022}
+        )
+    ).json()
+    assert bucket_ranged["total"] == 0
+    none_ranged = (
+        await authors_year_api.get(
+            "/api/v1/uu/authors", params={"last_pub": "none", "year_from": 2022}
+        )
+    ).json()
+    assert [i["pure_uuid"] for i in none_ranged["items"]] == ["noah-uuid", "pia-uuid"]
+
+
+@requires_db
+async def test_author_list_facets_year_scoped(authors_year_api):
+    """Facet buckets re-compute on the scoped columns; the other
+    dimensions keep the drop-own-dimension rule over the year-scoped
+    base."""
+    ranged = (await authors_year_api.get("/api/v1/uu/authors", params={"year_from": 2022})).json()[
+        "facets"
+    ]
+    assert ranged["works"] == [{"value": "1-4", "count": 1}]
+    assert ranged["last_pub"] == [
+        {"value": "none", "count": 2},
+        {"value": "2022-2024", "count": 1},
+    ]
+    # The LEFT JOIN keeps every author listed, so the join-only dimensions
+    # (faculty/org) describe the same roster.
+    assert ranged["faculty"] == [{"value": FACULTY, "count": 2}, {"value": BMS, "count": 1}]
+    assert ranged["org"] == [
+        {"value": "Group A", "count": 1},
+        {"value": "Group B", "count": 1},
+        {"value": "Group C", "count": 1},
+    ]
+
+    # A works filter re-scopes another dimension's counts when the range is
+    # active; the faculty facet still drops its own dimension.
+    faculty_default = (
+        await authors_year_api.get(
+            "/api/v1/uu/authors", params={"faculty": FACULTY, "works": "1-4"}
+        )
+    ).json()
+    assert faculty_default["total"] == 2
+    assert faculty_default["facets"]["faculty"] == [{"value": FACULTY, "count": 2}]
+    faculty_ranged = (
+        await authors_year_api.get(
+            "/api/v1/uu/authors",
+            params={"faculty": FACULTY, "works": "1-4", "year_from": 2022},
+        )
+    ).json()
+    assert faculty_ranged["total"] == 1
+    assert faculty_ranged["facets"]["faculty"] == [{"value": FACULTY, "count": 1}]
+
+
+@requires_db
+async def test_author_list_from_after_to_is_400(authors_year_api):
+    response = await authors_year_api.get(
+        "/api/v1/uu/authors", params={"year_from": 2023, "year_to": 2021}
+    )
+    assert response.status_code == 400

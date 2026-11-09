@@ -45,11 +45,14 @@ export type AuthorSearchSort = "works_desc" | "name_asc" | "name_desc" | "last_p
 
 export type AuthorSearchResponse = Schemas["AuthorSearchResponse"];
 
-/** Sort and paging options for fetchAuthors. */
+/** Sort, paging, and publication-year options for fetchAuthors. */
 export type AuthorFetchOptions = {
   sort?: AuthorSearchSort;
   offset?: number;
   limit?: number;
+  /** Publication-year range (global year lens; server clamps to the data window). */
+  year_from?: number;
+  year_to?: number;
 };
 
 /** Author search facet filters; arrays are comma-joined in the query string. */
@@ -191,6 +194,8 @@ export async function fetchAuthors(
     topic: filters.topic?.join("|"),
     sort: opts.sort,
     offset: opts.offset,
+    year_from: opts.year_from,
+    year_to: opts.year_to,
   });
   trackSearch({
     query: q ?? "",

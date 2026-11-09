@@ -27,6 +27,7 @@ from .works_query import (
     author_works_join,
     empty_year_buckets,
     strata_cond,
+    unit_work_join,
     work_window,
     work_year_window,
 )
@@ -56,13 +57,13 @@ LAST_PUB_BUCKETS = ("2025-2026", "2022-2024", "2020-2021", "none")
 _LAST_PUB_BOUNDS = {"2025-2026": (2025, 2026), "2022-2024": (2022, 2024), "2020-2021": (2020, 2021)}
 
 
-def _last_pub_cond(values: list[str]) -> Any:
+def _last_pub_cond(column: Any, values: list[str]) -> Any:
     parts = []
     for value in values:
         if value == "none":
-            parts.append(Author.last_pub_year.is_(None))
+            parts.append(column.is_(None))
         elif bounds := _LAST_PUB_BOUNDS.get(value):
-            parts.append(Author.last_pub_year.between(*bounds))
+            parts.append(column.between(*bounds))
     return or_(*parts) if parts else false()
 
 
@@ -81,9 +82,15 @@ def _filter_conds(
     works: list[str] | None,
     last_pub: list[str] | None,
     topic: list[str] | None,
+    n_col: Any | None = None,
+    last_col: Any | None = None,
 ) -> dict[str, Any]:
     """One condition per active facet dimension; keyed so a facet's counts
-    can drop its own dimension while keeping all others."""
+    can drop its own dimension while keeping all others. n_col/last_col
+    override the works strata and last-pub columns (the year-scoped
+    aggregates when a publication-year range is active)."""
+    n_col = n_col if n_col is not None else Author.n_works
+    last_col = last_col if last_col is not None else Author.last_pub_year
     conds: dict[str, Any] = {}
     if faculty:
         conds["faculty"] = Author.faculty.in_(faculty)
@@ -92,9 +99,9 @@ def _filter_conds(
     if topic:
         conds["topic"] = Author.primary_topic.in_(topic)
     if works:
-        conds["works"] = strata_cond(Author.n_works, works)
+        conds["works"] = strata_cond(n_col, works)
     if last_pub:
-        conds["last_pub"] = _last_pub_cond(last_pub)
+        conds["last_pub"] = _last_pub_cond(last_col, last_pub)
     if has_orcid:
         conds["has_orcid"] = _has_orcid_cond(has_orcid)
     return conds
@@ -118,12 +125,20 @@ async def search_authors(
     topic: list[str] | None = None,
     sort: str = "works_desc",
     offset: int = 0,
+    year_range: tuple[int, int] | None = None,
 ) -> dict[str, Any]:
     """Author roster for one institution. total is the filter match count
     (the whole roster when nothing is set); items are the offset/limit page
     of the sorted matches. require_confirmed restricts the search list to
     authors.confirmed; profile endpoints stay unfiltered. Facet counts and
-    total describe the filtered set, never the page."""
+    total describe the filtered set, never the page.
+
+    With an active publication-year range, n_works / last_pub_year (payload,
+    sorts, strata and last-pub filters, facet buckets) become query-time
+    aggregates over the author's stored work edges inside the range instead
+    of the denormalized snapshot columns — the same edge population the
+    snapshot counts. Without a range nothing joins: the queries stay
+    byte-identical to the snapshot-serving path."""
     roster = await session.scalar(
         select(func.count()).select_from(Author).where(Author.institution_id == institution_id)
     )
@@ -141,15 +156,42 @@ async def search_authors(
             func.translate(func.lower(f"%{_like(qstr)}%"), _FOLD_SRC, _FOLD_DST),
             escape="\\",
         )
-    conds = _filter_conds(faculty, org, has_orcid, works, last_pub, topic)
+    # Year-scoped per-author aggregates over the stored work edges (the
+    # same population the snapshot counts, so the clamped full window
+    # reproduces the denormalized columns exactly); None = no range, no join.
+    scoped = None
+    if year_range is not None:
+        lo, hi = year_range
+        scoped = (
+            select(
+                AuthorWork.author_pure_uuid.label("author_pure_uuid"),
+                func.count().label("n"),
+                func.max(Work.year).label("last_year"),
+            )
+            .select_from(AuthorWork)
+            .join(Work, unit_work_join(institution_id))
+            .where(AuthorWork.institution_id == institution_id, Work.year.between(lo, hi))
+            .group_by(AuthorWork.author_pure_uuid)
+            .subquery()
+        )
+    n_col = func.coalesce(scoped.c.n, 0) if scoped is not None else Author.n_works
+    last_col = scoped.c.last_year if scoped is not None else Author.last_pub_year
+    conds = _filter_conds(
+        faculty, org, has_orcid, works, last_pub, topic, n_col=n_col, last_col=last_col
+    )
     query = select(Author).where(*base, *conds.values())
+    if scoped is not None:
+        query = query.outerjoin(scoped, scoped.c.author_pure_uuid == Author.pure_uuid)
     if q_cond is not None:
         query = query.where(q_cond)
-    total = await session.scalar(
+    total_stmt = (
         select(func.count())
         .select_from(Author)
         .where(*base, *conds.values(), *([q_cond] if q_cond is not None else []))
     )
+    if scoped is not None:
+        total_stmt = total_stmt.outerjoin(scoped, scoped.c.author_pure_uuid == Author.pure_uuid)
+    total = await session.scalar(total_stmt)
     # Sort after filters; stable tiebreak by name, then pure_uuid. The q
     # prefix-rank boost only applies to the default works sort.
     if sort == "name_asc":
@@ -158,26 +200,40 @@ async def search_authors(
         order = (func.lower(Author.name).desc(), Author.pure_uuid)
     elif sort == "last_pub_desc":
         order = (
-            Author.last_pub_year.desc().nulls_last(),
+            last_col.desc().nulls_last(),
             func.lower(Author.name),
             Author.pure_uuid,
         )
     elif q_cond is not None:
         order = (
             case((Author.name.ilike(f"{_like(qstr)}%", escape="\\"), 1), else_=0).desc(),
-            Author.n_works.desc(),
+            n_col.desc(),
             func.lower(Author.name),
             Author.pure_uuid,
         )
     else:
-        order = (Author.n_works.desc(), func.lower(Author.name), Author.pure_uuid)
-    rows = (
-        (await session.execute(query.order_by(*order).offset(offset).limit(min(limit, MAX_LIMIT))))
-        .scalars()
-        .all()
-    )
+        order = (n_col.desc(), func.lower(Author.name), Author.pure_uuid)
+    stmt = query.order_by(*order).offset(offset).limit(min(limit, MAX_LIMIT))
+    if scoped is None:
+        rows = [
+            (a, a.n_works, a.last_pub_year) for a in (await session.execute(stmt)).scalars().all()
+        ]
+    else:
+        rows = [
+            (row[0], row.n_eff, row.last_eff)
+            for row in (
+                await session.execute(
+                    stmt.add_columns(
+                        n_col.label("n_eff"),
+                        last_col.label("last_eff"),
+                    )
+                )
+            ).all()
+        ]
     facet_base = list(base) + ([q_cond] if q_cond is not None else [])
-    facets = await author_facets(session, facet_base, conds)
+    facets = await author_facets(
+        session, facet_base, conds, scoped=scoped, n_col=n_col, last_col=last_col
+    )
     return {
         "enabled": True,
         "total": total,
@@ -190,13 +246,13 @@ async def search_authors(
                 "faculty": a.faculty,
                 "research_group": a.research_group,
                 "institute": a.institute,
-                "n_works": a.n_works,
+                "n_works": n,
                 "orcid": a.orcid,
                 "confirmed": a.confirmed,
-                "last_pub_year": a.last_pub_year,
+                "last_pub_year": last,
                 "primary_topic": a.primary_topic,
             }
-            for a in rows
+            for a, n, last in rows
         ],
         "facets": facets,
     }
