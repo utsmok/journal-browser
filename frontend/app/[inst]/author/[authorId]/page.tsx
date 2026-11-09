@@ -249,7 +249,27 @@ export default function AuthorPage() {
       <SectionNav sections={sections} />
       <div className="mx-auto max-w-screen-2xl px-4 py-10">
         <header className="mb-8">
-          <h1 className="text-3xl font-bold">{author.name}</h1>
+          <div className="flex items-center gap-4">
+            {author.people?.has_photo && (
+              // eslint-disable-next-line @next/next/no-img-element -- same-origin API bytes, no optimization pipeline wanted
+              <img
+                src={`/${inst}/authors/${encodeURIComponent(authorId ?? "")}/avatar`}
+                alt={author.name}
+                width={72}
+                height={72}
+                className="size-[72px] shrink-0 rounded-full object-cover"
+              />
+            )}
+            <div>
+              <h1 className="text-3xl font-bold">{author.name}</h1>
+              {author.people?.canonical_name &&
+                author.people.canonical_name.toLowerCase() !== author.name.toLowerCase() && (
+                  <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                    {author.people.canonical_name}
+                  </p>
+                )}
+            </div>
+          </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {author.faculty && (
               <Badge variant="muted" className="font-normal">
@@ -270,8 +290,16 @@ export default function AuthorPage() {
               {author.n_works.toLocaleString("en")} {author.n_works === 1 ? "work" : "works"}
             </span>
           </div>
-          {(author.orcid || author.openalex_author_id || author.openaire_person_id) && (
+          {(author.orcid ||
+            author.openalex_author_id ||
+            author.openaire_person_id ||
+            author.people ||
+            author.research_portal_url) && (
             <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+              {author.people && <External href={author.people.url}>People page</External>}
+              {author.research_portal_url && (
+                <External href={author.research_portal_url}>Research portal</External>
+              )}
               {author.orcid && (
                 <External href={`https://orcid.org/${author.orcid}`}>ORCID</External>
               )}
