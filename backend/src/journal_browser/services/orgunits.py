@@ -8,7 +8,11 @@ pattern: one cached per-institution snapshot of unit aggregates
 in Python over the name-keyed rows; per-item topic distributions stay a
 query-time GROUP BY for exactly the paged units. Unit membership is the
 non-empty grouping column; works/APC/deal rollups bound to the
-institution's data window."""
+institution's data window. An explicit publication-year range recomputes
+the works-derived columns (works, deal-covered works, authors with
+in-range work) at query time — same edge population and author gates as
+the snapshot, data window replaced by the clamped range — while the
+roster and attribute columns stay snapshot."""
 
 from dataclasses import dataclass
 from typing import Any
@@ -286,6 +290,86 @@ async def _snapshot(session: AsyncSession, institution: Institution) -> dict[str
     return snap
 
 
+def _scoped_unit_rows(institution: Institution, level: str, year_range: tuple[int, int]) -> Any:
+    """Year-scoped works aggregates per unit: the snapshot's edge
+    population (`_unit_rows`' `_edges` — same joins, author gates, and
+    retired-at gate) with the data window replaced by the clamped
+    publication-year range. Counts stay distinct-per-unit like the
+    snapshot's deal rollup; the flags join is outer so journals without a
+    flags row still fill n_works/n_authors."""
+    iid = institution.id
+    require_confirmed = institution.require_confirmed_affiliation
+    key = _unit_key(level)
+    edges = (
+        select(
+            key.label("name"),
+            Work.pure_uuid.label("work_uuid"),
+            Author.pure_uuid.label("author_uuid"),
+            JournalFlags.deal_covered.label("deal_covered"),
+        )
+        .select_from(Author)
+        .join(AuthorWork, unit_author_join(iid))
+        .join(Work, unit_work_join(iid))
+        .outerjoin(
+            JournalFlags,
+            (JournalFlags.institution_id == iid) & (JournalFlags.issn_l == Work.journal_issn_l),
+        )
+        .where(
+            *_author_base(iid, require_confirmed),
+            key.is_not(None),
+            key != "",
+            Work.retired_at.is_(None),
+            *work_year_window(institution, year_range),
+        )
+        .subquery()
+    )
+    return (
+        select(
+            edges.c.name.label("name"),
+            func.count(func.distinct(edges.c.work_uuid)).label("n_works"),
+            func.count(func.distinct(edges.c.work_uuid))
+            .filter(edges.c.deal_covered.is_(True))
+            .label("deal_works"),
+            func.count(func.distinct(edges.c.author_uuid)).label("n_authors"),
+        )
+        .group_by(edges.c.name)
+        .subquery()
+    )
+
+
+async def _scoped_units(
+    session: AsyncSession,
+    institution: Institution,
+    level: str,
+    year_range: tuple[int, int],
+    units: dict[str, _Unit],
+) -> dict[str, _Unit]:
+    """The snapshot roster with the works-derived columns recomputed inside
+    the clamped range; attribute columns (faculty, group count, APC
+    rollups) keep the snapshot values and units without in-range works
+    stay listed at zero (the authors-list convention)."""
+    scoped = {
+        r.name: r
+        for r in (
+            await session.execute(select(_scoped_unit_rows(institution, level, year_range)))
+        ).all()
+    }
+    out: dict[str, _Unit] = {}
+    for name, u in units.items():
+        r = scoped.get(name)
+        out[name] = _Unit(
+            name=name,
+            faculty=u.faculty,
+            n_authors=int(r.n_authors) if r else 0,
+            n_works=int(r.n_works) if r else 0,
+            n_groups=u.n_groups,
+            deal_works=int(r.deal_works) if r else 0,
+            apc_euro_total=u.apc_euro_total,
+            apc_n=u.apc_n,
+        )
+    return out
+
+
 def _order_units(sort: str, q: str | None) -> tuple[Any, str]:
     """(sort key over _Unit rows, natural direction). SQL convention: head
     direction, ties broken by (lower(name), name) ascending."""
@@ -364,14 +448,26 @@ async def search_orgunits(
     offset: int = 0,
     limit: int = DEFAULT_LIMIT,
     include_facets: bool = True,
+    year_range: tuple[int, int] | None = None,
 ) -> dict[str, Any]:
     """Unit roster for one institution: total is the filter match count,
     items the offset/limit page of the sorted matches (default sort
     relevance-with-q, else works desc). Serves from the cached unit
-    snapshot; only the page's topic distributions hit the database."""
+    snapshot; only the page's topic distributions hit the database.
+
+    With an active publication-year range the works-derived columns
+    (n_works, deal_works, n_authors = members with >=1 in-range work)
+    come from `_scoped_units` instead of the snapshot, so the works
+    strata filter, size/uses_deals facets, authors|works|deal_works sorts
+    and total evaluate the scoped columns; the faculty facet and the
+    attribute columns stay snapshot. Without a range nothing changes:
+    byte-identical snapshot serving, cache untouched."""
     require_confirmed = institution.require_confirmed_affiliation
     snapshot = await _snapshot(session, institution)
-    matches = list(snapshot.get(level, {}).values())
+    units = snapshot.get(level, {})
+    if year_range is not None:
+        units = await _scoped_units(session, institution, level, year_range, units)
+    matches = list(units.values())
 
     wanted_faculty = {f.lower() for f in faculty} if faculty and level == "group" else None
     if wanted_faculty is not None:
@@ -401,9 +497,7 @@ async def search_orgunits(
 
     facets: dict[str, dict[str, int]] = {}
     if include_facets:
-        facets = _snapshot_facets(
-            list(snapshot.get(level, {}).values()), level, wanted_faculty, works, uses_deals
-        )
+        facets = _snapshot_facets(list(units.values()), level, wanted_faculty, works, uses_deals)
     return {"level": level, "items": items, "total": int(total), "facets": facets}
 
 
@@ -415,9 +509,10 @@ async def orgunit_detail(
     year_range: tuple[int, int] | None = None,
 ) -> dict[str, Any] | None:
     """Full unit bundle; None = unknown unit (404 upstream). An explicit
-    publication-year range narrows the venue works counts and the CRIS-gap
-    card; per-year rows (works_by_year), the author rollups and deal usage
-    keep the data window (journal attributes stay unfiltered)."""
+    publication-year range narrows the venue works counts, the CRIS-gap
+    card and the faculty's child-group roster (same scoping as the
+    groups list); per-year rows (works_by_year), the author rollups and
+    deal usage keep the data window (journal attributes stay unfiltered)."""
     iid = institution.id
     require_confirmed = institution.require_confirmed_affiliation
     unit = (await _snapshot(session, institution)).get(level, {}).get(name)
@@ -441,6 +536,7 @@ async def orgunit_detail(
             sort="works",
             limit=MAX_LIMIT,
             include_facets=False,
+            year_range=year_range,
         )
         groups = child["items"]
 

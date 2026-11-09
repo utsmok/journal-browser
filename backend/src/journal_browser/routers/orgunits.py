@@ -15,8 +15,9 @@ router = APIRouter(prefix="/orgunits", tags=["orgunits"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
-#: Publication-year range for the detail works counts; clamped to the
-#: institution's data window, None = full window (today's behavior).
+#: Publication-year range for the list works counts and the detail works
+#: counts (child groups + venues); clamped to the institution's data
+#: window, None = full window (today's behavior).
 YearFrom = Annotated[
     int | None,
     Query(
@@ -59,6 +60,8 @@ async def search_orgunits(
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = orgunits_service.DEFAULT_LIMIT,
     include_facets: bool = True,
+    year_from: YearFrom = None,
+    year_to: YearTo = None,
 ) -> OrgUnitSearchResponse:
     # Pipe-joined multi-selects, OR'd within a dimension, AND'd across
     # dimensions; unknown strata match nothing (the authors convention).
@@ -76,6 +79,7 @@ async def search_orgunits(
             offset=offset,
             limit=limit,
             include_facets=include_facets,
+            year_range=clamped_year_range(institution, year_from, year_to),
         )
     )
 
