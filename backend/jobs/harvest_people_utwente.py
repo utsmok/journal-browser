@@ -27,6 +27,11 @@ async def main() -> None:
     parser.add_argument("--limit", type=int, default=None, help="max authors to attempt this run")
     parser.add_argument("--retry-missed", action="store_true", help="re-attempt missed authors")
     parser.add_argument("--refresh", action="store_true", help="re-attempt all attempted authors")
+    parser.add_argument(
+        "--confirmed-only",
+        action="store_true",
+        help="skip unconfirmed roster authors (mostly external co-authors)",
+    )
     parser.add_argument("--dry-run", action="store_true", help="match and report, write nothing")
     args = parser.parse_args()
 
@@ -39,6 +44,7 @@ async def main() -> None:
             "limit": args.limit,
             "retry_missed": args.retry_missed,
             "refresh": args.refresh,
+            "confirmed_only": args.confirmed_only,
         }
         if args.dry_run:
             stats = await harvest_people_utwente(
@@ -48,6 +54,7 @@ async def main() -> None:
                 limit=args.limit,
                 retry_missed=args.retry_missed,
                 refresh=args.refresh,
+                confirmed_only=args.confirmed_only,
                 dry_run=True,
             )
             await session.rollback()
@@ -64,6 +71,7 @@ async def main() -> None:
                     limit=args.limit,
                     retry_missed=args.retry_missed,
                     refresh=args.refresh,
+                    confirmed_only=args.confirmed_only,
                 ),
                 session,
                 institution_id=institution.id,

@@ -392,6 +392,7 @@ async def harvest_people_utwente(
     limit: int | None = None,
     retry_missed: bool = False,
     refresh: bool = False,
+    confirmed_only: bool = False,
     dry_run: bool = False,
 ) -> dict[str, int]:
     """Walk the author roster, resolve people.utwente.nl profiles.
@@ -432,6 +433,11 @@ async def harvest_people_utwente(
         prior = existing.get(row.pure_uuid)
         if prior is not None and not ((retry_missed and prior.status == "missed") or refresh):
             stats["skipped"] += 1
+            continue
+        if confirmed_only and not row.confirmed:
+            # people.utwente.nl lists employees; the unconfirmed tail of
+            # the roster is mostly external co-authors. Leave it out
+            # unless the caller asks for the full sweep.
             continue
         pool.append(row)
         if limit is not None and len(pool) >= limit:
