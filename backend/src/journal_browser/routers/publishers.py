@@ -69,6 +69,24 @@ async def search_publishers(
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = publishers_service.DEFAULT_LIMIT,
     include_facets: bool = True,
+    year_from: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range start (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    year_to: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range end (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
 ) -> PublisherSearchResponse:
     # Pipe-joined multi-selects, OR'd within a dimension, AND'd across
     # dimensions. Values validate at the boundary (422); size stays a
@@ -94,6 +112,7 @@ async def search_publishers(
         offset=offset,
         limit=limit,
         include_facets=include_facets,
+        years=clamped_year_range(institution, year_from, year_to),
     )
     return PublisherSearchResponse(**result)
 
