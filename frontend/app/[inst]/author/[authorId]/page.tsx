@@ -253,7 +253,7 @@ export default function AuthorPage() {
             {author.people?.has_photo && (
               // eslint-disable-next-line @next/next/no-img-element -- same-origin API bytes, no optimization pipeline wanted
               <img
-                src={`/${inst}/authors/${encodeURIComponent(authorId ?? "")}/avatar`}
+                src={`/api/v1/${inst}/authors/${encodeURIComponent(authorId ?? "")}/avatar`}
                 alt={author.name}
                 width={72}
                 height={72}
