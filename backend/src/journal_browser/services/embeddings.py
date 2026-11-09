@@ -8,6 +8,11 @@ same model via model.embed.
 import re
 from typing import Any
 
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..models import Journal
+
 MODEL_NAME = "BAAI/bge-small-en-v1.5"
 DIMENSION = 384
 
@@ -54,3 +59,43 @@ def embed_text(
     parts.extend(t["display_name"] for t in (topics or [])[:5] if t.get("display_name"))
     parts.extend(t for t in (work_titles or [])[:3] if t)
     return " | ".join(parts) or None
+
+
+VECTOR_WARM_SEEDS = 40
+VECTOR_WARM_EF_SEARCH = 80
+
+
+async def warm_journal_vector_index(session: AsyncSession, seeds: int = VECTOR_WARM_SEEDS) -> int:
+    """Walk the journals HNSW graph at boot so early author pages don't
+    pay cold random reads on the ~350 MB vector index. Seed vectors are
+    sampled across the store (scattered table pages, cheap), each driving
+    one cosine search with the same ef_search the similar sections use;
+    everything runs in one transaction so the SET LOCAL holds. Returns
+    the number of searches run (0 = nothing embedded yet)."""
+    seed_rows = (
+        (
+            await session.execute(
+                text(
+                    "SELECT embedding FROM journals TABLESAMPLE SYSTEM (1) "
+                    "WHERE embedding IS NOT NULL LIMIT :n"
+                ),
+                {"n": seeds},
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not seed_rows:
+        return 0
+    await session.execute(text(f"SET LOCAL hnsw.ef_search = {VECTOR_WARM_EF_SEARCH}"))
+    await session.execute(text("SET LOCAL hnsw.iterative_scan = strict_order"))
+    ran = 0
+    for vec in seed_rows:
+        await session.execute(
+            select(Journal.issn_l)
+            .where(Journal.embedding.is_not(None))
+            .order_by(Journal.embedding.cosine_distance(vec))
+            .limit(8)
+        )
+        ran += 1
+    return ran

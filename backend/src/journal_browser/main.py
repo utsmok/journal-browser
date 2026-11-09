@@ -127,6 +127,27 @@ def _warm_embedding_model() -> None:
 
 USAGE_PRUNE_FIRST_DELAY_S = 60
 USAGE_PRUNE_INTERVAL_S = 24 * 60 * 60
+VECTOR_WARM_DELAY_S = 5
+
+
+async def _warm_vector_index_task() -> None:
+    """Pre-walk the journals HNSW graph once after boot: the first author
+    pages after a restart otherwise pay seconds of cold random reads on
+    the ~350 MB vector index before it lands in the page cache. Errors
+    are logged, never propagated (fresh deployments may have no
+    embeddings yet)."""
+    if os.environ.get("JB_SKIP_EMBEDDING_WARMUP") == "1":
+        return
+    await asyncio.sleep(VECTOR_WARM_DELAY_S)
+    try:
+        from .services.embeddings import warm_journal_vector_index
+
+        async with async_sessionmaker(get_engine(), expire_on_commit=False)() as session:
+            ran = await warm_journal_vector_index(session)
+            await session.commit()
+        logger.info("vector index warm: %d hnsw search(es)", ran)
+    except Exception:
+        logger.exception("vector index warm failed")
 
 
 async def _usage_ip_retention_loop(days: int) -> None:
@@ -151,11 +172,13 @@ async def _usage_ip_retention_loop(days: int) -> None:
 async def _lifespan(app: FastAPI):
     days = get_settings().usage_retention_days
     task = asyncio.create_task(_usage_ip_retention_loop(days)) if days > 0 else None
+    warm_task = asyncio.create_task(_warm_vector_index_task())
     yield
-    if task is not None:
-        task.cancel()
-        with suppress(asyncio.CancelledError):
-            await task
+    for t in (task, warm_task):
+        if t is not None:
+            t.cancel()
+            with suppress(asyncio.CancelledError):
+                await t
 
 
 def create_app() -> "FastAPI":
