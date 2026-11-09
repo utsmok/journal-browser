@@ -3,6 +3,7 @@
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BeforeValidator
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +18,7 @@ from ..schemas import (
     PublisherSearchResponse,
     UTAuthorship,
 )
+from ..services import exports
 from ..services import publishers as publishers_service
 from ..vocab import OaType
 
@@ -93,6 +95,16 @@ async def search_publishers(
         include_facets=include_facets,
     )
     return PublisherSearchResponse(**result)
+
+
+# Before the {name:path} detail route: the path converter would otherwise
+# swallow the export suffix.
+@router.get("/{name:path}/openalex-only.csv")
+async def publisher_openalex_only_csv(
+    name: str, session: SessionDep, institution: InstitutionDep
+) -> StreamingResponse:
+    """Uncapped CSV of the publisher group's CRIS-gap (OpenAlex-only) list."""
+    return await exports.publisher_openalex_only_csv(session, institution, name)
 
 
 @router.get("/{name:path}", response_model=PublisherDetailResponse)

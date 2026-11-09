@@ -3,6 +3,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BeforeValidator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,7 +45,7 @@ from ..schemas import (
     UTAuthorship,
     WorksPage,
 )
-from ..services import authorship, detail_enrichment, repo_links
+from ..services import authorship, detail_enrichment, exports, repo_links
 from ..services import search as search_service
 from ..services.deal_coverage import deal_institution_join, dj_scope
 from ..services.funder_fit import JournalFacts, compute_funder_fit
@@ -271,6 +272,14 @@ async def journal_works(
     return WorksPage(
         **await detail_enrichment.list_works(session, known, institution, page, page_size)
     )
+
+
+@router.get("/{issn_l}/openalex-only.csv")
+async def journal_openalex_only_csv(
+    issn_l: str, session: SessionDep, institution: InstitutionDep
+) -> StreamingResponse:
+    """Uncapped CSV of the journal's CRIS-gap (OpenAlex-only) list."""
+    return await exports.journal_openalex_only_csv(session, institution, issn_l)
 
 
 @router.get("/{issn_l}", response_model=JournalDetailResponse)

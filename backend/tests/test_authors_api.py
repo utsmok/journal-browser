@@ -224,6 +224,7 @@ async def test_profile_shape(authors_api):
         "similar",
         "alternatives",
         "works",
+        "openalex_only",
         "openalex_only_count",
     }
     author = body["author"]
@@ -291,9 +292,10 @@ async def test_profile_works_sorted_and_joined(authors_api):
 
 @requires_db
 async def test_profile_openalex_only_merge(authors_api, db, monkeypatch):
-    """OpenAlex-attributed works absent from Pure append after the local
-    ones with in_pure False; window, excluded-type, and DOI-duplicate gates
-    drop the rest."""
+    """OpenAlex-attributed works absent from Pure live in the profile's
+    openalex_only section (never truncated by the works cap); window,
+    excluded-type, and DOI-duplicate gates drop the rest, and the works
+    list stays Pure-canon only."""
     from sqlalchemy import update
 
     await db.execute(
@@ -362,20 +364,28 @@ async def test_profile_openalex_only_merge(authors_api, db, monkeypatch):
     monkeypatch.setattr("journal_browser.services.authors.openalex_only_works_for_author", _fake)
     body = (await authors_api.get("/api/v1/ut/authors/alice-uuid")).json()
     works = body["works"]
-    assert [w["pure_uuid"] for w in works if w["in_pure"]] == [
-        "w-2024",
-        "w-2023a",
-        "w-2023b",
-        "w-2021",
-    ]
-    merged = [w for w in works if not w["in_pure"]]
-    assert [(w["title"], w["doi"]) for w in merged] == [
+    # the works list is the Pure canon only — no merged rows ride along
+    assert [w["pure_uuid"] for w in works] == ["w-2024", "w-2023a", "w-2023b", "w-2021"]
+    assert all(w["in_pure"] for w in works)
+    section = body["openalex_only"]
+    assert section["available"] is True
+    assert section["total"] == 2
+    assert body["openalex_only_count"] == 2
+    missed = section["items"]
+    assert [(w["title"], w["doi"]) for w in missed] == [
         ("Only OA", "10.1000/oa-only"),
         ("No Doi", None),
     ]
-    assert merged[0]["oa_status"] == "unknown"
-    assert merged[0]["journal_title"] == "Outside Journal"
-    assert merged[0]["journal_issn_l"] == "9999-9991"
+    assert missed[0]["pure_uuid"] is None
+    assert missed[0]["in_pure"] is False
+    assert missed[0]["oa_status"] == "unknown"
+    assert missed[0]["work_type"] is None
+    assert missed[0]["journal_title"] == "Outside Journal"
+    assert missed[0]["journal_issn_l"] == "9999-9991"
+    # fake rows carry no W-id/authorships: identity + attribution degrade
+    assert missed[0]["openalex_id"] is None
+    assert missed[0]["openalex_url"] is None
+    assert missed[0]["ut_authors"] == []
 
 
 @requires_db

@@ -418,6 +418,28 @@ async def search_publishers(
     return {"items": items, "total": len(matches), "facets": facets}
 
 
+async def group_issns(session: AsyncSession, institution_id: int, name: str) -> list[str] | None:
+    """The browsable journal ISSN set under one canonical publisher key;
+    sub-brand names resolve through the snapshot like publisher_detail.
+    None = no browsable journal under this key (404 upstream)."""
+    snapshot = await _snapshot(session, institution_id)
+    if snapshot.get(name) is None:
+        group = next((g for g, p in snapshot.items() if name.lower() in p.members_lower), None)
+        if group is None:
+            return None
+        name = group
+    subq = (
+        base_query(institution_id=institution_id)
+        .where(
+            grouping_key() == name,
+            Journal.publisher_name.is_not(None),
+            Journal.publisher_name != "",
+        )
+        .subquery()
+    )
+    return [r.issn_l for r in (await session.execute(select(subq.c.issn_l))).all()]
+
+
 async def publisher_detail(
     session: AsyncSession, institution: Institution, name: str
 ) -> dict[str, Any] | None:

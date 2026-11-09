@@ -48,7 +48,7 @@ async def authorship_db(db, institution_factory):
     distinct-work counting rules, plus store rows exercising every gap
     gate (matched DOI, excluded type, NULL type, window, venue)."""
     ut = await institution_factory(code="ut", data_window_start=WINDOW_START)
-    db.add(journal_factory("1234-5678"))
+    db.add(journal_factory("1234-5678", publisher_name="Publisher One"))
     db.add(journal_factory("9999-9999"))
     run = HarvestRun(source="pure", entity_type="works", status="completed", config_fingerprint="t")
     db.add(run)
@@ -128,8 +128,17 @@ async def authorship_db(db, institution_factory):
     )
     db.add_all(
         [
-            # venue gaps: unmatched DOI + DOI-less row (NULL type stays)
-            _oa_work(ut.id, "W-gap1", doi="10.9.0/1", title="Gap One", year=2024),
+            # venue gaps: unmatched DOI + DOI-less row (NULL type stays);
+            # Gap One names a roster author so the item-level ut
+            # attribution has something to match
+            _oa_work(
+                ut.id,
+                "W-gap1",
+                doi="10.9.0/1",
+                title="Gap One",
+                year=2024,
+                authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": "0000-0002-1111"}],
+            ),
             _oa_work(ut.id, "W-gap2", title="Gap Two Untyped", year=2023, work_type=None),
             # gated rows: matched DOI, excluded type, out of window, other venue
             _oa_work(ut.id, "W-matched", doi="10.0.0/w1", title="Matched", year=2023),
@@ -250,6 +259,32 @@ async def test_venue_openalex_only_applies_gates(authorship_db, db):
     assert [i["title"] for i in out["items"]] == ["Gap One", "Gap Two Untyped"]
     assert out["items"][1]["doi"] is None
     assert out["items"][1]["work_type"] is None
+    # items carry work identity, authorships, roster attribution, and
+    # venue context
+    first = out["items"][0]
+    assert first["openalex_id"] == "W-gap1"
+    assert first["openalex_url"] == "https://openalex.org/W-gap1"
+    assert first["authors"] == [
+        {"openalex_id": "A-ALICE", "name": "Alice Author", "orcid": "0000-0002-1111"}
+    ]
+    assert first["ut_authors"] == [
+        {
+            "name": "Alice Author",
+            "orcid": None,
+            "faculty": EEMCS,
+            "research_group": "Group X",
+            "institute": None,
+        }
+    ]
+    assert first["journal_issn_l"] == "1234-5678"
+    assert first["journal_title"] == "Journal One"
+    assert first["publisher_name"] == "Publisher One"
+    # the legacy venue key stays (store venue_name)
+    assert first["venue"] == "Journal One"
+    # the unattributed row keeps the new keys but empty lists
+    assert out["items"][1]["authors"] == []
+    assert out["items"][1]["ut_authors"] == []
+    assert out["items"][1]["publisher_name"] == "Publisher One"
 
 
 @requires_db
@@ -272,9 +307,12 @@ async def test_author_ids_openalex_only_counts_work_once(authorship_db, db):
         out = await authorship.author_ids_openalex_only(session, inst, ["a-alice", "a-bob"])
     # W-u1 (alice) + W-u2 (alice+bob, counted once); W-u3's DOI matches a
     # pure work and W-other sits in another venue but IS attributed —
-    # attribution is unit-wide, not venue-scoped, so it counts too
-    assert out["total"] == 3
+    # attribution is unit-wide, not venue-scoped, so it counts too.
+    # W-gap1 names alice as well and counts here (venue gaps are not
+    # author-scoped, but attribution is).
+    assert out["total"] == 4
     assert sorted(i["title"] for i in out["items"]) == [
+        "Gap One",
         "Other Venue",
         "Unit Gap One",
         "Unit Gap Two",

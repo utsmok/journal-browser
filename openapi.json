@@ -2136,6 +2136,56 @@
         }
       }
     },
+    "/api/v1/{institution_code}/journals/{issn_l}/openalex-only.csv": {
+      "get": {
+        "tags": [
+          "journals"
+        ],
+        "summary": "Journal Openalex Only Csv",
+        "description": "Uncapped CSV of the journal's CRIS-gap (OpenAlex-only) list.",
+        "operationId": "journal_openalex_only_csv_api_v1__institution_code__journals__issn_l__openalex_only_csv_get",
+        "parameters": [
+          {
+            "name": "issn_l",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Issn L"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/{institution_code}/journals/{issn_l}": {
       "get": {
         "tags": [
@@ -2591,6 +2641,66 @@
         }
       }
     },
+    "/api/v1/{institution_code}/authors/{pure_uuid}/works.csv": {
+      "get": {
+        "tags": [
+          "authors"
+        ],
+        "summary": "Author Works Csv",
+        "description": "Uncapped CSV of the author's works: scope=missed (default) serves\nthe openalex-only list, scope=canon the Pure works; 400 otherwise.",
+        "operationId": "author_works_csv_api_v1__institution_code__authors__pure_uuid__works_csv_get",
+        "parameters": [
+          {
+            "name": "pure_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pure Uuid"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "missed",
+              "title": "Scope"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/{institution_code}/publishers": {
       "get": {
         "tags": [
@@ -2830,6 +2940,56 @@
                 "schema": {
                   "$ref": "#/components/schemas/PublisherSearchResponse"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/publishers/{name}/openalex-only.csv": {
+      "get": {
+        "tags": [
+          "publishers"
+        ],
+        "summary": "Publisher Openalex Only Csv",
+        "description": "Uncapped CSV of the publisher group's CRIS-gap (OpenAlex-only) list.",
+        "operationId": "publisher_openalex_only_csv_api_v1__institution_code__publishers__name__openalex_only_csv_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -4854,6 +5014,172 @@
         ],
         "title": "AuthorJournalRow"
       },
+      "AuthorOpenalexOnly": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuthorOpenalexOnlyWork"
+            },
+            "type": "array",
+            "title": "Items",
+            "default": []
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "AuthorOpenalexOnly",
+        "description": "The author's OpenAlex-only works as their own section: total is\nexact, items carry the gated missed works (safety-capped)."
+      },
+      "AuthorOpenalexOnlyWork": {
+        "properties": {
+          "pure_uuid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Uuid"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "oa_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Status"
+          },
+          "work_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Type"
+          },
+          "journal_issn_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Issn L"
+          },
+          "journal_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Title"
+          },
+          "publisher_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Name"
+          },
+          "openalex_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Id"
+          },
+          "openalex_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Url"
+          },
+          "in_pure": {
+            "type": "boolean",
+            "title": "In Pure",
+            "default": false
+          },
+          "ut_authors": {
+            "items": {
+              "$ref": "#/components/schemas/UtAuthorAttribution"
+            },
+            "type": "array",
+            "title": "Ut Authors",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "AuthorOpenalexOnlyWork",
+        "description": "One OpenAlex-only (missed) work in the author page's dedicated\nsection: same gates the merged works list used to apply, but the list\nis the section's own \u2014 never truncated by the works cap."
+      },
       "AuthorOut": {
         "properties": {
           "pure_uuid": {
@@ -5011,6 +5337,14 @@
             },
             "type": "array",
             "title": "Works"
+          },
+          "openalex_only": {
+            "$ref": "#/components/schemas/AuthorOpenalexOnly",
+            "default": {
+              "total": 0,
+              "items": [],
+              "available": true
+            }
           },
           "openalex_only_count": {
             "anyOf": [
@@ -8528,6 +8862,42 @@
         "title": "OpenalexOnly",
         "description": "OpenAlex store works attributed to the venue or to the unit's\nmember authors whose DOI matches no Pure work \u2014 candidates missing\nfrom the CRIS. items is capped; total is exact. available=False when\nthe openalex_works projection never ran (frontend hides the card)."
       },
+      "OpenalexOnlyAuthor": {
+        "properties": {
+          "openalex_id": {
+            "type": "string",
+            "title": "Openalex Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "orcid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orcid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "openalex_id"
+        ],
+        "title": "OpenalexOnlyAuthor",
+        "description": "One compact OpenAlex authorship of a gap work ({a, n, o})."
+      },
       "OpenalexOnlyWork": {
         "properties": {
           "title": {
@@ -8595,6 +8965,77 @@
               }
             ],
             "title": "Venue"
+          },
+          "openalex_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Id"
+          },
+          "openalex_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Url"
+          },
+          "authors": {
+            "items": {
+              "$ref": "#/components/schemas/OpenalexOnlyAuthor"
+            },
+            "type": "array",
+            "title": "Authors",
+            "default": []
+          },
+          "ut_authors": {
+            "items": {
+              "$ref": "#/components/schemas/UtAuthorAttribution"
+            },
+            "type": "array",
+            "title": "Ut Authors",
+            "default": []
+          },
+          "journal_issn_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Issn L"
+          },
+          "journal_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Title"
+          },
+          "publisher_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Name"
           }
         },
         "type": "object",
@@ -10365,6 +10806,64 @@
           "count"
         ],
         "title": "UsageTopRef"
+      },
+      "UtAuthorAttribution": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "orcid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orcid"
+          },
+          "faculty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Faculty"
+          },
+          "research_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Group"
+          },
+          "institute": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institute"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "UtAuthorAttribution",
+        "description": "Roster author matched on a gap work's OpenAlex authorships."
       },
       "ValidationError": {
         "properties": {

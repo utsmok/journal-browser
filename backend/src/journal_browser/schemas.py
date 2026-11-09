@@ -325,6 +325,24 @@ class UTAuthorship(BaseModel):
     top_authors: list[UTAuthorRow] = []
 
 
+class OpenalexOnlyAuthor(BaseModel):
+    """One compact OpenAlex authorship of a gap work ({a, n, o})."""
+
+    openalex_id: str
+    name: str | None = None
+    orcid: str | None = None
+
+
+class UtAuthorAttribution(BaseModel):
+    """Roster author matched on a gap work's OpenAlex authorships."""
+
+    name: str
+    orcid: str | None = None
+    faculty: str | None = None
+    research_group: str | None = None
+    institute: str | None = None
+
+
 class OpenalexOnlyWork(BaseModel):
     title: str | None = None
     year: int | None = None
@@ -332,6 +350,13 @@ class OpenalexOnlyWork(BaseModel):
     oa_status: str | None = None
     work_type: str | None = None
     venue: str | None = None
+    openalex_id: str | None = None
+    openalex_url: str | None = None
+    authors: list[OpenalexOnlyAuthor] = []
+    ut_authors: list[UtAuthorAttribution] = []
+    journal_issn_l: str | None = None
+    journal_title: str | None = None
+    publisher_name: str | None = None
 
 
 class OpenalexOnly(BaseModel):
@@ -594,6 +619,35 @@ class AuthorWorkItem(BaseModel):
     in_pure: bool = True
 
 
+class AuthorOpenalexOnlyWork(BaseModel):
+    """One OpenAlex-only (missed) work in the author page's dedicated
+    section: same gates the merged works list used to apply, but the list
+    is the section's own — never truncated by the works cap."""
+
+    pure_uuid: str | None = None
+    title: str | None = None
+    year: int | None = None
+    doi: str | None = None
+    oa_status: str | None = None
+    work_type: str | None = None
+    journal_issn_l: str | None = None
+    journal_title: str | None = None
+    publisher_name: str | None = None
+    openalex_id: str | None = None
+    openalex_url: str | None = None
+    in_pure: bool = False
+    ut_authors: list[UtAuthorAttribution] = []
+
+
+class AuthorOpenalexOnly(BaseModel):
+    """The author's OpenAlex-only works as their own section: total is
+    exact, items carry the gated missed works (safety-capped)."""
+
+    total: int = 0
+    items: list[AuthorOpenalexOnlyWork] = []
+    available: bool = True
+
+
 class AuthorProfileResponse(BaseModel):
     author: AuthorOut
     oa_by_year: list[AuthorYearRow]
@@ -602,9 +656,10 @@ class AuthorProfileResponse(BaseModel):
     similar: AuthorSimilarBundle
     alternatives: list[AuthorAlternative]
     works: list[AuthorWorkItem]
+    openalex_only: AuthorOpenalexOnly = AuthorOpenalexOnly()
     # Exact count of OpenAlex-only works after gating; None when the
-    # source could not answer (DSN path). The works list carries the
-    # capped merged items, in_pure=False marking them.
+    # source could not answer (DSN path). The openalex_only section
+    # carries the works themselves.
     openalex_only_count: int | None = None
 
 

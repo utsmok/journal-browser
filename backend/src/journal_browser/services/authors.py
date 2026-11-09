@@ -13,6 +13,12 @@ from ..config import get_settings, work_type_excluded
 from ..harvest.authors import topic_mass
 from ..harvest.common import normalize_doi
 from ..models import Author, AuthorWork, Institution, Journal, JournalFlags, Work
+from .authorship import (
+    OPENALEX_URL,
+    journal_publisher_map,
+    ut_authors_for_authorships,
+    ut_roster_by_aids,
+)
 from .facets import author_facets
 from .search import _like, _oa_type, base_query
 from .work_sources import openalex_only_works_for_author
@@ -32,6 +38,9 @@ SIMILAR_FILTERED_LIMIT = 5
 ALTERNATIVE_JOURNALS = 5
 ALTERNATIVE_OPTIONS = 3
 WORKS_CAP = 200
+#: Safety cap for the openalex_only section's item list; the author-scoped
+#: query is small, and total stays exact beyond it.
+OPENALEX_ONLY_CAP = 1000
 
 # European diacritics folded to plain ASCII on both sides of author-name
 # search, so umlaut-free queries match umlauted names ("follmer" -> "Föllmer").
@@ -351,25 +360,28 @@ async def _similar_sections(
     return similar, alternatives
 
 
-async def _openalex_only_merge(
+async def _openalex_only_section(
     session: AsyncSession, institution: Institution, author: Author, work_rows: Any
-) -> tuple[list[dict[str, Any]], int | None]:
-    """OpenAlex-attributed works the Pure population does not hold, as
-    profile work items with in_pure False, appended after the local ones.
+) -> tuple[dict[str, Any], int | None]:
+    """The profile's openalex_only section: OpenAlex-attributed works the
+    Pure population does not hold, as their own list — never truncated by
+    the works cap (that split-off fixes authors with >= 200 Pure works,
+    whose missed works used to render zero items while the count said
+    otherwise).
 
-    Returns the capped merge items plus the exact gated count (None when
-    the source could not answer — the caller then leaves
-    openalex_only_count unset and the page degrades to Pure-only).
+    Returns the section plus the exact gated count (None when the source
+    could not answer — the caller then leaves openalex_only_count unset
+    and the section degrades to available=False).
 
-    Quality gates keep the merge honest: the institution's publication-year
-    window applies, excluded work types (preprints/books) drop out, and a
-    DOI that matches a local work is skipped (same publication; the Pure
-    copy stays the display record)."""
+    Quality gates keep the section honest: the institution's
+    publication-year window applies, excluded work types (preprints/books)
+    drop out, and a DOI that matches a local work is skipped (same
+    publication; the Pure copy stays the display record)."""
     rows = await openalex_only_works_for_author(session, institution, author)
     if rows is None:
-        return [], None
+        return {"total": 0, "items": [], "available": False}, None
     if not rows:
-        return [], 0
+        return {"total": 0, "items": [], "available": True}, 0
     year_end = institution.data_window_end if institution.data_window_end is not None else 9999
     seen_dois = {doi for row in work_rows if (doi := normalize_doi(row.doi_normalized))}
     gated: list[dict[str, Any]] = []
@@ -389,17 +401,44 @@ async def _openalex_only_merge(
             seen_dois.add(doi)
         gated.append(
             {
-                "pure_uuid": None,
                 "title": row["title"] or "Untitled",
                 "year": year,
                 "doi": row["doi"],
                 "oa_status": row["oa_status"] or "unknown",
+                "work_type": row["work_type"],
                 "journal_issn_l": row["issn_l"],
                 "journal_title": row["venue_name"],
-                "in_pure": False,
+                "openalex_id": row.get("openalex_id"),
+                "authorships": row.get("authorships") or [],
             }
         )
-    return gated[: max(WORKS_CAP - len(work_rows), 0)], len(gated)
+    publishers = await journal_publisher_map(session, [g["journal_issn_l"] for g in gated])
+    roster = await ut_roster_by_aids(
+        session,
+        institution,
+        {
+            aid.lower()
+            for g in gated
+            for entry in g["authorships"]
+            if (aid := str((entry or {}).get("a") or ""))
+        },
+    )
+    items = []
+    for g in gated:
+        authorships = g.pop("authorships")
+        w_id = g["openalex_id"]
+        items.append(
+            {
+                "pure_uuid": None,
+                **g,
+                "openalex_url": f"{OPENALEX_URL}/{w_id}" if w_id else None,
+                "publisher_name": publishers.get(g["journal_issn_l"]),
+                "in_pure": False,
+                "ut_authors": ut_authors_for_authorships(authorships, roster),
+            }
+        )
+    total = len(items)
+    return {"total": total, "items": items[:OPENALEX_ONLY_CAP], "available": True}, total
 
 
 async def author_profile(
@@ -489,7 +528,7 @@ async def author_profile(
         embeddings = {row.issn_l: row.embedding for row in emb_rows if row.embedding is not None}
     similar, alternatives = await _similar_sections(session, iid, journal_rows, embeddings)
 
-    openalex_items, openalex_only_count = await _openalex_only_merge(
+    openalex_section, openalex_only_count = await _openalex_only_section(
         session, institution, author, work_rows
     )
 
@@ -532,7 +571,7 @@ async def author_profile(
                 "in_pure": True,
             }
             for row in work_rows
-        ]
-        + openalex_items,
+        ],
+        "openalex_only": openalex_section,
         "openalex_only_count": openalex_only_count,
     }

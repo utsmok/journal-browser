@@ -219,16 +219,32 @@ async def test_journal_metrics_count_canonical_rows(serving_api):
 async def test_author_profile_merges_openalex_only(serving_api):
     r = await serving_api.get("/api/v1/ut/authors/alice-uuid")
     assert r.status_code == 200
+    # the works list is the Pure canon only; the missed work lives in the
+    # openalex_only section
     works = r.json()["works"]
-    titles = [w["title"] for w in works]
-    # local work first (pure), then the gated openalex-only merge
-    assert titles == ["Pure Work", "Ghost Work"]
-    ghost = works[-1]
+    assert [w["title"] for w in works] == ["Pure Work"]
+    section = r.json()["openalex_only"]
+    assert section["available"] is True
+    assert section["total"] == 1
+    ghost = section["items"][0]
+    assert ghost["title"] == "Ghost Work"
     assert ghost["in_pure"] is False
     assert ghost["doi"] == "10.9999/ghost"
     assert ghost["journal_title"] == "Journal One"
     assert ghost["year"] == 2024
-    # the exact gated count rides beside the capped merged list
+    assert ghost["openalex_id"] == "W-ghost"
+    assert ghost["openalex_url"] == "https://openalex.org/W-ghost"
+    # roster attribution rides on the store row's authorships
+    assert ghost["ut_authors"] == [
+        {
+            "name": "Alice Author",
+            "orcid": None,
+            "faculty": None,
+            "research_group": "Group X",
+            "institute": None,
+        }
+    ]
+    # the exact gated count rides beside the section
     assert r.json()["openalex_only_count"] == 1
 
 

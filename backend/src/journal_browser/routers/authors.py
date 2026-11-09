@@ -3,18 +3,21 @@
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
 from ..deps import InstitutionDep
 from ..schemas import (
     AuthorAlternative,
+    AuthorOpenalexOnly,
     AuthorProfileResponse,
     AuthorSearchResponse,
     AuthorSimilarBundle,
     AuthorSimilarJournal,
 )
 from ..services import authors as authors_service
+from ..services import exports as exports_service
 
 router = APIRouter(prefix="/authors", tags=["authors"])
 
@@ -93,5 +96,18 @@ async def author_profile(
             for alt in profile["alternatives"]
         ],
         works=profile["works"],
+        openalex_only=AuthorOpenalexOnly(**profile["openalex_only"]),
         openalex_only_count=profile["openalex_only_count"],
     )
+
+
+@router.get("/{pure_uuid}/works.csv")
+async def author_works_csv(
+    pure_uuid: str,
+    session: SessionDep,
+    institution: InstitutionDep,
+    scope: str = "missed",
+) -> StreamingResponse:
+    """Uncapped CSV of the author's works: scope=missed (default) serves
+    the openalex-only list, scope=canon the Pure works; 400 otherwise."""
+    return await exports_service.author_works_csv(session, institution, pure_uuid, scope)

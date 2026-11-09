@@ -20,6 +20,7 @@ degradation the author page applies); the frontend hides the card
 instead of showing a misleading zero.
 """
 
+from collections.abc import Iterable
 from typing import Any
 
 from sqlalchemy import column, exists, func, select
@@ -27,12 +28,14 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..harvest.openalex_works import AUTHOR_SWEEP_PREFIX
-from ..models import Author, Institution, OpenalexWork, Work, WorkPureAuthor
+from ..models import Author, Institution, Journal, OpenalexWork, Work, WorkPureAuthor
 from .works_query import work_type_not_excluded, year_end
 
 TOP_AUTHORS = 10
 #: Items served per OpenalexOnly payload; total stays exact beyond it.
 GAP_ITEM_CAP = 50
+#: Canonical OpenAlex work url prefix (openalex.org/W...).
+OPENALEX_URL = "https://openalex.org"
 
 
 async def local_store_ready(session: AsyncSession, institution: Institution) -> bool:
@@ -49,7 +52,7 @@ def _unavailable() -> dict[str, Any]:
     return {"total": 0, "items": [], "available": False}
 
 
-def _store_gates(institution: Institution) -> list[Any]:
+def store_gates(institution: Institution) -> list[Any]:
     """Window + type gates for store rows, mirroring the author page's
     openalex-only merge: NULL years drop (outside any window), NULL types
     stay (OpenAlex's vocabulary is sparser than Pure's)."""
@@ -59,7 +62,7 @@ def _store_gates(institution: Institution) -> list[Any]:
     ]
 
 
-def _not_in_pure() -> Any:
+def not_in_pure() -> Any:
     """Anti-join: no Pure work holds this DOI. DOI-less store rows cannot
     match and therefore count — same rule the author page applies."""
     return ~exists(
@@ -83,11 +86,111 @@ def attributed_to_any(aids: list[str]) -> Any:
     )
 
 
+async def ut_roster_by_aids(
+    session: AsyncSession, institution: Institution, aids: Iterable[str]
+) -> dict[str, dict[str, Any]]:
+    """Roster authors whose openalex_ids intersect the given bare A-ids,
+    keyed by lowercase id, one map entry per (author, id) pair.
+
+    Values carry pure_uuid for dedupe (merged A-ids point at one author);
+    ut_authors_for_authorships projects them to the served shape. Ids
+    compare case-insensitively — the store's authorships carry OpenAlex's
+    canonical uppercase form, openalex_ids stores lowercase ids."""
+    wanted = sorted({aid.lower() for aid in aids if aid})
+    if not wanted:
+        return {}
+    ids = func.jsonb_array_elements_text(Author.openalex_ids).table_valued(column("value", JSONB))
+    rows = (
+        await session.execute(
+            select(
+                Author.pure_uuid,
+                Author.name,
+                Author.orcid,
+                Author.faculty,
+                Author.research_group,
+                Author.institute,
+                Author.openalex_ids,
+            ).where(
+                Author.institution_id == institution.id,
+                exists(select(1).select_from(ids).where(func.lower(ids.c.value).in_(wanted))),
+            )
+        )
+    ).all()
+    out: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        entry = {
+            "pure_uuid": r.pure_uuid,
+            "name": r.name,
+            "orcid": r.orcid,
+            "faculty": r.faculty,
+            "research_group": r.research_group,
+            "institute": r.institute,
+        }
+        for aid in r.openalex_ids or []:
+            out.setdefault(str(aid).lower(), entry)
+    return out
+
+
+def ut_authors_for_authorships(
+    authorships: list[Any] | None, roster: dict[str, dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Roster attribution for one work's compact authorships, authorship
+    order kept, one row per roster author even when merged A-ids repeat
+    and blanks skipped."""
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for entry in authorships or []:
+        hit = roster.get(str((entry or {}).get("a") or "").lower())
+        if hit is None or hit["pure_uuid"] in seen:
+            continue
+        seen.add(hit["pure_uuid"])
+        out.append({k: hit[k] for k in ("name", "orcid", "faculty", "research_group", "institute")})
+    return out
+
+
+def work_authors_of(authorships: list[Any] | None) -> list[dict[str, Any]]:
+    """Authors of one work from the compact authorships array, order
+    kept, blank ids skipped."""
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for entry in authorships or []:
+        if not isinstance(entry, dict):
+            continue
+        aid = str(entry.get("a") or "").strip()
+        if not aid or aid in seen:
+            continue
+        seen.add(aid)
+        out.append({"openalex_id": aid, "name": entry.get("n"), "orcid": entry.get("o")})
+    return out
+
+
+async def journal_publisher_map(session: AsyncSession, issns: Iterable[str]) -> dict[str, str]:
+    """issn_l -> display publisher (canonical when known, else the raw
+    publisher_name) for the venue join."""
+    wanted = sorted({issn for issn in issns if issn})
+    if not wanted:
+        return {}
+    rows = (
+        await session.execute(
+            select(
+                Journal.issn_l,
+                func.coalesce(
+                    func.nullif(Journal.publisher_canonical, ""), Journal.publisher_name
+                ).label("publisher"),
+            ).where(Journal.issn_l.in_(wanted))
+        )
+    ).all()
+    return {r.issn_l: r.publisher for r in rows}
+
+
 async def _store_gap_payload(
     session: AsyncSession, institution: Institution, predicate: list[Any]
 ) -> dict[str, Any]:
     """Shared shape: exact total + capped items over one store predicate
-    (gates + attribution + anti-join), most recent first."""
+    (gates + attribution + anti-join), most recent first. Items carry the
+    work identity (openalex id/url), the compact authorships, roster
+    attribution for the institution's own authors, and venue context
+    (journal + publisher)."""
     if not await local_store_ready(session, institution):
         return _unavailable()
     where = [OpenalexWork.institution_id == institution.id, *predicate]
@@ -95,18 +198,32 @@ async def _store_gap_payload(
     rows = (
         await session.execute(
             select(
+                OpenalexWork.w_id,
                 OpenalexWork.title,
                 OpenalexWork.year,
                 OpenalexWork.doi_normalized,
                 OpenalexWork.oa_status,
                 OpenalexWork.work_type,
+                OpenalexWork.venue_issn_l,
                 OpenalexWork.venue_name,
+                OpenalexWork.authorships,
             )
             .where(*where)
             .order_by(OpenalexWork.year.desc().nulls_last(), func.lower(OpenalexWork.title))
             .limit(GAP_ITEM_CAP)
         )
     ).all()
+    publishers = await journal_publisher_map(session, [r.venue_issn_l for r in rows])
+    roster = await ut_roster_by_aids(
+        session,
+        institution,
+        {
+            aid.lower()
+            for r in rows
+            for entry in r.authorships or []
+            if (aid := str((entry or {}).get("a") or ""))
+        },
+    )
     items = [
         {
             "title": r.title,
@@ -115,6 +232,13 @@ async def _store_gap_payload(
             "oa_status": r.oa_status,
             "work_type": r.work_type,
             "venue": r.venue_name,
+            "openalex_id": r.w_id,
+            "openalex_url": f"{OPENALEX_URL}/{r.w_id}",
+            "authors": work_authors_of(r.authorships),
+            "ut_authors": ut_authors_for_authorships(r.authorships, roster),
+            "journal_issn_l": r.venue_issn_l,
+            "journal_title": r.venue_name,
+            "publisher_name": publishers.get(r.venue_issn_l),
         }
         for r in rows
     ]
@@ -149,8 +273,8 @@ async def venue_openalex_only(
         [
             OpenalexWork.venue_issn_l.in_(venue_issns),
             OpenalexWork.source != AUTHOR_SWEEP_PREFIX,
-            *_store_gates(institution),
-            _not_in_pure(),
+            *store_gates(institution),
+            not_in_pure(),
         ],
     )
 
@@ -171,7 +295,7 @@ async def author_ids_openalex_only(
     if not flat:
         return {"total": 0, "items": [], "available": await local_store_ready(session, institution)}
     return await _store_gap_payload(
-        session, institution, [attributed_to_any(flat), *_store_gates(institution), _not_in_pure()]
+        session, institution, [attributed_to_any(flat), *store_gates(institution), not_in_pure()]
     )
 
 

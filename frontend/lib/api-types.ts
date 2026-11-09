@@ -555,6 +555,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/{institution_code}/journals/{issn_l}/openalex-only.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Journal Openalex Only Csv
+         * @description Uncapped CSV of the journal's CRIS-gap (OpenAlex-only) list.
+         */
+        get: operations["journal_openalex_only_csv_api_v1__institution_code__journals__issn_l__openalex_only_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/{institution_code}/journals/{issn_l}": {
         parameters: {
             query?: never;
@@ -640,6 +660,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/{institution_code}/authors/{pure_uuid}/works.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Author Works Csv
+         * @description Uncapped CSV of the author's works: scope=missed (default) serves
+         *     the openalex-only list, scope=canon the Pure works; 400 otherwise.
+         */
+        get: operations["author_works_csv_api_v1__institution_code__authors__pure_uuid__works_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/{institution_code}/publishers": {
         parameters: {
             query?: never;
@@ -649,6 +690,26 @@ export interface paths {
         };
         /** Search Publishers */
         get: operations["search_publishers_api_v1__institution_code__publishers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/{institution_code}/publishers/{name}/openalex-only.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Publisher Openalex Only Csv
+         * @description Uncapped CSV of the publisher group's CRIS-gap (OpenAlex-only) list.
+         */
+        get: operations["publisher_openalex_only_csv_api_v1__institution_code__publishers__name__openalex_only_csv_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1190,6 +1251,68 @@ export interface components {
             /** Oa Type */
             oa_type: string;
         };
+        /**
+         * AuthorOpenalexOnly
+         * @description The author's OpenAlex-only works as their own section: total is
+         *     exact, items carry the gated missed works (safety-capped).
+         */
+        AuthorOpenalexOnly: {
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["AuthorOpenalexOnlyWork"][];
+            /**
+             * Available
+             * @default true
+             */
+            available: boolean;
+        };
+        /**
+         * AuthorOpenalexOnlyWork
+         * @description One OpenAlex-only (missed) work in the author page's dedicated
+         *     section: same gates the merged works list used to apply, but the list
+         *     is the section's own — never truncated by the works cap.
+         */
+        AuthorOpenalexOnlyWork: {
+            /** Pure Uuid */
+            pure_uuid?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Year */
+            year?: number | null;
+            /** Doi */
+            doi?: string | null;
+            /** Oa Status */
+            oa_status?: string | null;
+            /** Work Type */
+            work_type?: string | null;
+            /** Journal Issn L */
+            journal_issn_l?: string | null;
+            /** Journal Title */
+            journal_title?: string | null;
+            /** Publisher Name */
+            publisher_name?: string | null;
+            /** Openalex Id */
+            openalex_id?: string | null;
+            /** Openalex Url */
+            openalex_url?: string | null;
+            /**
+             * In Pure
+             * @default false
+             */
+            in_pure: boolean;
+            /**
+             * Ut Authors
+             * @default []
+             */
+            ut_authors: components["schemas"]["UtAuthorAttribution"][];
+        };
         /** AuthorOut */
         AuthorOut: {
             /** Pure Uuid */
@@ -1229,6 +1352,14 @@ export interface components {
             alternatives: components["schemas"]["AuthorAlternative"][];
             /** Works */
             works: components["schemas"]["AuthorWorkItem"][];
+            /**
+             * @default {
+             *       "total": 0,
+             *       "items": [],
+             *       "available": true
+             *     }
+             */
+            openalex_only: components["schemas"]["AuthorOpenalexOnly"];
             /** Openalex Only Count */
             openalex_only_count?: number | null;
         };
@@ -2447,6 +2578,18 @@ export interface components {
              */
             available: boolean;
         };
+        /**
+         * OpenalexOnlyAuthor
+         * @description One compact OpenAlex authorship of a gap work ({a, n, o}).
+         */
+        OpenalexOnlyAuthor: {
+            /** Openalex Id */
+            openalex_id: string;
+            /** Name */
+            name?: string | null;
+            /** Orcid */
+            orcid?: string | null;
+        };
         /** OpenalexOnlyWork */
         OpenalexOnlyWork: {
             /** Title */
@@ -2461,6 +2604,26 @@ export interface components {
             work_type?: string | null;
             /** Venue */
             venue?: string | null;
+            /** Openalex Id */
+            openalex_id?: string | null;
+            /** Openalex Url */
+            openalex_url?: string | null;
+            /**
+             * Authors
+             * @default []
+             */
+            authors: components["schemas"]["OpenalexOnlyAuthor"][];
+            /**
+             * Ut Authors
+             * @default []
+             */
+            ut_authors: components["schemas"]["UtAuthorAttribution"][];
+            /** Journal Issn L */
+            journal_issn_l?: string | null;
+            /** Journal Title */
+            journal_title?: string | null;
+            /** Publisher Name */
+            publisher_name?: string | null;
         };
         /**
          * OpenalexTopicOut
@@ -3063,6 +3226,22 @@ export interface components {
             ref_id: string;
             /** Count */
             count: number;
+        };
+        /**
+         * UtAuthorAttribution
+         * @description Roster author matched on a gap work's OpenAlex authorships.
+         */
+        UtAuthorAttribution: {
+            /** Name */
+            name: string;
+            /** Orcid */
+            orcid?: string | null;
+            /** Faculty */
+            faculty?: string | null;
+            /** Research Group */
+            research_group?: string | null;
+            /** Institute */
+            institute?: string | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -4377,6 +4556,38 @@ export interface operations {
             };
         };
     };
+    journal_openalex_only_csv_api_v1__institution_code__journals__issn_l__openalex_only_csv_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issn_l: string;
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     journal_detail_api_v1__institution_code__journals__issn_l__get: {
         parameters: {
             query?: {
@@ -4553,6 +4764,40 @@ export interface operations {
             };
         };
     };
+    author_works_csv_api_v1__institution_code__authors__pure_uuid__works_csv_get: {
+        parameters: {
+            query?: {
+                scope?: string;
+            };
+            header?: never;
+            path: {
+                pure_uuid: string;
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     search_publishers_api_v1__institution_code__publishers_get: {
         parameters: {
             query?: {
@@ -4585,6 +4830,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublisherSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publisher_openalex_only_csv_api_v1__institution_code__publishers__name__openalex_only_csv_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

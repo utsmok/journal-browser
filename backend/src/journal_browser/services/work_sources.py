@@ -84,6 +84,8 @@ async def openalex_only_works_for_author(
             "work_type": row.work_type,
             "venue_name": row.venue_name,
             "issn_l": row.venue_issn_l,
+            "openalex_id": row.w_id,
+            "authorships": row.authorships or [],
         }
         for row in rows
     ]
