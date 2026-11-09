@@ -66,6 +66,9 @@ export type AuthorSearchFilters = {
 
 export type AuthorSimilarJournal = Schemas["AuthorSimilarJournal"];
 
+/** Roster author matched on a gap work's OpenAlex authorships. */
+export type UtAuthorAttribution = Schemas["UtAuthorAttribution"];
+
 export type AuthorProfile = Schemas["AuthorProfileResponse"];
 
 export type SortKey =

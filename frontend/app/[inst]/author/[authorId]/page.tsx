@@ -9,7 +9,9 @@ import * as React from "react";
 import { DealBadge, OaStatusChip, OaTypeBadge } from "@/components/badges";
 import { CardPager } from "@/components/card-pager";
 import { CollapsibleCard } from "@/components/collapsible-card";
+import { GapCsvButton } from "@/components/gap-csv-button";
 import { OaTrend } from "@/components/oa-trend";
+import { UtAuthorLine } from "@/components/ut-author-line";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -23,6 +25,7 @@ import { DetailSkeleton, ErrorPanel } from "@/components/states";
 import { useInstitution } from "@/hooks/use-institution";
 import {
   errorMessage,
+  encodeNamePath,
   fetchAuthor,
   type AuthorProfile,
   type AuthorSimilarJournal,
@@ -230,6 +233,7 @@ export default function AuthorPage() {
     ...(hasSimilar ? [{ id: "next", label: "Where to publish next" }] : []),
     ...(alternatives.length > 0 ? [{ id: "alternatives", label: "Alternatives" }] : []),
     ...(works.length > 0 ? [{ id: "publications", label: "Publications" }] : []),
+    ...(data.openalex_only.available ? [{ id: "openalex-only", label: "Missing from Pure" }] : []),
   ];
 
   return (
@@ -423,13 +427,25 @@ export default function AuthorPage() {
           )}
 
           {works.length > 0 && (
-            <CollapsibleCard id="publications" title="Publications" contentClassName="text-sm">
-              {data.openalex_only_count != null && (
-                <p className="mb-3 text-xs text-[var(--muted-foreground)]">
-                  {data.openalex_only_count.toLocaleString("en")} work(s) attributed by OpenAlex
-                  only are missing from Pure (badged below).
-                </p>
-              )}
+            <CollapsibleCard
+              id="publications"
+              title="Publications"
+              contentClassName="text-sm"
+              description={
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                  {data.openalex_only_count != null && (
+                    <p className="text-sm text-[var(--muted-foreground)]">
+                      {data.openalex_only_count.toLocaleString("en")} work(s) attributed by OpenAlex
+                      only are missing from Pure — listed under &ldquo;Missing from Pure&rdquo;
+                      below.
+                    </p>
+                  )}
+                  <GapCsvButton
+                    href={`/api/v1/${inst}/authors/${encodeURIComponent(author.pure_uuid)}/works.csv?scope=canon`}
+                  />
+                </div>
+              }
+            >
               <Table>
                 <caption className="sr-only">This author&apos;s publications</caption>
                 <TableHeader>
@@ -448,15 +464,6 @@ export default function AuthorPage() {
                         <TableCell className="whitespace-nowrap tabular-nums">{w.year}</TableCell>
                         <TableCell className="min-w-0 font-medium">
                           {href ? <External href={href}>{w.title}</External> : w.title}
-                          {!w.in_pure && (
-                            <Badge
-                              variant="outline"
-                              className="ml-2 font-normal text-[11px] text-[var(--muted-foreground)]"
-                              title="Attributed by OpenAlex only; not in the university's Pure research information system"
-                            >
-                              OpenAlex only
-                            </Badge>
-                          )}
                         </TableCell>
                         <TableCell>
                           {w.journal_issn_l ? (
@@ -491,6 +498,101 @@ export default function AuthorPage() {
                 <p className="mt-3 text-xs text-[var(--muted-foreground)]">
                   Showing the 200 most recent publications.
                 </p>
+              )}
+            </CollapsibleCard>
+          )}
+
+          {data.openalex_only.available && (
+            <CollapsibleCard
+              id="openalex-only"
+              title="Missing from Pure (OpenAlex-only)"
+              description={
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                  <p className="text-sm text-[var(--muted-foreground)]">
+                    {data.openalex_only.total.toLocaleString("en")} work(s) attributed by OpenAlex
+                    to this author match no Pure record — likely missing from the research
+                    information system.
+                    {data.openalex_only.total > data.openalex_only.items.length &&
+                      ` Showing ${data.openalex_only.items.length.toLocaleString("en")} most recent.`}
+                  </p>
+                  {data.openalex_only.total > 0 && (
+                    <GapCsvButton
+                      href={`/api/v1/${inst}/authors/${encodeURIComponent(author.pure_uuid)}/works.csv?scope=missed`}
+                    />
+                  )}
+                </div>
+              }
+              contentClassName="text-sm"
+            >
+              {data.openalex_only.total === 0 ? (
+                <p className="text-[var(--muted-foreground)]">
+                  None found — every OpenAlex work attributed to this author has a Pure record.
+                </p>
+              ) : (
+                <Table>
+                  <caption className="sr-only">Works missing from Pure</caption>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Year</TableHead>
+                      <TableHead>Title</TableHead>
+                      <TableHead>Journal</TableHead>
+                      <TableHead>Publisher</TableHead>
+                      <TableHead>Access</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.openalex_only.items.map((w, idx) => {
+                      const href = doiHref(w.doi ?? null) ?? w.openalex_url ?? null;
+                      return (
+                        <TableRow key={`${w.openalex_id ?? w.title ?? "work"}-${idx}`}>
+                          <TableCell className="whitespace-nowrap tabular-nums">{w.year}</TableCell>
+                          <TableCell className="min-w-0 font-medium">
+                            {href ? (
+                              <External href={href}>{w.title ?? w.doi ?? w.openalex_id}</External>
+                            ) : (
+                              (w.title ?? "Untitled")
+                            )}
+                            <Badge
+                              variant="outline"
+                              className="ml-2 font-normal text-[11px] text-[var(--muted-foreground)]"
+                              title="Attributed by OpenAlex only; not in the university's Pure research information system"
+                            >
+                              OpenAlex only
+                            </Badge>
+                            <UtAuthorLine authors={w.ut_authors} />
+                          </TableCell>
+                          <TableCell>
+                            {w.journal_issn_l ? (
+                              <Link
+                                href={`/${inst}/journals/${w.journal_issn_l}`}
+                                className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                              >
+                                {w.journal_title || w.journal_issn_l}
+                              </Link>
+                            ) : (
+                              <span className="text-[var(--muted-foreground)]">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {w.publisher_name ? (
+                              <Link
+                                href={`/${inst}/publisher/${encodeNamePath(w.publisher_name)}`}
+                                className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                              >
+                                {w.publisher_name}
+                              </Link>
+                            ) : (
+                              <span className="text-[var(--muted-foreground)]">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <OaStatusChip status={w.oa_status} />
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
               )}
             </CollapsibleCard>
           )}

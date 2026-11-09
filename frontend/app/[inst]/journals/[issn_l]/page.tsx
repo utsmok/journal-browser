@@ -17,7 +17,9 @@ import * as React from "react";
 import { DealBadge, OaStatusChip, OaTypeBadge, QuartileBadge } from "@/components/badges";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { CardPager } from "@/components/card-pager";
+import { GapCsvButton } from "@/components/gap-csv-button";
 import { OaTrend } from "@/components/oa-trend";
+import { UtAuthorLine } from "@/components/ut-author-line";
 import { SourceNote } from "@/components/source-note";
 import { ErrorPanel, JournalDetailSkeleton } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
@@ -591,18 +593,32 @@ function UtAuthorshipCard({ authorship, inst }: { authorship: UtAuthorship; inst
 
 /** OpenAlex works attributed to this journal that match no Pure record:
  * candidates missing from the research information system. */
-function CrisGapsCard({ openalexOnly }: { openalexOnly: OpenalexOnly }) {
+function CrisGapsCard({
+  openalexOnly,
+  inst,
+  issnL,
+}: {
+  openalexOnly: OpenalexOnly;
+  inst: string;
+  issnL: string;
+}) {
   const { total, items } = openalexOnly;
   return (
     <CollapsibleCard
       id="cris-gaps"
       title="Not registered in Pure"
       description={
-        <p className="text-sm text-[var(--muted-foreground)]">
-          OpenAlex attributes {total.toLocaleString("en")} work(s) to this journal that match no
-          Pure record — likely missing from the research information system.
-          {total > items.length && ` Showing ${items.length.toLocaleString("en")} most recent.`}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <p className="text-sm text-[var(--muted-foreground)]">
+            OpenAlex attributes {total.toLocaleString("en")} work(s) to this journal that match no
+            Pure record — likely missing from the research information system. Each item lists the
+            UT authors OpenAlex matched to the university roster.
+            {total > items.length && ` Showing ${items.length.toLocaleString("en")} most recent.`}
+          </p>
+          {total > 0 && (
+            <GapCsvButton href={`/api/v1/${inst}/journals/${issnL}/openalex-only.csv`} />
+          )}
+        </div>
       }
       contentClassName="text-sm"
     >
@@ -639,6 +655,7 @@ function CrisGapsCard({ openalexOnly }: { openalexOnly: OpenalexOnly }) {
                 )}
                 {w.work_type && <span className="text-xs">{w.work_type}</span>}
                 <OaStatusChip status={w.oa_status} />
+                <UtAuthorLine authors={w.ut_authors} />
               </li>
             );
           })}
@@ -1646,7 +1663,9 @@ function JournalPageInner() {
             worksQuery={worksQuery}
           />
 
-          {data.openalex_only.available && <CrisGapsCard openalexOnly={data.openalex_only} />}
+          {data.openalex_only.available && (
+            <CrisGapsCard openalexOnly={data.openalex_only} inst={inst} issnL={journal.issn_l} />
+          )}
 
           {data.alternate_titles.length > 0 && <OtherNamesCard names={data.alternate_titles} />}
 

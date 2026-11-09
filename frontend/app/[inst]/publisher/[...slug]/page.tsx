@@ -8,8 +8,10 @@ import * as React from "react";
 import { DealBadge, OaStatusChip, OaTypeBadge, QuartileBadge } from "@/components/badges";
 import { CardPager } from "@/components/card-pager";
 import { CollapsibleCard } from "@/components/collapsible-card";
+import { GapCsvButton } from "@/components/gap-csv-button";
 import { OaCompositionBar, OaCompositionLegend } from "@/components/oa-composition";
 import { OaTrend } from "@/components/oa-trend";
+import { UtAuthorLine } from "@/components/ut-author-line";
 import { BackLink } from "@/components/back-link";
 import { DetailSkeleton, ErrorPanel } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +27,7 @@ import { usePublisher } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
 import {
   errorMessage,
+  encodeNamePath,
   type DealOut,
   type PublisherDetailResponse,
   type PublisherListItem,
@@ -253,18 +256,34 @@ function UtAuthorshipCard({ authorship, inst }: { authorship: UtAuthorship; inst
 
 /** OpenAlex works attributed to this publisher's journals that match no
  * Pure record: candidates missing from the research information system. */
-function CrisGapsCard({ openalexOnly }: { openalexOnly: OpenalexOnly }) {
+function CrisGapsCard({
+  openalexOnly,
+  inst,
+  name,
+}: {
+  openalexOnly: OpenalexOnly;
+  inst: string;
+  name: string;
+}) {
   const { total, items } = openalexOnly;
   return (
     <CollapsibleCard
       id="cris-gaps"
       title="Not registered in Pure"
       description={
-        <p className="text-sm text-[var(--muted-foreground)]">
-          OpenAlex attributes {total.toLocaleString("en")} work(s) to this publisher&apos;s journals
-          that match no Pure record — likely missing from the research information system.
-          {total > items.length && ` Showing ${items.length.toLocaleString("en")} most recent.`}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <p className="text-sm text-[var(--muted-foreground)]">
+            OpenAlex attributes {total.toLocaleString("en")} work(s) to this publisher&apos;s
+            journals that match no Pure record — likely missing from the research information
+            system. Each item lists the UT authors OpenAlex matched to the university roster.
+            {total > items.length && ` Showing ${items.length.toLocaleString("en")} most recent.`}
+          </p>
+          {total > 0 && (
+            <GapCsvButton
+              href={`/api/v1/${inst}/publishers/${encodeNamePath(name)}/openalex-only.csv`}
+            />
+          )}
+        </div>
       }
       contentClassName="text-sm"
     >
@@ -301,8 +320,17 @@ function CrisGapsCard({ openalexOnly }: { openalexOnly: OpenalexOnly }) {
                 {w.venue && (
                   <span className="min-w-0 text-xs text-[var(--muted-foreground)]">{w.venue}</span>
                 )}
+                {w.journal_issn_l && (
+                  <Link
+                    href={`/${inst}/journals/${w.journal_issn_l}`}
+                    className="text-xs underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                  >
+                    {w.journal_title ?? w.journal_issn_l}
+                  </Link>
+                )}
                 {w.work_type && <span className="text-xs">{w.work_type}</span>}
                 <OaStatusChip status={w.oa_status} />
+                <UtAuthorLine authors={w.ut_authors} />
               </li>
             );
           })}
@@ -523,7 +551,9 @@ export default function PublisherPage() {
 
         <UtAuthorshipCard authorship={data.ut_authorship} inst={inst} />
 
-        {data.openalex_only.available && <CrisGapsCard openalexOnly={data.openalex_only} />}
+        {data.openalex_only.available && (
+          <CrisGapsCard openalexOnly={data.openalex_only} inst={inst} name={name} />
+        )}
       </div>
     </div>
   );
