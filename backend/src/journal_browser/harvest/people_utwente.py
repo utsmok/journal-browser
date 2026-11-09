@@ -456,6 +456,7 @@ async def harvest_people_utwente(
         org_candidates_bare.setdefault(org_bare_key(org.name), []).append(uuid)
     org_aliases: dict[str, str] = {}
 
+    stats_before_loop = stats["searched"]
     async with httpx.AsyncClient(timeout=30) as client:
         for author in pool:
             stats["searched"] += 1
@@ -481,6 +482,11 @@ async def harvest_people_utwente(
                     org_aliases=org_aliases,
                     ingest=ingest,
                 )
+                # Batched commit every 50 authors: a crash loses at most
+                # the last 50 outcomes, and the run never holds an
+                # hours-long open transaction on the live db.
+                if (stats["searched"] - stats_before_loop) % 50 == 0:
+                    await ingest.commit()
             else:
                 stats[outcome["status"]] += 1
             await asyncio.sleep(PACE_SECONDS)
