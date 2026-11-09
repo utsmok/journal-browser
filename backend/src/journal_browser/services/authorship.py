@@ -23,7 +23,7 @@ instead of showing a misleading zero.
 from collections.abc import Iterable
 from typing import Any
 
-from sqlalchemy import column, exists, func, select
+from sqlalchemy import cast, column, exists, false, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -81,13 +81,18 @@ def attributed_to_any(aids: list[str]) -> Any:
     """True when the store row names any of the given (lowercase) bare
     OpenAlex A-ids in its authorships array.
 
-    Ids compare case-insensitively: authors.openalex_ids stores
-    lowercase ids while the harvested authorships carry OpenAlex's
-    canonical uppercase form (A1234567890)."""
-    ash = func.jsonb_array_elements(OpenalexWork.authorships).table_valued(column("value", JSONB))
-    return exists(
-        select(1).select_from(ash).where(func.lower(ash.c.value.op("->>")("a")).in_(aids))
-    )
+    Direct jsonb containment, probed in both cases (authors.openalex_ids
+    stores lowercase ids while harvested authorships carry OpenAlex's
+    canonical uppercase form): the jsonb_path_ops GIN index serves it in
+    ~10 ms. The earlier lateral jsonb_array_elements + lower() form
+    could not use any index and seq-scanned the whole openalex_works
+    store on every author-page request and missed-works CSV."""
+    conds = [
+        OpenalexWork.authorships.op("@>")(cast([{"a": form}], JSONB))
+        for aid in aids
+        for form in sorted({aid.upper(), aid.lower()})
+    ]
+    return or_(*conds) if conds else false()
 
 
 async def ut_roster_by_aids(

@@ -69,23 +69,53 @@ async def openalex_only_works_for_author(
         return []
     rows = (
         await session.execute(
-            select(OpenalexWork).where(
+            select(
+                OpenalexWork.w_id,
+                OpenalexWork.title,
+                OpenalexWork.year,
+                OpenalexWork.doi_normalized,
+                OpenalexWork.oa_status,
+                OpenalexWork.work_type,
+                OpenalexWork.venue_name,
+                OpenalexWork.venue_issn_l,
+            ).where(
                 OpenalexWork.institution_id == institution.id,
                 attributed_to_any(aids),
             )
         )
-    ).scalars()
+    ).all()
     return [
         {
-            "title": row.title,
-            "year": row.year,
-            "doi": row.doi_normalized,
-            "oa_status": row.oa_status,
-            "work_type": row.work_type,
-            "venue_name": row.venue_name,
-            "issn_l": row.venue_issn_l,
-            "openalex_id": row.w_id,
-            "authorships": row.authorships or [],
+            "title": r.title,
+            "year": r.year,
+            "doi": r.doi_normalized,
+            "oa_status": r.oa_status,
+            "work_type": r.work_type,
+            "venue_name": r.venue_name,
+            "issn_l": r.venue_issn_l,
+            "openalex_id": r.w_id,
+            # Fetched separately for the shown slice only (the bulk fetch
+            # stays scalar; authorships jsonb is the store's bulk mass).
+            "authorships": None,
         }
-        for row in rows
+        for r in rows
     ]
+
+
+async def authorships_by_wid(
+    session: AsyncSession, institution: Institution, w_ids: list[str]
+) -> dict[str, list[Any]]:
+    """Authorships arrays for specific works: the shown gap-list slice
+    gets roster attribution without refetching the whole author's
+    openalex_works mass."""
+    if not w_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(OpenalexWork.w_id, OpenalexWork.authorships).where(
+                OpenalexWork.institution_id == institution.id,
+                OpenalexWork.w_id.in_(w_ids),
+            )
+        )
+    ).all()
+    return {r.w_id: (r.authorships or []) for r in rows}

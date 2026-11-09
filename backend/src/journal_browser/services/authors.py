@@ -32,7 +32,7 @@ from .authorship import (
 )
 from .facets import author_facets
 from .search import _like, _oa_type, base_query
-from .work_sources import openalex_only_works_for_author
+from .work_sources import authorships_by_wid, openalex_only_works_for_author
 from .works_query import (
     YEAR_BUCKETS,
     author_works_join,
@@ -491,13 +491,18 @@ async def _openalex_only_section(
                 "journal_issn_l": row["issn_l"],
                 "journal_title": row["venue_name"],
                 "openalex_id": row.get("openalex_id"),
-                "authorships": row.get("authorships") or [],
+                "authorships": row.get("authorships"),
             }
         )
-    # total is the exact gated count; publisher/roster enrichment only
-    # covers the slice that ships to the client.
+    # total is the exact gated count; authorships, publisher and roster
+    # enrichment only cover the slice that ships to the client.
     total = len(gated)
     gated = gated[:OPENALEX_ONLY_CAP]
+    need_ash = [g["openalex_id"] for g in gated if g.get("authorships") is None]
+    if need_ash:
+        ash_map = await authorships_by_wid(session, institution, need_ash)
+        for g in gated:
+            g["authorships"] = ash_map.get(g["openalex_id"]) or []
     publishers = await journal_publisher_map(session, [g["journal_issn_l"] for g in gated])
     roster = await ut_roster_by_aids(
         session,
