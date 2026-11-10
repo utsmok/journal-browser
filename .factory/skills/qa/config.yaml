@@ -20,8 +20,8 @@ environments:
       full_dump: backups/live-pre-author-path-2026-10-31.dump
       fixtures: backend/scripts/seed_fixtures.py
   live-readonly:
-    url: http://localhost:3000
-    api_url: http://localhost:8000
+    url: http://127.0.0.1:3001
+    api_url: http://127.0.0.1:8001
     restrictions:
       - read-only GET flows only; this is the production deployment
       - never POST feedback (writes the live database)

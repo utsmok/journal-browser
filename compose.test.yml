@@ -27,7 +27,7 @@ services:
 
   backend:
     ports: !override
-      - "127.0.0.1:8001:8000"
+      - "127.0.0.1:8201:8000"
     volumes: !override
       - ./backend/landing-test:/app/landing
     environment:
@@ -38,4 +38,4 @@ services:
 
   frontend:
     ports: !override
-      - "3001:3000"
+      - "127.0.0.1:3201:3000"

@@ -13,7 +13,7 @@ import numpy as np
 from fastembed import TextEmbedding
 from pgvector.asyncpg import register_vector
 
-DSN = "postgresql://journal:journal@localhost:5433/journalbrowser"
+DSN = "postgresql://journal:journal@localhost:5434/journalbrowser"
 N_SAMPLE = 10_000
 TOP_K = 10
 SEED = 0.42

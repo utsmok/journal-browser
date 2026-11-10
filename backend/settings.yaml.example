@@ -36,7 +36,7 @@ contact_email: s.f.abma@utwente.nl
 cors_origins:
 - http://localhost:3000
 
-# ISSNs excluded from listings (admin scaffold; not applied anywhere yet).
+# ISSN-Ls treated as nonexistent on every journal surface (search, facets, detail 404s).
 #ignored_issns: ["1234-5678"]
 
 # Raw landing zone for downloaded source artifacts (compose bind mount).
