@@ -171,6 +171,7 @@ async def details_api(client, db, institution_factory):
                 venue_issn_l=MAIN,
                 venue_name="Journal AAAA",
                 authorships=[{"a": "A1111111111", "n": "Test Author"}],
+                author_aids=["a1111111111"],
                 source="works_stats",
             ),
             OpenalexWork(
@@ -182,6 +183,7 @@ async def details_api(client, db, institution_factory):
                 venue_issn_l=MAIN,
                 venue_name="Journal AAAA",
                 authorships=[{"a": "A1111111111", "n": "Test Author"}],
+                author_aids=["a1111111111"],
                 source="works_stats",
             ),
             OpenalexWork(
@@ -193,6 +195,7 @@ async def details_api(client, db, institution_factory):
                 venue_issn_l=OTHER,
                 venue_name="Journal BBBB",
                 authorships=[{"a": "A1111111111", "n": "Test Author"}],
+                author_aids=["a1111111111"],
                 source="works_stats",
             ),
             OpenalexWork(
@@ -204,6 +207,7 @@ async def details_api(client, db, institution_factory):
                 venue_issn_l=OTHER,
                 venue_name="Journal BBBB",
                 authorships=[{"a": "A1111111111", "n": "Test Author"}],
+                author_aids=["a1111111111"],
                 source="works_stats",
             ),
         ]

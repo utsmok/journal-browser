@@ -781,6 +781,7 @@ async def test_external_author_served_from_source_records(admin_api, db_engine):
                 year=2024,
                 doi_normalized="10.1/one",
                 authorships=[{"a": "A123", "n": "Jane Doe", "o": None}],
+                author_aids=["a123"],
             )
         )
         session.add(
@@ -791,6 +792,7 @@ async def test_external_author_served_from_source_records(admin_api, db_engine):
                 year=2023,
                 doi_normalized=None,
                 authorships=[{"a": "A999", "n": "Other", "o": None}],
+                author_aids=["a999"],
             )
         )
         await session.commit()

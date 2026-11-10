@@ -23,7 +23,7 @@ instead of showing a misleading zero.
 from collections.abc import Iterable
 from typing import Any
 
-from sqlalchemy import cast, column, exists, false, func, or_, select
+from sqlalchemy import cast, column, exists, false, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -89,21 +89,19 @@ def not_in_pure() -> Any:
 
 
 def attributed_to_any(aids: list[str]) -> Any:
-    """True when the store row names any of the given (lowercase) bare
-    OpenAlex A-ids in its authorships array.
+    """True when the store row names any of the given bare OpenAlex
+    author ids, case-insensitively.
 
-    Direct jsonb containment, probed in both cases (authors.openalex_ids
-    stores lowercase ids while harvested authorships carry OpenAlex's
-    canonical uppercase form): the jsonb_path_ops GIN index serves it in
-    ~10 ms. The earlier lateral jsonb_array_elements + lower() form
-    could not use any index and seq-scanned the whole openalex_works
-    store on every author-page request and missed-works CSV."""
-    conds = [
-        OpenalexWork.authorships.op("@>")(cast([{"a": form}], JSONB))
-        for aid in aids
-        for form in sorted({aid.upper(), aid.lower()})
-    ]
-    return or_(*conds) if conds else false()
+    One array-overlap probe over the lower-cased author_aids projection,
+    served by the GIN (array_ops) index in a single index scan. The
+    earlier form OR-ed one jsonb containment probe per id (both case
+    forms): faculty-sized units built ~2,400 OR'd probes, the planner
+    refused the bitmap-OR and seq-scanned the store — the EEMCS org-unit
+    page spent ~11 s in this one predicate."""
+    lowered = sorted({aid.lower() for aid in aids if aid})
+    if not lowered:
+        return false()
+    return OpenalexWork.author_aids.overlap(cast(lowered, OpenalexWork.author_aids.type))
 
 
 async def ut_roster_by_aids(

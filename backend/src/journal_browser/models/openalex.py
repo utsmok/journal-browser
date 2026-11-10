@@ -21,7 +21,7 @@ from sqlalchemy import (
     Text,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, _tstamp
@@ -56,6 +56,13 @@ class OpenalexWork(Base):
     # copy is not evidence a work is missing from Pure, and the
     # institution's own research information system is repository-typed.
     source_type: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Lower-case bare OpenAlex author ids of the authorships array, for
+    # one-array-overlap attribution probe (&&) served by the GIN index.
+    # The jsonb containment form needed thousands of OR'd probes on
+    # faculty-sized units and seq-scanned.
+    author_aids: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, server_default=text("'{}'")
+    )
     authorships: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'")
     )
@@ -91,6 +98,12 @@ class OpenalexWork(Base):
             "institution_id",
             "year",
             postgresql_where=text("year IS NOT NULL"),
+        ),
+        Index(
+            "ix_openalex_works_author_aids_gin",
+            "author_aids",
+            postgresql_using="gin",
+            postgresql_ops={"author_aids": "array_ops"},
         ),
     )
 

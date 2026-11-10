@@ -87,6 +87,8 @@ def test_work_row_shape():
         {"a": "A1", "n": "Author A1", "o": "0000-0002-1825-0097"},
         {"a": "A2", "n": "Author A2", "o": None},
     ]
+    # lower-cased bare ids for the indexed array-overlap attribution probe
+    assert row["author_aids"] == ["a1", "a2"]
 
 
 def test_work_row_gates():

@@ -214,7 +214,9 @@ async def stored_external_author(
     if record is None:
         raise HTTPException(404, f"no stored OpenAlex profile for {external_id}")
 
-    conditions = [OpenalexWork.authorships.contains([{"a": external_id}])]
+    # Same indexed array-overlap form as the gap queries (author_aids
+    # stores lower-cased bare ids).
+    conditions = [OpenalexWork.author_aids.contains([external_id.lower()])]
     if institution is not None:
         inst = await _get_institution_or_404(session, institution)
         conditions.append(OpenalexWork.institution_id == inst.id)

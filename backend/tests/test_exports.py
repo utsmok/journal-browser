@@ -57,6 +57,7 @@ def _oa_work(
         cited_by_count=7,
         fwci=1.2,
         authorships=authorships,
+        author_aids=sorted({a["a"].lower() for a in authorships if a.get("a")}),
         source=source,
     )
 

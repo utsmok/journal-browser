@@ -82,6 +82,7 @@ def work_row(payload: dict[str, Any], issn_by_source: dict[str, str]) -> dict[st
     venue_issn_l = issn_by_source.get(_w_id(source.get("id")) or "")
     oa_status = canonical_oa_status((payload.get("open_access") or {}).get("oa_status"))
     fwci = payload.get("fwci")
+    authorships = _authorships(payload)
     return {
         "w_id": w_id,
         "doi_normalized": normalize_doi(payload.get("doi")),
@@ -93,7 +94,8 @@ def work_row(payload: dict[str, Any], issn_by_source: dict[str, str]) -> dict[st
         "language": payload.get("language"),
         "venue_name": source.get("display_name") or None,
         "source_type": source.get("type") or None,
-        "authorships": _authorships(payload),
+        "authorships": authorships,
+        "author_aids": sorted({a["a"].lower() for a in authorships if a["a"]}),
         "cited_by_count": payload.get("cited_by_count") or 0,
         "fwci": float(fwci) if isinstance(fwci, (int, float)) else None,
         "is_retracted": bool(payload.get("is_retracted")),

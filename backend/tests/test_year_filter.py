@@ -61,6 +61,7 @@ def _store_work(inst_id, w_id, *, year, venue="AAAA-AAAA", doi=None, authorships
         venue_issn_l=venue,
         venue_name="Journal One",
         authorships=list(authorships),
+        author_aids=sorted({a["a"].lower() for a in authorships if a.get("a")}),
         source="works_stats",
     )
 

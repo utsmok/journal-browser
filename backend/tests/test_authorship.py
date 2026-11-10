@@ -39,6 +39,7 @@ def _oa_work(
         venue_issn_l=venue,
         venue_name="Journal One",
         authorships=authorships,
+        author_aids=sorted({a["a"].lower() for a in authorships if a.get("a")}),
         source=source,
         source_type=source_type,
     )
