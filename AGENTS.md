@@ -109,9 +109,14 @@ fails if the committed file drifted.
   on `127.0.0.1:8001`, db on `127.0.0.1:5434` (see `compose.override.yml`
   — 3000/8000 are taken by linkwarden/portainer on this host). Query the
   live db as `docker exec journal-browser-db-1 psql -U journal -d
-  journalbrowser`. Never restart, redeploy, or write to the live stack.
-  The live `journalbrowser` database is read-only for agents — SELECT ok,
-  never DDL. Public ingress is Caddy on the Proxmox host `192.168.2.122`
+  journalbrowser`. Agents may redeploy the live stack after committing:
+  `docker compose up -d --build` from the repo root (the one-shot
+  `bootstrap` service applies pending migrations, then exits in seconds on
+  a populated DB), then check `docker compose ps` health and the public
+  site. Do not `down -v`, delete volumes, or run harvests against live
+  without asking. Data writes to the live `journalbrowser` database need
+  explicit user approval; SELECT is always fine, schema changes only via
+  migrations shipped by a redeploy. Public ingress is Caddy on the Proxmox host `192.168.2.122`
   (`/home/root/Caddyfile`), reverse-proxying `journalbrowser.samuelmok.cc`
   to `192.168.2.153:3001`. The local containers here are the live
   deployment; there is no separate workstation copy.
