@@ -119,6 +119,13 @@ class Settings(BaseSettings):
     data_window_start: int = 2020
     data_window_end: int | None = None
 
+    @field_validator("data_window_end", mode="before")
+    @classmethod
+    def _window_end_zero_means_open(cls, v: object) -> object:
+        # docker-compose/.env default END=0 as the open-ended sentinel;
+        # without this it ships as year 0 and the window is empty.
+        return None if v in (0, "0", "") else v
+
     # Bootstrap job mode: auto = only on an empty DB, always, off.
     bootstrap: str = "auto"
 

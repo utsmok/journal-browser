@@ -4,7 +4,17 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from conftest import journal_factory, requires_db
+from journal_browser.config import Settings
 from journal_browser.models import Institution
+
+
+def test_settings_window_end_zero_means_open():
+    """JB_DATA_WINDOW_END=0 is the compose/.env open-ended default, not year 0."""
+    for raw in (0, "0", ""):
+        s = Settings(data_window_end=raw, data_window_start=2020)
+        assert s.data_window_end is None
+        assert s.window_years
+    assert Settings(data_window_end=2025, data_window_start=2020).data_window_end == 2025
 
 
 def test_window_years_open_end_runs_to_current_year():

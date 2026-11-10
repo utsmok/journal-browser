@@ -2325,7 +2325,7 @@ export interface components {
         /**
          * InstitutionUpdate
          * @description PATCH-shaped PUT body: absent fields are untouched, explicit null
-         *     clears nullable columns, and the four non-nullable fields reject null.
+         *     clears nullable columns, and the three non-nullable fields reject null.
          */
         InstitutionUpdate: {
             /** Name */

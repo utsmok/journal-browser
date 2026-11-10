@@ -234,7 +234,7 @@ async def test_feedback_limit_rejects_nonpositive(admin_api):
 @requires_db
 async def test_institution_put_rejects_null_nonnullable(admin_api):
     headers = await _login(admin_api)
-    for key in ("name", "data_window_start", "data_window_end", "active"):
+    for key in ("name", "data_window_start", "active"):
         r = await admin_api.put("/api/v1/admin/institutions/ut", headers=headers, json={key: None})
         assert r.status_code == 422, key
     # A nullable field still clears on explicit null.
@@ -243,6 +243,41 @@ async def test_institution_put_rejects_null_nonnullable(admin_api):
     )
     assert r.status_code == 200
     assert r.json()["admin_contact"] is None
+
+
+@requires_db
+async def test_institution_put_window_end_zero_and_null_mean_open(admin_api, db_engine):
+    """0 (the compose/.env default) and explicit null both store NULL."""
+    headers = await _login(admin_api)
+    r = await admin_api.put(
+        "/api/v1/admin/institutions/ut", headers=headers, json={"data_window_end": 0}
+    )
+    assert r.status_code == 200
+    assert r.json()["data_window_end"] is None
+    r = await admin_api.put(
+        "/api/v1/admin/institutions/ut",
+        headers=headers,
+        json={"data_window_start": 2024, "data_window_end": 2025},
+    )
+    assert r.json()["data_window_end"] == 2025
+    # Absent key leaves the stored value untouched.
+    r = await admin_api.put(
+        "/api/v1/admin/institutions/ut", headers=headers, json={"name": "University of Twente"}
+    )
+    assert r.status_code == 200
+    assert r.json()["data_window_end"] == 2025
+    # Explicit null clears the column again — really NULL in the DB.
+    r = await admin_api.put(
+        "/api/v1/admin/institutions/ut", headers=headers, json={"data_window_end": None}
+    )
+    assert r.status_code == 200
+    assert r.json()["data_window_end"] is None
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with maker() as session:
+        inst = (
+            await session.execute(select(Institution).where(Institution.code == "ut"))
+        ).scalar_one()
+        assert inst.data_window_end is None
 
 
 @requires_db
