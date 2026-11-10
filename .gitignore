@@ -51,3 +51,6 @@ compose.override.yml
 
 # Impeccable design-review artifacts
 .impeccable/
+
+# Local audit reports (not tracked)
+/.audit/

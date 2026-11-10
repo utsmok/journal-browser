@@ -41,8 +41,9 @@ institution-locked journal finders cannot truthfully copy either claim.
 
 ## Operating Context
 
-- Deployed via Docker Compose; the live instance runs at
-  journalbrowser.samuelmok.cc (frontend 3000, backend 8000).
+- Deployed via Docker Compose on the media VM (192.168.2.153); the live
+  instance runs at journalbrowser.samuelmok.cc (frontend published on
+  3001, backend on 127.0.0.1:8001).
 - Data arrives through an idempotent harvest pipeline (`bootstrap.py`):
   shared global steps once, then per-institution steps (repository harvest,
   enrichment, OpenAIRE, statistics, participation).
