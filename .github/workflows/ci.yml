@@ -41,7 +41,7 @@ jobs:
       # The committed openapi.json must match the routes; regenerating it
       # must be a no-op (refresh via scripts/dump_openapi.py when it isn't).
       - run: uv run python scripts/dump_openapi.py
-      - run: git diff --exit-code -- openapi.json
+      - run: git diff --exit-code -- ../openapi.json
 
   frontend:
     runs-on: ubuntu-latest
