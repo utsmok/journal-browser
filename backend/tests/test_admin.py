@@ -7,7 +7,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from conftest import requires_db
+from conftest import pair_rows, requires_db
 from journal_browser.config import get_settings, reset_settings_cache
 from journal_browser.models import (
     Author,
@@ -773,7 +773,7 @@ async def test_external_author_served_from_source_records(admin_api, db_engine):
                 harvest_run_id=run_id,
             )
         )
-        session.add(
+        admin_works = [
             OpenalexWork(
                 institution_id=ut_id,
                 w_id="W1",
@@ -781,10 +781,7 @@ async def test_external_author_served_from_source_records(admin_api, db_engine):
                 year=2024,
                 doi_normalized="10.1/one",
                 authorships=[{"a": "A123", "n": "Jane Doe", "o": None}],
-                author_aids=["a123"],
-            )
-        )
-        session.add(
+            ),
             OpenalexWork(
                 institution_id=ut_id,
                 w_id="W2",
@@ -792,9 +789,10 @@ async def test_external_author_served_from_source_records(admin_api, db_engine):
                 year=2023,
                 doi_normalized=None,
                 authorships=[{"a": "A999", "n": "Other", "o": None}],
-                author_aids=["a999"],
-            )
-        )
+            ),
+        ]
+        session.add_all(admin_works)
+        session.add_all(pair_rows(*admin_works))
         await session.commit()
 
     headers = await _login(admin_api)

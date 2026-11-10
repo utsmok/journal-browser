@@ -12,7 +12,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from conftest import journal_factory, requires_db
+from conftest import journal_factory, pair_rows, requires_db
 from journal_browser.db import get_session
 from journal_browser.main import app
 from journal_browser.models import (
@@ -57,7 +57,6 @@ def _oa_work(
         cited_by_count=7,
         fwci=1.2,
         authorships=authorships,
-        author_aids=sorted({a["a"].lower() for a in authorships if a.get("a")}),
         source=source,
     )
 
@@ -121,51 +120,49 @@ async def exports_api(db, institution_factory):
             AuthorWork(institution_id=ut.id, author_pure_uuid="alice-uuid", work_pure_uuid="w1"),
         ]
     )
-    db.add_all(
-        [
-            _oa_work(
-                ut.id,
-                "W-gap1",
-                doi="10.9.0/1",
-                title="Gap One",
-                year=2024,
-                authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": "0000-0002-1111"}],
-            ),
-            _oa_work(
-                ut.id,
-                "W-gap2",
-                title="Gap Two Untyped",
-                year=2023,
-                venue="9999-9999",
-                work_type=None,
-            ),
-            # venue-gated: harvested from an author profile
-            _oa_work(
-                ut.id,
-                "W-sweep",
-                doi="10.9.0/6",
-                title="Sweep Only",
-                year=2024,
-                source="author-sweep",
-            ),
-            # DOI matches a pure work -> anti-join drops it everywhere
-            _oa_work(ut.id, "W-matched", doi="10.0.0/w1", title="Matched", year=2023),
-            _oa_work(
-                ut.id, "W-pre", doi="10.9.0/9", title="Preprint", year=2024, work_type="preprint"
-            ),
-            _oa_work(ut.id, "W-old", doi="10.9.0/8", title="Old", year=2019),
-            # author-attributed row in a venue outside the group
-            _oa_work(
-                ut.id,
-                "W-ghost",
-                doi="10.9.0/7",
-                title="Ghost",
-                year=2024,
-                venue="7777-7777",
-                authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": None}],
-            ),
-        ]
-    )
+    store_works = [
+        _oa_work(
+            ut.id,
+            "W-gap1",
+            doi="10.9.0/1",
+            title="Gap One",
+            year=2024,
+            authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": "0000-0002-1111"}],
+        ),
+        _oa_work(
+            ut.id,
+            "W-gap2",
+            title="Gap Two Untyped",
+            year=2023,
+            venue="9999-9999",
+            work_type=None,
+        ),
+        # venue-gated: harvested from an author profile
+        _oa_work(
+            ut.id,
+            "W-sweep",
+            doi="10.9.0/6",
+            title="Sweep Only",
+            year=2024,
+            source="author-sweep",
+        ),
+        # DOI matches a pure work -> anti-join drops it everywhere
+        _oa_work(ut.id, "W-matched", doi="10.0.0/w1", title="Matched", year=2023),
+        _oa_work(ut.id, "W-pre", doi="10.9.0/9", title="Preprint", year=2024, work_type="preprint"),
+        _oa_work(ut.id, "W-old", doi="10.9.0/8", title="Old", year=2019),
+        # author-attributed row in a venue outside the group
+        _oa_work(
+            ut.id,
+            "W-ghost",
+            doi="10.9.0/7",
+            title="Ghost",
+            year=2024,
+            venue="7777-7777",
+            authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": None}],
+        ),
+    ]
+    db.add_all(store_works)
+    db.add_all(pair_rows(*store_works))
     now = datetime.now(UTC)
     db.add_all(
         [

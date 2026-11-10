@@ -12,7 +12,7 @@ from urllib.parse import quote
 
 import pytest
 
-from conftest import journal_factory, requires_db
+from conftest import journal_factory, pair_rows, requires_db
 from journal_browser.models import (
     ApcEvidence,
     Author,
@@ -107,6 +107,84 @@ async def details_api(client, db, institution_factory):
         )
     )
     await db.flush()
+    # Store rows: the Pure-matched pair (enrichment) and the DOI-free
+    # gap pair per venue, author-tagged so the org-unit gap query
+    # sees them too.
+    store_works = [
+        OpenalexWork(
+            institution_id=ut.id,
+            w_id="W1",
+            doi_normalized="10.0.0/pw2021",
+            title="Matched Old",
+            year=2021,
+            work_type="article",
+            oa_status="gold",
+            venue_issn_l=MAIN,
+            venue_name="Journal AAAA",
+            cited_by_count=5,
+            fwci=1.5,
+            source="works_stats",
+        ),
+        OpenalexWork(
+            institution_id=ut.id,
+            w_id="W2",
+            doi_normalized="10.0.0/pw2023",
+            title="Matched New",
+            year=2023,
+            work_type="article",
+            oa_status="closed",
+            venue_issn_l=MAIN,
+            venue_name="Journal AAAA",
+            cited_by_count=9,
+            fwci=2.0,
+            is_retracted=True,
+            source="works_stats",
+        ),
+        OpenalexWork(
+            institution_id=ut.id,
+            w_id="W5",
+            title="Gap Old",
+            year=2021,
+            work_type="article",
+            venue_issn_l=MAIN,
+            venue_name="Journal AAAA",
+            authorships=[{"a": "A1111111111", "n": "Test Author"}],
+            source="works_stats",
+        ),
+        OpenalexWork(
+            institution_id=ut.id,
+            w_id="W6",
+            title="Gap New",
+            year=2023,
+            work_type="article",
+            venue_issn_l=MAIN,
+            venue_name="Journal AAAA",
+            authorships=[{"a": "A1111111111", "n": "Test Author"}],
+            source="works_stats",
+        ),
+        OpenalexWork(
+            institution_id=ut.id,
+            w_id="W3",
+            title="Beta Gap Old",
+            year=2021,
+            work_type="article",
+            venue_issn_l=OTHER,
+            venue_name="Journal BBBB",
+            authorships=[{"a": "A1111111111", "n": "Test Author"}],
+            source="works_stats",
+        ),
+        OpenalexWork(
+            institution_id=ut.id,
+            w_id="W4",
+            title="Beta Gap New",
+            year=2023,
+            work_type="article",
+            venue_issn_l=OTHER,
+            venue_name="Journal BBBB",
+            authorships=[{"a": "A1111111111", "n": "Test Author"}],
+            source="works_stats",
+        ),
+    ]
     db.add_all(
         [
             WorkPureAuthor(institution_id=ut.id, work_pure_uuid="pw2021", person_uuid="author-1"),
@@ -130,88 +208,10 @@ async def details_api(client, db, institution_factory):
             # APC evidence attaches to the 2021 work's DOI only (latest
             # period), so a 2023+ range narrows the euro sum to zero.
             ApcEvidence(institution_id=ut.id, doi="10.0.0/pw2021", period=2024, euro=50),
-            # Store rows: the Pure-matched pair (enrichment) and the DOI-free
-            # gap pair per venue, author-tagged so the org-unit gap query
-            # sees them too.
-            OpenalexWork(
-                institution_id=ut.id,
-                w_id="W1",
-                doi_normalized="10.0.0/pw2021",
-                title="Matched Old",
-                year=2021,
-                work_type="article",
-                oa_status="gold",
-                venue_issn_l=MAIN,
-                venue_name="Journal AAAA",
-                cited_by_count=5,
-                fwci=1.5,
-                source="works_stats",
-            ),
-            OpenalexWork(
-                institution_id=ut.id,
-                w_id="W2",
-                doi_normalized="10.0.0/pw2023",
-                title="Matched New",
-                year=2023,
-                work_type="article",
-                oa_status="closed",
-                venue_issn_l=MAIN,
-                venue_name="Journal AAAA",
-                cited_by_count=9,
-                fwci=2.0,
-                is_retracted=True,
-                source="works_stats",
-            ),
-            OpenalexWork(
-                institution_id=ut.id,
-                w_id="W5",
-                title="Gap Old",
-                year=2021,
-                work_type="article",
-                venue_issn_l=MAIN,
-                venue_name="Journal AAAA",
-                authorships=[{"a": "A1111111111", "n": "Test Author"}],
-                author_aids=["a1111111111"],
-                source="works_stats",
-            ),
-            OpenalexWork(
-                institution_id=ut.id,
-                w_id="W6",
-                title="Gap New",
-                year=2023,
-                work_type="article",
-                venue_issn_l=MAIN,
-                venue_name="Journal AAAA",
-                authorships=[{"a": "A1111111111", "n": "Test Author"}],
-                author_aids=["a1111111111"],
-                source="works_stats",
-            ),
-            OpenalexWork(
-                institution_id=ut.id,
-                w_id="W3",
-                title="Beta Gap Old",
-                year=2021,
-                work_type="article",
-                venue_issn_l=OTHER,
-                venue_name="Journal BBBB",
-                authorships=[{"a": "A1111111111", "n": "Test Author"}],
-                author_aids=["a1111111111"],
-                source="works_stats",
-            ),
-            OpenalexWork(
-                institution_id=ut.id,
-                w_id="W4",
-                title="Beta Gap New",
-                year=2023,
-                work_type="article",
-                venue_issn_l=OTHER,
-                venue_name="Journal BBBB",
-                authorships=[{"a": "A1111111111", "n": "Test Author"}],
-                author_aids=["a1111111111"],
-                source="works_stats",
-            ),
+            *store_works,
         ]
     )
+    db.add_all(pair_rows(*store_works))
     await db.commit()
     return client
 

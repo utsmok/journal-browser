@@ -12,6 +12,7 @@ from journal_browser.models import (
     HarvestRun,
     HarvestState,
     OpenalexWork,
+    OpenalexWorkAuthor,
     SourceRecord,
 )
 
@@ -87,8 +88,6 @@ def test_work_row_shape():
         {"a": "A1", "n": "Author A1", "o": "0000-0002-1825-0097"},
         {"a": "A2", "n": "Author A2", "o": None},
     ]
-    # lower-cased bare ids for the indexed array-overlap attribution probe
-    assert row["author_aids"] == ["a1", "a2"]
 
 
 def test_work_row_gates():
@@ -201,10 +200,20 @@ async def test_rebuild_latest_wins_and_sweep_marking(db, institution_factory):
     assert rows["W2"].source == "author-sweep"
     assert rows["W1"].venue_issn_l == "1234-5678"
 
+    # Attribution edges ride along: one pair per stored authorship.
+    pairs = (await db.execute(select(OpenalexWorkAuthor))).scalars().all()
+    assert {(p.w_id, p.author_id) for p in pairs} == {
+        ("W1", "a1"),
+        ("W1", "a2"),
+        ("W2", "a1"),
+        ("W2", "a2"),
+    }
+
     # Re-run folds into the same rows (deterministic full-replace).
     stats2 = await rebuild_openalex_works(db, inst)
     assert stats2["works"] == 2
-    assert len((await db.execute(select(OpenalexWork))).scalars().all()) == 2
+    assert stats2["attributions"] == 4
+    assert len((await db.execute(select(OpenalexWorkAuthor))).scalars().all()) == 4
 
 
 @requires_db

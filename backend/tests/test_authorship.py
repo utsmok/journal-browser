@@ -5,7 +5,7 @@ journal/publisher/orgunit detail cards."""
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from conftest import journal_factory, requires_db
+from conftest import journal_factory, pair_rows, requires_db
 from journal_browser.db import get_session
 from journal_browser.main import app
 from journal_browser.models import Author, HarvestRun, OpenalexWork, Work, WorkPureAuthor
@@ -39,7 +39,6 @@ def _oa_work(
         venue_issn_l=venue,
         venue_name="Journal One",
         authorships=authorships,
-        author_aids=sorted({a["a"].lower() for a in authorships if a.get("a")}),
         source=source,
         source_type=source_type,
     )
@@ -130,103 +129,101 @@ async def authorship_db(db, institution_factory):
             WorkPureAuthor(institution_id=ut.id, work_pure_uuid="wout", person_uuid="alice-uuid"),
         ]
     )
-    db.add_all(
-        [
-            # venue gaps: unmatched DOI + DOI-less row (NULL type stays);
-            # Gap One names a roster author so the item-level ut
-            # attribution has something to match
-            _oa_work(
-                ut.id,
-                "W-gap1",
-                doi="10.9.0/1",
-                title="Gap One",
-                year=2024,
-                authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": "0000-0002-1111"}],
-            ),
-            _oa_work(ut.id, "W-gap2", title="Gap Two Untyped", year=2023, work_type=None),
-            # gated rows: matched DOI, excluded type, repository source
-            # (a Zenodo/Pure-RIS copy is no Pure gap), out of window, other venue
-            _oa_work(ut.id, "W-matched", doi="10.0.0/w1", title="Matched", year=2023),
-            _oa_work(
-                ut.id, "W-pre", doi="10.9.0/9", title="Preprint", year=2024, work_type="preprint"
-            ),
-            _oa_work(
-                ut.id,
-                "W-data",
-                doi="10.9.0/4",
-                title="Dataset",
-                year=2024,
-                work_type="dataset",
-                authorships=[{"a": "A-ALICE"}],
-            ),
-            _oa_work(
-                ut.id,
-                "W-repo",
-                doi="10.9.0/5",
-                title="Repo Copy",
-                year=2024,
-                source_type="repository",
-                authorships=[{"a": "A-ALICE"}],
-            ),
-            _oa_work(ut.id, "W-old", doi="10.9.0/8", title="Old", year=2019),
-            # author-sweep row: in-venue, in-window, unmatched DOI, but
-            # harvested from an author profile — OpenAlex attributes it
-            # elsewhere, so the venue gap card must not count it
-            _oa_work(
-                ut.id,
-                "W-sweep",
-                doi="10.9.0/6",
-                title="Sweep Only",
-                year=2024,
-                source="author-sweep",
-            ),
-            _oa_work(
-                ut.id,
-                "W-other",
-                doi="10.9.0/7",
-                title="Other Venue",
-                year=2024,
-                authorships=[{"a": "A-ALICE"}],
-            ),
-        ]
-    )
+    store_works = [
+        # venue gaps: unmatched DOI + DOI-less row (NULL type stays);
+        # Gap One names a roster author so the item-level ut
+        # attribution has something to match
+        _oa_work(
+            ut.id,
+            "W-gap1",
+            doi="10.9.0/1",
+            title="Gap One",
+            year=2024,
+            authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": "0000-0002-1111"}],
+        ),
+        _oa_work(ut.id, "W-gap2", title="Gap Two Untyped", year=2023, work_type=None),
+        # gated rows: matched DOI, excluded type, repository source
+        # (a Zenodo/Pure-RIS copy is no Pure gap), out of window, other venue
+        _oa_work(ut.id, "W-matched", doi="10.0.0/w1", title="Matched", year=2023),
+        _oa_work(ut.id, "W-pre", doi="10.9.0/9", title="Preprint", year=2024, work_type="preprint"),
+        _oa_work(
+            ut.id,
+            "W-data",
+            doi="10.9.0/4",
+            title="Dataset",
+            year=2024,
+            work_type="dataset",
+            authorships=[{"a": "A-ALICE"}],
+        ),
+        _oa_work(
+            ut.id,
+            "W-repo",
+            doi="10.9.0/5",
+            title="Repo Copy",
+            year=2024,
+            source_type="repository",
+            authorships=[{"a": "A-ALICE"}],
+        ),
+        _oa_work(ut.id, "W-old", doi="10.9.0/8", title="Old", year=2019),
+        # author-sweep row: in-venue, in-window, unmatched DOI, but
+        # harvested from an author profile — OpenAlex attributes it
+        # elsewhere, so the venue gap card must not count it
+        _oa_work(
+            ut.id,
+            "W-sweep",
+            doi="10.9.0/6",
+            title="Sweep Only",
+            year=2024,
+            source="author-sweep",
+        ),
+        _oa_work(
+            ut.id,
+            "W-other",
+            doi="10.9.0/7",
+            title="Other Venue",
+            year=2024,
+            authorships=[{"a": "A-ALICE"}],
+        ),
+    ]
+    db.add_all(store_works)
+    db.add_all(pair_rows(*store_works))
     # fix the other-venue row's venue
     await db.flush()
     other = await db.get(OpenalexWork, (ut.id, "W-other"))
     other.venue_issn_l = "9999-9999"
-    db.add_all(
-        [
-            # unit-attributed rows: one via a-alice, one naming two unit ids
-            # (must count once), one attributed but DOI-matched (gate wins)
-            _oa_work(
-                ut.id,
-                "W-u1",
-                doi="10.9.1/1",
-                title="Unit Gap One",
-                year=2024,
-                venue="7777-7777",
-                authorships=[{"a": "A-ALICE"}],
-            ),
-            _oa_work(
-                ut.id,
-                "W-u2",
-                doi="10.9.1/2",
-                title="Unit Gap Two",
-                year=2023,
-                venue="7777-7777",
-                authorships=[{"a": "A-ALICE"}, {"a": "A-BOB"}],
-            ),
-            _oa_work(
-                ut.id,
-                "W-u3",
-                doi="10.0.0/w2",
-                title="Unit Matched",
-                year=2022,
-                venue="7777-7777",
-                authorships=[{"a": "A-ALICE"}],
-            ),
-        ]
-    )
+    unit_works = [
+        # unit-attributed rows: one via a-alice, one naming two unit ids
+        # (must count once), one attributed but DOI-matched (gate wins)
+        _oa_work(
+            ut.id,
+            "W-u1",
+            doi="10.9.1/1",
+            title="Unit Gap One",
+            year=2024,
+            venue="7777-7777",
+            authorships=[{"a": "A-ALICE"}],
+        ),
+        _oa_work(
+            ut.id,
+            "W-u2",
+            doi="10.9.1/2",
+            title="Unit Gap Two",
+            year=2023,
+            venue="7777-7777",
+            authorships=[{"a": "A-ALICE"}, {"a": "A-BOB"}],
+        ),
+        _oa_work(
+            ut.id,
+            "W-u3",
+            doi="10.0.0/w2",
+            title="Unit Matched",
+            year=2022,
+            venue="7777-7777",
+            authorships=[{"a": "A-ALICE"}],
+        ),
+    ]
+    db.add_all(unit_works)
+    db.add_all(pair_rows(*unit_works))
     await db.commit()
 
     async def _override():

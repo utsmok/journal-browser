@@ -15,7 +15,7 @@ import io
 
 import pytest
 
-from conftest import journal_factory, requires_db
+from conftest import journal_factory, pair_rows, requires_db
 from journal_browser.models import (
     Author,
     AuthorWork,
@@ -61,7 +61,6 @@ def _store_work(inst_id, w_id, *, year, venue="AAAA-AAAA", doi=None, authorships
         venue_issn_l=venue,
         venue_name="Journal One",
         authorships=list(authorships),
-        author_aids=sorted({a["a"].lower() for a in authorships if a.get("a")}),
         source="works_stats",
     )
 
@@ -132,6 +131,24 @@ async def year_api(client, db, institution_factory):
             primary_topic="Quantum Chemistry",
         )
     )
+    store_works = [
+        _store_work(ut.id, "W1", year=2021),
+        _store_work(ut.id, "W2", year=2023),
+        _store_work(
+            ut.id,
+            "W3",
+            year=2021,
+            venue="BBBB-BBBB",
+            authorships=[{"a": "A1111111111", "n": "Test Author"}],
+        ),
+        _store_work(
+            ut.id,
+            "W4",
+            year=2023,
+            venue="BBBB-BBBB",
+            authorships=[{"a": "A1111111111", "n": "Test Author"}],
+        ),
+    ]
     db.add_all(
         [
             AuthorWork(
@@ -148,24 +165,10 @@ async def year_api(client, db, institution_factory):
             # one inside a 2022+ range, one before it. The author-attributed
             # pair sits on another venue so the journal gap CSV stays the
             # W1/W2 population.
-            _store_work(ut.id, "W1", year=2021),
-            _store_work(ut.id, "W2", year=2023),
-            _store_work(
-                ut.id,
-                "W3",
-                year=2021,
-                venue="BBBB-BBBB",
-                authorships=[{"a": "A1111111111", "n": "Test Author"}],
-            ),
-            _store_work(
-                ut.id,
-                "W4",
-                year=2023,
-                venue="BBBB-BBBB",
-                authorships=[{"a": "A1111111111", "n": "Test Author"}],
-            ),
+            *store_works,
         ]
     )
+    db.add_all(pair_rows(*store_works))
     await db.commit()
     return client
 

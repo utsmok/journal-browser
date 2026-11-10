@@ -26,6 +26,7 @@ from ..models import (
     Institution,
     Journal,
     OpenalexWork,
+    OpenalexWorkAuthor,
     SourceRecord,
     Work,
 )
@@ -95,7 +96,6 @@ def work_row(payload: dict[str, Any], issn_by_source: dict[str, str]) -> dict[st
         "venue_name": source.get("display_name") or None,
         "source_type": source.get("type") or None,
         "authorships": authorships,
-        "author_aids": sorted({a["a"].lower() for a in authorships if a["a"]}),
         "cited_by_count": payload.get("cited_by_count") or 0,
         "fwci": float(fwci) if isinstance(fwci, (int, float)) else None,
         "is_retracted": bool(payload.get("is_retracted")),
@@ -165,6 +165,9 @@ async def rebuild_openalex_works(session: AsyncSession, institution: Institution
             # which is the most-mentioned-at-first-sweep id — deterministic.
             rows.setdefault(row["w_id"], row)
     await session.execute(delete(OpenalexWork).where(OpenalexWork.institution_id == institution.id))
+    await session.execute(
+        delete(OpenalexWorkAuthor).where(OpenalexWorkAuthor.institution_id == institution.id)
+    )
     values = list(rows.values())
     for start in range(0, len(values), INSERT_CHUNK):
         await session.execute(
@@ -173,6 +176,19 @@ async def rebuild_openalex_works(session: AsyncSession, institution: Institution
                 {**row, "institution_id": institution.id}
                 for row in values[start : start + INSERT_CHUNK]
             ],
+        )
+    # Attribution edges: one (work, lower-cased author id) pair per
+    # authorship — the indexed side of every attribution probe. OpenAlex
+    # authorships can repeat an author within one work; the PK forbids
+    # duplicate edges, so dedupe per row.
+    pairs = [
+        {"institution_id": institution.id, "author_id": aid, "w_id": row["w_id"]}
+        for row in values
+        for aid in sorted({a["a"].lower() for a in row["authorships"] if a["a"]})
+    ]
+    for start in range(0, len(pairs), INSERT_CHUNK):
+        await session.execute(
+            OpenalexWorkAuthor.__table__.insert(), pairs[start : start + INSERT_CHUNK]
         )
     # Modal work language per journal, over every institution's stored works
     # (language is a journal attribute, so any rebuild refreshes the same
@@ -239,6 +255,7 @@ async def rebuild_openalex_works(session: AsyncSession, institution: Institution
         "parse_failures": parse_failures,
         "excluded_types": excluded_types,
         "author_sweep_rows": sum(1 for r in values if r["source"] == AUTHOR_SWEEP_PREFIX),
+        "attributions": len(pairs),
         "journals_language_stamped": stamped.rowcount,
         "works_oa_synced": synced.rowcount,
     }

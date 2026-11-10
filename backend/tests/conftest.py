@@ -141,6 +141,22 @@ def journal_factory(issn_l: str, **kw) -> Journal:
     return Journal(**base)
 
 
+def pair_rows(*works):
+    """Attribution edges for the given openalex_works rows under test —
+    the same derivation the store rebuild applies to its authorships."""
+    from journal_browser.models import OpenalexWorkAuthor
+
+    return [
+        OpenalexWorkAuthor(
+            institution_id=work.institution_id,
+            author_id=aid,
+            w_id=work.w_id,
+        )
+        for work in works
+        for aid in sorted({a["a"].lower() for a in (work.authorships or []) if a.get("a")})
+    ]
+
+
 @pytest.fixture
 async def client(db_engine):
     maker = async_sessionmaker(db_engine, expire_on_commit=False)

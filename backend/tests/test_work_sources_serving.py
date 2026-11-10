@@ -7,7 +7,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from conftest import journal_factory, requires_db
+from conftest import journal_factory, pair_rows, requires_db
 from journal_browser.db import get_session
 from journal_browser.main import app
 from journal_browser.models import (
@@ -47,7 +47,6 @@ def _oa_work(
         source_type=source_type,
         cited_by_count=4,
         authorships=authorships,
-        author_aids=sorted({a["a"].lower() for a in authorships if a.get("a")}),
     )
 
 
@@ -126,77 +125,77 @@ async def serving_api(db, institution_factory):
         )
     )
     await db.flush()
-    db.add_all(
-        [
-            # canonical-only: DOI held by no UT-affiliated pure work -> must not serve
-            _oa_work(
-                ut.id,
-                "W-ghost",
-                doi="10.9999/ghost",
-                title="Ghost Work",
-                year=2024,
-                authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": None}],
-            ),
-            # same publication as the Pure copy -> merged away; a second
-            # W-id record for the same DOI carries the stale closed color,
-            # and the most open record must win the DOI dedup
-            _oa_work(
-                ut.id,
-                "W-twin",
-                doi="10.1000/shared",
-                title="Pure Work (OA twin)",
-                year=2023,
-                authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": None}],
-            ),
-            _oa_work(
-                ut.id,
-                "W-twin-aaa",
-                doi="10.1000/shared",
-                title="Pure Work (OA twin)",
-                year=2023,
-                authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": None}],
-                oa="closed",
-            ),
-            # same publication as the org-closure pure copy -> merged away
-            _oa_work(
-                ut.id,
-                "W-org",
-                doi="10.1000/orgwork",
-                title="Org Work (OA twin)",
-                year=2022,
-                authorships=[],
-            ),
-            # outside the publication window -> gated everywhere
-            _oa_work(
-                ut.id,
-                "W-old",
-                doi="10.9999/old",
-                title="Old Work",
-                year=2015,
-                authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": None}],
-            ),
-            # repository-primary (Zenodo / the institution's own Pure,
-            # repository-typed in OpenAlex) -> never a Pure gap
-            _oa_work(
-                ut.id,
-                "W-repo",
-                doi="10.9999/repo-only",
-                title="Repo Only Work",
-                year=2024,
-                authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": None}],
-                source_type="repository",
-            ),
-            # journal-only DOI with no UT affiliation behind it -> must not serve
-            _oa_work(
-                ut.id,
-                "W-journal",
-                doi="10.9999/journal-only",
-                title="Journal Only Work",
-                year=2022,
-                authorships=[],
-            ),
-        ]
-    )
+    store_works = [
+        # canonical-only: DOI held by no UT-affiliated pure work -> must not serve
+        _oa_work(
+            ut.id,
+            "W-ghost",
+            doi="10.9999/ghost",
+            title="Ghost Work",
+            year=2024,
+            authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": None}],
+        ),
+        # same publication as the Pure copy -> merged away; a second
+        # W-id record for the same DOI carries the stale closed color,
+        # and the most open record must win the DOI dedup
+        _oa_work(
+            ut.id,
+            "W-twin",
+            doi="10.1000/shared",
+            title="Pure Work (OA twin)",
+            year=2023,
+            authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": None}],
+        ),
+        _oa_work(
+            ut.id,
+            "W-twin-aaa",
+            doi="10.1000/shared",
+            title="Pure Work (OA twin)",
+            year=2023,
+            authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": None}],
+            oa="closed",
+        ),
+        # same publication as the org-closure pure copy -> merged away
+        _oa_work(
+            ut.id,
+            "W-org",
+            doi="10.1000/orgwork",
+            title="Org Work (OA twin)",
+            year=2022,
+            authorships=[],
+        ),
+        # outside the publication window -> gated everywhere
+        _oa_work(
+            ut.id,
+            "W-old",
+            doi="10.9999/old",
+            title="Old Work",
+            year=2015,
+            authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": None}],
+        ),
+        # repository-primary (Zenodo / the institution's own Pure,
+        # repository-typed in OpenAlex) -> never a Pure gap
+        _oa_work(
+            ut.id,
+            "W-repo",
+            doi="10.9999/repo-only",
+            title="Repo Only Work",
+            year=2024,
+            authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": None}],
+            source_type="repository",
+        ),
+        # journal-only DOI with no UT affiliation behind it -> must not serve
+        _oa_work(
+            ut.id,
+            "W-journal",
+            doi="10.9999/journal-only",
+            title="Journal Only Work",
+            year=2022,
+            authorships=[],
+        ),
+    ]
+    db.add_all(store_works)
+    db.add_all(pair_rows(*store_works))
     await db.commit()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
         yield client

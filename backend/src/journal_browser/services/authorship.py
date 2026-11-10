@@ -23,12 +23,20 @@ instead of showing a misleading zero.
 from collections.abc import Iterable
 from typing import Any
 
-from sqlalchemy import cast, column, exists, false, func, select
+from sqlalchemy import column, exists, false, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..harvest.openalex_works import AUTHOR_SWEEP_PREFIX
-from ..models import Author, Institution, Journal, OpenalexWork, Work, WorkPureAuthor
+from ..models import (
+    Author,
+    Institution,
+    Journal,
+    OpenalexWork,
+    OpenalexWorkAuthor,
+    Work,
+    WorkPureAuthor,
+)
 from .works_query import work_type_not_excluded, work_year_window, year_end
 
 TOP_AUTHORS = 10
@@ -92,16 +100,23 @@ def attributed_to_any(aids: list[str]) -> Any:
     """True when the store row names any of the given bare OpenAlex
     author ids, case-insensitively.
 
-    One array-overlap probe over the lower-cased author_aids projection,
-    served by the GIN (array_ops) index in a single index scan. The
-    earlier form OR-ed one jsonb containment probe per id (both case
-    forms): faculty-sized units built ~2,400 OR'd probes, the planner
-    refused the bitmap-OR and seq-scanned the store — the EEMCS org-unit
-    page spent ~11 s in this one predicate."""
+    One EXISTS probe over the openalex_work_authors edge table (author-
+    first PK): the unit's ids become one indexed probe set and the
+    planner decorrelates into a semi-join. Earlier forms degenerated on
+    faculty-sized units (~1,200 ids for EEMCS): ~2,400 OR'd jsonb
+    containment probes seq-scanned (~11 s), and the one-array-overlap
+    replacement was worse — the overlap matched most of the store so
+    the planner skipped the GIN and evaluated && per row (~45 s)."""
     lowered = sorted({aid.lower() for aid in aids if aid})
     if not lowered:
         return false()
-    return OpenalexWork.author_aids.overlap(cast(lowered, OpenalexWork.author_aids.type))
+    return exists(
+        select(OpenalexWorkAuthor.author_id).where(
+            OpenalexWorkAuthor.institution_id == OpenalexWork.institution_id,
+            OpenalexWorkAuthor.w_id == OpenalexWork.w_id,
+            OpenalexWorkAuthor.author_id.in_(lowered),
+        )
+    )
 
 
 async def ut_roster_by_aids(
