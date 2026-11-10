@@ -73,12 +73,13 @@ def _authorships(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 def work_row(payload: dict[str, Any], issn_by_source: dict[str, str]) -> dict[str, Any] | None:
     """One openalex_works row from a stored works payload; None when the
-    record has no usable W-id or is a preprint/book (never journal output)."""
+    record has no usable W-id or is of an excluded type (never app
+    output)."""
     w_id = _w_id(payload.get("id"))
     if w_id is None or work_type_excluded(payload.get("type")):
         return None
-    source_id = _w_id(((payload.get("primary_location") or {}).get("source") or {}).get("id"))
-    venue_issn_l = issn_by_source.get(source_id or "")
+    source = (payload.get("primary_location") or {}).get("source") or {}
+    venue_issn_l = issn_by_source.get(_w_id(source.get("id")) or "")
     oa_status = canonical_oa_status((payload.get("open_access") or {}).get("oa_status"))
     fwci = payload.get("fwci")
     return {
@@ -90,10 +91,8 @@ def work_row(payload: dict[str, Any], issn_by_source: dict[str, str]) -> dict[st
         "oa_status": oa_status if oa_status else None,
         "venue_issn_l": venue_issn_l,
         "language": payload.get("language"),
-        "venue_name": (
-            ((payload.get("primary_location") or {}).get("source") or {}).get("display_name")
-            or None
-        ),
+        "venue_name": source.get("display_name") or None,
+        "source_type": source.get("type") or None,
         "authorships": _authorships(payload),
         "cited_by_count": payload.get("cited_by_count") or 0,
         "fwci": float(fwci) if isinstance(fwci, (int, float)) else None,
@@ -150,8 +149,9 @@ async def rebuild_openalex_works(session: AsyncSession, institution: Institution
             filter_set = filter_set or ""
             row = work_row(payload, issn_by_source)
             if row is None:
-                # An excluded type (preprint/book, never journal output) is by
-                # design, not a parse failure; only the rest are anomalies.
+                # An excluded type (preprint/book, dataset, peer review, ...)
+                # is by design, not a parse failure; only the rest are
+                # anomalies.
                 if work_type_excluded(payload.get("type")):
                     excluded_types += 1
                 else:

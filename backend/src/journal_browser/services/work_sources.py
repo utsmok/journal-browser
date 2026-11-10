@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import get_settings
 from ..models import Author, Institution, OpenalexWork
 from . import ut_metadata
-from .authorship import attributed_to_any
+from .authorship import attributed_to_any, not_repository
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +81,10 @@ async def openalex_only_works_for_author(
             ).where(
                 OpenalexWork.institution_id == institution.id,
                 attributed_to_any(aids),
+                # Repository-primary works never qualify as Pure gaps (see
+                # authorship.not_repository); filtered here so the author
+                # merge never ships them.
+                not_repository(),
             )
         )
     ).all()

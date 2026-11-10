@@ -52,17 +52,28 @@ def _unavailable() -> dict[str, Any]:
     return {"total": 0, "items": [], "available": False}
 
 
+def not_repository() -> Any:
+    """True unless the store row's OpenAlex primary location is a
+    repository source. A repository copy (Zenodo, TNO repository) is not
+    evidence a work is missing from Pure — and the institution's own
+    research information system is repository-typed in OpenAlex, so
+    without this gate the gap cards list works Pure already holds. NULL
+    stays (OpenAlex's source vocabulary is sparser than the raw feed)."""
+    return func.coalesce(OpenalexWork.source_type, "") != "repository"
+
+
 def store_gates(institution: Institution, year_range: tuple[int, int] | None = None) -> list[Any]:
-    """Window + type gates for store rows, mirroring the author page's
-    openalex-only merge: NULL years drop (outside any window), NULL types
-    stay (OpenAlex's vocabulary is sparser than Pure's). An explicit
-    clamped year range replaces the window bounds."""
+    """Window + type + source gates for store rows, mirroring the author
+    page's openalex-only merge: NULL years drop (outside any window), NULL
+    types and source kinds stay (OpenAlex's vocabulary is sparser than
+    Pure's). An explicit clamped year range replaces the window bounds."""
     start, end = (
         year_range if year_range else (institution.data_window_start, year_end(institution))
     )
     return [
         OpenalexWork.year.between(start, end),
         func.coalesce(work_type_not_excluded(OpenalexWork.work_type), True),
+        not_repository(),
     ]
 
 

@@ -41,6 +41,7 @@ from .works_query import (
     strata_match,
     unit_author_join,
     unit_work_join,
+    work_type_not_excluded,
     work_window,
     work_year_window,
 )
@@ -127,6 +128,7 @@ def _unit_rows(institution: Institution, level: str) -> Any:
             Work.institution_id == iid,
             Work.retired_at.is_(None),
             *work_window(institution),
+            work_type_not_excluded(Work.work_type),
         ]
         if dois_only:
             conds.append(Work.doi_normalized.is_not(None))
@@ -320,6 +322,7 @@ def _scoped_unit_rows(institution: Institution, level: str, year_range: tuple[in
             key != "",
             Work.retired_at.is_(None),
             *work_year_window(institution, year_range),
+            work_type_not_excluded(Work.work_type),
         )
         .subquery()
     )
@@ -583,6 +586,7 @@ async def orgunit_detail(
                 *membership,
                 Work.retired_at.is_(None),
                 *work_year_window(institution, year_range),
+                work_type_not_excluded(Work.work_type),
                 *([Journal.issn_l.not_in(sorted(set(ignored)))] if ignored else []),
             )
             .group_by(
@@ -612,7 +616,11 @@ async def orgunit_detail(
             )
             .select_from(AuthorWork)
             .join(Work, unit_work_join(iid))
-            .where(AuthorWork.institution_id == iid, Work.year.between(lo, hi))
+            .where(
+                AuthorWork.institution_id == iid,
+                Work.year.between(lo, hi),
+                work_type_not_excluded(Work.work_type),
+            )
             .group_by(AuthorWork.author_pure_uuid)
             .subquery()
         )
@@ -652,6 +660,7 @@ async def orgunit_detail(
                 *membership,
                 Work.retired_at.is_(None),
                 *work_window(institution),
+                work_type_not_excluded(Work.work_type),
             )
             .group_by(Work.year, Work.oa_status)
         )
@@ -699,6 +708,7 @@ async def orgunit_detail(
             *membership,
             Work.retired_at.is_(None),
             *work_year_window(institution, year_range),
+            work_type_not_excluded(Work.work_type),
         )
         .subquery()
     )

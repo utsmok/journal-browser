@@ -22,7 +22,18 @@ from journal_browser.models import (
 )
 
 
-def _oa_work(inst_id, w_id, *, doi, title, year, authorships, work_type="article", oa="gold"):
+def _oa_work(
+    inst_id,
+    w_id,
+    *,
+    doi,
+    title,
+    year,
+    authorships,
+    work_type="article",
+    oa="gold",
+    source_type=None,
+):
     return OpenalexWork(
         institution_id=inst_id,
         w_id=w_id,
@@ -33,6 +44,7 @@ def _oa_work(inst_id, w_id, *, doi, title, year, authorships, work_type="article
         oa_status=oa,
         venue_issn_l="1234-5678",
         venue_name="Journal One",
+        source_type=source_type,
         cited_by_count=4,
         authorships=authorships,
     )
@@ -162,6 +174,17 @@ async def serving_api(db, institution_factory):
                 year=2015,
                 authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": None}],
             ),
+            # repository-primary (Zenodo / the institution's own Pure,
+            # repository-typed in OpenAlex) -> never a Pure gap
+            _oa_work(
+                ut.id,
+                "W-repo",
+                doi="10.9999/repo-only",
+                title="Repo Only Work",
+                year=2024,
+                authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": None}],
+                source_type="repository",
+            ),
             # journal-only DOI with no UT affiliation behind it -> must not serve
             _oa_work(
                 ut.id,
@@ -225,6 +248,7 @@ async def test_author_profile_merges_openalex_only(serving_api):
     assert [w["title"] for w in works] == ["Pure Work"]
     section = r.json()["openalex_only"]
     assert section["available"] is True
+    # the repository-primary row (W-repo) drops via the source gate
     assert section["total"] == 1
     ghost = section["items"][0]
     assert ghost["title"] == "Ghost Work"

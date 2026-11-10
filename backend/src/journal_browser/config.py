@@ -6,13 +6,34 @@ import yaml
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Works of these types are not journal output and stay out of every count,
-# list, and stat (author pages, works stats, trends): preprints and books
-# would inflate open-access numbers. Conference proceedings stay in.
-# Compared via normalize_work_type, so the bare and info:eu-repo/semantics/
-# spellings in works.work_type collapse onto one form.
+# Works of these types are not research output this app describes and stay
+# out of every count, list, and stat (author pages, works stats, trends):
+# preprints and books would inflate open-access numbers; datasets,
+# software, peer reviews, errata, paratext, and similar artifacts are not
+# the works Pure registers or the pages compare. Book chapters and book
+# parts stay IN — conference proceedings hide there. Compared via
+# normalize_work_type, so the bare and info:eu-repo/semantics/ spellings
+# in works.work_type collapse onto one form.
 EXCLUDED_WORK_TYPES = frozenset(
-    {"preprint", "postedcontent", "workingpaper", "book", "bookchapter", "bookpart", "monograph"}
+    {
+        "preprint",
+        "postedcontent",
+        "workingpaper",
+        "book",
+        "monograph",
+        "dataset",
+        "software",
+        "other",
+        "erratum",
+        "supplementarymaterials",
+        "peerreview",
+        "paratext",
+        "referenceentry",
+        "bookreview",
+        "retraction",
+        "libguides",
+        "standard",
+    }
 )
 
 

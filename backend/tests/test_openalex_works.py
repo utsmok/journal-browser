@@ -26,6 +26,7 @@ def _payload(
     oa: str | None = "gold",
     source_id: str | None = "S123",
     source_name: str | None = "Journal One",
+    source_type: str | None = "journal",
     language: str | None = "en",
     authorships: list[dict] | None = None,
     cited: int = 5,
@@ -46,7 +47,13 @@ def _payload(
             for a, x, orc in (("A1", "7", True), ("A2", "8", False))
         ]
     )
-    primary = {"source": {"id": f"https://openalex.org/{source_id}", "display_name": source_name}}
+    primary = {
+        "source": {
+            "id": f"https://openalex.org/{source_id}",
+            "display_name": source_name,
+            "type": source_type,
+        }
+    }
     if source_id is None:
         primary = {"source": None}
     return {
@@ -71,6 +78,7 @@ def test_work_row_shape():
     assert row["doi_normalized"] == "10.1234/abc"
     assert row["venue_issn_l"] == "1234-5678"
     assert row["venue_name"] == "Journal One"
+    assert row["source_type"] == "journal"
     assert row["oa_status"] == "gold"
     assert row["language"] == "en"
     assert row["source"] == "works_stats"
@@ -84,8 +92,18 @@ def test_work_row_shape():
 def test_work_row_gates():
     # no usable W-id
     assert work_row(_payload(w_id=""), {"S123": "1234-5678"}) is None
-    # excluded work type (preprint/book never enter journal views)
+    # excluded work types (preprint/book/dataset/peer review never enter
+    # app views) project to None
     assert work_row(_payload(type_="preprint"), {"S123": "x"}) is None
+    assert work_row(_payload(type_="dataset"), {"S123": "x"}) is None
+    assert work_row(_payload(type_="peer-review"), {"S123": "x"}) is None
+    # book chapters and book parts ARE app output (conference proceedings
+    # hide there) and project like any other work
+    assert work_row(_payload(type_="book-chapter"), {"S123": "x"}) is not None
+    assert work_row(_payload(type_="info:eu-repo/semantics/bookPart"), {"S123": "x"}) is not None
+    # repository sources project their type; gap queries drop the rows
+    row = work_row(_payload(source_type="repository"), {})
+    assert row["source_type"] == "repository" and row["venue_name"] == "Journal One"
     # unmapped venue keeps the name, loses the issn; unknown oa folds to closed
     row = work_row(_payload(oa="archive"), {})
     assert row["venue_issn_l"] is None and row["venue_name"] == "Journal One"

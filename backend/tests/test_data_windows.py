@@ -196,10 +196,13 @@ async def test_works_tab_total_matches_stats_count(db):
         flags = await session.get(JournalFlags, {"institution_id": inst.id, "issn_l": "0000-0000"})
         page = await list_works(session, "0000-0000", inst, page=1, page_size=50)
 
-    assert flags is not None and flags.works_count == 2
-    assert page["total"] == 2
-    assert [i["title"] for i in page["items"]] == ["Doi Work", "No Doi Work"]
-    doi_item, nodoi_item = page["items"]
+    assert flags is not None and flags.works_count == 3
+    assert page["total"] == 3
+    # sort_work_items: year desc, cited desc, title asc — the book part
+    # (book parts are app output since the 2026-11 type review) outranks
+    # the uncited 2020 work
+    assert [i["title"] for i in page["items"]] == ["Doi Work", "A Book Part", "No Doi Work"]
+    doi_item, nodoi_item = page["items"][0], page["items"][2]
     assert doi_item["in_openalex"] is True
     assert doi_item["id"] == "W1"
     assert doi_item["fwci"] == 1.5

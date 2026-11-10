@@ -51,6 +51,11 @@ class OpenalexWork(Base):
     venue_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     # OpenAlex work language (ISO 639-1); feeds the modal journals.language.
     language: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # OpenAlex primary-location source type (journal, repository,
+    # conference, ...); gap queries drop repository rows — a repository
+    # copy is not evidence a work is missing from Pure, and the
+    # institution's own research information system is repository-typed.
+    source_type: Mapped[str | None] = mapped_column(Text, nullable=True)
     authorships: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'")
     )

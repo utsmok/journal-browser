@@ -26,6 +26,7 @@ def _oa_work(
     authorships=(),
     venue="1234-5678",
     source="works_stats",
+    source_type=None,
 ):
     return OpenalexWork(
         institution_id=inst_id,
@@ -39,6 +40,7 @@ def _oa_work(
         venue_name="Journal One",
         authorships=authorships,
         source=source,
+        source_type=source_type,
     )
 
 
@@ -46,7 +48,8 @@ def _oa_work(
 async def authorship_db(db, institution_factory):
     """ut: journal 1234-5678 with works and authors arranged to pin the
     distinct-work counting rules, plus store rows exercising every gap
-    gate (matched DOI, excluded type, NULL type, window, venue)."""
+    gate (matched DOI, excluded type, NULL type, repository source,
+    window, venue)."""
     ut = await institution_factory(code="ut", data_window_start=WINDOW_START)
     db.add(journal_factory("1234-5678", publisher_name="Publisher One"))
     db.add(journal_factory("9999-9999"))
@@ -140,10 +143,29 @@ async def authorship_db(db, institution_factory):
                 authorships=[{"a": "A-ALICE", "n": "Alice Author", "o": "0000-0002-1111"}],
             ),
             _oa_work(ut.id, "W-gap2", title="Gap Two Untyped", year=2023, work_type=None),
-            # gated rows: matched DOI, excluded type, out of window, other venue
+            # gated rows: matched DOI, excluded type, repository source
+            # (a Zenodo/Pure-RIS copy is no Pure gap), out of window, other venue
             _oa_work(ut.id, "W-matched", doi="10.0.0/w1", title="Matched", year=2023),
             _oa_work(
                 ut.id, "W-pre", doi="10.9.0/9", title="Preprint", year=2024, work_type="preprint"
+            ),
+            _oa_work(
+                ut.id,
+                "W-data",
+                doi="10.9.0/4",
+                title="Dataset",
+                year=2024,
+                work_type="dataset",
+                authorships=[{"a": "A-ALICE"}],
+            ),
+            _oa_work(
+                ut.id,
+                "W-repo",
+                doi="10.9.0/5",
+                title="Repo Copy",
+                year=2024,
+                source_type="repository",
+                authorships=[{"a": "A-ALICE"}],
             ),
             _oa_work(ut.id, "W-old", doi="10.9.0/8", title="Old", year=2019),
             # author-sweep row: in-venue, in-window, unmatched DOI, but
@@ -223,23 +245,24 @@ async def test_venue_authorship_counts_distinct_works(authorship_db, db):
     async with async_sessionmaker(db.bind, expire_on_commit=False)() as session:
         inst = await session.get(type(ut), ut.id)
         out = await authorship.venue_authorship(session, inst, issn_l="1234-5678")
-    # w1, w2, w3 carry UT author edges after gating (w4 none, wex/wout/
-    # wret/wother drop via type/window/retired/venue gates)
-    assert out["n_ut_works"] == 3
+    # w1, w2, w3 and the book-chapter wex carry UT author edges after
+    # gating (book chapters are app output; w4 none, wout/wret/wother drop
+    # via window/retired/venue gates)
+    assert out["n_ut_works"] == 4
     # distinct works per faculty: alice+bob+carol cover EEMCS over
-    # w1..w3 (w3 counted once despite two EEMCS authors)
+    # w1..w3+wex (w3 counted once despite two EEMCS authors)
     assert out["faculties"] == [
-        {"name": EEMCS, "works": 3},
+        {"name": EEMCS, "works": 4},
         {"name": "Faculty of Behavioural Sciences", "works": 1},
     ]
     assert out["research_groups"] == [
-        {"name": "Group X", "works": 2},
+        {"name": "Group X", "works": 3},
         {"name": "Group Y", "works": 1},
         {"name": "Group Z", "works": 1},
     ]
     # count desc, then name asc on ties
     assert [(a["name"], a["works"]) for a in out["top_authors"]] == [
-        ("Alice Author", 2),
+        ("Alice Author", 3),
         ("Bob Author", 1),
         ("Carol Author", 1),
     ]
@@ -253,8 +276,8 @@ async def test_venue_openalex_only_applies_gates(authorship_db, db):
         inst = await session.get(type(ut), ut.id)
         out = await authorship.venue_openalex_only(session, inst, issn_l="1234-5678")
     assert out["available"] is True
-    # matched-DOI, preprint, out-of-window, and other-venue rows drop;
-    # the DOI-less NULL-type row stays
+    # matched-DOI, preprint, dataset, repository-sourced, out-of-window,
+    # and other-venue rows drop; the DOI-less NULL-type row stays
     assert out["total"] == 2
     assert [i["title"] for i in out["items"]] == ["Gap One", "Gap Two Untyped"]
     assert out["items"][1]["doi"] is None
@@ -309,7 +332,8 @@ async def test_author_ids_openalex_only_counts_work_once(authorship_db, db):
     # pure work and W-other sits in another venue but IS attributed —
     # attribution is unit-wide, not venue-scoped, so it counts too.
     # W-gap1 names alice as well and counts here (venue gaps are not
-    # author-scoped, but attribution is).
+    # author-scoped, but attribution is). Alice's dataset and
+    # repository-sourced rows drop via the type/source gates.
     assert out["total"] == 4
     assert sorted(i["title"] for i in out["items"]) == [
         "Gap One",
@@ -340,6 +364,6 @@ async def test_journal_detail_carries_new_fields(authorship_db, db):
         r = await client.get("/api/v1/ut/journals/1234-5678")
     assert r.status_code == 200
     body = r.json()
-    assert body["ut_authorship"]["n_ut_works"] == 3
+    assert body["ut_authorship"]["n_ut_works"] == 4
     assert body["openalex_only"]["total"] == 2
     assert body["openalex_only"]["available"] is True

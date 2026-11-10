@@ -43,7 +43,7 @@ from .authorship import (
     work_authors_of,
 )
 from .publishers import group_issns
-from .works_query import author_works_join, work_year_window
+from .works_query import author_works_join, work_type_not_excluded, work_year_window
 
 #: CSV column order; every export uses exactly this header row.
 CSV_COLUMNS = (
@@ -440,6 +440,7 @@ async def _canon_csv(
                 Work.institution_id == institution.id,
                 Work.retired_at.is_(None),
                 *work_year_window(institution, year_range),
+                work_type_not_excluded(Work.work_type),
             )
             .order_by(Work.year.desc(), func.lower(Work.title))
         )

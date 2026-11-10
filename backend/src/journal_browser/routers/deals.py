@@ -17,6 +17,7 @@ from ..deps import InstitutionDep
 from ..models import ApcEvidence, Deal, DealInstitution, DealJournal, Publisher, Work
 from ..schemas import DealOut
 from ..services.deal_coverage import deal_institution_join, dj_scope
+from ..services.works_query import work_type_not_excluded
 
 router = APIRouter(prefix="/deals", tags=["deals"])
 
@@ -82,7 +83,10 @@ def _apc_agg(institution_id: int):
             Work,
             (Work.institution_id == institution_id)
             & (Work.journal_issn_l == djs.c.issn_l)
-            & Work.doi_normalized.is_not(None),
+            & Work.doi_normalized.is_not(None)
+            # APC euros match works, so the matched set must describe the
+            # same population as every other works count.
+            & work_type_not_excluded(Work.work_type),
         )
         .join(
             ApcEvidence,
