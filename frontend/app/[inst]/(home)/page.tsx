@@ -354,7 +354,10 @@ function SearchView() {
         // Orderable via the facet, not the column; screen readers still get
         // a column name.
         header: () => <span className="sr-only">Deal coverage</span>,
-        cell: (info) => <DealBadge covered={info.getValue<boolean>()} />,
+        cell: (info) => {
+          const row = info.row.original;
+          return <DealBadge covered={row.deal_covered} capped={row.deal_cap_reached} />;
+        },
       },
       {
         accessorKey: "funder_fit",
@@ -855,7 +858,7 @@ function SearchView() {
                             )}
                           </div>
                           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                            <DealBadge covered={row.deal_covered} />
+                            <DealBadge covered={row.deal_covered} capped={row.deal_cap_reached} />
                             <FunderFitBadge
                               status={row.funder_fit?.status ?? null}
                               reasons={row.funder_fit?.reasons ?? []}

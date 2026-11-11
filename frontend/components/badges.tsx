@@ -195,6 +195,7 @@ function Lockup({
   width,
   title,
   className,
+  overlay,
   children,
 }: {
   label: string;
@@ -202,10 +203,14 @@ function Lockup({
   width: number;
   title: string;
   className: string;
+  overlay?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
-    <span className={`jb-badge inline-flex shrink-0 items-center ${className}`} title={title}>
+    <span
+      className={`jb-badge relative inline-flex shrink-0 items-center ${className}`}
+      title={title}
+    >
       <svg
         viewBox={`0 0 ${width} 16`}
         className="h-4 w-auto overflow-visible"
@@ -226,6 +231,7 @@ function Lockup({
           {label}
         </text>
       </svg>
+      {overlay}
     </span>
   );
 }
@@ -415,14 +421,33 @@ export function PureMatchBadge({ match, url }: { match?: string | null; url?: st
   );
 }
 
-export function DealBadge({ covered }: { covered: boolean }) {
+export function DealBadge({ covered, capped = false }: { covered: boolean; capped?: boolean }) {
   if (!covered) return null;
   return (
     <Lockup
       label="DEAL"
       width={50}
-      title="Open access deal — APCs for corresponding authors are covered (fully or partly) by an institutional agreement."
-      className={ACCESS_TEXT.deal}
+      title={
+        capped
+          ? "Open access deal — cap reached: the publisher's article cap for this contract year is used up, so free OA publishing is no longer guaranteed."
+          : "Open access deal — APCs for corresponding authors are covered (fully or partly) by an institutional agreement."
+      }
+      className={capped ? `${ACCESS_TEXT.deal} grayscale opacity-60` : ACCESS_TEXT.deal}
+      overlay={
+        capped ? (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center text-[var(--primary-text)]"
+          >
+            <span
+              className="-rotate-6 rounded-[2px] border-[1.5px] border-current bg-[var(--card)]/85 px-[3px] py-px text-[8px] font-black leading-none tracking-[0.04em]"
+              style={{ fontFamily: WORDMARK_FONT }}
+            >
+              CAPPED
+            </span>
+          </span>
+        ) : undefined
+      }
     >
       <DealGlyph />
     </Lockup>

@@ -2529,6 +2529,11 @@ export interface components {
              */
             deal_covered: boolean;
             /**
+             * Deal Cap Reached
+             * @default false
+             */
+            deal_cap_reached: boolean;
+            /**
              * Works
              * @default 0
              */
