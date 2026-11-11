@@ -3845,6 +3845,22 @@
             }
           },
           {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "share",
+                "works"
+              ],
+              "type": "string",
+              "description": "Top-authors ordering: share = share of the author's counted works published diamond/gold OA (authors with fewer than 4 counted works unranked, share null), works = works count",
+              "default": "share",
+              "title": "Sort"
+            },
+            "description": "Top-authors ordering: share = share of the author's counted works published diamond/gold OA (authors with fewer than 4 counted works unranked, share null), works = works count"
+          },
+          {
             "name": "year_from",
             "in": "query",
             "required": false,
@@ -3936,6 +3952,22 @@
             }
           },
           {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "share",
+                "works"
+              ],
+              "type": "string",
+              "description": "Top-authors ordering: share = share of the author's counted works published diamond/gold OA (authors with fewer than 4 counted works unranked, share null), works = works count",
+              "default": "share",
+              "title": "Sort"
+            },
+            "description": "Top-authors ordering: share = share of the author's counted works published diamond/gold OA (authors with fewer than 4 counted works unranked, share null), works = works count"
+          },
+          {
             "name": "year_from",
             "in": "query",
             "required": false,
@@ -4025,6 +4057,22 @@
               "type": "string",
               "title": "Institution Code"
             }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "share",
+                "works"
+              ],
+              "type": "string",
+              "description": "Top-authors ordering: share = share of the author's counted works published diamond/gold OA (authors with fewer than 4 counted works unranked, share null), works = works count",
+              "default": "share",
+              "title": "Sort"
+            },
+            "description": "Top-authors ordering: share = share of the author's counted works published diamond/gold OA (authors with fewer than 4 counted works unranked, share null), works = works count"
           },
           {
             "name": "year_from",
@@ -5723,6 +5771,11 @@
             "type": "boolean",
             "title": "Available",
             "default": true
+          },
+          "likely_missing": {
+            "type": "integer",
+            "title": "Likely Missing",
+            "default": 0
           }
         },
         "type": "object",
@@ -5864,6 +5917,33 @@
             "type": "array",
             "title": "Ut Authors",
             "default": []
+          },
+          "pure_match": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "doi_in_pure",
+                  "parent_book_in_pure",
+                  "same_title_in_pure"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Match"
+          },
+          "pure_match_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Match Url"
           }
         },
         "type": "object",
@@ -6122,7 +6202,8 @@
             "default": {
               "total": 0,
               "items": [],
-              "available": true
+              "available": true,
+              "likely_missing": 0
             }
           },
           "openalex_only_count": {
@@ -6329,6 +6410,17 @@
             ],
             "title": "Oa Status"
           },
+          "work_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Type"
+          },
           "journal_issn_l": {
             "anyOf": [
               {
@@ -6351,10 +6443,41 @@
             ],
             "title": "Journal Title"
           },
+          "pure_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Url"
+          },
+          "openalex_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Url"
+          },
           "in_pure": {
             "type": "boolean",
             "title": "In Pure",
             "default": true
+          },
+          "oa_status_source": {
+            "type": "string",
+            "enum": [
+              "openalex",
+              "pure"
+            ],
+            "title": "Oa Status Source",
+            "default": "openalex"
           }
         },
         "type": "object",
@@ -9815,6 +9938,33 @@
               }
             ],
             "title": "Publisher Name"
+          },
+          "pure_match": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "doi_in_pure",
+                  "parent_book_in_pure",
+                  "same_title_in_pure"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Match"
+          },
+          "pure_match_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Match Url"
           }
         },
         "type": "object",
@@ -9942,6 +10092,17 @@
               }
             ],
             "title": "Primary Topic"
+          },
+          "oa_diamond_gold_share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Diamond Gold Share"
           }
         },
         "type": "object",

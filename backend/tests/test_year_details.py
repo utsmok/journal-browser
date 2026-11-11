@@ -348,6 +348,7 @@ async def test_orgunit_detail_default_unchanged(details_api):
             "n_works": 2,
             "orcid": None,
             "primary_topic": "Quantum Chemistry",
+            "oa_diamond_gold_share": None,
         }
     ]
     assert body["deal_usage"] == [{"label": ALPHA, "n_works": 2, "euro": 50.0}]

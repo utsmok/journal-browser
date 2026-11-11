@@ -5,7 +5,13 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
-import { DealBadge, OaStatusChip, OaTypeBadge, QuartileBadge } from "@/components/badges";
+import {
+  DealBadge,
+  OaStatusChip,
+  OaTypeBadge,
+  PureMatchBadge,
+  QuartileBadge,
+} from "@/components/badges";
 import { BackLink } from "@/components/back-link";
 import { CardPager } from "@/components/card-pager";
 import { CollapsibleCard } from "@/components/collapsible-card";
@@ -13,6 +19,7 @@ import { OaTrend } from "@/components/oa-trend";
 import { OrcidLink } from "@/components/orcid-link";
 import { DetailSkeleton, ErrorPanel } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -27,11 +34,13 @@ import { useYearRange } from "@/hooks/use-year-filter";
 import {
   encodeNamePath,
   errorMessage,
+  type OrgUnitAuthorSort,
   type OrgUnitDetailResponse,
   type OrgUnitItem,
   type OrgUnitLevel,
 } from "@/lib/api";
 import { formatEur } from "@/lib/format";
+import { workTypeLabel } from "@/lib/work-type";
 
 const PAGE_SIZE = 20;
 
@@ -87,7 +96,8 @@ function CrisGapsCard({ openalexOnly }: { openalexOnly: OpenalexOnly }) {
                 {w.venue && (
                   <span className="min-w-0 text-xs text-[var(--muted-foreground)]">{w.venue}</span>
                 )}
-                {w.work_type && <span className="text-xs">{w.work_type}</span>}
+                {w.work_type && <span className="text-xs">{workTypeLabel(w.work_type)}</span>}
+                <PureMatchBadge match={w.pure_match} url={w.pure_match_url} />
                 <OaStatusChip status={w.oa_status} />
               </li>
             );
@@ -151,10 +161,13 @@ export default function OrgUnitPage() {
 
   const backHref = level === "faculty" ? `/${inst}/orgunit` : `/${inst}/orgunit?level=${level}`;
   const { year_from, year_to } = useYearRange();
-  const { data, isPending, isError, error } = useOrgUnit(level, level && name ? name : undefined, {
-    year_from,
-    year_to,
-  });
+  const [authorSort, setAuthorSort] = React.useState<OrgUnitAuthorSort>("share");
+  const { data, isPending, isError, error } = useOrgUnit(
+    level,
+    level && name ? name : undefined,
+    { year_from, year_to },
+    authorSort,
+  );
 
   if (!level)
     return (
@@ -179,17 +192,30 @@ export default function OrgUnitPage() {
     );
 
   // Keyed by unit so per-card pagination restarts on navigation.
-  return <OrgUnitDetail key={`${level}:${name}`} inst={inst} backHref={backHref} data={data} />;
+  return (
+    <OrgUnitDetail
+      key={`${level}:${name}`}
+      inst={inst}
+      backHref={backHref}
+      data={data}
+      authorSort={authorSort}
+      onAuthorSortChange={setAuthorSort}
+    />
+  );
 }
 
 function OrgUnitDetail({
   inst,
   backHref,
   data,
+  authorSort,
+  onAuthorSortChange,
 }: {
   inst: string;
   backHref: string;
   data: OrgUnitDetailResponse;
+  authorSort: OrgUnitAuthorSort;
+  onAuthorSortChange: (sort: OrgUnitAuthorSort) => void;
 }) {
   const { year_from, year_to } = useYearRange();
   const { unit, groups, journals, authors, works_by_year, deal_usage } = data;
@@ -292,12 +318,51 @@ function OrgUnitDetail({
         )}
 
         {authors.length > 0 && (
-          <CollapsibleCard id="authors" title="Top authors" contentClassName="text-sm">
+          <CollapsibleCard
+            id="authors"
+            title="Top authors"
+            description={
+              <div
+                role="group"
+                aria-label="Rank authors by"
+                className="mt-2 flex flex-wrap items-center gap-2"
+              >
+                <div className="flex overflow-hidden rounded-[var(--radius)] border border-[var(--input)]">
+                  <Button
+                    variant={authorSort === "share" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="rounded-none"
+                    aria-pressed={authorSort === "share"}
+                    title="Rank by the share of the author's counted works published diamond or gold open access. Authors with fewer than 4 counted works are not ranked by share."
+                    onClick={() => onAuthorSortChange("share")}
+                  >
+                    Diamond + gold share
+                  </Button>
+                  <Button
+                    variant={authorSort === "works" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="rounded-none"
+                    aria-pressed={authorSort === "works"}
+                    onClick={() => onAuthorSortChange("works")}
+                  >
+                    Works count
+                  </Button>
+                </div>
+              </div>
+            }
+            contentClassName="text-sm"
+          >
             <Table>
               <caption className="sr-only">Authors of this unit</caption>
               <TableHeader>
                 <TableRow>
                   <TableHead>Author</TableHead>
+                  <TableHead
+                    className="text-right"
+                    title="Share of the author's counted works published diamond or gold open access. Ranked from 4 counted works; authors with fewer rank last and show no share."
+                  >
+                    Diamond + gold
+                  </TableHead>
                   <TableHead className="text-right">Works</TableHead>
                   <TableHead>Topic</TableHead>
                 </TableRow>
@@ -316,6 +381,13 @@ function OrgUnitDetail({
                         <span className="ml-2">
                           <OrcidLink orcid={a.orcid} />
                         </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {a.oa_diamond_gold_share != null ? (
+                        `${Math.round(a.oa_diamond_gold_share * 100)}%`
+                      ) : (
+                        <span className="text-[var(--muted-foreground)]">fewer than 4 works</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">

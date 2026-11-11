@@ -19,6 +19,7 @@ import {
   type JournalSearchParams,
   type JournalSearchResponse,
   type LimitationOut,
+  type OrgUnitAuthorSort,
   type OrgUnitLevel,
   type OrgUnitSearchParams,
   type PublisherSearchParams,
@@ -292,6 +293,7 @@ export function useOrgUnit(
   level: OrgUnitLevel | undefined,
   name: string | undefined,
   years?: YearParams,
+  sort?: OrgUnitAuthorSort,
 ) {
   const inst = useInstitution();
   return useQuery({
@@ -299,8 +301,9 @@ export function useOrgUnit(
       ...qk.orgunit(inst, level ?? "faculty", name ?? ""),
       years?.year_from ?? null,
       years?.year_to ?? null,
+      sort ?? "share",
     ] as const,
-    queryFn: () => fetchOrgUnit(inst, level ?? "faculty", name ?? "", years),
+    queryFn: () => fetchOrgUnit(inst, level ?? "faculty", name ?? "", years, sort),
     enabled: Boolean(level && name),
   });
 }

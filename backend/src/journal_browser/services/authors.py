@@ -20,13 +20,16 @@ from ..models import (
     Institution,
     Journal,
     JournalFlags,
+    OpenalexWork,
     PeopleUtwentePerson,
     PurePersonOrg,
     Work,
+    WorkPureAuthor,
 )
 from .authorship import (
     OPENALEX_URL,
     journal_publisher_map,
+    tag_pure_matches,
     ut_authors_for_authorships,
     ut_roster_by_aids,
 )
@@ -39,6 +42,7 @@ from .works_query import (
     empty_year_buckets,
     strata_cond,
     unit_work_join,
+    work_type_normalized,
     work_window,
     work_year_window,
 )
@@ -455,9 +459,9 @@ async def _openalex_only_section(
     publication; the Pure copy stays the display record)."""
     rows = await openalex_only_works_for_author(session, institution, author)
     if rows is None:
-        return {"total": 0, "items": [], "available": False}, None
+        return {"total": 0, "likely_missing": 0, "items": [], "available": False}, None
     if not rows:
-        return {"total": 0, "items": [], "available": True}, 0
+        return {"total": 0, "likely_missing": 0, "items": [], "available": True}, 0
     if year_range is not None:
         year_start, year_end_bound = year_range
     else:
@@ -494,6 +498,22 @@ async def _openalex_only_section(
                 "authorships": row.get("authorships"),
             }
         )
+    # Explain rows that are in fact in Pure: a DOI belonging to a Pure
+    # record outside the author's list (a book, or a record not linked to
+    # them), a chapter whose parent book is in Pure, or a same-title Pure
+    # record sharing the author. Tagged over the WHOLE gated list so the
+    # counts stay exact beyond the shown slice; untagged rows — the likely
+    # misses — sort first (stable: year/title order kept within groups).
+    # Every tag must share an author: this author themself.
+    await tag_pure_matches(
+        session,
+        institution,
+        gated,
+        [{author.pure_uuid}] * len(gated),
+        check_own_doi=True,
+    )
+    likely_missing = sum(1 for g in gated if g.get("pure_match") is None)
+    gated.sort(key=lambda g: g.get("pure_match") is not None)
     # total is the exact gated count; authorships, publisher and roster
     # enrichment only cover the slice that ships to the client.
     total = len(gated)
@@ -528,7 +548,12 @@ async def _openalex_only_section(
                 "ut_authors": ut_authors_for_authorships(authorships, roster),
             }
         )
-    return {"total": total, "items": items, "available": True}, total
+    return {
+        "total": total,
+        "likely_missing": likely_missing,
+        "items": items,
+        "available": True,
+    }, total
 
 
 async def author_avatar(
@@ -644,6 +669,7 @@ async def author_profile(
                 Work.year,
                 Work.doi_normalized,
                 Work.oa_status,
+                Work.work_type,
                 Work.journal_issn_l,
                 Journal.title.label("journal_title"),
             )
@@ -654,6 +680,62 @@ async def author_profile(
             .limit(WORKS_CAP)
         )
     ).all()
+
+    # The author's Pure books ride along in the works list. harvest drops
+    # author_works edges to book types, so the join above never sees them
+    # — but the records exist (linked via work_pure_authors) and belong on
+    # the page. They stay OUT of every count: n_works, oa_by_year and the
+    # journals table aggregate over the AuthorWork edges below, untouched.
+    book_rows = (
+        await session.execute(
+            select(
+                Work.pure_uuid,
+                Work.title,
+                Work.year,
+                Work.doi_normalized,
+                Work.oa_status,
+                Work.work_type,
+                Work.journal_issn_l,
+                Journal.title.label("journal_title"),
+            )
+            .join(
+                WorkPureAuthor,
+                (WorkPureAuthor.institution_id == iid)
+                & (WorkPureAuthor.work_pure_uuid == Work.pure_uuid),
+            )
+            .outerjoin(Journal, Journal.issn_l == Work.journal_issn_l)
+            .where(
+                Work.institution_id == iid,
+                Work.retired_at.is_(None),
+                *work_year_window(institution, year_range),
+                WorkPureAuthor.person_uuid == pure_uuid,
+                work_type_normalized(Work.work_type).in_(("book", "monograph")),
+            )
+            .order_by(Work.year.desc(), func.lower(Work.title))
+        )
+    ).all()
+    known_uuids = {row.pure_uuid for row in work_rows}
+    all_work_rows = sorted(
+        [*work_rows, *(r for r in book_rows if r.pure_uuid not in known_uuids)],
+        key=lambda r: (-(r.year or 0), (r.title or "").lower()),
+    )
+
+    # One batched OpenAlex store lookup for every DOI on the page: lowest
+    # w_id wins deterministically when several store rows share a DOI.
+    oa_ids_by_doi: dict[str, str] = {}
+    works_dois = sorted({row.doi_normalized for row in all_work_rows if row.doi_normalized})
+    if works_dois:
+        oa_rows = (
+            await session.execute(
+                select(OpenalexWork.doi_normalized, func.min(OpenalexWork.w_id).label("w_id"))
+                .where(
+                    OpenalexWork.institution_id == iid,
+                    OpenalexWork.doi_normalized.in_(works_dois),
+                )
+                .group_by(OpenalexWork.doi_normalized)
+            )
+        ).all()
+        oa_ids_by_doi = {row.doi_normalized: row.w_id for row in oa_rows}
 
     year_rows = (
         await session.execute(
@@ -745,11 +827,26 @@ async def author_profile(
                 "year": row.year,
                 "doi": row.doi_normalized,
                 "oa_status": row.oa_status,
+                "work_type": row.work_type,
                 "journal_issn_l": row.journal_issn_l,
                 "journal_title": row.journal_title,
+                "pure_url": (
+                    f"{institution.research_portal_url}/en/publications/{row.pure_uuid}"
+                    if institution.research_portal_url
+                    else None
+                ),
+                "openalex_url": (
+                    f"{OPENALEX_URL}/{oa_ids_by_doi[row.doi_normalized]}"
+                    if row.doi_normalized in oa_ids_by_doi
+                    else None
+                ),
                 "in_pure": True,
+                # The OpenAlex oa_status sync only overwrites DOI-matched
+                # rows; a green status on a DOI-less record is Pure's own
+                # access flag — the venue's OA model is unverified.
+                "oa_status_source": "pure" if row.doi_normalized is None else "openalex",
             }
-            for row in work_rows
+            for row in all_work_rows
         ],
         "openalex_only": openalex_section,
         "openalex_only_count": openalex_only_count,

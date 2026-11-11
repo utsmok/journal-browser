@@ -5,7 +5,13 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
-import { DealBadge, OaStatusChip, OaTypeBadge, QuartileBadge } from "@/components/badges";
+import {
+  DealBadge,
+  OaStatusChip,
+  OaTypeBadge,
+  PureMatchBadge,
+  QuartileBadge,
+} from "@/components/badges";
 import { CardPager } from "@/components/card-pager";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { GapCsvButton } from "@/components/gap-csv-button";
@@ -35,6 +41,7 @@ import {
 } from "@/lib/api";
 import { formatEur, journalApcText } from "@/lib/format";
 import { dealLinkLabel, displayPublisherName, orderedDealLinks } from "@/lib/deal-links";
+import { workTypeLabel } from "@/lib/work-type";
 
 /** First curated link for a deal ("conditions" / contract document). */
 function dealConditionsUrl(deal: DealOut): string | null {
@@ -330,7 +337,8 @@ function CrisGapsCard({
                     {w.journal_title ?? w.journal_issn_l}
                   </Link>
                 )}
-                {w.work_type && <span className="text-xs">{w.work_type}</span>}
+                {w.work_type && <span className="text-xs">{workTypeLabel(w.work_type)}</span>}
+                <PureMatchBadge match={w.pure_match} url={w.pure_match_url} />
                 <OaStatusChip status={w.oa_status} />
                 <UtAuthorLine authors={w.ut_authors} />
               </li>

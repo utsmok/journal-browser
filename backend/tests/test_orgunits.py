@@ -546,3 +546,123 @@ async def test_orgunit_detail_without_primary_topics(orgunits_api, db):
     assert body["unit"]["name"] == "Faculty of Lost Topics"
     assert body["unit"]["topics"] == []
     assert [(a["pure_uuid"], a["n_works"]) for a in body["authors"]] == [("no-topic-uuid", 2)]
+
+
+@pytest.fixture
+async def share_api(db, institution_factory):
+    """ut: research group 'OA Leaders' with Dana (4 counted works, 3
+    diamond/gold = 75%), Ted (10 works, 1 diamond = 10%) and Tina (3
+    works, all diamond: below the 4-work minimum, share None)."""
+
+    async def _override():
+        async with async_sessionmaker(db.bind, expire_on_commit=False)() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = _override
+    ut = await institution_factory(code="ut")
+    session = db
+    run = HarvestRun(source="pure", entity_type="works", status="completed", config_fingerprint="t")
+    session.add(run)
+    await session.flush()
+    session.add(journal_factory("3333-3330"))
+    await session.flush()
+
+    def _author(uuid: str, name: str, n_works: int) -> Author:
+        return Author(
+            institution_id=ut.id,
+            pure_uuid=uuid,
+            name=name,
+            research_group="OA Leaders",
+            n_works=n_works,
+            confirmed=True,
+        )
+
+    session.add_all(
+        [
+            _author("dana-uuid", "Dana Diamond", 4),
+            _author("ted-uuid", "Ted Tenured", 10),
+            _author("tina-uuid", "Tina Trio", 3),
+        ]
+    )
+
+    def _work(uuid: str, year: int, oa: str) -> Work:
+        return Work(
+            institution_id=ut.id,
+            pure_uuid=uuid,
+            title=f"Work {uuid}",
+            norm_title=f"work {uuid}",
+            year=year,
+            oa_status=oa,
+            journal_issn_l="3333-3330",
+            first_seen_run=run.id,
+            last_seen_run=run.id,
+        )
+
+    session.add_all(
+        [
+            # Dana: 4 works, 3 diamond/gold.
+            _work("w-d1", 2023, "gold"),
+            _work("w-d2", 2023, "diamond"),
+            _work("w-d3", 2022, "gold"),
+            _work("w-d4", 2022, "closed"),
+            # Ted: 10 works, 1 diamond.
+            _work("w-t1", 2023, "diamond"),
+            *[(_work(f"w-t{i}", 2022, "closed")) for i in range(2, 11)],
+            # Tina: 3 works, all diamond (share None: below the minimum).
+            *[(_work(f"w-x{i}", 2024, "diamond")) for i in range(1, 4)],
+        ]
+    )
+    await session.flush()
+    session.add_all(
+        [
+            *[
+                AuthorWork(
+                    institution_id=ut.id, author_pure_uuid="dana-uuid", work_pure_uuid=f"w-d{i}"
+                )
+                for i in range(1, 5)
+            ],
+            *[
+                AuthorWork(
+                    institution_id=ut.id, author_pure_uuid="ted-uuid", work_pure_uuid=f"w-t{i}"
+                )
+                for i in range(1, 11)
+            ],
+            *[
+                AuthorWork(
+                    institution_id=ut.id, author_pure_uuid="tina-uuid", work_pure_uuid=f"w-x{i}"
+                )
+                for i in range(1, 4)
+            ],
+        ]
+    )
+    await session.commit()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
+        yield client, ut.id
+    app.dependency_overrides.clear()
+
+
+@requires_db
+async def test_orgunit_top_authors_share_ordering(share_api):
+    """Share ordering (default): a 4-work author at 75% outranks a 10-work
+    author at 10%; a 3-work all-diamond author ranks last with share None.
+    The works ordering is the previous behaviour, shares still served."""
+    client, _ut = share_api
+    group_url = f"/api/v1/ut/orgunits/group/{quote('OA Leaders')}"
+    r = await client.get(group_url)
+    assert r.status_code == 200
+    authors = r.json()["authors"]
+    assert [(a["name"], a["n_works"]) for a in authors] == [
+        ("Dana Diamond", 4),
+        ("Ted Tenured", 10),
+        ("Tina Trio", 3),
+    ]
+    assert [a["oa_diamond_gold_share"] for a in authors] == [0.75, 0.1, None]
+
+    r = await client.get(group_url, params={"sort": "works"})
+    authors = r.json()["authors"]
+    assert [(a["name"], a["n_works"]) for a in authors] == [
+        ("Ted Tenured", 10),
+        ("Dana Diamond", 4),
+        ("Tina Trio", 3),
+    ]
+    assert [a["oa_diamond_gold_share"] for a in authors] == [0.1, 0.75, None]

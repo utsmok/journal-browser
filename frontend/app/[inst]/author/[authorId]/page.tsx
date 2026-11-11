@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
-import { DealBadge, OaStatusChip, OaTypeBadge } from "@/components/badges";
+import { DealBadge, OaStatusChip, OaTypeBadge, PureMatchBadge } from "@/components/badges";
 import { CardPager } from "@/components/card-pager";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { GapCsvButton } from "@/components/gap-csv-button";
@@ -33,6 +33,7 @@ import {
   type StatsYear,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { workTypeLabel } from "@/lib/work-type";
 
 function External({
   href,
@@ -61,6 +62,50 @@ function External({
 function doiHref(doi: string | null): string | null {
   if (!doi) return null;
   return /^https?:\/\//.test(doi) ? doi : `https://doi.org/${doi}`;
+}
+
+/** Small per-row verification links: DOI, OpenAlex, Pure — whichever
+ * exist; an empty row (no DOI, no portal record) shows a dash. */
+function WorkLinks({
+  doi,
+  openalexUrl,
+  pureUrl,
+}: {
+  doi: string | null;
+  openalexUrl?: string | null;
+  pureUrl?: string | null;
+}) {
+  const links = [
+    doi ? { label: "DOI", href: doiHref(doi) ?? "" } : null,
+    openalexUrl ? { label: "OpenAlex", href: openalexUrl } : null,
+    pureUrl ? { label: "Pure", href: pureUrl } : null,
+  ].filter((l): l is { label: string; href: string } => l !== null);
+  if (links.length === 0) return <span className="text-[var(--muted-foreground)]">—</span>;
+  return (
+    <span className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs">
+      {links.map((l) => (
+        <a
+          key={l.label}
+          href={l.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[var(--primary-text)] underline-offset-2 hover:underline"
+        >
+          {l.label}
+        </a>
+      ))}
+    </span>
+  );
+}
+
+/** Neutral small type badge; null renders a dash so columns stay aligned. */
+function WorkTypeCell({ workType }: { workType?: string | null }) {
+  if (!workType) return <span className="text-[var(--muted-foreground)]">—</span>;
+  return (
+    <Badge variant="outline" className="font-normal text-[11px] text-[var(--muted-foreground)]">
+      {workTypeLabel(workType)}
+    </Badge>
+  );
 }
 
 /** href for "Back to search": the last search this tab ran, else this
@@ -241,7 +286,7 @@ export default function AuthorPage() {
     ...(hasSimilar ? [{ id: "next", label: "Where to publish next" }] : []),
     ...(alternatives.length > 0 ? [{ id: "alternatives", label: "Alternatives" }] : []),
     ...(works.length > 0 ? [{ id: "publications", label: "Publications" }] : []),
-    ...(data.openalex_only.available ? [{ id: "openalex-only", label: "Missing from Pure" }] : []),
+    ...(data.openalex_only.available ? [{ id: "openalex-only", label: "Not linked in Pure" }] : []),
   ];
 
   return (
@@ -471,9 +516,9 @@ export default function AuthorPage() {
                 <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                   {data.openalex_only_count != null && (
                     <p className="text-sm text-[var(--muted-foreground)]">
-                      {data.openalex_only_count.toLocaleString("en")} work(s) attributed by OpenAlex
-                      only are missing from Pure — listed under &ldquo;Missing from Pure&rdquo;
-                      below.
+                      {data.openalex_only_count.toLocaleString("en")} more work(s) found in OpenAlex
+                      but not linked to this author in Pure are listed under &ldquo;Not linked in
+                      Pure&rdquo; below.
                     </p>
                   )}
                   <GapCsvButton
@@ -488,13 +533,15 @@ export default function AuthorPage() {
                   <TableRow>
                     <TableHead>Year</TableHead>
                     <TableHead>Title</TableHead>
-                    <TableHead>Journal</TableHead>
+                    <TableHead>Published in</TableHead>
+                    <TableHead>Type</TableHead>
                     <TableHead>Access</TableHead>
+                    <TableHead>Links</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {workRows.map((w, idx) => {
-                    const href = doiHref(w.doi);
+                    const href = doiHref(w.doi) ?? w.pure_url ?? w.openalex_url;
                     return (
                       <TableRow key={w.pure_uuid ?? w.doi ?? `oa-${idx}`}>
                         <TableCell className="whitespace-nowrap tabular-nums">{w.year}</TableCell>
@@ -509,12 +556,24 @@ export default function AuthorPage() {
                             >
                               {w.journal_title || w.journal_issn_l}
                             </Link>
+                          ) : w.journal_title ? (
+                            <span>{w.journal_title}</span>
                           ) : (
                             <span className="text-[var(--muted-foreground)]">—</span>
                           )}
                         </TableCell>
                         <TableCell>
-                          <OaStatusChip status={w.oa_status} />
+                          <WorkTypeCell workType={w.work_type} />
+                        </TableCell>
+                        <TableCell>
+                          <OaStatusChip status={w.oa_status} source={w.oa_status_source} />
+                        </TableCell>
+                        <TableCell>
+                          <WorkLinks
+                            doi={w.doi}
+                            openalexUrl={w.openalex_url}
+                            pureUrl={w.pure_url}
+                          />
                         </TableCell>
                       </TableRow>
                     );
@@ -541,13 +600,13 @@ export default function AuthorPage() {
           {data.openalex_only.available && (
             <CollapsibleCard
               id="openalex-only"
-              title="Missing from Pure (OpenAlex-only)"
+              title="Not linked in Pure (found in OpenAlex)"
               description={
                 <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                   <p className="text-sm text-[var(--muted-foreground)]">
-                    {data.openalex_only.total.toLocaleString("en")} work(s) attributed by OpenAlex
-                    to this author match no Pure record — likely missing from the research
-                    information system.
+                    {data.openalex_only.total.toLocaleString("en")} found in OpenAlex but not linked
+                    in Pure; {data.openalex_only.likely_missing.toLocaleString("en")} likely
+                    missing.
                     {data.openalex_only.total > data.openalex_only.items.length &&
                       ` Showing ${data.openalex_only.items.length.toLocaleString("en")} most recent.`}
                   </p>
@@ -571,9 +630,11 @@ export default function AuthorPage() {
                     <TableRow>
                       <TableHead>Year</TableHead>
                       <TableHead>Title</TableHead>
-                      <TableHead>Journal</TableHead>
+                      <TableHead>Published in</TableHead>
                       <TableHead>Publisher</TableHead>
+                      <TableHead>Type</TableHead>
                       <TableHead>Access</TableHead>
+                      <TableHead>Links</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -595,6 +656,7 @@ export default function AuthorPage() {
                             >
                               OpenAlex only
                             </Badge>
+                            <PureMatchBadge match={w.pure_match} url={w.pure_match_url} />
                             <UtAuthorLine authors={w.ut_authors} />
                           </TableCell>
                           <TableCell>
@@ -605,6 +667,8 @@ export default function AuthorPage() {
                               >
                                 {w.journal_title || w.journal_issn_l}
                               </Link>
+                            ) : w.journal_title ? (
+                              <span>{w.journal_title}</span>
                             ) : (
                               <span className="text-[var(--muted-foreground)]">—</span>
                             )}
@@ -622,7 +686,13 @@ export default function AuthorPage() {
                             )}
                           </TableCell>
                           <TableCell>
+                            <WorkTypeCell workType={w.work_type} />
+                          </TableCell>
+                          <TableCell>
                             <OaStatusChip status={w.oa_status} />
+                          </TableCell>
+                          <TableCell>
+                            <WorkLinks doi={w.doi ?? null} openalexUrl={w.openalex_url} />
                           </TableCell>
                         </TableRow>
                       );

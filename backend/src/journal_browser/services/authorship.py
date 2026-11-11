@@ -21,13 +21,15 @@ instead of showing a misleading zero.
 """
 
 from collections.abc import Iterable
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import column, exists, false, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..harvest.common import normalize_doi
 from ..harvest.openalex_works import AUTHOR_SWEEP_PREFIX
+from ..harvest.pure.xmlrecords import _norm_title
 from ..models import (
     Author,
     Institution,
@@ -94,6 +96,115 @@ def not_in_pure() -> Any:
             Work.doi_normalized == OpenalexWork.doi_normalized,
         )
     )
+
+
+def parent_doi(doi: str | None) -> str | None:
+    """DOI with its trailing ``_<segment>`` stripped: book-chapter DOIs
+    share their parent book's DOI stem (10.1007/978-3-032-03219-5_4 ->
+    10.1007/978-3-032-03219-5). One segment only; None when the DOI has
+    no strippable suffix."""
+    if not doi:
+        return None
+    head, sep, _tail = doi.rpartition("_")
+    if not sep or not head or head.endswith("/"):
+        return None
+    return head
+
+
+def pure_work_url(institution: Institution, pure_uuid: str | None) -> str | None:
+    """Pure public record page for a work; None without a portal URL or
+    an identified record."""
+    if not pure_uuid or not institution.research_portal_url:
+        return None
+    return f"{institution.research_portal_url}/en/publications/{pure_uuid}"
+
+
+async def tag_pure_matches(
+    session: AsyncSession,
+    institution: Institution,
+    items: list[dict[str, Any]],
+    author_uuids: list[set[str]],
+    *,
+    check_own_doi: bool,
+) -> None:
+    """Tag gap items whose publication is in fact held by Pure under a
+    record the page does not show, so the UI can explain why a row is
+    not truly missing. Mutates each item in place with:
+
+    - ``pure_match``: 'doi_in_pure' (the DOI belongs to a Pure work the
+      page does not list — a book, or a record not linked to the author),
+      'parent_book_in_pure' (a chapter DOI whose parent book DOI is a
+      Pure record), or 'same_title_in_pure' (a Pure record of the same
+      normalized title sharing an author);
+    - ``pure_match_url``: the identified Pure record's portal page.
+
+    Precedence is doi > parent > title; untagged rows are the likely
+    misses. One batched DOI/parent-DOI lookup and one batched title
+    lookup per page — never per-row queries. Titles fold with the same
+    function Pure ingestion uses (harvest _norm_title), so both sides
+    normalize identically.
+
+    ``check_own_doi`` enables the doi_in_pure tag; venue/group cards
+    already anti-join their rows against every Pure DOI of the
+    institution, so there an exact-DOI hit cannot exist and the flag
+    stays off. ``author_uuids`` is parallel to ``items``: the roster
+    author uuids a same-title Pure record must share (the author themself
+    on the author page, any matched roster member on the cards)."""
+    dois = sorted({d for it in items if (d := normalize_doi(it.get("doi")))})
+    parents = sorted({p for d in dois if (p := parent_doi(d))})
+    doi_uuid: dict[str, str] = {}
+    wanted = sorted({*dois, *parents})
+    if wanted:
+        rows = (
+            await session.execute(
+                select(Work.doi_normalized, Work.pure_uuid).where(
+                    Work.institution_id == institution.id,
+                    Work.doi_normalized.in_(wanted),
+                )
+            )
+        ).all()
+        doi_uuid = {r.doi_normalized: r.pure_uuid for r in rows}
+    # norm title -> the Pure records carrying it and their roster authors
+    title_rows: dict[str, set[tuple[str, str]]] = {}
+    titles = sorted({t for it in items if (t := _norm_title(it.get("title") or ""))})
+    persons = sorted({u for ids in author_uuids for u in ids})
+    if titles and persons:
+        rows = (
+            await session.execute(
+                select(Work.norm_title, Work.pure_uuid, WorkPureAuthor.person_uuid)
+                .join(
+                    WorkPureAuthor,
+                    (WorkPureAuthor.institution_id == Work.institution_id)
+                    & (WorkPureAuthor.work_pure_uuid == Work.pure_uuid),
+                )
+                .where(
+                    Work.institution_id == institution.id,
+                    Work.norm_title.in_(titles),
+                    WorkPureAuthor.person_uuid.in_(persons),
+                )
+                .distinct()
+            )
+        ).all()
+        for r in rows:
+            title_rows.setdefault(r.norm_title, set()).add((r.pure_uuid, r.person_uuid))
+    for it, ids in zip(items, author_uuids, strict=False):
+        doi = normalize_doi(it.get("doi"))
+        match = None
+        match_uuid = None
+        if check_own_doi and doi and doi in doi_uuid:
+            match, match_uuid = "doi_in_pure", doi_uuid[doi]
+        if match is None and doi and (parent := parent_doi(doi)) in doi_uuid:
+            match, match_uuid = "parent_book_in_pure", doi_uuid[parent]
+        shared = title_rows.get(_norm_title(it.get("title") or "")) if match is None else None
+        hits = sorted(uuid for uuid, person in shared or () if person in ids)
+        if hits:
+            match, match_uuid = "same_title_in_pure", hits[0]
+        it["pure_match"] = match
+        it["pure_match_url"] = pure_work_url(institution, match_uuid)
+
+
+#: The literal values tag_pure_matches writes into items' pure_match.
+PureMatch = Literal["doi_in_pure", "parent_book_in_pure", "same_title_in_pure"]
 
 
 def attributed_to_any(aids: list[str]) -> Any:
@@ -275,6 +386,26 @@ async def _store_gap_payload(
         }
         for r in rows
     ]
+    # Explain rows the DOI anti-join kept: a parent book or a same-title
+    # Pure record may hold the publication. The exact-DOI tag cannot fire
+    # here — the anti-join already removed those. Pure-link uuids per item
+    # come straight from the roster map built above.
+    await tag_pure_matches(
+        session,
+        institution,
+        items,
+        [
+            {
+                m["pure_uuid"]
+                for entry in r.authorships or []
+                if (m := roster.get(str((entry or {}).get("a") or "").lower()))
+            }
+            for r in rows
+        ],
+        check_own_doi=False,
+    )
+    # Likely misses first (stable: year/title order kept within groups).
+    items.sort(key=lambda it: it.get("pure_match") is not None)
     return {"total": int(total or 0), "items": items, "available": True}
 
 

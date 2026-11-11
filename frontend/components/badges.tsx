@@ -298,9 +298,9 @@ export const OA_STATUS_ORDER = ["gold", "hybrid", "green", "bronze", "diamond", 
 export const OA_STATUS_META: Record<string, { label: string; bar: string }> = {
   gold: { label: "Gold", bar: "bg-amber-400 dark:bg-amber-500" },
   hybrid: { label: "Hybrid", bar: "bg-blue-400 dark:bg-blue-500" },
-  green: { label: "Green", bar: "bg-emerald-400 dark:bg-emerald-500" },
+  green: { label: "Green", bar: "bg-green-600 dark:bg-green-500" },
   bronze: { label: "Bronze", bar: "bg-orange-400 dark:bg-orange-500/80" },
-  diamond: { label: "Diamond", bar: "bg-teal-400 dark:bg-teal-500" },
+  diamond: { label: "Diamond", bar: "bg-[#4fe4f8] dark:bg-cyan-300" },
   closed: { label: "Closed", bar: "bg-slate-300 dark:bg-slate-600" },
 };
 
@@ -338,14 +338,80 @@ const OA_STATUS_LOCKUP: Record<
 };
 
 /** Small OA-status lockup for a single work; legend/chart reuse the same colors. */
-export function OaStatusChip({ status }: { status?: string | null }) {
+export function OaStatusChip({
+  status,
+  source,
+}: {
+  status?: string | null;
+  /** Provenance of the status (api oa_status_source); 'pure' on green
+   * DOI-less rows means the repository copy, not the venue's OA model. */
+  source?: string | null;
+}) {
   if (!status) return null;
-  const meta = OA_STATUS_LOCKUP[status];
+  // The OpenAlex oa_status sync only overwrites DOI-matched rows, so a
+  // green status on a DOI-less Pure record is Pure's own access flag:
+  // it only means Pure holds a freely readable file.
+  const meta =
+    status === "green" && source === "pure"
+      ? {
+          label: "OPEN (PURE)",
+          title:
+            "Pure holds a freely readable file. Without a DOI we cannot tell the venue's open-access model.",
+          className: "text-emerald-700 dark:text-emerald-300",
+          width: 122,
+          glyph: <GreenGlyph />,
+        }
+      : OA_STATUS_LOCKUP[status];
   if (!meta) return null;
   return (
     <Lockup label={meta.label} width={meta.width} title={meta.title} className={meta.className}>
       {meta.glyph}
     </Lockup>
+  );
+}
+
+/** Why a "missing from Pure" row is in fact held by Pure, when a record
+ * was identified. Linked to that record's public page when known. */
+const PURE_MATCH_META: Record<string, { label: string; title: string }> = {
+  doi_in_pure: {
+    label: "In Pure (other record)",
+    title:
+      "A Pure record with this DOI exists but is not linked here — for example a book that the page leaves out, or a record not linked to this author.",
+  },
+  parent_book_in_pure: {
+    label: "Book in Pure",
+    title: "The parent book of this chapter has a Pure record.",
+  },
+  same_title_in_pure: {
+    label: "Same title in Pure",
+    title:
+      "A Pure record with the same title shares an author — likely another version or DOI of the same publication.",
+  },
+};
+
+export function PureMatchBadge({ match, url }: { match?: string | null; url?: string | null }) {
+  if (!match) return null;
+  const meta = PURE_MATCH_META[match];
+  if (!meta) return null;
+  const badge = (
+    <span
+      className="inline-flex shrink-0 items-center rounded-[var(--radius)] border border-[var(--border)] px-2 py-0.5 text-[11px] font-normal text-[var(--muted-foreground)]"
+      title={meta.title}
+    >
+      {meta.label}
+    </span>
+  );
+  if (!url) return badge;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+      title={meta.title}
+    >
+      {badge}
+    </a>
   );
 }
 

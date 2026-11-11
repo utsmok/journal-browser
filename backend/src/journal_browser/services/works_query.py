@@ -51,18 +51,23 @@ def clamped_year_range(
     return (lo, hi)
 
 
-def work_type_not_excluded(column: Any) -> ColumnElement:
-    """SQL twin of config.work_type_excluded: the normalized work type
-    (lower-cased, info:eu-repo/semantics/ stripped, hyphens collapsed) is
-    not one of the never-journal-output types. One definition for every
-    query that must describe the same population as the pure_canon stats
-    (write_pure_canon_stats was the first consumer)."""
-    normalized = func.lower(
+def work_type_normalized(column: Any) -> ColumnElement:
+    """The normalized work type (lower-cased, info:eu-repo/semantics/
+    stripped, hyphens collapsed) so SQL filters match Python's
+    config.normalize_work_type exactly."""
+    return func.lower(
         func.replace(
             func.replace(func.coalesce(column, ""), "info:eu-repo/semantics/", ""), "-", ""
         )
     )
-    return normalized.not_in(sorted(EXCLUDED_WORK_TYPES))
+
+
+def work_type_not_excluded(column: Any) -> ColumnElement:
+    """SQL twin of config.work_type_excluded: the normalized work type
+    is not one of the never-journal-output types. One definition for every
+    query that must describe the same population as the pure_canon stats
+    (write_pure_canon_stats was the first consumer)."""
+    return work_type_normalized(column).not_in(sorted(EXCLUDED_WORK_TYPES))
 
 
 def author_works_join(institution_id: int, author_uuid: str) -> ColumnElement:

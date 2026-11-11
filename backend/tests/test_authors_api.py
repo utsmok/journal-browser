@@ -291,6 +291,54 @@ async def test_profile_works_sorted_and_joined(authors_api):
 
 
 @requires_db
+async def test_profile_works_links(authors_api, db):
+    """Pure works items expose verification links: a DOI matched to the
+    institution's openalex_works store yields the OpenAlex record URL
+    (lowest w_id wins deterministically), a DOI-less work yields no
+    OpenAlex link; the Pure record URL rides on the institution's
+    research portal URL."""
+    from sqlalchemy import select, update
+
+    from journal_browser.models import Institution, OpenalexWork
+
+    await db.execute(
+        update(Institution)
+        .where(Institution.code == "ut")
+        .values(research_portal_url="https://research.utwente.nl")
+    )
+    await db.execute(
+        update(Work)
+        .where(Work.pure_uuid == "w-2024")
+        .values(doi_normalized="10.1000/local", work_type="info:eu-repo/semantics/bookPart")
+    )
+    await db.commit()
+
+    iid = (await db.execute(select(Institution.id).where(Institution.code == "ut"))).scalar_one()
+    # Two store rows share w-2024's DOI: the lowest w_id must win.
+    db.add_all(
+        [
+            OpenalexWork(institution_id=iid, w_id="W-900002", doi_normalized="10.1000/local"),
+            OpenalexWork(institution_id=iid, w_id="W-900001", doi_normalized="10.1000/local"),
+        ]
+    )
+    await db.commit()
+
+    body = (await authors_api.get("/api/v1/ut/authors/alice-uuid")).json()
+    by_uuid = {w["pure_uuid"]: w for w in body["works"]}
+    matched = by_uuid["w-2024"]
+    assert matched["doi"] == "10.1000/local"
+    assert matched["work_type"] == "info:eu-repo/semantics/bookPart"
+    assert matched["openalex_url"] == "https://openalex.org/W-900001"
+    assert matched["pure_url"] == "https://research.utwente.nl/en/publications/w-2024"
+    # No DOI on the work: no OpenAlex link, Pure record link still there.
+    doi_less = by_uuid["w-2023a"]
+    assert doi_less["doi"] is None
+    assert doi_less["openalex_url"] is None
+    assert doi_less["pure_url"] == "https://research.utwente.nl/en/publications/w-2023a"
+    assert doi_less["work_type"] is None
+
+
+@requires_db
 async def test_profile_openalex_only_merge(authors_api, db, monkeypatch):
     """OpenAlex-attributed works absent from Pure live in the profile's
     openalex_only section (never truncated by the works cap); window,

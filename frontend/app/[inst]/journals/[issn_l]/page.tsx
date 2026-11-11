@@ -14,7 +14,13 @@ import Link from "next/link";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
-import { DealBadge, OaStatusChip, OaTypeBadge, QuartileBadge } from "@/components/badges";
+import {
+  DealBadge,
+  OaStatusChip,
+  OaTypeBadge,
+  PureMatchBadge,
+  QuartileBadge,
+} from "@/components/badges";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { CardPager } from "@/components/card-pager";
 import { GapCsvButton } from "@/components/gap-csv-button";
@@ -50,6 +56,7 @@ import {
 import { dealLinkLabel, orderedDealLinks } from "@/lib/deal-links";
 import { useFunderPrefs, type FunderPrefs } from "@/lib/funder-prefs";
 import { cleanProse, cn } from "@/lib/utils";
+import { workTypeLabel } from "@/lib/work-type";
 
 type NamedTopic = { display_name?: string };
 
@@ -657,7 +664,8 @@ function CrisGapsCard({
                 {w.venue && (
                   <span className="min-w-0 text-xs text-[var(--muted-foreground)]">{w.venue}</span>
                 )}
-                {w.work_type && <span className="text-xs">{w.work_type}</span>}
+                {w.work_type && <span className="text-xs">{workTypeLabel(w.work_type)}</span>}
+                <PureMatchBadge match={w.pure_match} url={w.pure_match_url} />
                 <OaStatusChip status={w.oa_status} />
                 <UtAuthorLine authors={w.ut_authors} />
               </li>

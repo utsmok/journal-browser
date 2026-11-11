@@ -357,6 +357,11 @@ class OpenalexOnlyWork(BaseModel):
     journal_issn_l: str | None = None
     journal_title: str | None = None
     publisher_name: str | None = None
+    # Why the row is not truly missing from Pure, when a record was
+    # identified; None = likely missing. pure_match_url is that record's
+    # public page (None without a portal URL).
+    pure_match: Literal["doi_in_pure", "parent_book_in_pure", "same_title_in_pure"] | None = None
+    pure_match_url: str | None = None
 
 
 class OpenalexOnly(BaseModel):
@@ -633,9 +638,20 @@ class AuthorWorkItem(BaseModel):
     year: int
     doi: str | None
     oa_status: str | None
+    # Raw works.work_type (e.g. 'info:eu-repo/semantics/bookPart'); the
+    # frontend normalizes it into a plain label.
+    work_type: str | None = None
     journal_issn_l: str | None
     journal_title: str | None
+    # Pure public record page; None when the institution has no portal URL.
+    pure_url: str | None = None
+    # Matching openalex_works record (same institution, same normalized
+    # DOI, lowest w_id); None without a DOI or store row.
+    openalex_url: str | None = None
     in_pure: bool = True
+    # Where oa_status came from: OpenAlex sync (DOI-matched) or Pure's own
+    # access flag (DOI-less rows, where the venue's OA model is unknown).
+    oa_status_source: Literal["openalex", "pure"] = "openalex"
 
 
 class AuthorOpenalexOnlyWork(BaseModel):
@@ -656,6 +672,11 @@ class AuthorOpenalexOnlyWork(BaseModel):
     openalex_url: str | None = None
     in_pure: bool = False
     ut_authors: list[UtAuthorAttribution] = []
+    # Why the row is not truly missing from Pure, when a record was
+    # identified; None = likely missing. pure_match_url is that record's
+    # public page (None without a portal URL).
+    pure_match: Literal["doi_in_pure", "parent_book_in_pure", "same_title_in_pure"] | None = None
+    pure_match_url: str | None = None
 
 
 class AuthorOpenalexOnly(BaseModel):
@@ -665,6 +686,8 @@ class AuthorOpenalexOnly(BaseModel):
     total: int = 0
     items: list[AuthorOpenalexOnlyWork] = []
     available: bool = True
+    # Gated rows with no pure_match: the ones likely missing for real.
+    likely_missing: int = 0
 
 
 class AuthorProfileResponse(BaseModel):
@@ -791,6 +814,10 @@ class OrgUnitAuthorRow(BaseModel):
     n_works: int
     orcid: str | None
     primary_topic: str | None
+    # Share (0..1) of the author's counted works whose OA status is
+    # diamond or gold; None below the 4-work ranking minimum (such rows
+    # sort after all ranked authors in the share ordering).
+    oa_diamond_gold_share: float | None = None
 
 
 class DealUsageRow(BaseModel):

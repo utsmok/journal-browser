@@ -1293,6 +1293,11 @@ export interface components {
              * @default true
              */
             available: boolean;
+            /**
+             * Likely Missing
+             * @default 0
+             */
+            likely_missing: number;
         };
         /**
          * AuthorOpenalexOnlyWork
@@ -1333,6 +1338,10 @@ export interface components {
              * @default []
              */
             ut_authors: components["schemas"]["UtAuthorAttribution"][];
+            /** Pure Match */
+            pure_match?: ("doi_in_pure" | "parent_book_in_pure" | "same_title_in_pure") | null;
+            /** Pure Match Url */
+            pure_match_url?: string | null;
         };
         /** AuthorOut */
         AuthorOut: {
@@ -1402,7 +1411,8 @@ export interface components {
              * @default {
              *       "total": 0,
              *       "items": [],
-             *       "available": true
+             *       "available": true,
+             *       "likely_missing": 0
              *     }
              */
             openalex_only: components["schemas"]["AuthorOpenalexOnly"];
@@ -1476,15 +1486,27 @@ export interface components {
             doi: string | null;
             /** Oa Status */
             oa_status: string | null;
+            /** Work Type */
+            work_type?: string | null;
             /** Journal Issn L */
             journal_issn_l: string | null;
             /** Journal Title */
             journal_title: string | null;
+            /** Pure Url */
+            pure_url?: string | null;
+            /** Openalex Url */
+            openalex_url?: string | null;
             /**
              * In Pure
              * @default true
              */
             in_pure: boolean;
+            /**
+             * Oa Status Source
+             * @default openalex
+             * @enum {string}
+             */
+            oa_status_source: "openalex" | "pure";
         };
         /** AuthorYearRow */
         AuthorYearRow: {
@@ -2670,6 +2692,10 @@ export interface components {
             journal_title?: string | null;
             /** Publisher Name */
             publisher_name?: string | null;
+            /** Pure Match */
+            pure_match?: ("doi_in_pure" | "parent_book_in_pure" | "same_title_in_pure") | null;
+            /** Pure Match Url */
+            pure_match_url?: string | null;
         };
         /**
          * OpenalexTopicOut
@@ -2709,6 +2735,8 @@ export interface components {
             orcid: string | null;
             /** Primary Topic */
             primary_topic: string | null;
+            /** Oa Diamond Gold Share */
+            oa_diamond_gold_share?: number | null;
         };
         /** OrgUnitDetailResponse */
         OrgUnitDetailResponse: {
@@ -5087,6 +5115,8 @@ export interface operations {
     faculty_detail_api_v1__institution_code__orgunits_faculty__name__get: {
         parameters: {
             query?: {
+                /** @description Top-authors ordering: share = share of the author's counted works published diamond/gold OA (authors with fewer than 4 counted works unranked, share null), works = works count */
+                sort?: "share" | "works";
                 /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
                 year_from?: number | null;
                 /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
@@ -5124,6 +5154,8 @@ export interface operations {
     group_detail_api_v1__institution_code__orgunits_group__name__get: {
         parameters: {
             query?: {
+                /** @description Top-authors ordering: share = share of the author's counted works published diamond/gold OA (authors with fewer than 4 counted works unranked, share null), works = works count */
+                sort?: "share" | "works";
                 /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
                 year_from?: number | null;
                 /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
@@ -5161,6 +5193,8 @@ export interface operations {
     institute_detail_api_v1__institution_code__orgunits_institute__name__get: {
         parameters: {
             query?: {
+                /** @description Top-authors ordering: share = share of the author's counted works published diamond/gold OA (authors with fewer than 4 counted works unranked, share null), works = works count */
+                sort?: "share" | "works";
                 /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
                 year_from?: number | null;
                 /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */

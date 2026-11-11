@@ -262,6 +262,9 @@ export type OrgUnitDetailResponse = Schemas["OrgUnitDetailResponse"];
 
 export type OrgUnitSearchSort = "relevance" | "name" | "authors" | "works" | "deal_works";
 
+/** Top-authors card ordering on org-unit detail pages. */
+export type OrgUnitAuthorSort = "share" | "works";
+
 export type OrgUnitSearchParams = {
   level?: OrgUnitLevel;
   q?: string;
@@ -366,9 +369,11 @@ export async function fetchOrgUnit(
   level: OrgUnitLevel,
   name: string,
   years?: YearParams,
+  sort?: OrgUnitAuthorSort,
 ): Promise<OrgUnitDetailResponse> {
   return apiGet<OrgUnitDetailResponse>(`/${inst}/orgunits/${level}/${encodeNamePath(name)}`, {
     year_from: years?.year_from,
     year_to: years?.year_to,
+    sort,
   });
 }

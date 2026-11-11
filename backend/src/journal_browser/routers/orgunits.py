@@ -36,6 +36,15 @@ YearTo = Annotated[
         "institution's data window; default: the full window)",
     ),
 ]
+#: Top-authors card ordering on the detail endpoints.
+AuthorSort = Annotated[
+    Literal["share", "works"],
+    Query(
+        description="Top-authors ordering: share = share of the author's "
+        "counted works published diamond/gold OA (authors with fewer than "
+        "4 counted works unranked, share null), works = works count"
+    ),
+]
 
 
 def _split(raw: str | None) -> list[str] | None:
@@ -89,6 +98,7 @@ async def faculty_detail(
     name: str,
     session: SessionDep,
     institution: InstitutionDep,
+    sort: AuthorSort = "share",
     year_from: YearFrom = None,
     year_to: YearTo = None,
 ) -> OrgUnitDetailResponse:
@@ -98,6 +108,7 @@ async def faculty_detail(
         "faculty",
         name,
         year_range=clamped_year_range(institution, year_from, year_to),
+        sort=sort,
     )
     if detail is None:
         raise HTTPException(status_code=404, detail="orgunit not found")
@@ -109,6 +120,7 @@ async def group_detail(
     name: str,
     session: SessionDep,
     institution: InstitutionDep,
+    sort: AuthorSort = "share",
     year_from: YearFrom = None,
     year_to: YearTo = None,
 ) -> OrgUnitDetailResponse:
@@ -118,6 +130,7 @@ async def group_detail(
         "group",
         name,
         year_range=clamped_year_range(institution, year_from, year_to),
+        sort=sort,
     )
     if detail is None:
         raise HTTPException(status_code=404, detail="orgunit not found")
@@ -129,6 +142,7 @@ async def institute_detail(
     name: str,
     session: SessionDep,
     institution: InstitutionDep,
+    sort: AuthorSort = "share",
     year_from: YearFrom = None,
     year_to: YearTo = None,
 ) -> OrgUnitDetailResponse:
@@ -138,6 +152,7 @@ async def institute_detail(
         "institute",
         name,
         year_range=clamped_year_range(institution, year_from, year_to),
+        sort=sort,
     )
     if detail is None:
         raise HTTPException(status_code=404, detail="orgunit not found")

@@ -17,7 +17,7 @@ roster and attribute columns stay snapshot."""
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import func, select, text
+from sqlalchemy import Numeric, case, cast, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
@@ -50,6 +50,10 @@ DEFAULT_LIMIT = 20
 MAX_LIMIT = 100
 JOURNAL_CAP = 15
 AUTHOR_CAP = 50
+#: OA statuses counting toward the top-authors diamond+gold share, and the
+#: minimum counted works before an author is ranked by that share.
+DIAMOND_GOLD = ("diamond", "gold")
+AUTHOR_SHARE_MIN_WORKS = 4
 DEAL_USAGE_CAP = 8
 TOPICS_PER_ITEM = 3
 TOPICS_PER_DETAIL = 5
@@ -510,6 +514,7 @@ async def orgunit_detail(
     level: str,
     name: str,
     year_range: tuple[int, int] | None = None,
+    sort: str = "share",
 ) -> dict[str, Any] | None:
     """Full unit bundle; None = unknown unit (404 upstream). An explicit
     publication-year range narrows the works-derived sections — the unit
@@ -518,7 +523,11 @@ async def orgunit_detail(
     deal-usage work set and the CRIS-gap card (same scoping as the groups
     list); per-year rows (works_by_year) keep the data window, the unit's
     APC rollups stay snapshot, and the deal-usage euro follows the
-    narrowed work set (journal attributes stay unfiltered)."""
+    narrowed work set (journal attributes stay unfiltered). `sort` orders
+    the member authors card: 'share' ranks by the diamond/gold OA share
+    (default; authors below AUTHOR_SHARE_MIN_WORKS counted works rank
+    last, share None), 'works' by works count; AUTHOR_CAP cuts after the
+    chosen ordering."""
     iid = institution.id
     require_confirmed = institution.require_confirmed_affiliation
     unit = (await _snapshot(session, institution)).get(level, {}).get(name)
@@ -605,14 +614,20 @@ async def orgunit_detail(
     # Member rows: the denormalized n_works answers by default; an active
     # range recomputes it from the stored work edges (the authors-list
     # convention, same aggregation as search_authors' scoped subquery —
-    # edge population, confirmed gate unchanged).
-    scoped_n = None
+    # edge population, confirmed gate unchanged). The diamond/gold count
+    # has no snapshot column, so it always comes from those same edges in
+    # this one statement: inside the range when one is active, else from
+    # the edge population the snapshot count mirrors exactly (edges to
+    # retired or excluded-type works are never stored).
+    dg_count = func.count().filter(Work.oa_status.in_(DIAMOND_GOLD)).label("dg")
+    edge_counts = None
     if year_range is not None:
         lo, hi = year_range
-        scoped_n = (
+        edge_counts = (
             select(
                 AuthorWork.author_pure_uuid.label("author_pure_uuid"),
                 func.count().label("n"),
+                dg_count,
             )
             .select_from(AuthorWork)
             .join(Work, unit_work_join(iid))
@@ -624,24 +639,55 @@ async def orgunit_detail(
             .group_by(AuthorWork.author_pure_uuid)
             .subquery()
         )
-    n_col = func.coalesce(scoped_n.c.n, 0) if scoped_n is not None else Author.n_works
+    else:
+        edge_counts = (
+            select(
+                AuthorWork.author_pure_uuid.label("author_pure_uuid"),
+                dg_count,
+            )
+            .select_from(AuthorWork)
+            .join(Work, unit_work_join(iid))
+            .where(
+                AuthorWork.institution_id == iid,
+                work_type_not_excluded(Work.work_type),
+            )
+            .group_by(AuthorWork.author_pure_uuid)
+            .subquery()
+        )
+    n_col = func.coalesce(edge_counts.c.n, 0) if year_range is not None else Author.n_works
+    share = case(
+        (
+            n_col >= AUTHOR_SHARE_MIN_WORKS,
+            cast(func.coalesce(edge_counts.c.dg, 0), Numeric) / n_col,
+        ),
+        else_=None,
+    ).label("oa_diamond_gold_share")
     author_stmt = select(
         Author.pure_uuid,
         Author.name,
         n_col.label("n_works"),
         Author.orcid,
         Author.primary_topic,
+        share,
     ).where(*membership)
-    if scoped_n is not None:
-        author_stmt = author_stmt.outerjoin(
-            scoped_n, scoped_n.c.author_pure_uuid == Author.pure_uuid
+    author_stmt = author_stmt.outerjoin(
+        edge_counts, edge_counts.c.author_pure_uuid == Author.pure_uuid
+    )
+    # share: share desc (authors below the minimum rank last via the NULL
+    # and the works tiebreakers); works: the previous works-desc ordering.
+    # The cap applies after the chosen ordering, so the card's toggle
+    # refetches with the other sort key.
+    if sort == "works":
+        author_order = (n_col.desc(), func.lower(Author.name), Author.pure_uuid)
+    else:
+        author_order = (
+            share.desc().nulls_last(),
+            n_col.desc(),
+            func.lower(Author.name),
+            Author.pure_uuid,
         )
     author_rows = (
-        await session.execute(
-            author_stmt.order_by(n_col.desc(), func.lower(Author.name), Author.pure_uuid).limit(
-                AUTHOR_CAP
-            )
-        )
+        await session.execute(author_stmt.order_by(*author_order).limit(AUTHOR_CAP))
     ).all()
 
     year_rows = (
@@ -783,6 +829,7 @@ async def orgunit_detail(
                 "n_works": r.n_works,
                 "orcid": r.orcid,
                 "primary_topic": r.primary_topic,
+                "oa_diamond_gold_share": r.oa_diamond_gold_share,
             }
             for r in author_rows
         ],
