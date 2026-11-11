@@ -48,6 +48,9 @@ class JournalListItem(BaseModel):
     in_scimago: bool = False
     last_active_year: int | None = None
     deal_covered: bool = False
+    # True when every effective covering deal's latest cap_usage entry has
+    # used >= total; free OA publishing no longer guaranteed (harvest.denorm).
+    deal_cap_reached: bool = False
     works: int = 0
     quartile: str | None = None
     twoyr_mean_citedness: float | None = None

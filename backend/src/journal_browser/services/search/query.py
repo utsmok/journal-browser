@@ -164,7 +164,14 @@ def base_query(
     # OpenAlex publishes this metric as "two_yr_mean_citedness".
     twoyr = cast(J.summary_stats.op("->>")("two_yr_mean_citedness"), Numeric).label("twoyr")
     flags = (
-        select(F.issn_l, F.works_count, F.deal_covered, F.works_window_plus, F.browse_excluded)
+        select(
+            F.issn_l,
+            F.works_count,
+            F.deal_covered,
+            F.deal_cap_reached,
+            F.works_window_plus,
+            F.browse_excluded,
+        )
         .where(F.institution_id == institution_id)
         .subquery()
     )
@@ -217,6 +224,7 @@ def base_query(
             J.in_scimago,
             J.last_active_year,
             covered.label("deal_covered"),
+            flags.c.deal_cap_reached.label("deal_cap_reached"),
             year_works.label("works"),
             J.latest_quartile.label("quartile"),
             twoyr,

@@ -156,6 +156,11 @@ class JournalFlags(Base):
     deal_covered: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
+    # Latest-year cap usage reached on ALL effective covering deals;
+    # denorm-refreshed, see harvest.denorm.
+    deal_cap_reached: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     # Journal's own works inside THIS institution's data window; the >3
     # corpus cutoff reads it (owner decision 2026-10-23).
     works_window_plus: Mapped[int] = mapped_column(

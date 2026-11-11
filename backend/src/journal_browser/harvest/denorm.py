@@ -165,6 +165,69 @@ DEAL_FLAGS_SQL = text(
     """
 )
 
+# A deal counts cap-reached when its cap_usage has an entry for the latest
+# entry year whose used >= total; without cap_usage data a deal is never
+# cap-reached (never stamp without data). The flag is true only when EVERY
+# effective covering deal is cap-reached.
+DEAL_CAP_REACHED_SQL = text(
+    """
+    UPDATE journal_flags f SET deal_cap_reached =
+        f.deal_covered AND NOT EXISTS (
+            SELECT 1
+            FROM deal_journals dj
+            JOIN deals d ON d.id = dj.deal_id
+            JOIN deal_institutions di ON di.deal_id = d.id
+                 AND di.institution_id = f.institution_id
+            WHERE dj.issn_l = f.issn_l
+              AND d.status = 'current'
+              AND NOT dj.excluded
+              AND dj.institution_id IS NOT DISTINCT FROM
+                  (CASE WHEN di.journal_override THEN di.institution_id ELSE NULL END)
+              AND NOT (
+                  d.cap_usage IS NOT NULL
+                  AND EXISTS (
+                      SELECT 1
+                      FROM jsonb_array_elements(d.cap_usage) e
+                      WHERE (e->>'year')::int = (
+                                SELECT max((x->>'year')::int)
+                                FROM jsonb_array_elements(d.cap_usage) x
+                            )
+                        AND e->>'used' IS NOT NULL
+                        AND (e->>'used')::int >= (e->>'total')::int
+                  )
+              )
+        )
+    WHERE f.institution_id = :iid
+      AND f.deal_cap_reached IS DISTINCT FROM (
+          f.deal_covered AND NOT EXISTS (
+            SELECT 1
+            FROM deal_journals dj
+            JOIN deals d ON d.id = dj.deal_id
+            JOIN deal_institutions di ON di.deal_id = d.id
+                 AND di.institution_id = f.institution_id
+            WHERE dj.issn_l = f.issn_l
+              AND d.status = 'current'
+              AND NOT dj.excluded
+              AND dj.institution_id IS NOT DISTINCT FROM
+                  (CASE WHEN di.journal_override THEN di.institution_id ELSE NULL END)
+              AND NOT (
+                  d.cap_usage IS NOT NULL
+                  AND EXISTS (
+                      SELECT 1
+                      FROM jsonb_array_elements(d.cap_usage) e
+                      WHERE (e->>'year')::int = (
+                                SELECT max((x->>'year')::int)
+                                FROM jsonb_array_elements(d.cap_usage) x
+                            )
+                        AND e->>'used' IS NOT NULL
+                        AND (e->>'used')::int >= (e->>'total')::int
+                  )
+              )
+        )
+      )
+    """
+)
+
 
 async def refresh_institution_stats(session: AsyncSession, institution: Institution) -> None:
     """Recompute one institution's works_count + window cutoff + exclusion.
@@ -201,5 +264,6 @@ async def refresh_deal_flags(session: AsyncSession, institution_id: int) -> None
     """Recompute one institution's effective coverage + browse exclusion."""
     await session.execute(MATERIALIZE_SQL, {"iid": institution_id})
     await session.execute(DEAL_FLAGS_SQL, {"iid": institution_id})
+    await session.execute(DEAL_CAP_REACHED_SQL, {"iid": institution_id})
     await session.execute(BROWSE_EXCLUDED_SQL, {"iid": institution_id})
     await bump_cache_epoch(session)
