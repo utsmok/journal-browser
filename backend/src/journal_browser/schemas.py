@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .vocab import (
     DealJournalSource,
@@ -205,6 +205,18 @@ class DealLinkOut(BaseModel):
     category: str | None = None
 
 
+class CapUsageEntry(BaseModel):
+    """One contract year's publisher-reported APC cap usage (admin-entered
+    from library email updates; the harvest never rewrites it)."""
+
+    year: int = Field(ge=1900, le=2100)
+    pool: str | None = None
+    total: int = Field(ge=0)
+    used: int | None = Field(default=None, ge=0)
+    as_of: str | None = None
+    note: str | None = None
+
+
 class DealOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -229,6 +241,7 @@ class DealOut(BaseModel):
     openaccess_nl_url: str | None
     jct_data_url: str | None
     per_year_oa_counts: dict[str, Any] | None
+    cap_usage: list[CapUsageEntry] | None = None
     needs_curation: bool
     needs_curation_reason: str | None
     # Register links; None on rows not yet seeded.
@@ -1017,6 +1030,7 @@ class AdminDealOut(BaseModel):
     capped: bool
     cap_numbers: dict[str, Any] | None
     cap_text: str | None
+    cap_usage: list[CapUsageEntry] | None = None
     summary: str | None
     journal_count: int
     participations: list[str]

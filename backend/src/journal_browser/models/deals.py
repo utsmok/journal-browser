@@ -44,6 +44,9 @@ class Deal(Base):
     provenance: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     # Register links from the owner-reviewed snapshot: [{url, text, category}].
     links: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
+    # Admin-owned cap usage entries (library email updates), not harvest-owned:
+    # unlike cap_numbers the harvester never rewrites it.
+    cap_usage: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     needs_curation: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )

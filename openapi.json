@@ -4477,6 +4477,20 @@
             ],
             "title": "Cap Text"
           },
+          "cap_usage": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CapUsageEntry"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap Usage"
+          },
           "summary": {
             "anyOf": [
               {
@@ -4703,6 +4717,20 @@
               }
             ],
             "title": "Cap Text"
+          },
+          "cap_usage": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CapUsageEntry"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap Usage"
           },
           "summary": {
             "anyOf": [
@@ -6581,6 +6609,73 @@
         "title": "CanonicalOa",
         "description": "ut-metadata oa_status distribution over a journal's works."
       },
+      "CapUsageEntry": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "maximum": 2100.0,
+            "minimum": 1900.0,
+            "title": "Year"
+          },
+          "pool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pool"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total"
+          },
+          "used": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Used"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "total"
+        ],
+        "title": "CapUsageEntry",
+        "description": "One contract year's publisher-reported APC cap usage (admin-entered\nfrom library email updates; the harvest never rewrites it)."
+      },
       "ClientInfo": {
         "properties": {
           "tz": {
@@ -7075,6 +7170,20 @@
             ],
             "title": "Per Year Oa Counts"
           },
+          "cap_usage": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CapUsageEntry"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap Usage"
+          },
           "needs_curation": {
             "type": "boolean",
             "title": "Needs Curation"
@@ -7251,6 +7360,20 @@
               }
             ],
             "title": "Cap Text"
+          },
+          "cap_usage": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CapUsageEntry"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap Usage"
           },
           "summary": {
             "anyOf": [

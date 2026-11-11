@@ -35,6 +35,16 @@ async def deals_api(client, db_engine):
             status="current",
             start_year=2024,
             end_year=2026,
+            cap_usage=[
+                {
+                    "year": 2026,
+                    "pool": "full OA",
+                    "total": 750,
+                    "used": 610,
+                    "as_of": "September 2026",
+                },
+                {"year": 2026, "total": 100, "used": 100},
+            ],
         )
         foreign_deal = Deal(
             publisher_id=other.id,
@@ -95,6 +105,26 @@ async def test_journal_panel_requires_home_link(deals_api):
     body = (await client.get(f"/api/v1/ut/journals/{issn}")).json()
     assert len(body["deals"]) == 1
     assert body["deals"][0]["esac_id"] == "sn2024ukb"
+
+
+@requires_db
+async def test_cap_usage_flows_through_public_api(deals_api):
+    client, (twente_id, _, _) = deals_api
+    expected = [
+        {
+            "year": 2026,
+            "pool": "full OA",
+            "total": 750,
+            "used": 610,
+            "as_of": "September 2026",
+            "note": None,
+        },
+        {"year": 2026, "pool": None, "total": 100, "used": 100, "as_of": None, "note": None},
+    ]
+    listing = {d["id"]: d for d in (await client.get("/api/v1/ut/deals")).json()}
+    assert listing[twente_id]["cap_usage"] == expected
+    detail = (await client.get(f"/api/v1/ut/deals/{twente_id}")).json()
+    assert detail["cap_usage"] == expected
 
 
 @pytest.fixture
