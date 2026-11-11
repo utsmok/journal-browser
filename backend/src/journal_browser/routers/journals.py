@@ -20,6 +20,7 @@ from ..models import (
     JiscFunder,
     Journal,
     JournalApcAggregate,
+    JournalFlags,
     Publisher,
     ScimagojrMetric,
 )
@@ -421,6 +422,15 @@ async def journal_detail(
     ).all()
     deals = [d for d, _name in deal_rows]
     publisher_names = {d.id: name for d, name in deal_rows}
+    # Reads the denormalized flag (harvest.denorm) shared with the search list.
+    deal_cap_reached = (
+        await session.execute(
+            select(JournalFlags.deal_cap_reached).where(
+                JournalFlags.institution_id == institution.id,
+                JournalFlags.issn_l == journal.issn_l,
+            )
+        )
+    ).scalar() or False
     # Phase 10: pure_canon is the primary works count; the OpenAlex
     # institution-filter rows keep the OA split and stay visible as the
     # labeled cross-check (decision 13-style honesty about sources).
@@ -574,6 +584,7 @@ async def journal_detail(
             in_scimago=journal.in_scimago,
             last_active_year=journal.last_active_year,
             deal_covered=bool(deals),
+            deal_cap_reached=deal_cap_reached,
             works=sum(s.works_count for s in stats),
             quartile=sjr_rows[-1].best_quartile if sjr_rows else None,
             twoyr_mean_citedness=summary_stats.get("two_yr_mean_citedness"),

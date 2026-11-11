@@ -249,6 +249,11 @@ async def test_search_items_carry_deal_cap_reached(db, db_engine, client):
     assert by_issn["4444-4444"]["deal_cap_reached"] is True
     assert by_issn["5555-5555"]["deal_covered"] is True
     assert by_issn["5555-5555"]["deal_cap_reached"] is False
+    detail = (await client.get(f"/api/v1/{inst.code}/journals/4444-4444")).json()
+    assert detail["journal"]["deal_covered"] is True
+    assert detail["journal"]["deal_cap_reached"] is True
+    unreached_detail = (await client.get(f"/api/v1/{inst.code}/journals/5555-5555")).json()
+    assert unreached_detail["journal"]["deal_cap_reached"] is False
     fuzzy = (
         await client.get(
             f"/api/v1/{inst.code}/journals", params={"q": "Single reched", "search_in": "title"}
