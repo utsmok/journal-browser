@@ -39,6 +39,7 @@ import {
   type PublisherDetailResponse,
   type PublisherListItem,
 } from "@/lib/api";
+import { capReached, latestYearUsage } from "@/lib/deal-caps";
 import { formatEur, journalApcText } from "@/lib/format";
 import { dealLinkLabel, displayPublisherName, orderedDealLinks } from "@/lib/deal-links";
 import { workTypeLabel } from "@/lib/work-type";
@@ -51,10 +52,12 @@ function dealConditionsUrl(deal: DealOut): string | null {
 
 function DealRow({ deal }: { deal: DealOut }) {
   const conditionsUrl = dealConditionsUrl(deal);
+  const capUsage = latestYearUsage(deal.cap_usage);
+  const capUsageReached = capUsage.some(capReached);
   return (
     <li className="py-2.5 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <DealBadge covered />
+        <DealBadge covered capped={capUsageReached} />
         <span className="font-medium">
           {displayPublisherName(deal.publisher_name) || "Open access deal"}
         </span>

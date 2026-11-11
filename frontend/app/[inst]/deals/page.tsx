@@ -9,7 +9,8 @@ import { SourceNote } from "@/components/source-note";
 import { Badge } from "@/components/ui/badge";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { Button } from "@/components/ui/button";
-import { CapReachedBadge, DealCapUsage } from "@/components/deal-cap-usage";
+import { DealBadge } from "@/components/badges";
+import { DealCapUsage } from "@/components/deal-cap-usage";
 import { useDeals } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
@@ -96,7 +97,7 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
               Current
             </Badge>
           )}
-          {capUsageReached && <CapReachedBadge />}
+          {capUsageReached && <DealBadge covered capped />}
           {deal.needs_curation && (
             <Badge
               variant="outline"

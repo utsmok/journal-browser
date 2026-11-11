@@ -1,16 +1,4 @@
-import { Badge } from "@/components/ui/badge";
 import type { CapUsageEntry } from "@/lib/deal-caps";
-
-export function CapReachedBadge() {
-  return (
-    <Badge
-      variant="destructive"
-      title="The publisher cap for this contract year is reached: free open access publishing in this deal is no longer guaranteed."
-    >
-      Cap reached
-    </Badge>
-  );
-}
 
 /** One line per latest-year cap usage entry, plus remaining APCs when the
  * cap is nearly exhausted. `?` marks a year whose used count the library

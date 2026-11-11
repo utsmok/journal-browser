@@ -23,7 +23,7 @@ import {
 } from "@/components/badges";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { CardPager } from "@/components/card-pager";
-import { CapReachedBadge, DealCapUsage } from "@/components/deal-cap-usage";
+import { DealCapUsage } from "@/components/deal-cap-usage";
 import { GapCsvButton } from "@/components/gap-csv-button";
 import { OaTrend } from "@/components/oa-trend";
 import { UtAuthorLine } from "@/components/ut-author-line";
@@ -187,8 +187,7 @@ function DealPanel({
       title={
         <>
           Open access deal
-          <DealBadge covered />
-          {capUsageReached && <CapReachedBadge />}
+          <DealBadge covered capped={capUsageReached} />
           {deal.corresponding_authors_only && (
             <Badge
               variant="muted"
@@ -1211,7 +1210,7 @@ function JournalPageInner() {
             </h1>
             <OaTypeBadge oaType={journal.oa_type} isOa={journal.is_oa} />
             <QuartileBadge quartile={journal.quartile ?? null} />
-            <DealBadge covered={journal.deal_covered} />
+            <DealBadge covered={journal.deal_covered} capped={journal.deal_cap_reached} />
             {journal.is_in_doaj && (
               <Badge
                 variant="outline"
@@ -1468,7 +1467,7 @@ function JournalPageInner() {
                                 {s.publisher_canonical ?? s.publisher_name ?? "Unknown publisher"}
                               </span>
                               <span className="ml-auto flex flex-wrap items-center gap-2">
-                                <DealBadge covered={s.deal_covered} />
+                                <DealBadge covered={s.deal_covered} capped={s.deal_cap_reached} />
                                 {s.works > 0 && (
                                   <span
                                     className="text-xs text-[var(--muted-foreground)]"
