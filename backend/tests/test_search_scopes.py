@@ -650,9 +650,13 @@ async def test_similar_journals(api):
         "quartile",
         "is_oa",
         "deal_covered",
+        "deal_cap_reached",
         "works",
         "shared_topics",
     }
+    # No fixture journal here is deal-covered, so False proves the flag
+    # flows through SimilarJournalItem.
+    assert items[0]["deal_cap_reached"] is False
     # Fixture journals carry no UT works and no deal, so the teaser cuts are
     # empty and every item lands in "all" only.
     assert bundle["institution"] == []

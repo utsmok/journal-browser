@@ -147,6 +147,7 @@ class SimilarJournalItem(BaseModel):
     quartile: str | None
     is_oa: bool | None
     deal_covered: bool
+    deal_cap_reached: bool = False
     works: int
     shared_topics: int
     # Embedding-cosine similarity (0-1); null on the shared-topic fallback.

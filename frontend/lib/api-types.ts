@@ -3031,6 +3031,11 @@ export interface components {
             is_oa: boolean | null;
             /** Deal Covered */
             deal_covered: boolean;
+            /**
+             * Deal Cap Reached
+             * @default false
+             */
+            deal_cap_reached: boolean;
             /** Works */
             works: number;
             /** Shared Topics */

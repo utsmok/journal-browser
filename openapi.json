@@ -10976,6 +10976,11 @@
             "type": "boolean",
             "title": "Deal Covered"
           },
+          "deal_cap_reached": {
+            "type": "boolean",
+            "title": "Deal Cap Reached",
+            "default": false
+          },
           "works": {
             "type": "integer",
             "title": "Works"
