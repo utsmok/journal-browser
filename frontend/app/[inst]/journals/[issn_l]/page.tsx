@@ -23,6 +23,7 @@ import {
 } from "@/components/badges";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { CardPager } from "@/components/card-pager";
+import { CapReachedBadge, DealCapUsage } from "@/components/deal-cap-usage";
 import { GapCsvButton } from "@/components/gap-csv-button";
 import { OaTrend } from "@/components/oa-trend";
 import { UtAuthorLine } from "@/components/ut-author-line";
@@ -53,6 +54,7 @@ import {
   type WorksPage,
   encodeNamePath,
 } from "@/lib/api";
+import { capReached, latestYearUsage } from "@/lib/deal-caps";
 import { dealLinkLabel, orderedDealLinks } from "@/lib/deal-links";
 import { useFunderPrefs, type FunderPrefs } from "@/lib/funder-prefs";
 import { cleanProse, cn } from "@/lib/utils";
@@ -177,6 +179,8 @@ function DealPanel({
   const capNumbers = Object.entries(deal.cap_numbers ?? {}).sort(
     (a, b) => (parseInt(a[0], 10) || 0) - (parseInt(b[0], 10) || 0),
   );
+  const capUsage = latestYearUsage(deal.cap_usage);
+  const capUsageReached = capUsage.some(capReached);
   return (
     <CollapsibleCard
       id={id}
@@ -184,6 +188,7 @@ function DealPanel({
         <>
           Open access deal
           <DealBadge covered />
+          {capUsageReached && <CapReachedBadge />}
           {deal.corresponding_authors_only && (
             <Badge
               variant="muted"
@@ -221,7 +226,7 @@ function DealPanel({
           </p>
         </div>
       )}
-      {(deal.cap_text || capNumbers.length > 0) && (
+      {(deal.cap_text || capNumbers.length > 0 || capUsage.length > 0) && (
         <div>
           <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
             Article caps
@@ -240,6 +245,11 @@ function DealPanel({
                 </li>
               ))}
             </ul>
+          )}
+          {capUsage.length > 0 && (
+            <div className={capNumbers.length > 0 ? "mt-1.5" : undefined}>
+              <DealCapUsage entries={capUsage} />
+            </div>
           )}
         </div>
       )}

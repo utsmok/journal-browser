@@ -9,10 +9,12 @@ import { SourceNote } from "@/components/source-note";
 import { Badge } from "@/components/ui/badge";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { Button } from "@/components/ui/button";
+import { CapReachedBadge, DealCapUsage } from "@/components/deal-cap-usage";
 import { useDeals } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { errorMessage, type DealLink, type DealOut } from "@/lib/api";
+import { capReached, latestYearUsage } from "@/lib/deal-caps";
 import { dealLinkLabel, displayPublisherName, orderedDealLinks } from "@/lib/deal-links";
 import { formatApc, formatEur } from "@/lib/format";
 import { cleanProse } from "@/lib/utils";
@@ -52,6 +54,8 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
   const duration = deal.duration_text ?? `${deal.start_year ?? "?"}–${deal.end_year ?? "?"}`;
   const latestOa = oaPerYear.at(-1);
   const latestCap = capNumbers.at(-1);
+  const capUsage = latestYearUsage(deal.cap_usage);
+  const capUsageReached = capUsage.some(capReached);
   const prose = (
     <>
       {deal.conditions_text && (
@@ -92,6 +96,7 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
               Current
             </Badge>
           )}
+          {capUsageReached && <CapReachedBadge />}
           {deal.needs_curation && (
             <Badge
               variant="outline"
@@ -159,6 +164,7 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
           </ul>
         </div>
       )}
+      {capUsage.length > 0 && <DealCapUsage entries={capUsage} />}
       {oaPerYear.length > 0 && (
         <div>
           <p className="mb-1 text-xs text-[var(--muted-foreground)]">

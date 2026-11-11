@@ -35,6 +35,15 @@ const ISSN_RE = /^\d{4}-\d{3}[\dX]$/;
 
 type CapRow = { year: string; count: string };
 
+type CapUsageRow = {
+  year: string;
+  pool: string;
+  total: string;
+  used: string;
+  asOf: string;
+  note: string;
+};
+
 function yearsSpan(d: Pick<AdminDeal, "start_year" | "end_year">) {
   if (d.start_year == null && d.end_year == null) return "—";
   return `${d.start_year ?? "?"}–${d.end_year ?? ""}`;
@@ -44,6 +53,27 @@ function capToRows(cap: Record<string, unknown> | null): CapRow[] {
   return Object.entries(cap ?? {})
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([year, count]) => ({ year, count: String(count) }));
+}
+
+/** Stable JSON form with object keys sorted, so change detection cannot
+ * hinge on key insertion order. */
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, v) =>
+    v !== null && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v).sort())
+      : v,
+  );
+}
+
+function capUsageToRows(usage: AdminDealDetail["cap_usage"]): CapUsageRow[] {
+  return (usage ?? []).map((entry) => ({
+    year: String(entry.year),
+    pool: entry.pool ?? "",
+    total: String(entry.total),
+    used: entry.used == null ? "" : String(entry.used),
+    asOf: entry.as_of ?? "",
+    note: entry.note ?? "",
+  }));
 }
 
 export function DealStatusBadge({ status }: { status: string }) {
@@ -158,6 +188,7 @@ export function DealEditor({
   const [summary, setSummary] = useState("");
   const [capText, setCapText] = useState("");
   const [capRows, setCapRows] = useState<CapRow[]>([]);
+  const [capUsageRows, setCapUsageRows] = useState<CapUsageRow[]>([]);
 
   const [issn, setIssn] = useState("");
   const [issnName, setIssnName] = useState("");
@@ -193,6 +224,7 @@ export function DealEditor({
       setSummary(d.summary ?? "");
       setCapText(d.cap_text ?? "");
       setCapRows(capToRows(d.cap_numbers));
+      setCapUsageRows(capUsageToRows(d.cap_usage));
     } catch (err) {
       if (err instanceof AdminError && err.status === 401) onUnauthorized(null);
       else setLoadError(`Could not load deal (${err instanceof Error ? err.message : err}).`);
@@ -233,6 +265,35 @@ export function DealEditor({
         cap[row.year.trim()] = n;
       }
     }
+    let capUsage: Record<string, unknown>[] | null = null;
+    if (capUsageRows.length > 0) {
+      capUsage = [];
+      for (const row of capUsageRows) {
+        if (row.year.trim() === "" || row.total.trim() === "") {
+          setError("Cap usage rows need a year and a total.");
+          return;
+        }
+        const year = Number(row.year);
+        const total = Number(row.total);
+        const used = row.used.trim() === "" ? null : Number(row.used);
+        if (
+          !Number.isInteger(year) ||
+          !Number.isInteger(total) ||
+          (used != null && !Number.isInteger(used))
+        ) {
+          setError("Cap usage years, totals, and used counts must be whole numbers.");
+          return;
+        }
+        capUsage.push({
+          year,
+          pool: row.pool.trim() || null,
+          total,
+          used,
+          as_of: row.asOf.trim() || null,
+          note: row.note.trim() || null,
+        });
+      }
+    }
     // Diff against the loaded detail: only changed fields go into the PUT body.
     const body: Record<string, unknown> = {};
     if (status !== detail.status) body.status = status;
@@ -243,7 +304,9 @@ export function DealEditor({
       body.esac_id = esacId.trim() === "" ? null : esacId.trim();
     if (summary !== (detail.summary ?? "")) body.summary = summary === "" ? null : summary;
     if (capText !== (detail.cap_text ?? "")) body.cap_text = capText === "" ? null : capText;
-    if (JSON.stringify(cap) !== JSON.stringify(detail.cap_numbers)) body.cap_numbers = cap;
+    if (canonicalJson(cap) !== canonicalJson(detail.cap_numbers)) body.cap_numbers = cap;
+    if (canonicalJson(capUsage) !== canonicalJson(detail.cap_usage ?? null))
+      body.cap_usage = capUsage;
     if (Object.keys(body).length === 0) {
       setError("No changes to save.");
       return;
@@ -487,6 +550,122 @@ export function DealEditor({
             }}
           />
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-sm font-medium">
+          Cap usage{" "}
+          <span className="text-muted-foreground">(library email updates; empty = none)</span>
+        </p>
+        {capUsageRows.map((row, i) => (
+          <div key={i} className="flex flex-wrap items-center gap-2">
+            <Input
+              type="number"
+              aria-label="Usage year"
+              placeholder="year"
+              className="w-24"
+              value={row.year}
+              onChange={(e) => {
+                setSaved(false);
+                setCapUsageRows((rows) =>
+                  rows.map((r, j) => (j === i ? { ...r, year: e.target.value } : r)),
+                );
+              }}
+            />
+            <Input
+              aria-label="Usage pool"
+              placeholder="pool (e.g. hybrid)"
+              className="w-40"
+              value={row.pool}
+              onChange={(e) => {
+                setSaved(false);
+                setCapUsageRows((rows) =>
+                  rows.map((r, j) => (j === i ? { ...r, pool: e.target.value } : r)),
+                );
+              }}
+            />
+            <Input
+              type="number"
+              aria-label="Usage total"
+              placeholder="total"
+              className="w-24"
+              value={row.total}
+              onChange={(e) => {
+                setSaved(false);
+                setCapUsageRows((rows) =>
+                  rows.map((r, j) => (j === i ? { ...r, total: e.target.value } : r)),
+                );
+              }}
+            />
+            <Input
+              type="number"
+              aria-label="APCs used"
+              placeholder="used"
+              className="w-24"
+              value={row.used}
+              onChange={(e) => {
+                setSaved(false);
+                setCapUsageRows((rows) =>
+                  rows.map((r, j) => (j === i ? { ...r, used: e.target.value } : r)),
+                );
+              }}
+            />
+            <Input
+              aria-label="Reported as of"
+              placeholder="as of (e.g. October 2026)"
+              className="w-56"
+              value={row.asOf}
+              onChange={(e) => {
+                setSaved(false);
+                setCapUsageRows((rows) =>
+                  rows.map((r, j) => (j === i ? { ...r, asOf: e.target.value } : r)),
+                );
+              }}
+            />
+            <Input
+              aria-label="Usage note"
+              placeholder="note"
+              className="w-56"
+              value={row.note}
+              onChange={(e) => {
+                setSaved(false);
+                setCapUsageRows((rows) =>
+                  rows.map((r, j) => (j === i ? { ...r, note: e.target.value } : r)),
+                );
+              }}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSaved(false);
+                setCapUsageRows((rows) => rows.filter((_, j) => j !== i));
+              }}
+            >
+              Remove
+            </Button>
+          </div>
+        ))}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setSaved(false);
+            setCapUsageRows((rows) => [
+              ...rows,
+              {
+                year: String(new Date().getFullYear()),
+                pool: "",
+                total: "",
+                used: "",
+                asOf: "",
+                note: "",
+              },
+            ]);
+          }}
+        >
+          Add entry
+        </Button>
       </div>
 
       <div className="flex items-center gap-3">

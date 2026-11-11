@@ -938,6 +938,8 @@ export interface components {
             } | null;
             /** Cap Text */
             cap_text: string | null;
+            /** Cap Usage */
+            cap_usage?: components["schemas"]["CapUsageEntry"][] | null;
             /** Summary */
             summary: string | null;
             /** Journal Count */
@@ -990,6 +992,8 @@ export interface components {
             } | null;
             /** Cap Text */
             cap_text: string | null;
+            /** Cap Usage */
+            cap_usage?: components["schemas"]["CapUsageEntry"][] | null;
             /** Summary */
             summary: string | null;
             /** Journal Count */
@@ -1571,6 +1575,25 @@ export interface components {
              */
             unknown: number;
         };
+        /**
+         * CapUsageEntry
+         * @description One contract year's publisher-reported APC cap usage (admin-entered
+         *     from library email updates; the harvest never rewrites it).
+         */
+        CapUsageEntry: {
+            /** Year */
+            year: number;
+            /** Pool */
+            pool?: string | null;
+            /** Total */
+            total: number;
+            /** Used */
+            used?: number | null;
+            /** As Of */
+            as_of?: string | null;
+            /** Note */
+            note?: string | null;
+        };
         /** ClientInfo */
         ClientInfo: {
             /** Tz */
@@ -1704,6 +1727,8 @@ export interface components {
             per_year_oa_counts: {
                 [key: string]: unknown;
             } | null;
+            /** Cap Usage */
+            cap_usage?: components["schemas"]["CapUsageEntry"][] | null;
             /** Needs Curation */
             needs_curation: boolean;
             /** Needs Curation Reason */
@@ -1764,6 +1789,8 @@ export interface components {
             } | null;
             /** Cap Text */
             cap_text?: string | null;
+            /** Cap Usage */
+            cap_usage?: components["schemas"]["CapUsageEntry"][] | null;
             /** Summary */
             summary?: string | null;
             /** Esac Id */
