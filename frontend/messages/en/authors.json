@@ -1,0 +1,127 @@
+{
+  "worksCount": "{count, plural, one {# work} other {# works}}",
+  "meta": {
+    "title": "Authors"
+  },
+  "list": {
+    "heading": "Authors",
+    "intro": "Search researchers at {name} to find experts, co-authors, or reviewers, and see where they publish.",
+    "searchPlaceholder": "Search by author name",
+    "searchLabel": "Search authors",
+    "searchButton": "Search",
+    "sortBy": "Sort by",
+    "sortTitle": "Order of the results",
+    "perPage": "Per page",
+    "perPageTitle": "Results per page",
+    "resetFilters": "Reset filters",
+    "resetTitle": "Clears all active filters",
+    "disabledTitle": "Author profiles",
+    "disabledBody": "Author profiles are not available for this institution."
+  },
+  "sort": {
+    "mostPublications": "Most publications",
+    "nameAZ": "Name, A to Z",
+    "nameZA": "Name, Z to A",
+    "latestPublication": "Latest publication first"
+  },
+  "filters": {
+    "faculty": "Faculty",
+    "group": "Research group",
+    "publications": "Publications",
+    "lastPublication": "Last publication",
+    "topic": "Topic",
+    "orcid": "ORCID",
+    "hasOrcid": "Has ORCID",
+    "noOrcid": "No ORCID",
+    "works1to4": "1 to 4 works",
+    "works5to19": "5 to 19 works",
+    "works20to49": "20 to 49 works",
+    "works50plus": "50 or more works",
+    "lastPub2025to2026": "2025 to 2026",
+    "lastPub2022to2024": "2022 to 2024",
+    "lastPub2020to2021": "2020 to 2021",
+    "lastPubNone": "No publication since 2020"
+  },
+  "results": {
+    "count": "{count, plural, one {# author} other {# authors}}",
+    "countMatching": "{count, plural, one {# author matching “{query}”} other {# authors matching “{query}”}}",
+    "updating": "updating…",
+    "prevShort": "Prev",
+    "prevLabel": "Previous page",
+    "nextShort": "Next",
+    "nextLabel": "Next page",
+    "pageOf": "Page {page} of {total}",
+    "retry": "Retry",
+    "emptyQuery": "No authors match “{query}”.",
+    "empty": "No authors match.",
+    "emptyFiltered": "No authors match these filters.",
+    "clearFilters": "Clear filters",
+    "listLabel": "Author results",
+    "lastPub": "Last publication {year}",
+    "caption": "Author search results",
+    "colName": "Name",
+    "colFaculty": "Faculty",
+    "colGroup": "Research group",
+    "colWorks": "Works",
+    "colLastPub": "Last publication",
+    "colTopic": "Topic",
+    "colOrcid": "ORCID",
+    "showing": "Showing {shown} of {total}"
+  },
+  "detail": {
+    "backToSearch": "Back to search",
+    "navLabel": "Page sections",
+    "peoplePage": "People page",
+    "researchPortal": "Research portal",
+    "untitled": "Untitled",
+    "showLess": "Show less",
+    "showMore": "+{count} more",
+    "matchScore": "{score}% match",
+    "matchScoreTitle": "Similarity to this author's publishing profile",
+    "oaOnlyBadge": "OpenAlex only",
+    "oaOnlyTitle": "OpenAlex attributes this work to the author. The university's Pure research information system has no record of it.",
+    "pagerJournals": "journals",
+    "pagerPublications": "publications"
+  },
+  "sections": {
+    "oaOverTime": "Open access over time",
+    "journals": "Where they publish",
+    "topics": "Topics",
+    "publishNext": "Where to publish next",
+    "alternatives": "Alternatives",
+    "publications": "Publications",
+    "notInPure": "Not linked in Pure"
+  },
+  "cards": {
+    "alternatives": "Alternatives for paywalled venues",
+    "alternativesIntro": "Each entry lists a paywalled journal this author published in, with the most similar open access journals below it.",
+    "notInPure": "Found in OpenAlex but not linked in Pure",
+    "publicationsIntro": "OpenAlex found {count, plural, one {# more work} other {# more works}} that Pure does not link to this author. They are listed under “{section}” below.",
+    "publicationsCapped": "Showing the {count} most recent publications."
+  },
+  "similar": {
+    "mostSimilar": "Most similar",
+    "dealCovered": "Covered by a deal",
+    "diamond": "Diamond open access"
+  },
+  "tables": {
+    "journalsCaption": "Journals this author publishes in",
+    "worksCaption": "This author's publications",
+    "gapCaption": "Works found in OpenAlex but not linked in Pure",
+    "colJournal": "Journal",
+    "colWorks": "Works",
+    "colAccess": "Access",
+    "colYear": "Year",
+    "colTitle": "Title",
+    "colVenue": "Published in",
+    "colPublisher": "Publisher",
+    "colType": "Type",
+    "colLinks": "Links"
+  },
+  "gap": {
+    "found": "OpenAlex attributes {count, plural, one {# work} other {# works}} to this author without a link in Pure.",
+    "missing": "{count, plural, one {# of them is likely missing.} other {# of them are likely missing.}}",
+    "showing": "Showing the {count} most recent.",
+    "none": "None found. Every OpenAlex work attributed to this author has a record in Pure."
+  }
+}

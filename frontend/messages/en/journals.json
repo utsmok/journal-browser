@@ -1,0 +1,219 @@
+{
+  "nav": {
+    "sections": "Page sections",
+    "backToSearch": "Back to search"
+  },
+  "header": {
+    "websiteLabel": "{title} (opens the journal website in a new tab)",
+    "unknownPublisher": "Unknown publisher",
+    "imprint": "imprint: {name}",
+    "homepage": "Journal homepage",
+    "metadataSource": "Metadata: OpenAlex",
+    "doajBadge": "DOAJ",
+    "doajHint": "Listed in DOAJ, the Directory of Open Access Journals",
+    "issnLHint": "ISSN-L links the print and online ISSNs of one journal into a single identifier"
+  },
+  "oaPerYear": {
+    "title": "Open access per year",
+    "titleSuffixYears": "{short}, {from} to {to}",
+    "titleSuffixWindow": "{short}, {window}+",
+    "titleSuffixShort": "{short}",
+    "empty": "No publication statistics for this period yet.",
+    "totals": "{pure} {short} works in total{since} <pureLabel>(Pure)</pureLabel> · OpenAlex institution filter: <openalexLabel>{openalex} <crossLabel>(cross-check)</crossLabel></openalexLabel>.",
+    "totalsYears": "{pure} {short} works in {from} to {to} <pureLabel>(Pure)</pureLabel>."
+  },
+  "deal": {
+    "title": "Open access deal",
+    "correspondingOnly": "Corresponding authors only",
+    "correspondingOnlyHint": "The deal only funds the APC when the corresponding author is from {name}.",
+    "curationPending": "Curation pending",
+    "costsHeading": "Costs and conditions",
+    "capsHeading": "Article caps",
+    "articleTypesHeading": "Included article types",
+    "workflowHeading": "Workflow",
+    "noDeal": "No current open access deal covers this journal for {name} authors. Also check <oaNl>openaccess.nl</oaNl> and the <jct>Journal Checker Tool</jct>. For green open access routes (self-archiving), see the library's open access guide linked in the footer.",
+    "openaccessNlLink": "openaccess.nl deal page",
+    "contractLink": "Contract",
+    "jctLink": "JCT data"
+  },
+  "dealCapUsage": {
+    "line": "{year}{pool}: {used}/{total} used",
+    "through": "(through {date})",
+    "left": " · {count, plural, one {# APC left} other {# APCs left}}"
+  },
+  "greenOa": {
+    "title": "Green OA policy",
+    "description": "The versions of your article that the publisher lets you self-archive.",
+    "prohibited": "The publisher prohibits open access for this journal.",
+    "feeBadge": "OA fee required",
+    "feeHint": "The policy states that this route requires an additional open access fee.",
+    "where": "Where:",
+    "licence": "Licence: {licenses}.",
+    "embargo": "Embargo: after {count, plural, one {# month} other {# months}}.",
+    "conditionsHeading": "Conditions",
+    "empty": "No self-archiving route is listed for this journal.",
+    "jiscLink": "View on Jisc Open Policy Finder"
+  },
+  "greenVersions": {
+    "submitted": "Submitted version",
+    "accepted": "Accepted version",
+    "published": "Published version"
+  },
+  "greenLocations": {
+    "academicSocialNetwork": "Academic social network",
+    "anyRepository": "Any repository",
+    "anyWebsite": "Any website",
+    "authorsHomepage": "Author's homepage",
+    "funderDesignatedLocation": "Funder-designated location",
+    "institutionalRepository": "Institutional repository",
+    "institutionalWebsite": "Institutional website",
+    "namedAcademicSocialNetwork": "Named academic social networks",
+    "namedRepository": "Named repositories",
+    "nonCommercialInstitutionalRepository": "Non-commercial institutional repository",
+    "nonCommercialRepository": "Non-commercial repository",
+    "nonCommercialSocialNetwork": "Non-commercial academic social network",
+    "nonCommercialSubjectRepository": "Non-commercial subject repository",
+    "nonCommercialWebsite": "Non-commercial website",
+    "preprintRepository": "Preprint repository",
+    "subjectRepository": "Subject repository",
+    "thisJournal": "This journal"
+  },
+  "funderFit": {
+    "withStatus": "Funder fit for {funderName}: {status}",
+    "textOnly": "Funder policy for {funderName}",
+    "viewPolicy": "View funder policy",
+    "checkManually": "The funder policy is text-only, so check it manually.",
+    "compliant": "Compliant",
+    "check": "Check",
+    "notCompliant": "Not compliant"
+  },
+  "apc": {
+    "title": "APC cost evidence",
+    "hint": "APC = article processing charge",
+    "caption": "OpenAPC cost evidence per publishing year, showing the number of recorded APCs, the mean, and the observed range in euros",
+    "yearCol": "Year",
+    "yearColHint": "Publishing year of the articles with recorded APCs",
+    "countCol": "APCs",
+    "countColHint": "Articles with an APC recorded in OpenAPC for this journal and year",
+    "meanCol": "Mean €",
+    "meanColHint": "Average APC paid, in euros",
+    "rangeCol": "Range €",
+    "rangeColHint": "Lowest and highest APC recorded, in euros",
+    "evidence": "{count, plural, one {# {short} APC record} other {# {short} APC records}} (latest {period}: {amount}).",
+    "amountUnknown": "amount unknown"
+  },
+  "similar": {
+    "title": "Similar journals",
+    "institutionHeading": "{short} publishes here",
+    "institutionNote": "Nearest neighbors that carry at least one {name} publication.",
+    "dealsHeading": "Covered by a publication deal",
+    "dealsNote": "Nearest neighbors with a current open access deal for {short} authors.",
+    "allHeading": "Most similar overall",
+    "allNote": "Nearest neighbors by research-profile similarity alone, regardless of deals or {short} output.",
+    "publications": "{count, plural, one {# {short} publication} other {# {short} publications}}",
+    "publicationsHint": "Known {name} publications in this journal",
+    "percentMatch": "{percent}% match",
+    "sharedTopics": "{count, plural, one {# shared topic} other {# shared topics}}",
+    "embeddingNote": "(embedding similarity)",
+    "similarityTitle": "Embedding similarity between the journals' research profiles",
+    "showAll": "Show all {count} journals"
+  },
+  "topics": {
+    "title": "Topics",
+    "descriptionWithCounts": "Topics assigned by OpenAlex. The number is the works in this journal classified under the topic.",
+    "description": "Topics assigned by OpenAlex.",
+    "worksCount": "{count, plural, one {# work} other {# works}}",
+    "showMore": "+{count} more"
+  },
+  "metrics": {
+    "title": "Key stats",
+    "citednessLabel": "2-year mean citedness",
+    "citednessHint": "Average number of citations that works from the last two years have received, as counted by OpenAlex.",
+    "hIndexLabel": "h-index",
+    "hIndexHint": "h works of this journal have received at least h citations each (OpenAlex).",
+    "i10Label": "i10 index",
+    "i10Hint": "Number of works of this journal with at least 10 citations (OpenAlex).",
+    "totalCitationsLabel": "Total citations",
+    "totalCitationsHint": "All citations to works of this journal that OpenAlex has recorded.",
+    "worksCountLabel": "Works count",
+    "worksCountHint": "Number of works of this journal known to OpenAlex.",
+    "fwciLabel": "FWCI ({short} works)",
+    "fwciHint": "Field-weighted citation impact of {short} works. Citations are counted relative to the average for works of the same year, type, and field, so 1.0 is the average.",
+    "fwciN": "n = {count, plural, one {# work} other {# works}}",
+    "retractedLabel": "Retracted {short} works",
+    "retractedHint": "{short} works in this journal that OpenAlex marks as retracted.",
+    "openaireLabel": "Matched publications",
+    "openaireHint": "{name} publications that OpenAIRE matched to this journal.",
+    "sjrLabel": "SJR",
+    "sjrHint": "SCImago Journal Rank, a prestige-weighted average of citations per recent work. Higher is better.",
+    "bestQuartileLabel": "Best quartile",
+    "bestQuartileHint": "Best quartile the journal reaches in any of its SCImago subject categories.",
+    "sjrHIndexLabel": "SJR h-index",
+    "sjrHIndexHint": "The h-index of the journal as computed by SCImago."
+  },
+  "utAuthorship": {
+    "title": "UT authorship",
+    "description": "Distinct works with UT authors: {count} of the works counted here.",
+    "empty": "No UT-authorship records for this journal.",
+    "facultiesHeading": "Faculties",
+    "groupsHeading": "Research groups",
+    "captionFaculties": "Distinct works with UT authors per faculty",
+    "captionGroups": "Distinct works with UT authors per research group",
+    "nameCol": "Name",
+    "worksCol": "Works",
+    "topAuthorsHeading": "Top authors",
+    "captionTopAuthors": "Most prolific UT authors of this journal",
+    "authorCol": "Author",
+    "affiliationCol": "Affiliation"
+  },
+  "publications": {
+    "title": "Publications ({short})",
+    "navLabel": "Publications",
+    "description": "{short} works from Pure merged with OpenAlex venue works{period}. Citations and FWCI come from OpenAlex; works not matched there are marked.",
+    "empty": "No {name} publications in the university corpus for this journal.",
+    "pureOnly": "Pure only",
+    "pureOnlyHint": "In the university's Pure research information system but not matched in OpenAlex, so citations and FWCI are unavailable",
+    "citations": "{count, plural, one {# citation} other {# citations}}",
+    "citationsTitle": "Citations (OpenAlex)",
+    "fwci": "FWCI {value}",
+    "fwciTitle": "Field-weighted citation impact",
+    "retracted": "Retracted",
+    "retractedHint": "This publication was retracted, per OpenAlex.",
+    "pagerLabel": "publications",
+    "allOpenalexLink": "All works on OpenAlex",
+    "openaireLink": "Search on OpenAIRE",
+    "untitled": "Untitled"
+  },
+  "crisGaps": {
+    "title": "Not registered in Pure",
+    "description": "{count, plural, one {OpenAlex attributes # work from this journal that matches no Pure record, so it is likely missing from the research information system.} other {OpenAlex attributes # works from this journal that match no Pure record, so they are likely missing from the research information system.}}",
+    "matchNote": "Each item lists the UT authors that OpenAlex matched to the university roster.",
+    "showingRecent": "Showing {count} most recent.",
+    "empty": "None found. Every work that OpenAlex attributes to this journal has a Pure record."
+  },
+  "names": {
+    "title": "Other names",
+    "description": "Other titles that this journal is published under.",
+    "showAll": "Show all {count} names"
+  },
+  "identifiers": {
+    "title": "Identifiers",
+    "description": "The journal's ISSNs and its records in DOAJ, OpenAlex, and Open Access NL.",
+    "doajRecord": "DOAJ record",
+    "openalexSource": "OpenAlex source",
+    "oaNlPublisher": "Open Access NL publisher",
+    "viaDoaj": "via DOAJ"
+  },
+  "citation": {
+    "title": "Cite this journal",
+    "template": "{title}. {publisher}. ISSN-L {issnL}. Available at: {url} (accessed {date})",
+    "copyHint": "ISSNs to cite are listed under Identifiers below.",
+    "copyLabel": "citation"
+  },
+  "list": {
+    "showLess": "Show less",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyFailed": "Copy failed"
+  }
+}

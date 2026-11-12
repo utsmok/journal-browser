@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import type { JournalSearchResponse } from "@/lib/api";
@@ -16,15 +17,14 @@ export function Pagination({
   stack: string[];
   moveTo: (nextStack: string[], nextCursor: string | undefined) => void;
 }) {
+  const t = useTranslations("common");
   return (
     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
       <p className="text-sm text-[var(--muted-foreground)]">
         {/* Announce only settled counts: while a fetch runs the live
             region keeps its previous text, so typing never chatters. */}
-        <span aria-live="polite">
-          {data ? `${data.total.toLocaleString("en")} journal${data.total === 1 ? "" : "s"}` : ""}
-        </span>
-        {isFetching && data ? " · updating…" : ""}
+        <span aria-live="polite">{data ? t("pagination.count", { count: data.total }) : ""}</span>
+        {isFetching && data ? t("pagination.updating") : ""}
       </p>
       <div className="flex items-center gap-2">
         <Button
@@ -36,7 +36,7 @@ export function Pagination({
             moveTo(next, next[next.length - 1]);
           }}
         >
-          <ChevronLeft aria-hidden className="size-4" /> Prev
+          <ChevronLeft aria-hidden className="size-4" /> {t("pagination.prev")}
         </Button>
         <Button
           variant="outline"
@@ -47,7 +47,7 @@ export function Pagination({
             moveTo([...stack, data.next_cursor], data.next_cursor);
           }}
         >
-          Next <ChevronRight aria-hidden className="size-4" />
+          {t("pagination.next")} <ChevronRight aria-hidden className="size-4" />
         </Button>
       </div>
     </div>

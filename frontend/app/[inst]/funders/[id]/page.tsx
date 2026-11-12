@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, ExternalLink } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import * as React from "react";
@@ -24,11 +25,14 @@ const OPF_URL = "https://openpolicyfinder.jisc.ac.uk/";
 const OPENAIRE_URL = "https://openaire.eu";
 
 function CanonLinks({ funder }: { funder: FunderDetailResponse }) {
+  const t = useTranslations("funders");
   const links: { label: string; href: string }[] = [];
-  if (funder.ror) links.push({ label: "ROR", href: ROR_URL + funder.ror });
-  if (funder.fundref) links.push({ label: "FundRef", href: FUNDREF_URL + funder.fundref });
-  if (funder.openalex_funder_id) links.push({ label: "OpenAlex", href: funder.openalex_funder_id });
-  if (funder.url) links.push({ label: "Website", href: funder.url });
+  if (funder.ror) links.push({ label: t("detail.ror"), href: ROR_URL + funder.ror });
+  if (funder.fundref)
+    links.push({ label: t("detail.fundref"), href: FUNDREF_URL + funder.fundref });
+  if (funder.openalex_funder_id)
+    links.push({ label: t("detail.openalex"), href: funder.openalex_funder_id });
+  if (funder.url) links.push({ label: t("detail.website"), href: funder.url });
   return (
     <p className="flex flex-wrap gap-3 text-sm">
       {links.map((l) => (
@@ -48,27 +52,29 @@ function CanonLinks({ funder }: { funder: FunderDetailResponse }) {
 }
 
 /** Values inside the OPF policy sub-blocks use short codes
- * ("requires", "national_repository"); humanize before showing. */
-function policyValue(v: unknown): string {
-  if (typeof v === "boolean") return v ? "Yes" : "No";
+ * ("requires", "national_repository"); humanize before showing.
+ * Boolean values render as the given Yes/No labels. */
+function policyValue(v: unknown, yesLabel: string, noLabel: string): string {
+  if (typeof v === "boolean") return v ? yesLabel : noLabel;
   if (typeof v === "string") return v.replaceAll("_", " ");
-  if (Array.isArray(v)) return v.map(policyValue).join("; ");
+  if (Array.isArray(v)) return v.map((x) => policyValue(x, yesLabel, noLabel)).join("; ");
   if (v && typeof v === "object") {
     return Object.values(v as Record<string, unknown>)
-      .map(policyValue)
+      .map((x) => policyValue(x, yesLabel, noLabel))
       .join("; ");
   }
   return String(v ?? "");
 }
 
-const POLICY_LABELS: Record<string, string> = {
-  what: "What",
-  when: "When",
-  where: "Where",
-  license: "License",
-  requirement: "Requirement",
-  special_conditions: "Special conditions",
-  conditions: "Conditions",
+/** Known OPF rule keys → message keys; unknown keys render humanized. */
+const POLICY_LABEL_KEYS: Record<string, string> = {
+  what: "detail.policy.what",
+  when: "detail.policy.when",
+  where: "detail.policy.where",
+  license: "detail.policy.license",
+  requirement: "detail.policy.requirement",
+  special_conditions: "detail.policy.specialConditions",
+  conditions: "detail.policy.conditions",
 };
 
 // Payload wrapper keys rendered elsewhere; never show them as JSON fallback.
@@ -78,11 +84,12 @@ const NON_RULE_KEYS: Record<string, true> = { urls: true, notes: true, scope: tr
  * every key renders as a label row — known keys get curated labels,
  * unknown keys get a humanized label, never a raw JSON dump. */
 function PolicyRules({ rules }: { rules: Record<string, unknown> }) {
+  const t = useTranslations("funders");
   const rows: [string, unknown][] = [];
   const seen = new Set<string>();
-  for (const [k, label] of Object.entries(POLICY_LABELS)) {
+  for (const [k, key] of Object.entries(POLICY_LABEL_KEYS)) {
     if (k in rules) {
-      rows.push([label, rules[k]]);
+      rows.push([t(key), rules[k]]);
       seen.add(k);
     }
   }
@@ -97,7 +104,7 @@ function PolicyRules({ rules }: { rules: Record<string, unknown> }) {
       {rows.map(([label, value]) => (
         <React.Fragment key={label}>
           <dt className="text-[var(--muted-foreground)]">{label}</dt>
-          <dd>{policyValue(value) || "—"}</dd>
+          <dd>{policyValue(value, t("detail.policy.yes"), t("detail.policy.no")) || "—"}</dd>
         </React.Fragment>
       ))}
     </dl>
@@ -132,7 +139,11 @@ function PolicyUrls({ urls }: { urls: unknown }) {
  * scope, structured rules); unknown shapes render as humanized rows
  * rather than a raw JSON dump. */
 function PolicyBlock({ data }: { data: Record<string, unknown> | null | undefined }) {
-  if (!data) return <p className="text-sm text-[var(--muted-foreground)]">Not harvested.</p>;
+  const t = useTranslations("funders");
+  if (!data)
+    return (
+      <p className="text-sm text-[var(--muted-foreground)]">{t("detail.policy.notHarvested")}</p>
+    );
   // Nested shape (publications_policy: archiving_policy/publishing_policy
   // sub-blocks) and flat shape (data_archiving_policy: rule keys directly
   // on the payload) both occur in the OPF payloads.
@@ -149,8 +160,8 @@ function PolicyBlock({ data }: { data: Record<string, unknown> | null | undefine
   const rules = flat
     ? []
     : ([
-        ["Archiving rules", data.archiving_policy],
-        ["Publishing rules", data.publishing_policy],
+        [t("detail.policy.archivingRules"), data.archiving_policy],
+        [t("detail.policy.publishingRules"), data.publishing_policy],
       ].filter(([, v]) => v && typeof v === "object") as [string, Record<string, unknown>][]);
   const notes = Array.isArray(data.notes) ? (data.notes as string[]) : [];
   const scope = Array.isArray(data.scope) ? (data.scope as string[]) : [];
@@ -164,7 +175,11 @@ function PolicyBlock({ data }: { data: Record<string, unknown> | null | undefine
       ))}
       {scope.length > 0 && (
         <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-          Scope: {scope.map(policyValue).join(", ")}
+          {t("detail.policy.scope", {
+            scope: scope
+              .map((v) => policyValue(v, t("detail.policy.yes"), t("detail.policy.no")))
+              .join(", "),
+          })}
         </p>
       )}
       {flat && (
@@ -189,30 +204,33 @@ function PolicyBlock({ data }: { data: Record<string, unknown> | null | undefine
 
 /** OpenAIRE Graph identity for the same funder (canon-linked via ROR). */
 function OpenaireCard({ oa }: { oa: NonNullable<FunderDetailResponse["openaire"]> }) {
+  const t = useTranslations("funders");
   return (
-    <CollapsibleCard id="funder-openaire" title="OpenAIRE record">
+    <CollapsibleCard id="funder-openaire" title={t("detail.openaire.title")}>
       <div className="text-sm">
         <dl className="grid grid-cols-[10rem_1fr] gap-x-3 gap-y-1.5">
-          <dt className="text-[var(--muted-foreground)]">Name</dt>
+          <dt className="text-[var(--muted-foreground)]">{t("detail.openaire.name")}</dt>
           <dd>{oa.name ?? "—"}</dd>
           {oa.short_name && (
             <>
-              <dt className="text-[var(--muted-foreground)]">Short name</dt>
+              <dt className="text-[var(--muted-foreground)]">{t("detail.openaire.shortName")}</dt>
               <dd>{oa.short_name}</dd>
             </>
           )}
           {oa.jurisdiction && (
             <>
-              <dt className="text-[var(--muted-foreground)]">Jurisdiction</dt>
+              <dt className="text-[var(--muted-foreground)]">
+                {t("detail.openaire.jurisdiction")}
+              </dt>
               <dd>{oa.jurisdiction}</dd>
             </>
           )}
-          <dt className="text-[var(--muted-foreground)]">OpenAIRE id</dt>
+          <dt className="text-[var(--muted-foreground)]">{t("detail.openaire.id")}</dt>
           <dd className="break-all">{oa.openaire_id}</dd>
         </dl>
         {oa.streams.length > 0 && (
           <div className="mt-3 border-t border-[var(--border)] pt-3">
-            <p className="mb-1.5 text-sm font-medium">Top funding streams (OpenAIRE projects)</p>
+            <p className="mb-1.5 text-sm font-medium">{t("detail.openaire.streams")}</p>
             <ul className="space-y-1">
               {oa.streams.map((s) => (
                 <li key={s.level0_id} className="flex justify-between gap-3">
@@ -226,7 +244,11 @@ function OpenaireCard({ oa }: { oa: NonNullable<FunderDetailResponse["openaire"]
           </div>
         )}
         <div className="mt-2">
-          <SourceNote source="OpenAIRE Graph" url={OPENAIRE_URL} codes={["openaire-enrichment"]} />
+          <SourceNote
+            source={t("detail.openaire.source")}
+            url={OPENAIRE_URL}
+            codes={["openaire-enrichment"]}
+          />
         </div>
       </div>
     </CollapsibleCard>
@@ -234,6 +256,8 @@ function OpenaireCard({ oa }: { oa: NonNullable<FunderDetailResponse["openaire"]
 }
 
 export default function FunderPage() {
+  const t = useTranslations("funders");
+  const tc = useTranslations("common");
   const params = useParams<{ id: string }>();
   const inst = useInstitution();
   const site = useSiteMeta();
@@ -244,13 +268,13 @@ export default function FunderPage() {
 
   return (
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
-      <BackLink href={`/${inst}/funders`} label="Funders" />
+      <BackLink href={`/${inst}/funders`} label={t("detail.backToList")} />
       {isPending && <ListSkeletonRows rows={6} />}
       {isError && (
         <div>
-          <p className="text-[var(--destructive)]">{errorMessage(error)}</p>
+          <p className="text-[var(--destructive)]">{errorMessage(tc, error)}</p>
           <Button variant="outline" size="sm" className="mt-2" onClick={() => refetch()}>
-            Retry
+            {t("detail.retry")}
           </Button>
         </div>
       )}
@@ -260,11 +284,9 @@ export default function FunderPage() {
           <p className="mb-2 text-sm text-[var(--muted-foreground)]">
             {(data.country ?? "").toUpperCase() || "—"}
             {" · "}
-            {data.n_ut_works.toLocaleString()} {site.short} works
+            {t("detail.worksByInst", { count: data.n_ut_works, inst: site.short })}
             {" · "}
-            {data.policy_structured
-              ? "structured OA policy"
-              : "text-only policy (no machine-readable rules)"}
+            {data.policy_structured ? t("detail.policyStructured") : t("detail.policyTextOnly")}
           </p>
           <div className="mb-6 flex flex-wrap items-center gap-4">
             <CanonLinks funder={data} />
@@ -276,21 +298,21 @@ export default function FunderPage() {
                   size="sm"
                   aria-pressed={mine}
                   onClick={() =>
-                    setFunder(mine ? null : { id: data.id, name: data.name ?? `Funder ${data.id}` })
+                    setFunder(
+                      mine
+                        ? null
+                        : { id: data.id, name: data.name ?? t("unnamedFunder", { id: data.id }) },
+                    )
                   }
-                  title={
-                    mine
-                      ? "Showing funder-fit badges on the journal search. Select again to stop."
-                      : "Show funder-fit badges on the journal search"
-                  }
+                  title={mine ? t("detail.myFunderHintOn") : t("detail.myFunderHintOff")}
                 >
                   {mine ? (
                     <>
                       <Check aria-hidden className="size-4" />
-                      Your funder
+                      {t("detail.yourFunder")}
                     </>
                   ) : (
-                    "Use as my funder"
+                    t("detail.useAsMyFunder")
                   )}
                 </Button>
               );
@@ -299,15 +321,15 @@ export default function FunderPage() {
 
           {data.top_journals.length > 0 && (
             <section className="mb-8">
-              <h2 className="mb-2 text-xl font-bold">{site.short} works</h2>
+              <h2 className="mb-2 text-xl font-bold">{t("instWorks", { inst: site.short })}</h2>
               <Card>
                 <CardContent className="p-0">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-[var(--border)] text-left text-[var(--muted-foreground)]">
-                        <th className="px-3 py-2 font-medium">Journal</th>
-                        <th className="px-3 py-2 font-medium">ISSN-L</th>
-                        <th className="px-3 py-2 text-right font-medium">Works</th>
+                        <th className="px-3 py-2 font-medium">{t("detail.journal")}</th>
+                        <th className="px-3 py-2 font-medium">{t("detail.issnL")}</th>
+                        <th className="px-3 py-2 text-right font-medium">{t("detail.works")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -334,7 +356,7 @@ export default function FunderPage() {
               </Card>
               <div className="mt-1">
                 <SourceNote
-                  source={`${site.short} works via PURE, grants from OpenAlex/OpenAIRE`}
+                  source={t("detail.worksSource", { inst: site.short })}
                   url={OPENAIRE_URL}
                   codes={["openalex-coverage", "openaire-enrichment"]}
                 />
@@ -343,21 +365,21 @@ export default function FunderPage() {
           )}
 
           <div className="space-y-4">
-            <CollapsibleCard id="funder-publications-policy" title="Publications policy">
+            <CollapsibleCard id="funder-publications-policy" title={t("detail.publicationsPolicy")}>
               <PolicyBlock data={data.publications_policy} />
               <div className="mt-2">
                 <SourceNote
-                  source="Jisc Open Policy Finder"
+                  source={t("sourceJisc")}
                   url={OPF_URL}
                   codes={["jisc-policy-currency"]}
                 />
               </div>
             </CollapsibleCard>
-            <CollapsibleCard id="funder-data-policy" title="Data archiving policy">
+            <CollapsibleCard id="funder-data-policy" title={t("detail.dataPolicy")}>
               <PolicyBlock data={data.data_archiving_policy} />
               <div className="mt-2">
                 <SourceNote
-                  source="Jisc Open Policy Finder"
+                  source={t("sourceJisc")}
                   url={OPF_URL}
                   codes={["jisc-policy-currency"]}
                 />

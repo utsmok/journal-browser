@@ -1,37 +1,39 @@
 import type { DealLink } from "@/lib/api";
+import type { LabelT } from "@/lib/work-type";
 
-/** Fixed rendering order and fallback labels for deal link categories. */
-const DEAL_LINK_ORDER: { category: string; label: string }[] = [
-  { category: "workflow", label: "Workflow" },
-  { category: "contract", label: "Contract" },
-  { category: "contact", label: "Contact" },
-  { category: "publisher_site", label: "Publisher page" },
-  { category: "publisher_page", label: "Publisher page" },
-  { category: "journal_browser", label: "Journal browser" },
-  { category: "openaccessnl_doc", label: "Open Access info" },
-  { category: "flyer", label: "Flyer" },
-  { category: "other", label: "Information" },
+/** Fixed rendering order and message keys (common.dealLinks) for deal link
+ * categories. */
+const DEAL_LINK_ORDER: { category: string; labelKey: string }[] = [
+  { category: "workflow", labelKey: "dealLinks.workflow" },
+  { category: "contract", labelKey: "dealLinks.contract" },
+  { category: "contact", labelKey: "dealLinks.contact" },
+  { category: "publisher_site", labelKey: "dealLinks.publisherPage" },
+  { category: "publisher_page", labelKey: "dealLinks.publisherPage" },
+  { category: "journal_browser", labelKey: "dealLinks.journalBrowser" },
+  { category: "openaccessnl_doc", labelKey: "dealLinks.openAccessInfo" },
+  { category: "flyer", labelKey: "dealLinks.flyer" },
+  { category: "other", labelKey: "dealLinks.information" },
 ];
 
-const DEAL_LINK_LABEL = Object.fromEntries(
-  DEAL_LINK_ORDER.map(({ category, label }) => [category, label]),
+const DEAL_LINK_KEYS = Object.fromEntries(
+  DEAL_LINK_ORDER.map(({ category, labelKey }) => [category, labelKey]),
 ) as Record<string, string>;
 
 /** Scraped text sometimes leaks the raw category token ("workflow", "info"). */
 const TEXT_ALIASES: Record<string, string> = {
-  workflow: "Workflow",
-  contract: "Contract",
-  contact: "Contact",
-  info: "Information",
-  other: "Information",
+  workflow: "dealLinks.workflow",
+  contract: "dealLinks.contract",
+  contact: "dealLinks.contact",
+  info: "dealLinks.information",
+  other: "dealLinks.information",
 };
 
-function cleanLabel(link: DealLink) {
+function cleanLabel(t: LabelT, link: DealLink) {
   const text = link.text?.trim().replace(/[.:\s]+$/, "");
-  if (!text) return DEAL_LINK_LABEL[link.category ?? ""] ?? "Information";
-  if (/[^\s@]+@[^\s@]+\.[^\s@]+/.test(text)) return "Contact";
+  if (!text) return t(DEAL_LINK_KEYS[link.category ?? ""] ?? "dealLinks.information");
+  if (/[^\s@]+@[^\s@]+\.[^\s@]+/.test(text)) return t("dealLinks.contact");
   const aliased = TEXT_ALIASES[text.toLowerCase()];
-  if (aliased) return aliased;
+  if (aliased) return t(aliased);
   // Scraped single-word labels sometimes arrive lowercase ("documentation").
   return /^[a-z][a-z\s]*$/.test(text) ? text.charAt(0).toUpperCase() + text.slice(1) : text;
 }
@@ -71,6 +73,6 @@ export function orderedDealLinks(links: DealLink[]) {
     });
 }
 
-export function dealLinkLabel(link: DealLink) {
-  return cleanLabel(link);
+export function dealLinkLabel(t: LabelT, link: DealLink) {
+  return cleanLabel(t, link);
 }

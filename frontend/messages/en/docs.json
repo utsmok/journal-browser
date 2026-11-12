@@ -1,0 +1,55 @@
+{
+  "meta": {
+    "title": "Docs"
+  },
+  "index": {
+    "heading": "Documentation",
+    "intro": "What this browser shows, where the data comes from, and how to use it when you argue for open access.",
+    "liveHeading": "See it live",
+    "journalsLabel": "Journal pages",
+    "journalsBlurb": "Deals, APCs, and statistics for one journal.",
+    "authorsLabel": "Author profiles",
+    "authorsBlurb": "Where colleagues publish and which deals cover them.",
+    "publishersLabel": "Publishers",
+    "publishersBlurb": "Agreements and publication output per publisher.",
+    "orgunitsLabel": "Faculties and units",
+    "orgunitsBlurb": "Publication output per faculty or unit.",
+    "dealsLabel": "Deals",
+    "dealsBlurb": "The full register of open access agreements.",
+    "searchLabel": "Journal search",
+    "searchBlurb": "The main search across all journals.",
+    "loading": "Loading…",
+    "loadFailed": "Could not load the docs list. Refresh the page to try again.",
+    "editsBadge": "{count, plural, one {# edit} other {# edits}}"
+  },
+  "toolbar": {
+    "wrongPassword": "Wrong password, or admin sign-in is disabled.",
+    "signInFailed": "Sign-in failed.",
+    "editingOn": "Editing: on",
+    "editingOff": "Editing: off",
+    "adminPassword": "Admin password",
+    "signIn": "Sign in",
+    "edit": "Edit",
+    "saveAsPdf": "Save as PDF"
+  },
+  "mermaid": {
+    "renderFailed": "The diagram could not be rendered, so the mermaid source is shown instead."
+  },
+  "doc": {
+    "allDocs": "← All docs",
+    "metaGroup": "{group}",
+    "metaWithEdits": "{group} · {count} edited",
+    "loading": "Loading…",
+    "backToIndex": "Back to the index.",
+    "sessionExpired": "Your session expired. Sign in again.",
+    "adminRequestFailed": "Admin request failed ({message})",
+    "editedTitle": "Edited on this server",
+    "revert": "Revert",
+    "save": "Save",
+    "cancel": "Cancel",
+    "keyboardHint": "⌘/Ctrl+Enter saves, Esc cancels",
+    "saveCell": "Save cell",
+    "prevPage": "← {title}",
+    "nextPage": "{title} →"
+  }
+}

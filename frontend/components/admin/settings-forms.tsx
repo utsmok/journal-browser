@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,48 +14,90 @@ import {
   type SettingsResponse,
 } from "@/lib/admin";
 
-/** Field set for the flat /admin/institutions/{code} payload (no schema from the API). */
-const INST_FIELDS: SettingField[] = [
-  { key: "name", section: "institution", type: "string", label: "Name" },
-  { key: "short_name", section: "institution", type: "string", label: "Short name" },
-  { key: "active", section: "institution", type: "bool", label: "Active" },
-  { key: "ror", section: "institution", type: "string", label: "ROR" },
-  { key: "openalex_id", section: "institution", type: "string", label: "OpenAlex ID" },
+/**
+ * Field set for the flat /admin/institutions/{code} payload (no schema from
+ * the API). Labels are message keys; the form resolves them with t() because
+ * this array lives at module scope, outside any React component.
+ */
+const INST_FIELDS: (Omit<SettingField, "label" | "help"> & {
+  labelKey: `settings.field${string}`;
+  helpKey?: string;
+})[] = [
+  { key: "name", section: "institution", type: "string", labelKey: "settings.fieldName" },
+  {
+    key: "short_name",
+    section: "institution",
+    type: "string",
+    labelKey: "settings.fieldShortName",
+  },
+  { key: "active", section: "institution", type: "bool", labelKey: "settings.fieldActive" },
+  { key: "ror", section: "institution", type: "string", labelKey: "settings.fieldRor" },
+  {
+    key: "openalex_id",
+    section: "institution",
+    type: "string",
+    labelKey: "settings.fieldOpenalexId",
+  },
   {
     key: "pure_oai_base_url",
     section: "institution",
     type: "string",
-    label: "Pure OAI base URL",
+    labelKey: "settings.fieldPureOaiBaseUrl",
   },
   {
     key: "openaire_org_id",
     section: "institution",
     type: "string",
-    label: "OpenAIRE organisation ID",
+    labelKey: "settings.fieldOpenaireOrgId",
   },
   {
     key: "data_window_start",
     section: "institution",
     type: "number",
-    label: "Data window start",
+    labelKey: "settings.fieldDataWindowStart",
   },
-  { key: "data_window_end", section: "institution", type: "number", label: "Data window end" },
-  { key: "library_url", section: "institution", type: "string", label: "Library URL" },
-  { key: "oa_guide_url", section: "institution", type: "string", label: "OA guide URL" },
-  { key: "support_email", section: "institution", type: "string", label: "Support email" },
-  { key: "admin_contact", section: "institution", type: "string", label: "Admin contact" },
+  {
+    key: "data_window_end",
+    section: "institution",
+    type: "number",
+    labelKey: "settings.fieldDataWindowEnd",
+  },
+  {
+    key: "library_url",
+    section: "institution",
+    type: "string",
+    labelKey: "settings.fieldLibraryUrl",
+  },
+  {
+    key: "oa_guide_url",
+    section: "institution",
+    type: "string",
+    labelKey: "settings.fieldOaGuideUrl",
+  },
+  {
+    key: "support_email",
+    section: "institution",
+    type: "string",
+    labelKey: "settings.fieldSupportEmail",
+  },
+  {
+    key: "admin_contact",
+    section: "institution",
+    type: "string",
+    labelKey: "settings.fieldAdminContact",
+  },
   {
     key: "research_portal_url",
     section: "institution",
     type: "string",
-    label: "Research portal URL",
+    labelKey: "settings.fieldResearchPortalUrl",
   },
   {
     key: "require_confirmed_affiliation",
     section: "institution",
     type: "bool",
-    label: "Only show confirmed affiliated authors",
-    help: "Hide authors whose affiliation is not confirmed in the source system. On by default.",
+    labelKey: "settings.fieldConfirmedAffiliation",
+    helpKey: "settings.fieldConfirmedAffiliationHelp",
     default: true,
   },
 ];
@@ -115,6 +158,7 @@ function SettingRow({
   placeholder?: string;
   onChange: (value: string | boolean) => void;
 }) {
+  const t = useTranslations("admin");
   const id = `setting-${field.key}`;
   return (
     <div className="space-y-1">
@@ -130,7 +174,7 @@ function SettingRow({
             checked={value === true}
             onChange={(e) => onChange(e.target.checked)}
           />
-          {value ? "Enabled" : "Disabled"}
+          {value ? t("settings.enabled") : t("settings.disabled")}
         </label>
       ) : field.type === "list" ? (
         <textarea
@@ -151,7 +195,7 @@ function SettingRow({
       )}
       {field.help && <p className="text-xs text-muted-foreground">{field.help}</p>}
       {field.type === "list" && (
-        <p className="text-xs text-muted-foreground">One value per line.</p>
+        <p className="text-xs text-muted-foreground">{t("settings.onePerLine")}</p>
       )}
     </div>
   );
@@ -178,6 +222,7 @@ function SettingsForm({
   /** Called with null to drop the stored token; pass the useAdminToken setter. */
   onUnauthorized: (token: string | null) => void;
 }) {
+  const t = useTranslations("admin");
   const [fields, setFields] = useState<SettingField[] | null>(null);
   const [initial, setInitial] = useState<Record<string, unknown>>({});
   const [draft, setDraft] = useState<Record<string, string | boolean>>({});
@@ -192,14 +237,21 @@ function SettingsForm({
         `/institutions/${encodeURIComponent(code ?? "")}`,
         token,
       );
-      return { fields: INST_FIELDS, values: inst };
+      return {
+        fields: INST_FIELDS.map((f) => ({
+          ...f,
+          label: t(f.labelKey),
+          help: f.helpKey ? t(f.helpKey) : null,
+        })),
+        values: inst,
+      };
     }
     const res = await adminGet<SettingsResponse>("/settings", token);
     return {
       fields: res.schema.filter((f) => f.section === "global"),
       values: res.values,
     };
-  }, [variant, code, token]);
+  }, [variant, code, token, t]);
 
   const put = useCallback(
     (body: Record<string, unknown>) =>
@@ -224,16 +276,19 @@ function SettingsForm({
       setError(null);
     } catch (err) {
       if (err instanceof AdminError && err.status === 401) onUnauthorized(null);
-      else setLoadError(`Could not load settings (${err instanceof Error ? err.message : err}).`);
+      else
+        setLoadError(
+          t("settings.loadFailed", { message: err instanceof Error ? err.message : String(err) }),
+        );
     }
-  }, [fetchDoc, token, onUnauthorized]);
+  }, [fetchDoc, token, onUnauthorized, t]);
 
   useEffect(() => {
     void reload();
   }, [reload]);
 
   if (loadError) return <p className="text-sm text-destructive">{loadError}</p>;
-  if (!fields) return <p className="text-sm text-muted-foreground">Loading…</p>;
+  if (!fields) return <p className="text-sm text-muted-foreground">{t("settings.loading")}</p>;
 
   const save = async () => {
     for (const f of fields) {
@@ -242,7 +297,7 @@ function SettingsForm({
         String(draft[f.key]).trim() !== "" &&
         Number.isNaN(Number(draft[f.key]))
       ) {
-        setError(`"${f.label}" must be a number.`);
+        setError(t("settings.mustBeNumber", { label: f.label }));
         return;
       }
     }
@@ -255,7 +310,7 @@ function SettingsForm({
       if (value !== undefined) body[f.key] = value;
     }
     if (Object.keys(body).length === 0) {
-      setError("No changes to save.");
+      setError(t("settings.noChanges"));
       return;
     }
     setSaving(true);
@@ -266,7 +321,10 @@ function SettingsForm({
       setSaved(true);
     } catch (err) {
       if (err instanceof AdminError && err.status === 401) onUnauthorized(null);
-      else setError(`Save failed (${err instanceof Error ? err.message : err}).`);
+      else
+        setError(
+          t("settings.saveFailed", { message: err instanceof Error ? err.message : String(err) }),
+        );
     } finally {
       setSaving(false);
     }
@@ -281,7 +339,11 @@ function SettingsForm({
             field={f}
             value={draft[f.key]}
             placeholder={
-              f.type === "secret" ? (initial[f.key] ? "set (********)" : "not set") : undefined
+              f.type === "secret"
+                ? initial[f.key]
+                  ? t("settings.secretSet")
+                  : t("settings.secretUnset")
+                : undefined
             }
             onChange={(value) => {
               setSaved(false);
@@ -292,9 +354,9 @@ function SettingsForm({
       </div>
       <div className="flex items-center gap-3">
         <Button onClick={() => void save()} disabled={saving}>
-          {saving ? "Saving…" : "Save"}
+          {saving ? t("settings.saving") : t("settings.save")}
         </Button>
-        {saved && <span className="text-sm text-muted-foreground">Saved.</span>}
+        {saved && <span className="text-sm text-muted-foreground">{t("settings.saved")}</span>}
         {error && <span className="text-sm text-destructive">{error}</span>}
       </div>
     </div>

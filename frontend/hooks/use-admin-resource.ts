@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { AdminError, adminGet } from "@/lib/admin";
 
@@ -28,6 +29,7 @@ export function useAdminResource<T>(
   onUnauthorized: () => void,
   label?: string,
 ) {
+  const t = useTranslations("admin");
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,12 +50,15 @@ export function useAdminResource<T>(
         return;
       }
       setError(
-        `Could not load ${label ?? path.split("?")[0]} (${err instanceof Error ? err.message : err}).`,
+        t("loadFailed", {
+          label: label ?? path.split("?")[0],
+          message: err instanceof Error ? err.message : String(err),
+        }),
       );
     } finally {
       setLoading(false);
     }
-  }, [path, token, label]);
+  }, [path, token, label, t]);
 
   useEffect(() => {
     void refresh();

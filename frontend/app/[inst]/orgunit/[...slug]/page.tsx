@@ -1,6 +1,7 @@
 "use client";
 
 import { ExternalLink } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import * as React from "react";
@@ -49,24 +50,23 @@ type OpenalexOnly = OrgUnitDetailResponse["openalex_only"];
 /** OpenAlex works attributed to this unit's members that match no Pure
  * record: candidates missing from the research information system. */
 function CrisGapsCard({ openalexOnly }: { openalexOnly: OpenalexOnly }) {
+  const t = useTranslations("orgunits");
+  const tc = useTranslations("common");
   const { total, items } = openalexOnly;
   return (
     <CollapsibleCard
       id="cris-gaps"
-      title="Not registered in Pure"
+      title={t("detail.crisGaps.title")}
       description={
         <p className="text-sm text-[var(--muted-foreground)]">
-          OpenAlex attributes {total.toLocaleString("en")} work(s) to this unit&apos;s members that
-          match no Pure record — likely missing from the research information system.
-          {total > items.length && ` Showing ${items.length.toLocaleString("en")} most recent.`}
+          {t("detail.crisGaps.description", { count: total })}
+          {total > items.length ? ` ${t("detail.crisGaps.showing", { count: items.length })}` : ""}
         </p>
       }
       contentClassName="text-sm"
     >
       {total === 0 ? (
-        <p className="text-[var(--muted-foreground)]">
-          None found — every OpenAlex work here has a Pure record.
-        </p>
+        <p className="text-[var(--muted-foreground)]">{t("detail.crisGaps.empty")}</p>
       ) : (
         <ul className="divide-y divide-[var(--border)]">
           {items.map((w, i) => {
@@ -87,7 +87,7 @@ function CrisGapsCard({ openalexOnly }: { openalexOnly: OpenalexOnly }) {
                   </a>
                 ) : (
                   <span className="min-w-0 w-full min-[480px]:w-auto min-[480px]:flex-1 font-medium">
-                    {w.title ?? "Untitled"}
+                    {w.title ?? t("detail.crisGaps.untitled")}
                   </span>
                 )}
                 {w.year != null && (
@@ -96,7 +96,7 @@ function CrisGapsCard({ openalexOnly }: { openalexOnly: OpenalexOnly }) {
                 {w.venue && (
                   <span className="min-w-0 text-xs text-[var(--muted-foreground)]">{w.venue}</span>
                 )}
-                {w.work_type && <span className="text-xs">{workTypeLabel(w.work_type)}</span>}
+                {w.work_type && <span className="text-xs">{workTypeLabel(tc, w.work_type)}</span>}
                 <PureMatchBadge match={w.pure_match} url={w.pure_match_url} />
                 <OaStatusChip status={w.oa_status} />
               </li>
@@ -110,38 +110,30 @@ function CrisGapsCard({ openalexOnly }: { openalexOnly: OpenalexOnly }) {
 
 /** Unit headline stats: authors, works, deal-covered share, APC spend. */
 function UnitStats({ unit }: { unit: OrgUnitItem }) {
+  const t = useTranslations("orgunits");
   const share = unit.n_works > 0 ? Math.round((unit.deal_works / unit.n_works) * 100) : 0;
   return (
     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--muted-foreground)]">
-      <span className="tabular-nums">
-        {unit.n_authors.toLocaleString("en")} {unit.n_authors === 1 ? "author" : "authors"}
-      </span>
+      <span className="tabular-nums">{t("counts.author", { count: unit.n_authors })}</span>
       <span aria-hidden>·</span>
-      <span className="tabular-nums">
-        {unit.n_works.toLocaleString("en")} {unit.n_works === 1 ? "work" : "works"}
-      </span>
+      <span className="tabular-nums">{t("counts.work", { count: unit.n_works })}</span>
       <span aria-hidden>·</span>
-      <span className="tabular-nums" title="Works in journals covered by an open access deal">
-        {unit.deal_works.toLocaleString("en")} deal-covered works
-        {unit.n_works > 0 && ` (${share}%)`}
+      <span className="tabular-nums" title={t("tooltips.dealWorks")}>
+        {t("counts.dealWork", { count: unit.deal_works })}
+        {unit.n_works > 0 && ` ${t("detail.stats.share", { share })}`}
       </span>
       {unit.apc_n > 0 && (
         <>
           <span aria-hidden>·</span>
-          <span
-            className="tabular-nums"
-            title={`APC paid for ${unit.apc_n} ${unit.apc_n === 1 ? "article" : "articles"}`}
-          >
-            {formatEur(unit.apc_euro_total)} € APC ({unit.apc_n})
+          <span className="tabular-nums" title={t("tooltips.apc", { count: unit.apc_n })}>
+            {t("detail.stats.apc", { euro: formatEur(unit.apc_euro_total), count: unit.apc_n })}
           </span>
         </>
       )}
       {unit.n_groups != null && unit.n_groups > 0 && (
         <>
           <span aria-hidden>·</span>
-          <span className="tabular-nums">
-            {unit.n_groups.toLocaleString("en")} research {unit.n_groups === 1 ? "group" : "groups"}
-          </span>
+          <span className="tabular-nums">{t("counts.group", { count: unit.n_groups })}</span>
         </>
       )}
     </div>
@@ -149,6 +141,8 @@ function UnitStats({ unit }: { unit: OrgUnitItem }) {
 }
 
 export default function OrgUnitPage() {
+  const t = useTranslations("orgunits");
+  const tc = useTranslations("common");
   const params = useParams<{ slug: string[] }>();
   const inst = useInstitution();
   const segments = params?.slug ?? [];
@@ -172,11 +166,9 @@ export default function OrgUnitPage() {
   if (!level)
     return (
       <div className="mx-auto max-w-screen-2xl px-4 py-10">
-        <p className="text-[var(--destructive)]">
-          Unknown unit type. Use a faculty, group, or institute page.
-        </p>
+        <p className="text-[var(--destructive)]">{t("detail.unknownType")}</p>
         <div className="mt-2">
-          <BackLink href={`/${inst}/orgunit`} label="Back to faculties" />
+          <BackLink href={`/${inst}/orgunit`} label={t("detail.back.faculty")} />
         </div>
       </div>
     );
@@ -184,9 +176,9 @@ export default function OrgUnitPage() {
   if (isError || !data)
     return (
       <ErrorPanel
-        message={errorMessage(error)}
+        message={errorMessage(tc, error)}
         backHref={backHref}
-        backLabel="Back"
+        backLabel={t("detail.backGeneric")}
         backClassName=""
       />
     );
@@ -217,6 +209,7 @@ function OrgUnitDetail({
   authorSort: OrgUnitAuthorSort;
   onAuthorSortChange: (sort: OrgUnitAuthorSort) => void;
 }) {
+  const t = useTranslations("orgunits");
   const { year_from, year_to } = useYearRange();
   const { unit, groups, journals, authors, works_by_year, deal_usage } = data;
   const trendYears = works_by_year.filter(
@@ -237,10 +230,10 @@ function OrgUnitDetail({
         href={backHref}
         label={
           unit.level === "group"
-            ? "Back to research groups"
+            ? t("detail.back.group")
             : unit.level === "faculty"
-              ? "Back to faculties"
-              : "Back to institutes"
+              ? t("detail.back.faculty")
+              : t("detail.back.institute")
         }
       />
       <header className="mb-6 mt-4">
@@ -248,10 +241,10 @@ function OrgUnitDetail({
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <Badge variant="muted" className="font-normal">
             {unit.level === "group"
-              ? "Research group"
+              ? t("detail.badge.group")
               : unit.level === "institute"
-                ? "Institute"
-                : "Faculty"}
+                ? t("detail.badge.institute")
+                : t("detail.badge.faculty")}
           </Badge>
           {unit.faculty && (
             <Badge variant="muted" className="font-normal">
@@ -264,15 +257,15 @@ function OrgUnitDetail({
 
       <div className="space-y-6">
         {groups != null && groups.length > 0 && (
-          <CollapsibleCard id="groups" title="Research groups" contentClassName="text-sm">
+          <CollapsibleCard id="groups" title={t("detail.groups.title")} contentClassName="text-sm">
             <Table>
-              <caption className="sr-only">Research groups in this unit</caption>
+              <caption className="sr-only">{t("detail.groups.caption")}</caption>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Research group</TableHead>
-                  <TableHead className="text-right">Authors</TableHead>
-                  <TableHead className="text-right">Works</TableHead>
-                  <TableHead className="text-right">Deal-covered works</TableHead>
+                  <TableHead>{t("detail.groups.column")}</TableHead>
+                  <TableHead className="text-right">{t("columns.authors")}</TableHead>
+                  <TableHead className="text-right">{t("columns.works")}</TableHead>
+                  <TableHead className="text-right">{t("columns.dealWorks")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -311,7 +304,7 @@ function OrgUnitDetail({
                 pages={groupPages}
                 total={(groups ?? []).length}
                 onPage={setGroupPage}
-                label="groups"
+                label={t("detail.groups.pager")}
               />
             )}
           </CollapsibleCard>
@@ -320,11 +313,11 @@ function OrgUnitDetail({
         {authors.length > 0 && (
           <CollapsibleCard
             id="authors"
-            title="Top authors"
+            title={t("detail.authors.title")}
             description={
               <div
                 role="group"
-                aria-label="Rank authors by"
+                aria-label={t("detail.authors.rankBy")}
                 className="mt-2 flex flex-wrap items-center gap-2"
               >
                 <div className="flex overflow-hidden rounded-[var(--radius)] border border-[var(--input)]">
@@ -333,10 +326,10 @@ function OrgUnitDetail({
                     size="sm"
                     className="rounded-none"
                     aria-pressed={authorSort === "share"}
-                    title="Rank by the share of the author's counted works published diamond or gold open access. Authors with fewer than 4 counted works are not ranked by share."
+                    title={t("detail.authors.shareSortTitle")}
                     onClick={() => onAuthorSortChange("share")}
                   >
-                    Diamond + gold share
+                    {t("detail.authors.shareSort")}
                   </Button>
                   <Button
                     variant={authorSort === "works" ? "secondary" : "ghost"}
@@ -345,7 +338,7 @@ function OrgUnitDetail({
                     aria-pressed={authorSort === "works"}
                     onClick={() => onAuthorSortChange("works")}
                   >
-                    Works count
+                    {t("detail.authors.worksSort")}
                   </Button>
                 </div>
               </div>
@@ -353,18 +346,15 @@ function OrgUnitDetail({
             contentClassName="text-sm"
           >
             <Table>
-              <caption className="sr-only">Authors of this unit</caption>
+              <caption className="sr-only">{t("detail.authors.caption")}</caption>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Author</TableHead>
-                  <TableHead
-                    className="text-right"
-                    title="Share of the author's counted works published diamond or gold open access. Ranked from 4 counted works; authors with fewer rank last and show no share."
-                  >
-                    Diamond + gold
+                  <TableHead>{t("columns.author")}</TableHead>
+                  <TableHead className="text-right" title={t("detail.authors.shareHeaderTitle")}>
+                    {t("detail.authors.shareHeader")}
                   </TableHead>
-                  <TableHead className="text-right">Works</TableHead>
-                  <TableHead>Topic</TableHead>
+                  <TableHead className="text-right">{t("columns.works")}</TableHead>
+                  <TableHead>{t("columns.topic")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -387,7 +377,9 @@ function OrgUnitDetail({
                       {a.oa_diamond_gold_share != null ? (
                         `${Math.round(a.oa_diamond_gold_share * 100)}%`
                       ) : (
-                        <span className="text-[var(--muted-foreground)]">fewer than 4 works</span>
+                        <span className="text-[var(--muted-foreground)]">
+                          {t("detail.authors.shareUnavailable")}
+                        </span>
                       )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
@@ -412,7 +404,7 @@ function OrgUnitDetail({
                 pages={authorPages}
                 total={authors.length}
                 onPage={setAuthorPage}
-                label="authors"
+                label={t("detail.authors.pager")}
               />
             )}
           </CollapsibleCard>
@@ -421,16 +413,20 @@ function OrgUnitDetail({
         {data.openalex_only.available && <CrisGapsCard openalexOnly={data.openalex_only} />}
 
         {journals.length > 0 && (
-          <CollapsibleCard id="journals" title="Journals" contentClassName="text-sm">
+          <CollapsibleCard
+            id="journals"
+            title={t("detail.journals.title")}
+            contentClassName="text-sm"
+          >
             <Table>
-              <caption className="sr-only">Journals this unit publishes in</caption>
+              <caption className="sr-only">{t("detail.journals.caption")}</caption>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Journal</TableHead>
-                  <TableHead className="text-right">Works</TableHead>
-                  <TableHead>Access</TableHead>
-                  <TableHead>Q</TableHead>
-                  <TableHead>Deal</TableHead>
+                  <TableHead>{t("columns.journal")}</TableHead>
+                  <TableHead className="text-right">{t("columns.works")}</TableHead>
+                  <TableHead>{t("columns.access")}</TableHead>
+                  <TableHead>{t("columns.quartile")}</TableHead>
+                  <TableHead>{t("columns.deal")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -464,7 +460,7 @@ function OrgUnitDetail({
         )}
 
         {trendYears.length > 0 && (
-          <CollapsibleCard id="oa-over-time" title="Open access over time">
+          <CollapsibleCard id="oa-over-time" title={t("detail.trendTitle")}>
             <OaTrend stats={trendYears} />
           </CollapsibleCard>
         )}
@@ -472,22 +468,21 @@ function OrgUnitDetail({
         {deal_usage.length > 0 && (
           <CollapsibleCard
             id="deal-usage"
-            title="Deal usage"
+            title={t("detail.dealUsage.title")}
             description={
               <p className="text-sm text-[var(--muted-foreground)]">
-                Publications in journals that are currently part of each deal (not historical deal
-                usage).
+                {t("detail.dealUsage.description")}
               </p>
             }
             contentClassName="text-sm"
           >
             <Table>
-              <caption className="sr-only">Open access deals used by this unit</caption>
+              <caption className="sr-only">{t("detail.dealUsage.caption")}</caption>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Agreement</TableHead>
-                  <TableHead className="text-right">Works</TableHead>
-                  <TableHead className="text-right">APC</TableHead>
+                  <TableHead>{t("columns.agreement")}</TableHead>
+                  <TableHead className="text-right">{t("columns.works")}</TableHead>
+                  <TableHead className="text-right">{t("columns.apc")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

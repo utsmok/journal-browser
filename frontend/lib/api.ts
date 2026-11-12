@@ -1,4 +1,5 @@
 import type { components } from "./api-types";
+import type { LabelT } from "./work-type";
 import { trackApiError, trackSearch } from "./usage/tracker";
 
 type Schemas = components["schemas"];
@@ -137,17 +138,16 @@ class ApiError extends Error {
 
 /**
  * Human copy for fetch failures; the raw error is already in the console
- * (apiGet logs it). Maps the statuses the UI can actually hit.
+ * (apiGet logs it). Maps the statuses the UI can actually hit. Sentences
+ * live under common.errors.
  */
-export function errorMessage(err: unknown): string {
+export function errorMessage(t: LabelT, err: unknown): string {
   if (err instanceof ApiError) {
-    if (err.status === 400 || err.status === 422)
-      return "The request was not valid. Adjust the filters and try again.";
-    if (err.status === 404)
-      return "We could not find that information. Check the address, or go back and adjust your search.";
-    if (err.status >= 500) return "The server could not process the search. Try again in a moment.";
+    if (err.status === 400 || err.status === 422) return t("errors.badRequest");
+    if (err.status === 404) return t("errors.notFound");
+    if (err.status >= 500) return t("errors.server");
   }
-  return "Something went wrong while loading this data. Try again in a moment.";
+  return t("errors.unknown");
 }
 
 /** GET helper against the same-origin /api proxy (next.config.mjs rewrites). */

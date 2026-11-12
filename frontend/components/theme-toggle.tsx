@@ -2,15 +2,18 @@
 
 import { Monitor, Moon, Sun } from "lucide-react";
 import * as React from "react";
+import { useTranslations } from "next-intl";
 
 const STORAGE_KEY = "jb-theme";
 const MODES = ["light", "dark", "system"] as const;
 type Mode = (typeof MODES)[number];
 
-const NEXT_META: Record<Mode, { next: Mode; label: string }> = {
-  light: { next: "dark", label: "Switch to dark mode" },
-  dark: { next: "system", label: "Switch to system theme" },
-  system: { next: "light", label: "Switch to light mode" },
+const NEXT_MODE: Record<Mode, Mode> = { light: "dark", dark: "system", system: "light" };
+
+const LABEL_KEYS: Record<Mode, string> = {
+  light: "theme.switchToLight",
+  dark: "theme.switchToDark",
+  system: "theme.switchToSystem",
 };
 
 function apply(mode: Mode) {
@@ -28,6 +31,7 @@ const ICONS = { light: Sun, dark: Moon, system: Monitor } as const;
  * owns the initial state; this only changes it.
  */
 export function ThemeToggle() {
+  const t = useTranslations("common");
   const [mode, setMode] = React.useState<Mode>("system");
 
   React.useEffect(() => {
@@ -45,7 +49,7 @@ export function ThemeToggle() {
   }, [mode]);
 
   const cycle = () => {
-    const next = NEXT_META[mode].next;
+    const next = NEXT_MODE[mode];
     localStorage.setItem(STORAGE_KEY, next);
     apply(next);
     setMode(next);
@@ -56,8 +60,8 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={cycle}
-      aria-label={NEXT_META[mode].label}
-      title={`Theme: ${mode}`}
+      aria-label={t(LABEL_KEYS[mode])}
+      title={t("theme.label", { mode })}
       className="inline-flex size-8 items-center justify-center rounded-[var(--radius)] text-white/90 hover:bg-white/10 hover:text-white"
     >
       <Icon aria-hidden className="size-4" />

@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { CopyButton } from "@/components/admin/record";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,20 @@ import { AdminError, adminDelete, adminPatch, type FeedbackAdmin } from "@/lib/a
 const STATUSES = ["todo", "in_progress", "done", "wontfix"] as const;
 const PRIORITIES = ["low", "normal", "high", "critical"] as const;
 
+const STATUS_LABEL_KEYS: Record<(typeof STATUSES)[number], `feedback.status${string}`> = {
+  todo: "feedback.statusTodo",
+  in_progress: "feedback.statusInProgress",
+  done: "feedback.statusDone",
+  wontfix: "feedback.statusWontfix",
+};
+
+const PRIORITY_LABEL_KEYS: Record<(typeof PRIORITIES)[number], `feedback.priority${string}`> = {
+  low: "feedback.priorityLow",
+  normal: "feedback.priorityNormal",
+  high: "feedback.priorityHigh",
+  critical: "feedback.priorityCritical",
+};
+
 function FeedbackDetail({
   item,
   token,
@@ -30,6 +45,7 @@ function FeedbackDetail({
   onUnauthorized: (token: string | null) => void;
   onChanged: () => void;
 }) {
+  const t = useTranslations("admin");
   const [notes, setNotes] = useState(item.resolution_notes ?? "");
   const [error, setError] = useState<string | null>(null);
   // page_data is the widget's own buildPageDump output; the contract types it
@@ -46,7 +62,11 @@ function FeedbackDetail({
         onUnauthorized(null);
         return;
       }
-      setError(`Update failed (${err instanceof Error ? err.message : err}).`);
+      setError(
+        t("feedback.updateFailed", {
+          message: err instanceof Error ? err.message : String(err),
+        }),
+      );
     }
   }
 
@@ -57,13 +77,13 @@ function FeedbackDetail({
           <p className="whitespace-pre-wrap text-sm">{item.description}</p>
           {item.page_url && (
             <p className="text-xs text-[var(--muted-foreground)]">
-              Page: <span className="font-mono">{item.page_url}</span>
+              {t("feedback.pageLine")} <span className="font-mono">{item.page_url}</span>
             </p>
           )}
           <div className="flex flex-wrap items-center gap-2">
             <textarea
               className="min-h-16 flex-1 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-3 py-2 text-sm"
-              placeholder="Resolution notes…"
+              placeholder={t("feedback.notesPlaceholder")}
               value={notes}
               maxLength={8000}
               onChange={(e) => setNotes(e.target.value)}
@@ -74,25 +94,25 @@ function FeedbackDetail({
                 run(() => adminPatch(`/feedback/${item.id}`, token, { resolution_notes: notes }))
               }
             >
-              Save notes
+              {t("feedback.saveNotes")}
             </Button>
             <Button
               size="sm"
               variant="outline"
               onClick={() => {
-                if (confirm("Delete this feedback report?")) {
+                if (confirm(t("feedback.deleteConfirm"))) {
                   void run(() => adminDelete(`/feedback/${item.id}`, token));
                 }
               }}
             >
-              Delete
+              {t("feedback.delete")}
             </Button>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           {pageData && (
             <details>
               <summary className="cursor-pointer text-xs text-[var(--muted-foreground)]">
-                Page data ({pageData.queries?.length ?? 0} cached responses)
+                {t("feedback.pageData", { count: pageData.queries?.length ?? 0 })}
                 {pageData.url ? ` — ${pageData.url}` : ""}
               </summary>
               <div className="mt-2 flex justify-end">
@@ -119,6 +139,7 @@ export function FeedbackSection({
   token: string;
   onUnauthorized: (token: string | null) => void;
 }) {
+  const t = useTranslations("admin");
   const [filter, setFilter] = useState<string>("all");
   const [patchError, setPatchError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
@@ -140,7 +161,11 @@ export function FeedbackSection({
         onUnauthorized(null);
         return;
       }
-      setPatchError(`Update failed (${err instanceof Error ? err.message : err}).`);
+      setPatchError(
+        t("feedback.updateFailed", {
+          message: err instanceof Error ? err.message : String(err),
+        }),
+      );
     }
   }
 
@@ -150,10 +175,14 @@ export function FeedbackSection({
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Feedback {loading ? "…" : `(${items.length})`}</h2>
+        <h2 className="text-lg font-semibold">
+          {loading
+            ? t("feedback.headingLoading")
+            : t("feedback.headingCount", { count: items.length })}
+        </h2>
         <div className="flex items-center gap-2 text-sm">
           <label htmlFor="feedback-filter" className="text-muted-foreground">
-            Status
+            {t("feedback.statusLabel")}
           </label>
           <select
             id="feedback-filter"
@@ -164,10 +193,10 @@ export function FeedbackSection({
               setOpenId(null);
             }}
           >
-            <option value="all">All</option>
+            <option value="all">{t("feedback.all")}</option>
             {STATUSES.map((s) => (
               <option key={s} value={s}>
-                {s.replace("_", " ")}
+                {t(STATUS_LABEL_KEYS[s])}
               </option>
             ))}
           </select>
@@ -178,11 +207,11 @@ export function FeedbackSection({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Received</TableHead>
-            <TableHead>Title</TableHead>
-            <TableHead>Category</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Priority</TableHead>
+            <TableHead>{t("feedback.columnReceived")}</TableHead>
+            <TableHead>{t("feedback.columnTitle")}</TableHead>
+            <TableHead>{t("feedback.columnCategory")}</TableHead>
+            <TableHead>{t("feedback.columnStatus")}</TableHead>
+            <TableHead>{t("feedback.columnPriority")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -190,7 +219,7 @@ export function FeedbackSection({
             <Fragment key={item.id}>
               <TableRow
                 className="cursor-pointer"
-                title="Click to open this report"
+                title={t("feedback.rowTitle")}
                 onClick={() => setOpenId(openId === item.id ? null : item.id)}
               >
                 <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
@@ -205,11 +234,11 @@ export function FeedbackSection({
                     className={selectCls}
                     value={item.status}
                     onChange={(e) => void patch(item.id, { status: e.target.value })}
-                    aria-label={`Status of: ${item.title}`}
+                    aria-label={t("feedback.statusOf", { title: item.title })}
                   >
                     {STATUSES.map((s) => (
                       <option key={s} value={s}>
-                        {s.replace("_", " ")}
+                        {t(STATUS_LABEL_KEYS[s])}
                       </option>
                     ))}
                   </select>
@@ -219,11 +248,11 @@ export function FeedbackSection({
                     className={selectCls}
                     value={item.priority}
                     onChange={(e) => void patch(item.id, { priority: e.target.value })}
-                    aria-label={`Priority of: ${item.title}`}
+                    aria-label={t("feedback.priorityOf", { title: item.title })}
                   >
                     {PRIORITIES.map((p) => (
                       <option key={p} value={p}>
-                        {p}
+                        {t(PRIORITY_LABEL_KEYS[p])}
                       </option>
                     ))}
                   </select>

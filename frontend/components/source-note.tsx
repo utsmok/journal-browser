@@ -2,6 +2,7 @@
 
 import { ExternalLink, Info } from "lucide-react";
 import * as React from "react";
+import { useTranslations } from "next-intl";
 
 import { useLimitations } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,7 @@ type SourceNoteProps = {
  * this data's caveat codes. Renders a plain label if codes are unknown.
  */
 export function SourceNote({ source, url, codes, className }: SourceNoteProps) {
+  const t = useTranslations("common");
   const { data: limitations } = useLimitations();
   const caveats = (limitations ?? []).filter((l) => codes?.includes(l.code));
   const tooltipId = React.useId();
@@ -37,7 +39,7 @@ export function SourceNote({ source, url, codes, className }: SourceNoteProps) {
       )}
     >
       <Info aria-hidden className="size-3 shrink-0" />
-      <span>{source ?? "Source"}</span>
+      <span>{source ?? t("sourceNote.fallbackLabel")}</span>
       {hasTooltip && (
         <span
           role="tooltip"
@@ -69,7 +71,7 @@ export function SourceNote({ source, url, codes, className }: SourceNoteProps) {
                   rel="noopener noreferrer"
                   className="mt-0.5 inline-flex items-center gap-0.5 text-[var(--primary-text)] underline-offset-2 hover:underline"
                 >
-                  More info <ExternalLink aria-hidden className="size-3" />
+                  {t("sourceNote.moreInfo")} <ExternalLink aria-hidden className="size-3" />
                 </a>
               )}
             </span>

@@ -1,6 +1,18 @@
+"use client";
+
 import { OA_STATUS_META, OA_STATUS_ORDER } from "@/components/badges";
 import { useSiteMeta } from "@/hooks/use-site-meta";
+import { useTranslations } from "next-intl";
 import type { StatsYear } from "@/lib/api";
+
+const STATUS_LABEL_KEYS: Record<string, string> = {
+  gold: "trend.statusGold",
+  hybrid: "trend.statusHybrid",
+  green: "trend.statusGreen",
+  bronze: "trend.statusBronze",
+  diamond: "trend.statusDiamond",
+  closed: "trend.statusClosed",
+};
 
 /**
  * Hand-rolled stacked per-year OA-status chart (no chart library), in the
@@ -9,55 +21,56 @@ import type { StatsYear } from "@/lib/api";
  */
 export function OaTrend({ stats }: { stats: StatsYear[] }) {
   const site = useSiteMeta();
+  const t = useTranslations("common");
   const total = (s: StatsYear) => OA_STATUS_ORDER.reduce((acc, k) => acc + (s[`oa_${k}`] ?? 0), 0);
   const max = Math.max(1, ...stats.map(total));
   const currentYear = new Date().getFullYear();
   if (stats.length === 0 || stats.every((s) => total(s) === 0))
-    return (
-      <p className="py-8 text-sm text-[var(--muted-foreground)]">
-        No works recorded for this period.
-      </p>
-    );
+    return <p className="py-8 text-sm text-[var(--muted-foreground)]">{t("trend.noWorks")}</p>;
   return (
     <div>
       <div
         className="flex h-44 items-end gap-2"
         role="img"
-        aria-label={`Open access status of ${site.short} publications per year`}
+        aria-label={t("trend.chartLabel", { short: site.short })}
       >
         {stats.map((s) => {
-          const t = total(s);
+          const count = total(s);
           return (
             <div
               key={s.year}
               className="flex h-full flex-1 flex-col items-center justify-end gap-1"
             >
               <span className="text-[11px] tabular-nums text-[var(--muted-foreground)]">
-                {t > 0 ? t : ""}
+                {count > 0 ? count : ""}
               </span>
               <div
                 className="flex w-full max-w-12 flex-col-reverse overflow-hidden rounded-t"
-                style={{ height: `${Math.max((t / max) * 100, t > 0 ? 2 : 0)}%` }}
-                title={`${s.year}: ${t} works`}
+                style={{ height: `${Math.max((count / max) * 100, count > 0 ? 2 : 0)}%` }}
+                title={t("trend.yearTitle", { year: String(s.year), count: String(count) })}
               >
                 {OA_STATUS_ORDER.map((status) => {
-                  const count = s[`oa_${status}`] ?? 0;
-                  if (count === 0) return null;
+                  const n = s[`oa_${status}`] ?? 0;
+                  if (n === 0) return null;
                   // flexGrow splits the column exactly proportionally; fixed
                   // percentage heights would round and leave gaps.
                   return (
                     <div
                       key={status}
                       className={OA_STATUS_META[status].bar}
-                      style={{ flexGrow: count, flexBasis: 0 }}
-                      title={`${s.year} · ${OA_STATUS_META[status].label}: ${count}`}
+                      style={{ flexGrow: n, flexBasis: 0 }}
+                      title={t("trend.segmentTitle", {
+                        year: String(s.year),
+                        label: t(STATUS_LABEL_KEYS[status]),
+                        count: String(n),
+                      })}
                     />
                   );
                 })}
               </div>
               <span className="text-[11px] tabular-nums text-[var(--muted-foreground)]">
                 {s.year}
-                {s.year === currentYear && <span title="Year in progress">*</span>}
+                {s.year === currentYear && <span title={t("trend.yearInProgress")}>*</span>}
               </span>
             </div>
           );
@@ -65,14 +78,22 @@ export function OaTrend({ stats }: { stats: StatsYear[] }) {
       </div>
       {/* The chart is role="img"; this transcript carries the per-year data. */}
       <ul className="sr-only">
-        {stats.map((s) => (
-          <li key={s.year}>
-            {s.year}: {total(s)} works
-            {OA_STATUS_ORDER.filter((k) => (s[`oa_${k}`] ?? 0) > 0)
-              .map((k) => `${OA_STATUS_META[k].label} ${s[`oa_${k}`]}`)
-              .join(", ")}
-          </li>
-        ))}
+        {stats.map((s) => {
+          const breakdown = OA_STATUS_ORDER.filter((k) => (s[`oa_${k}`] ?? 0) > 0)
+            .map((k) =>
+              t("trend.srStatus", {
+                label: t(STATUS_LABEL_KEYS[k]),
+                count: String(s[`oa_${k}`] ?? 0),
+              }),
+            )
+            .join(", ");
+          return (
+            <li key={s.year}>
+              {t("trend.srWorks", { year: String(s.year), total: String(total(s)) })}
+              {breakdown ? ` ${breakdown}` : ""}
+            </li>
+          );
+        })}
       </ul>
       <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--muted-foreground)]">
         {OA_STATUS_ORDER.map((status) => (
@@ -81,15 +102,12 @@ export function OaTrend({ stats }: { stats: StatsYear[] }) {
               aria-hidden
               className={`inline-block size-2.5 rounded-full ${OA_STATUS_META[status].bar}`}
             />
-            {OA_STATUS_META[status].label}
+            {t(STATUS_LABEL_KEYS[status])}
           </li>
         ))}
-        {stats.some((s) => s.year === currentYear) && <li>* year in progress</li>}
+        {stats.some((s) => s.year === currentYear) && <li>{t("trend.yearInProgressLegend")}</li>}
       </ul>
-      <p className="mt-1.5 text-xs text-[var(--muted-foreground)]">
-        Bronze: free to read on the publisher&apos;s site without an explicit open license — OA, but
-        not guaranteed free to share.
-      </p>
+      <p className="mt-1.5 text-xs text-[var(--muted-foreground)]">{t("trend.bronzeNote")}</p>
     </div>
   );
 }

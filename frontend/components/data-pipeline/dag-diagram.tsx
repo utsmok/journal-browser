@@ -1,4 +1,4 @@
-import type { SourceKey } from "@/lib/data-pipeline/dag";
+import type { DagBand, SourceKey } from "@/lib/data-pipeline/dag";
 import {
   DAG_BANDS,
   DAG_EDGES,
@@ -8,6 +8,7 @@ import {
   VIEW_H,
   VIEW_W,
 } from "@/lib/data-pipeline/dag";
+import { getTranslations } from "next-intl/server";
 
 const DOT_CLASS: Record<SourceKey, string> = {
   openalex: "fill-orange-500 dark:fill-orange-400",
@@ -18,13 +19,15 @@ const DOT_CLASS: Record<SourceKey, string> = {
   db: "",
 };
 
-const LEGEND: { label: string; className: string; hollow?: boolean }[] = [
+// Service names are proper nouns and stay raw; the two descriptive entries
+// come from messages.
+const LEGEND: { messageKey?: string; label?: string; className: string; hollow?: boolean }[] = [
   { label: "OpenAlex", className: DOT_CLASS.openalex },
   { label: "Crossref", className: DOT_CLASS.crossref },
   { label: "OpenAIRE", className: DOT_CLASS.openaire },
   { label: "Pure", className: DOT_CLASS.pure },
-  { label: "Register or file", className: DOT_CLASS.register },
-  { label: "Database-only", className: "", hollow: true },
+  { messageKey: "dag.legendRegister", className: DOT_CLASS.register },
+  { messageKey: "dag.legendDatabaseOnly", className: "", hollow: true },
 ];
 
 function SourceDot({ source, cx, cy }: { source: SourceKey; cx: number; cy: number }) {
@@ -44,14 +47,22 @@ function SourceDot({ source, cx, cy }: { source: SourceKey; cx: number; cy: numb
   return <circle cx={cx} cy={cy} r={4} className={DOT_CLASS[source]} />;
 }
 
-export function DagDiagram() {
+export async function DagDiagram() {
+  const t = await getTranslations("dataPipeline");
+  const stepLabels = (band: DagBand) =>
+    DAG_STEPS.filter((step) => step.band === band).map((step) => t(`steps.${step.id}`));
+
   return (
     <div>
       <svg
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
         className="w-full"
         role="img"
-        aria-label="Bootstrap harvest plan. The global band runs once: journal sweep, publisher lineage, openaccess.nl deals, JCT sheets, OpenAPC, deal reconcile, deal ISSN-L, Scimago quartiles, corpus flags, DOAJ canon, OA color sample. The institution band runs once per hosted institution: pure works sweep, CERIF authors, orgs and persons, enrich works, OpenAIRE products, institution stats, works store, pure author edges, coverage flags, author identity cascade, author roster. The final step is journal embeddings."
+        aria-label={t("dag.ariaLabel", {
+          global: stepLabels("global").join(", "),
+          institution: stepLabels("institution").join(", "),
+          final: stepLabels("final").join(", "),
+        })}
       >
         <defs>
           <marker
@@ -69,7 +80,7 @@ export function DagDiagram() {
 
         {DAG_BANDS.map((band) => (
           <g key={band.id}>
-            <title>{band.label}</title>
+            <title>{t(`bands.${band.id}`)}</title>
             <rect
               x={band.x}
               y={band.y}
@@ -84,7 +95,7 @@ export function DagDiagram() {
               fontSize={10}
               className="fill-[var(--muted-foreground)] tracking-wide"
             >
-              {band.label}
+              {t(`bands.${band.id}`)}
             </text>
           </g>
         ))}
@@ -103,7 +114,7 @@ export function DagDiagram() {
 
         {DAG_STEPS.map((step) => (
           <g key={step.id}>
-            <title>{`${step.label} (${step.job})`}</title>
+            <title>{t("dag.nodeTooltip", { label: t(`steps.${step.id}`), job: step.job })}</title>
             <rect
               x={step.x}
               y={step.y}
@@ -121,7 +132,7 @@ export function DagDiagram() {
               fontSize={12.5}
               className="fill-[var(--foreground)]"
             >
-              {step.label}
+              {t(`steps.${step.id}`)}
             </text>
             <text
               x={step.x + 10}
@@ -135,22 +146,25 @@ export function DagDiagram() {
         ))}
       </svg>
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--muted-foreground)]">
-        {LEGEND.map((item) => (
-          <span key={item.label} className="flex items-center gap-1.5">
-            <svg width={12} height={12} aria-hidden>
-              <circle
-                cx={6}
-                cy={6}
-                r={4}
-                fill={item.hollow ? "none" : undefined}
-                strokeWidth={item.hollow ? 1.2 : undefined}
-                strokeDasharray={item.hollow ? "2 1.5" : undefined}
-                className={item.hollow ? "stroke-[var(--muted-foreground)]" : item.className}
-              />
-            </svg>
-            {item.label}
-          </span>
-        ))}
+        {LEGEND.map((item) => {
+          const label = item.messageKey ? t(item.messageKey) : (item.label as string);
+          return (
+            <span key={label} className="flex items-center gap-1.5">
+              <svg width={12} height={12} aria-hidden>
+                <circle
+                  cx={6}
+                  cy={6}
+                  r={4}
+                  fill={item.hollow ? "none" : undefined}
+                  strokeWidth={item.hollow ? 1.2 : undefined}
+                  strokeDasharray={item.hollow ? "2 1.5" : undefined}
+                  className={item.hollow ? "stroke-[var(--muted-foreground)]" : item.className}
+                />
+              </svg>
+              {label}
+            </span>
+          );
+        })}
       </div>
     </div>
   );

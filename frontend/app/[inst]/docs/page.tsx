@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useQueries, useQuery } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/badge";
@@ -16,25 +17,19 @@ import {
   type DocsListItem,
 } from "@/lib/docs";
 
-/** One-line pitch for each real surface, linked from the top of the index. */
+/** One-line pitch for each real surface, linked from the top of the index.
+ * Labels and blurbs come from the docs messages under "index.". */
 const LIVE_SURFACES = [
-  {
-    path: "journals/0027-8424",
-    label: "Journal pages",
-    blurb: "deals, APCs, and statistics for one title",
-  },
-  {
-    path: "author",
-    label: "Author profiles",
-    blurb: "where colleagues publish and what covers them",
-  },
-  { path: "publisher", label: "Publishers", blurb: "agreements and output per publisher" },
-  { path: "orgunit", label: "Faculties and units", blurb: "output per organisational unit" },
-  { path: "deals", label: "Deals", blurb: "the full open access agreement register" },
-  { path: "", label: "Journal search", blurb: "the main search over all titles" },
+  { path: "journals/0027-8424", label: "journalsLabel", blurb: "journalsBlurb" },
+  { path: "author", label: "authorsLabel", blurb: "authorsBlurb" },
+  { path: "publisher", label: "publishersLabel", blurb: "publishersBlurb" },
+  { path: "orgunit", label: "orgunitsLabel", blurb: "orgunitsBlurb" },
+  { path: "deals", label: "dealsLabel", blurb: "dealsBlurb" },
+  { path: "", label: "searchLabel", blurb: "searchBlurb" },
 ] as const;
 
 export default function DocsIndexPage() {
+  const t = useTranslations("docs");
   const inst = useInstitution();
   const list = useQuery({ queryKey: ["docs", inst], queryFn: fetchDocs });
   const slugs = (list.data ?? []).map((d) => d.slug);
@@ -59,14 +54,11 @@ export default function DocsIndexPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
-      <h1 className="text-3xl font-bold">Documentation</h1>
-      <p className="mt-2 text-[var(--muted-foreground)]">
-        What this browser shows, where the data comes from, and how to argue for open access with
-        it.
-      </p>
+      <h1 className="text-3xl font-bold">{t("index.heading")}</h1>
+      <p className="mt-2 text-[var(--muted-foreground)]">{t("index.intro")}</p>
 
       <section className="mt-8">
-        <h2 className="text-lg font-semibold">See it live</h2>
+        <h2 className="text-lg font-semibold">{t("index.liveHeading")}</h2>
         <ul className="mt-2 grid gap-x-6 gap-y-1 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 text-sm sm:grid-cols-2">
           {LIVE_SURFACES.map((s) => (
             <li key={s.label}>
@@ -74,20 +66,18 @@ export default function DocsIndexPage() {
                 href={`/${inst}/${s.path}`}
                 className="text-[var(--primary-text)] underline-offset-2 hover:underline"
               >
-                {s.label}
+                {t(`index.${s.label}`)}
               </Link>{" "}
-              <span className="text-[var(--muted-foreground)]">— {s.blurb}</span>
+              <span className="text-[var(--muted-foreground)]">{t(`index.${s.blurb}`)}</span>
             </li>
           ))}
         </ul>
       </section>
 
-      {list.isPending && <p className="mt-10 text-sm text-[var(--muted-foreground)]">Loading…</p>}
-      {list.isError && (
-        <p className="mt-10 text-sm text-destructive">
-          Could not load the docs list. Refresh the page to try again.
-        </p>
+      {list.isPending && (
+        <p className="mt-10 text-sm text-[var(--muted-foreground)]">{t("index.loading")}</p>
       )}
+      {list.isError && <p className="mt-10 text-sm text-destructive">{t("index.loadFailed")}</p>}
 
       {groups.map(({ group, docs }) => (
         <section key={group} className="mt-10">
@@ -109,7 +99,7 @@ export default function DocsIndexPage() {
                   </span>
                   {d.edits > 0 && (
                     <Badge variant="muted" className="mt-0.5 shrink-0">
-                      {d.edits} {d.edits === 1 ? "edit" : "edits"}
+                      {t("index.editsBadge", { count: d.edits })}
                     </Badge>
                   )}
                 </Link>

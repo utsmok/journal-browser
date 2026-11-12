@@ -1,19 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 
 /** Clipboard write with transient "Copied" feedback. */
 export function CopyButton({
   text,
-  label = "Copy JSON",
+  label,
   className,
 }: {
   text: string;
   label?: string;
   className?: string;
 }) {
+  const t = useTranslations("admin");
   const [copied, setCopied] = useState(false);
   const copy = useCallback(() => {
     void navigator.clipboard.writeText(text).then(() => {
@@ -22,12 +24,12 @@ export function CopyButton({
   }, [text]);
   useEffect(() => {
     if (!copied) return;
-    const t = setTimeout(() => setCopied(false), 1500);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(timer);
   }, [copied]);
   return (
     <Button variant="outline" size="sm" className={className} onClick={copy}>
-      {copied ? "Copied ✓" : label}
+      {copied ? t("copy.copied") : (label ?? t("copy.json"))}
     </Button>
   );
 }
@@ -44,6 +46,7 @@ export function RecordField({
   mono?: boolean;
   href?: string;
 }) {
+  const t = useTranslations("admin");
   const display = value === null || value === undefined || value === "" ? "—" : String(value);
   return (
     <div className="flex items-baseline justify-between gap-3 py-1">
@@ -52,7 +55,7 @@ export function RecordField({
       </dt>
       <dd
         className={`min-w-0 break-words text-right text-sm ${mono ? "font-mono text-xs" : ""}`}
-        title={href ? undefined : "Click to copy"}
+        title={href ? undefined : t("copy.clickToCopy")}
         onClick={href ? undefined : () => void navigator.clipboard.writeText(display)}
         role={href ? undefined : "button"}
       >

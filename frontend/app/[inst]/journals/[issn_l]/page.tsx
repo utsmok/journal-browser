@@ -10,6 +10,7 @@ import {
   ExternalLink,
   X,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -109,6 +110,7 @@ function Metric({
 
 /** Clipboard write with a brief "Copied" affordance; no alerts. */
 function CopyButton({ text, label }: { text: string; label: string }) {
+  const t = useTranslations("journals");
   const [state, setState] = React.useState<"idle" | "copied" | "failed">("idle");
   const timer = React.useRef<number | undefined>(undefined);
   React.useEffect(() => () => window.clearTimeout(timer.current), []);
@@ -121,7 +123,12 @@ function CopyButton({ text, label }: { text: string; label: string }) {
     }
     timer.current = window.setTimeout(() => setState("idle"), 1500);
   };
-  const title = state === "copied" ? "Copied" : state === "failed" ? "Copy failed" : "Copy";
+  const title =
+    state === "copied"
+      ? t("list.copied")
+      : state === "failed"
+        ? t("list.copyFailed")
+        : t("list.copy");
   return (
     <button
       type="button"
@@ -143,24 +150,30 @@ function CopyButton({ text, label }: { text: string; label: string }) {
 }
 
 function CitationCard({ data }: { data: JournalDetailResponse }) {
+  const t = useTranslations("journals");
   const inst = useInstitution();
   const today = new Date().toLocaleDateString("en-GB", {
     day: "numeric",
     month: "long",
     year: "numeric",
   });
-  const title = data.journal.title ?? data.journal.issn_l;
-  const citation = `${title}. ${data.journal.publisher_name ?? "Unknown publisher"}. ISSN-L ${data.journal.issn_l}. Available at: ${process.env.NEXT_PUBLIC_SITE_URL ?? "https://journalbrowser.samuelmok.cc"}/${inst}/journals/${data.journal.issn_l} (accessed ${today})`;
+  const citation = t("citation.template", {
+    title: data.journal.title ?? data.journal.issn_l,
+    publisher: data.journal.publisher_name ?? t("header.unknownPublisher"),
+    issnL: data.journal.issn_l,
+    url: `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://journalbrowser.samuelmok.cc"}/${inst}/journals/${data.journal.issn_l}`,
+    date: today,
+  });
   return (
-    <CollapsibleCard id="cite" title="Cite this journal" contentClassName="space-y-2 text-sm">
+    <CollapsibleCard id="cite" title={t("citation.title")} contentClassName="space-y-2 text-sm">
       <div className="flex items-start gap-2">
         {/* anywhere (not break-words): only `anywhere` lets the long canonical URL
               count as breakable for the grid column's min-content, so mobile stays 390px. */}
         <p className="min-w-0 flex-1 text-pretty [overflow-wrap:anywhere]">{citation}</p>
-        <CopyButton text={citation} label="citation" />
+        <CopyButton text={citation} label={t("citation.copyLabel")} />
       </div>
       <p className="border-t border-[var(--border)] pt-2 text-xs text-[var(--muted-foreground)]">
-        ISSNs to cite are listed under Identifiers below.
+        {t("citation.copyHint")}
       </p>
     </CollapsibleCard>
   );
@@ -175,6 +188,8 @@ function DealPanel({
   deal: DealOut;
   attribution: Partial<Attribution>;
 }) {
+  const t = useTranslations("journals");
+  const tc = useTranslations("common");
   const site = useSiteMeta();
   const capNumbers = Object.entries(deal.cap_numbers ?? {}).sort(
     (a, b) => (parseInt(a[0], 10) || 0) - (parseInt(b[0], 10) || 0),
@@ -186,14 +201,11 @@ function DealPanel({
       id={id}
       title={
         <>
-          Open access deal
+          {t("deal.title")}
           <DealBadge covered capped={capUsageReached} />
           {deal.corresponding_authors_only && (
-            <Badge
-              variant="muted"
-              title={`The deal only funds the APC when the corresponding author is from ${site.name}.`}
-            >
-              Corresponding authors only
+            <Badge variant="muted" title={t("deal.correspondingOnlyHint", { name: site.name })}>
+              {t("deal.correspondingOnly")}
             </Badge>
           )}
           {deal.needs_curation && (
@@ -202,7 +214,7 @@ function DealPanel({
               className="border-[var(--primary)] text-[var(--primary-text)] normal-case"
               title={deal.needs_curation_reason ?? undefined}
             >
-              curation pending
+              {t("deal.curationPending")}
             </Badge>
           )}
         </>
@@ -218,7 +230,7 @@ function DealPanel({
       {deal.conditions_text && (
         <div>
           <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-            Cost implication & conditions
+            {t("deal.costsHeading")}
           </h3>
           <p className="max-w-prose whitespace-pre-line text-pretty">
             {cleanProse(deal.conditions_text)}
@@ -228,7 +240,7 @@ function DealPanel({
       {(deal.cap_text || capNumbers.length > 0 || capUsage.length > 0) && (
         <div>
           <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-            Article caps
+            {t("deal.capsHeading")}
           </h3>
           {deal.cap_text && (
             <p className="whitespace-pre-line text-pretty">{cleanProse(deal.cap_text)}</p>
@@ -255,7 +267,7 @@ function DealPanel({
       {deal.article_types_text && (
         <div>
           <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-            Included article types
+            {t("deal.articleTypesHeading")}
           </h3>
           <p className="text-pretty">{cleanProse(deal.article_types_text)}</p>
         </div>
@@ -263,7 +275,7 @@ function DealPanel({
       {deal.workflow_text && (
         <div>
           <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-            Workflow
+            {t("deal.workflowHeading")}
           </h3>
           <p className="text-pretty">{cleanProse(deal.workflow_text)}</p>
         </div>
@@ -274,17 +286,19 @@ function DealPanel({
             .filter((link): link is DealLink & { url: string } => !!link.url)
             .map((link) => (
               <External key={`${link.category}-${link.url}`} href={link.url}>
-                {dealLinkLabel(link)}
+                {dealLinkLabel(tc, link)}
               </External>
             ))
         ) : (
           // Old backend: no links[] yet; fall back to the flat URL fields.
           <>
             {deal.openaccess_nl_url && (
-              <External href={deal.openaccess_nl_url}>openaccess.nl deal page</External>
+              <External href={deal.openaccess_nl_url}>{t("deal.openaccessNlLink")}</External>
             )}
-            {deal.contract_url && <External href={deal.contract_url}>Contract</External>}
-            {deal.jct_data_url && <External href={deal.jct_data_url}>JCT data</External>}
+            {deal.contract_url && (
+              <External href={deal.contract_url}>{t("deal.contractLink")}</External>
+            )}
+            {deal.jct_data_url && <External href={deal.jct_data_url}>{t("deal.jctLink")}</External>}
           </>
         )}
         <SourceNote {...attribution} codes={attribution.caveat_codes} />
@@ -305,31 +319,31 @@ type GreenOaPolicy = NonNullable<JournalDetailResponse["green_oa"]>;
 type UtAuthorship = JournalDetailResponse["ut_authorship"];
 type OpenalexOnly = JournalDetailResponse["openalex_only"];
 
-const GREEN_OA_VERSIONS: Record<string, string> = {
-  submitted: "Submitted version",
-  accepted: "Accepted version",
-  published: "Published version",
+const GREEN_OA_VERSION_KEYS: Record<string, string> = {
+  submitted: "greenVersions.submitted",
+  accepted: "greenVersions.accepted",
+  published: "greenVersions.published",
 };
 
 /** Sherpa location slugs (verified against the live jisc_policy corpus). */
-const GREEN_OA_LOCATIONS: Record<string, string> = {
-  academic_social_network: "Academic social network",
-  any_repository: "Any repository",
-  any_website: "Any website",
-  authors_homepage: "Author's homepage",
-  funder_designated_location: "Funder-designated location",
-  institutional_repository: "Institutional repository",
-  institutional_website: "Institutional website",
-  named_academic_social_network: "Named academic social networks",
-  named_repository: "Named repositories",
-  non_commercial_institutional_repository: "Non-commercial institutional repository",
-  non_commercial_repository: "Non-commercial repository",
-  non_commercial_social_network: "Non-commercial academic social network",
-  non_commercial_subject_repository: "Non-commercial subject repository",
-  non_commercial_website: "Non-commercial website",
-  preprint_repository: "Preprint repository",
-  subject_repository: "Subject repository",
-  this_journal: "This journal",
+const GREEN_OA_LOCATION_KEYS: Record<string, string> = {
+  academic_social_network: "greenLocations.academicSocialNetwork",
+  any_repository: "greenLocations.anyRepository",
+  any_website: "greenLocations.anyWebsite",
+  authors_homepage: "greenLocations.authorsHomepage",
+  funder_designated_location: "greenLocations.funderDesignatedLocation",
+  institutional_repository: "greenLocations.institutionalRepository",
+  institutional_website: "greenLocations.institutionalWebsite",
+  named_academic_social_network: "greenLocations.namedAcademicSocialNetwork",
+  named_repository: "greenLocations.namedRepository",
+  non_commercial_institutional_repository: "greenLocations.nonCommercialInstitutionalRepository",
+  non_commercial_repository: "greenLocations.nonCommercialRepository",
+  non_commercial_social_network: "greenLocations.nonCommercialSocialNetwork",
+  non_commercial_subject_repository: "greenLocations.nonCommercialSubjectRepository",
+  non_commercial_website: "greenLocations.nonCommercialWebsite",
+  preprint_repository: "greenLocations.preprintRepository",
+  subject_repository: "greenLocations.subjectRepository",
+  this_journal: "greenLocations.thisJournal",
 };
 
 function licenseLabel(license: string): string {
@@ -339,13 +353,11 @@ function licenseLabel(license: string): string {
 }
 
 function locationPhrase(
+  base: React.ReactNode,
   location: string,
   repositories: string[],
   links: Record<string, string>,
 ): React.ReactNode {
-  const base =
-    GREEN_OA_LOCATIONS[location] ??
-    location.charAt(0).toUpperCase() + location.slice(1).replaceAll("_", " ");
   if (!(location.startsWith("named_") && repositories.length > 0)) return base;
   return (
     <>
@@ -368,10 +380,18 @@ const FIT_TIER = {
   compliant: {
     Icon: CircleCheck,
     color: "text-emerald-700 dark:text-emerald-400",
-    label: "Compliant",
+    labelKey: "funderFit.compliant",
   },
-  check: { Icon: CircleHelp, color: "text-amber-600 dark:text-amber-400", label: "Check" },
-  no: { Icon: CircleX, color: "text-red-700 dark:text-red-400", label: "Not compliant" },
+  check: {
+    Icon: CircleHelp,
+    color: "text-amber-600 dark:text-amber-400",
+    labelKey: "funderFit.check",
+  },
+  no: {
+    Icon: CircleX,
+    color: "text-red-700 dark:text-red-400",
+    labelKey: "funderFit.notCompliant",
+  },
 } as const;
 
 function FunderFitCard({
@@ -383,6 +403,7 @@ function FunderFitCard({
   funder: NonNullable<FunderPrefs>;
   inst: string;
 }) {
+  const t = useTranslations("journals");
   const tier = fit?.status ? FIT_TIER[fit.status] : null;
   return (
     <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 text-sm">
@@ -390,18 +411,18 @@ function FunderFitCard({
         {tier && <tier.Icon aria-hidden className={`size-5 ${tier.color}`} />}
         <span className="font-medium">
           {tier
-            ? `Funder fit for ${funder.name}: ${tier.label}`
-            : `Funder policy for ${funder.name}`}
+            ? t("funderFit.withStatus", { funderName: funder.name, status: t(tier.labelKey) })
+            : t("funderFit.textOnly", { funderName: funder.name })}
         </span>
         <Link
           href={`/${inst}/funders/${funder.id}`}
           className="text-xs underline decoration-dotted underline-offset-2"
         >
-          view funder policy
+          {t("funderFit.viewPolicy")}
         </Link>
       </div>
       <ul className="mt-2 list-disc space-y-1 pl-5 text-[var(--muted-foreground)]">
-        {(fit?.reasons ?? ["Funder policy is text-only; check manually"]).map((reason) => (
+        {(fit?.reasons ?? [t("funderFit.checkManually")]).map((reason) => (
           <li key={reason}>{reason}</li>
         ))}
       </ul>
@@ -416,62 +437,60 @@ function GreenOaPanel({
   greenOa: GreenOaPolicy;
   attribution: Partial<Attribution>;
 }) {
+  const t = useTranslations("journals");
   const routes = Object.entries(greenOa.routes);
   return (
     <CollapsibleCard
       id="green-oa"
-      title="Green OA policy"
+      title={t("greenOa.title")}
       description={
-        <p className="text-sm text-[var(--muted-foreground)]">
-          Which versions of your article the publisher lets you self-archive.
-        </p>
+        <p className="text-sm text-[var(--muted-foreground)]">{t("greenOa.description")}</p>
       }
       contentClassName="space-y-4 text-sm"
     >
       {greenOa.oa_prohibited && (
-        <p className="font-medium text-red-700 dark:text-red-300">
-          The publisher prohibits open access for this journal.
-        </p>
+        <p className="font-medium text-red-700 dark:text-red-300">{t("greenOa.prohibited")}</p>
       )}
       {routes.map(([version, route]) => (
         <div key={version} className="space-y-1">
           <h3 className="flex flex-wrap items-center gap-2 font-semibold">
-            {GREEN_OA_VERSIONS[version] ?? version}
+            {GREEN_OA_VERSION_KEYS[version] ? t(GREEN_OA_VERSION_KEYS[version]) : version}
             {route.additional_oa_fee === "yes" && (
-              <Badge
-                variant="muted"
-                title="The policy states this route requires an additional open access fee."
-              >
-                OA fee required
+              <Badge variant="muted" title={t("greenOa.feeHint")}>
+                {t("greenOa.feeBadge")}
               </Badge>
             )}
           </h3>
           {route.locations.length > 0 && (
             <p>
-              Where:{" "}
+              {t("greenOa.where")}{" "}
               {route.locations.map((location, i) => (
                 <React.Fragment key={location}>
                   {i > 0 && "; "}
-                  {locationPhrase(location, route.repositories, greenOa.repository_links)}
+                  {locationPhrase(
+                    GREEN_OA_LOCATION_KEYS[location]
+                      ? t(GREEN_OA_LOCATION_KEYS[location])
+                      : location.charAt(0).toUpperCase() + location.slice(1).replaceAll("_", " "),
+                    location,
+                    route.repositories,
+                    greenOa.repository_links,
+                  )}
                 </React.Fragment>
               ))}
               .
             </p>
           )}
           {route.licenses.length > 0 && (
-            <p>Licence: {route.licenses.map(licenseLabel).join(", ")}.</p>
+            <p>{t("greenOa.licence", { licenses: route.licenses.map(licenseLabel).join(", ") })}</p>
           )}
           {route.embargo_months != null && (
-            <p>
-              Embargo: after {route.embargo_months}{" "}
-              {route.embargo_months === 1 ? "month" : "months"}.
-            </p>
+            <p>{t("greenOa.embargo", { count: route.embargo_months })}</p>
           )}
           {route.conditions.length > 0 && (
             // Jisc policy text is CC BY-NC-ND: shown verbatim, never paraphrased.
             <div>
               <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                Conditions
+                {t("greenOa.conditionsHeading")}
               </h4>
               <ul className="list-disc space-y-1 pl-4">
                 {route.conditions.map((condition) => (
@@ -484,12 +503,10 @@ function GreenOaPanel({
           )}
         </div>
       ))}
-      {routes.length === 0 && !greenOa.oa_prohibited && (
-        <p>No self-archiving route is listed for this journal.</p>
-      )}
+      {routes.length === 0 && !greenOa.oa_prohibited && <p>{t("greenOa.empty")}</p>}
       <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-[var(--border)] pt-3">
         {greenOa.policy_uri && (
-          <External href={greenOa.policy_uri}>View on Jisc Open Policy Finder</External>
+          <External href={greenOa.policy_uri}>{t("greenOa.jiscLink")}</External>
         )}
         {greenOa.urls.map((u) => (
           <External key={u.url} href={u.url}>
@@ -510,6 +527,7 @@ function doiHref(doi: string | null): string | null {
 /** Who at this institution authors the journal's works: distinct works
  * per faculty and research group, plus the most prolific UT authors. */
 function UtAuthorshipCard({ authorship, inst }: { authorship: UtAuthorship; inst: string }) {
+  const t = useTranslations("journals");
   const empty =
     authorship.faculties.length === 0 &&
     authorship.research_groups.length === 0 &&
@@ -517,42 +535,46 @@ function UtAuthorshipCard({ authorship, inst }: { authorship: UtAuthorship; inst
   return (
     <CollapsibleCard
       id="ut-authorship"
-      title="UT authorship"
+      title={t("utAuthorship.title")}
       description={
         <p className="text-sm text-[var(--muted-foreground)]">
-          Distinct works with UT authors: {authorship.n_ut_works.toLocaleString("en")} of the works
-          counted here.
+          {t("utAuthorship.description", { count: authorship.n_ut_works })}
         </p>
       }
       contentClassName="space-y-5 text-sm"
     >
       {empty ? (
-        <p className="text-[var(--muted-foreground)]">No UT-authorship records for this journal.</p>
+        <p className="text-[var(--muted-foreground)]">{t("utAuthorship.empty")}</p>
       ) : (
         <>
           {(
             [
-              { heading: "Faculties", rows: authorship.faculties },
-              { heading: "Research groups", rows: authorship.research_groups },
+              {
+                heading: t("utAuthorship.facultiesHeading"),
+                caption: t("utAuthorship.captionFaculties"),
+                rows: authorship.faculties,
+              },
+              {
+                heading: t("utAuthorship.groupsHeading"),
+                caption: t("utAuthorship.captionGroups"),
+                rows: authorship.research_groups,
+              },
             ] as const
           ).map(
-            (t) =>
-              t.rows.length > 0 && (
-                <div key={t.heading}>
-                  <h3 className="mb-1 text-sm font-semibold">{t.heading}</h3>
+            (table) =>
+              table.rows.length > 0 && (
+                <div key={table.heading}>
+                  <h3 className="mb-1 text-sm font-semibold">{table.heading}</h3>
                   <Table>
-                    <caption className="sr-only">
-                      Distinct works with UT authors per{" "}
-                      {t.heading === "Faculties" ? "faculty" : "research group"}
-                    </caption>
+                    <caption className="sr-only">{table.caption}</caption>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead className="text-right">Works</TableHead>
+                        <TableHead>{t("utAuthorship.nameCol")}</TableHead>
+                        <TableHead className="text-right">{t("utAuthorship.worksCol")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {t.rows.map((row) => (
+                      {table.rows.map((row) => (
                         <TableRow key={row.name}>
                           <TableCell className="font-medium">{row.name}</TableCell>
                           <TableCell className="text-right tabular-nums">
@@ -567,14 +589,14 @@ function UtAuthorshipCard({ authorship, inst }: { authorship: UtAuthorship; inst
           )}
           {authorship.top_authors.length > 0 && (
             <div>
-              <h3 className="mb-1 text-sm font-semibold">Top authors</h3>
+              <h3 className="mb-1 text-sm font-semibold">{t("utAuthorship.topAuthorsHeading")}</h3>
               <Table>
-                <caption className="sr-only">Most prolific UT authors of this journal</caption>
+                <caption className="sr-only">{t("utAuthorship.captionTopAuthors")}</caption>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Author</TableHead>
-                    <TableHead className="text-right">Works</TableHead>
-                    <TableHead>Affiliation</TableHead>
+                    <TableHead>{t("utAuthorship.authorCol")}</TableHead>
+                    <TableHead className="text-right">{t("utAuthorship.worksCol")}</TableHead>
+                    <TableHead>{t("utAuthorship.affiliationCol")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -619,19 +641,19 @@ function CrisGapsCard({
   inst: string;
   issnL: string;
 }) {
+  const t = useTranslations("journals");
+  const tc = useTranslations("common");
   const { year_from, year_to } = useYearRange();
   const { total, items } = openalexOnly;
   return (
     <CollapsibleCard
       id="cris-gaps"
-      title="Not registered in Pure"
+      title={t("crisGaps.title")}
       description={
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <p className="text-sm text-[var(--muted-foreground)]">
-            OpenAlex attributes {total.toLocaleString("en")} work(s) to this journal that match no
-            Pure record — likely missing from the research information system. Each item lists the
-            UT authors OpenAlex matched to the university roster.
-            {total > items.length && ` Showing ${items.length.toLocaleString("en")} most recent.`}
+            {t("crisGaps.description", { count: total })} {t("crisGaps.matchNote")}
+            {total > items.length ? ` ${t("crisGaps.showingRecent", { count: items.length })}` : ""}
           </p>
           {total > 0 && (
             <GapCsvButton
@@ -643,9 +665,7 @@ function CrisGapsCard({
       contentClassName="text-sm"
     >
       {total === 0 ? (
-        <p className="text-[var(--muted-foreground)]">
-          None found — every OpenAlex work here has a Pure record.
-        </p>
+        <p className="text-[var(--muted-foreground)]">{t("crisGaps.empty")}</p>
       ) : (
         <ul className="divide-y divide-[var(--border)]">
           {items.map((w, i) => {
@@ -664,7 +684,7 @@ function CrisGapsCard({
                   </External>
                 ) : (
                   <span className="min-w-0 w-full min-[480px]:w-auto min-[480px]:flex-1 font-medium">
-                    {w.title ?? "Untitled"}
+                    {w.title ?? t("publications.untitled")}
                   </span>
                 )}
                 {w.year != null && (
@@ -673,7 +693,7 @@ function CrisGapsCard({
                 {w.venue && (
                   <span className="min-w-0 text-xs text-[var(--muted-foreground)]">{w.venue}</span>
                 )}
-                {w.work_type && <span className="text-xs">{workTypeLabel(w.work_type)}</span>}
+                {w.work_type && <span className="text-xs">{workTypeLabel(tc, w.work_type)}</span>}
                 <PureMatchBadge match={w.pure_match} url={w.pure_match_url} />
                 <OaStatusChip status={w.oa_status} />
                 <UtAuthorLine authors={w.ut_authors} />
@@ -706,6 +726,7 @@ function PublicationsCard({
     isFetching: boolean;
   };
 }) {
+  const t = useTranslations("journals");
   const site = useSiteMeta();
   const inst = useInstitution();
   const { year_from, year_to } = useYearRange();
@@ -737,16 +758,18 @@ function PublicationsCard({
   return (
     <CollapsibleCard
       id="publications"
-      title={`Publications (${site.short})`}
+      title={t("publications.title", { short: site.short })}
       description={
         <p className="text-pretty text-sm text-[var(--muted-foreground)]">
-          {site.short} works from Pure merged with OpenAlex venue works
-          {year_from !== undefined
-            ? `, ${year_from}–${year_to}`
-            : site.windowStart === undefined
-              ? ""
-              : `, ${site.windowStart} onwards`}
-          . Citations and FWCI come from OpenAlex; works not matched there are marked.
+          {t("publications.description", {
+            short: site.short,
+            period:
+              year_from !== undefined
+                ? `, ${year_from} to ${year_to}`
+                : site.windowStart === undefined
+                  ? ""
+                  : `, ${site.windowStart} onwards`,
+          })}
         </p>
       }
       contentClassName="space-y-3 text-sm"
@@ -764,7 +787,7 @@ function PublicationsCard({
       ) : works.length === 0 ? (
         // Also the pre-integration state: old backends 404 on /works.
         <p className="text-[var(--muted-foreground)]">
-          No {site.name} publications in the university corpus for this journal.
+          {t("publications.empty", { name: site.name })}
         </p>
       ) : (
         <ul className="divide-y divide-[var(--border)]">
@@ -786,16 +809,16 @@ function PublicationsCard({
                   </External>
                 ) : (
                   <span className="min-w-0 w-full min-[480px]:w-auto min-[480px]:flex-1 font-medium">
-                    {w.title ?? "Untitled"}
+                    {w.title ?? t("publications.untitled")}
                   </span>
                 )}
                 {!w.in_openalex && (
                   <Badge
                     variant="outline"
                     className="font-normal text-[11px] text-[var(--muted-foreground)]"
-                    title="In the university's Pure research information system; not matched in OpenAlex, so citations and FWCI are unavailable"
+                    title={t("publications.pureOnlyHint")}
                   >
-                    Pure only
+                    {t("publications.pureOnly")}
                   </Badge>
                 )}
                 {w.year != null && (
@@ -804,24 +827,23 @@ function PublicationsCard({
                 <OaStatusChip status={w.oa_status} />
                 <span
                   className="text-xs tabular-nums text-[var(--muted-foreground)]"
-                  title="Citations (OpenAlex)"
+                  title={t("publications.citationsTitle")}
                 >
-                  {w.cited_by_count.toLocaleString("en")}{" "}
-                  {w.cited_by_count === 1 ? "citation" : "citations"}
+                  {t("publications.citations", { count: w.cited_by_count })}
                 </span>
                 <span
                   className="text-xs tabular-nums text-[var(--muted-foreground)]"
-                  title="Field-weighted citation impact"
+                  title={t("publications.fwciTitle")}
                 >
-                  FWCI {w.fwci != null ? w.fwci.toFixed(2) : "—"}
+                  {t("publications.fwci", { value: w.fwci != null ? w.fwci.toFixed(2) : "—" })}
                 </span>
                 {w.is_retracted && (
                   <Badge
                     variant="outline"
-                    title="This publication was retracted, per OpenAlex."
+                    title={t("publications.retractedHint")}
                     className="border-red-300 bg-red-100 text-red-700 dark:border-red-400/40 dark:bg-red-400/15 dark:text-red-300"
                   >
-                    Retracted
+                    {t("publications.retracted")}
                   </Badge>
                 )}
                 {(w.ut_authors.length > 0 || w.ut_groups.length > 0) && (
@@ -866,7 +888,7 @@ function PublicationsCard({
           total={total}
           onPage={setPage}
           isFetching={isFetching}
-          label="publications"
+          label={t("publications.pagerLabel")}
         />
       )}
       <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-[var(--border)] pt-3">
@@ -874,13 +896,13 @@ function PublicationsCard({
           <External
             href={`https://openalex.org/works?filter=primary_location.source.id:${openalex.id}`}
           >
-            All works on OpenAlex
+            {t("publications.allOpenalexLink")}
           </External>
         )}
         <External
           href={`https://explore.openaire.eu/search/find?keyword=%22${encodeURIComponent(title)}%22`}
         >
-          Search on OpenAIRE
+          {t("publications.openaireLink")}
         </External>
         <SourceNote {...worksNote} codes={worksNote.caveat_codes} />
       </div>
@@ -934,12 +956,13 @@ function useSectionSpy(ids: string[]) {
 
 function SectionNav({ sections }: { sections: { id: string; label: string; hint?: string }[] }) {
   const active = useSectionSpy(sections.map((s) => s.id));
+  const t = useTranslations("journals");
   // Muted-foreground/primary-text both fail 4.5:1 on the navy bar, so this
   // nav speaks in white and separates the active item with weight+underline.
   const backHref = useLastSearchHref();
   return (
     <nav
-      aria-label="Page sections"
+      aria-label={t("nav.sections")}
       className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--secondary)] text-[var(--secondary-foreground)]"
     >
       <div className="mx-auto flex max-w-5xl items-center gap-3 overflow-x-auto px-4 py-2">
@@ -947,7 +970,7 @@ function SectionNav({ sections }: { sections: { id: string; label: string; hint?
           href={backHref}
           className="inline-flex shrink-0 items-center gap-1 text-sm text-white/80 hover:text-white"
         >
-          <ArrowLeft aria-hidden className="size-4" /> Back to search
+          <ArrowLeft aria-hidden className="size-4" /> {t("nav.backToSearch")}
         </Link>
         <span aria-hidden className="h-4 w-px shrink-0 bg-[var(--border)]" />
         {/* Wrap instead of a single clipped line: long section lists stay
@@ -988,6 +1011,7 @@ function MoreToggle({
   onToggle: () => void;
   moreLabel: string;
 }) {
+  const t = useTranslations("journals");
   return (
     <button
       type="button"
@@ -995,7 +1019,7 @@ function MoreToggle({
       aria-expanded={open}
       onClick={onToggle}
     >
-      {open ? "Show less" : moreLabel}
+      {open ? t("list.showLess") : moreLabel}
     </button>
   );
 }
@@ -1003,16 +1027,15 @@ function MoreToggle({
 /** Alternate titles from OpenAlex, capped like topics: chips plus a
  * reveal toggle once the list runs long. */
 function OtherNamesCard({ names }: { names: string[] }) {
+  const t = useTranslations("journals");
   const [open, setOpen] = React.useState(false);
   const shown = open ? names : names.slice(0, NAMES_LIMIT);
   return (
     <CollapsibleCard
       id="names"
-      title="Other names"
+      title={t("names.title")}
       description={
-        <p className="text-sm text-[var(--muted-foreground)]">
-          Titles this journal is also published under.
-        </p>
+        <p className="text-sm text-[var(--muted-foreground)]">{t("names.description")}</p>
       }
       contentClassName="flex flex-wrap items-center gap-1.5"
     >
@@ -1025,7 +1048,7 @@ function OtherNamesCard({ names }: { names: string[] }) {
         <MoreToggle
           open={open}
           onToggle={() => setOpen((o) => !o)}
-          moreLabel={`Show all ${names.length} names`}
+          moreLabel={t("names.showAll", { count: String(names.length) })}
         />
       )}
     </CollapsibleCard>
@@ -1047,17 +1070,20 @@ function IdentifiersCard({
   openalexUrl?: string | null;
   oaNlSlug?: string | null;
 }) {
+  const t = useTranslations("journals");
   const rows = [
     ...[`ISSN-L ${issnL}`, ...issns.map((i) => `ISSN ${i}`)]
       .filter((v, i, a) => a.indexOf(v) === i)
       .map((label) => ({ key: label, label })),
-    ...(doajUrl ? [{ key: "doaj", label: "DOAJ record", href: doajUrl }] : []),
-    ...(openalexUrl ? [{ key: "openalex", label: "OpenAlex source", href: openalexUrl }] : []),
+    ...(doajUrl ? [{ key: "doaj", label: t("identifiers.doajRecord"), href: doajUrl }] : []),
+    ...(openalexUrl
+      ? [{ key: "openalex", label: t("identifiers.openalexSource"), href: openalexUrl }]
+      : []),
     ...(oaNlSlug
       ? [
           {
             key: "oa-nl",
-            label: "Open Access NL publisher",
+            label: t("identifiers.oaNlPublisher"),
             href: `https://openaccess.nl/en/publisher/${oaNlSlug}`,
           },
         ]
@@ -1066,11 +1092,9 @@ function IdentifiersCard({
   return (
     <CollapsibleCard
       id="identifiers"
-      title="Identifiers"
+      title={t("identifiers.title")}
       description={
-        <p className="text-sm text-[var(--muted-foreground)]">
-          Ids and registry entries for this journal.
-        </p>
+        <p className="text-sm text-[var(--muted-foreground)]">{t("identifiers.description")}</p>
       }
       contentClassName="space-y-2 text-sm"
     >
@@ -1084,7 +1108,11 @@ function IdentifiersCard({
               <>
                 <External href={row.href}>{row.label}</External>
                 {row.key === "doaj" && (
-                  <SourceNote source="via DOAJ" url="https://doaj.org" codes={["doaj-canon"]} />
+                  <SourceNote
+                    source={t("identifiers.viaDoaj")}
+                    url="https://doaj.org"
+                    codes={["doaj-canon"]}
+                  />
                 )}
               </>
             ) : (
@@ -1101,6 +1129,8 @@ function IdentifiersCard({
 }
 
 function JournalPageInner() {
+  const t = useTranslations("journals");
+  const tc = useTranslations("common");
   const site = useSiteMeta();
   const params = useParams<{ issn_l: string }>();
   const inst = useInstitution();
@@ -1129,7 +1159,7 @@ function JournalPageInner() {
     (similar.all.length === 0 && similar.institution.length === 0 && similar.deals.length === 0);
 
   if (isPending) return <JournalDetailSkeleton />;
-  if (isError || !data) return <ErrorPanel message={errorMessage(error)} backHref={backHref} />;
+  if (isError || !data) return <ErrorPanel message={errorMessage(tc, error)} backHref={backHref} />;
 
   const { journal, stats, deals, attribution, summary_stats, stats_totals: totals } = data;
   const greenOa = data.green_oa ?? null;
@@ -1164,26 +1194,26 @@ function JournalPageInner() {
   const hasApc = data.apc_aggregates.length > 0 || data.apc_evidence.length > 0;
   // One nav entry per rendered section, in DOM order.
   const sections: { id: string; label: string; hint?: string }[] = [
-    { id: "oa-per-year", label: "Open access per year" },
+    { id: "oa-per-year", label: t("oaPerYear.title") },
     ...(deals.length > 0
       ? deals.map((deal) => ({
           id: `deal-${deal.id}`,
-          label: "Open access deal",
+          label: t("deal.title"),
         }))
-      : [{ id: "deal", label: "Open access deal" }]),
-    ...(greenOa ? [{ id: "green-oa", label: "Green OA policy" }] : []),
-    ...(hasApc
-      ? [{ id: "apc", label: "APC cost evidence", hint: "APC = article processing charge" }]
+      : [{ id: "deal", label: t("deal.title") }]),
+    ...(greenOa ? [{ id: "green-oa", label: t("greenOa.title") }] : []),
+    ...(hasApc ? [{ id: "apc", label: t("apc.title"), hint: t("apc.hint") }] : []),
+    ...(!similarEmpty ? [{ id: "similar", label: t("similar.title") }] : []),
+    ...(topics.length > 0 || oaTopics.length > 0
+      ? [{ id: "topics", label: t("topics.title") }]
       : []),
-    ...(!similarEmpty ? [{ id: "similar", label: "Similar journals" }] : []),
-    ...(topics.length > 0 || oaTopics.length > 0 ? [{ id: "topics", label: "Topics" }] : []),
-    { id: "metrics", label: "Key stats" },
-    { id: "ut-authorship", label: "UT authorship" },
-    { id: "publications", label: "Publications" },
-    ...(data.openalex_only.available ? [{ id: "cris-gaps", label: "Not registered in Pure" }] : []),
-    ...(data.alternate_titles.length > 0 ? [{ id: "names", label: "Other names" }] : []),
-    { id: "identifiers", label: "Identifiers" },
-    { id: "cite", label: "Cite this journal" },
+    { id: "metrics", label: t("metrics.title") },
+    { id: "ut-authorship", label: t("utAuthorship.title") },
+    { id: "publications", label: t("publications.navLabel") },
+    ...(data.openalex_only.available ? [{ id: "cris-gaps", label: t("crisGaps.title") }] : []),
+    ...(data.alternate_titles.length > 0 ? [{ id: "names", label: t("names.title") }] : []),
+    { id: "identifiers", label: t("identifiers.title") },
+    { id: "cite", label: t("citation.title") },
   ];
 
   return (
@@ -1198,7 +1228,9 @@ function JournalPageInner() {
                   href={data.homepage_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label={`${journal.title ?? journal.issn_l} — opens the journal website in a new tab`}
+                  aria-label={t("header.websiteLabel", {
+                    title: journal.title ?? journal.issn_l,
+                  })}
                   className="inline-flex items-center gap-1.5 underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
                 >
                   {journal.title ?? journal.issn_l}
@@ -1212,17 +1244,14 @@ function JournalPageInner() {
             <QuartileBadge quartile={journal.quartile ?? null} />
             <DealBadge covered={journal.deal_covered} capped={journal.deal_cap_reached} />
             {journal.is_in_doaj && (
-              <Badge
-                variant="outline"
-                title="Listed in DOAJ, the Directory of Open Access Journals"
-              >
-                DOAJ
+              <Badge variant="outline" title={t("header.doajHint")}>
+                {t("header.doajBadge")}
               </Badge>
             )}
             <Badge
               variant="muted"
               className="font-normal tabular-nums"
-              title="ISSN-L links the print and online ISSNs of one journal into a single identifier"
+              title={t("header.issnLHint")}
             >
               ISSN-L {journal.issn_l}
             </Badge>
@@ -1238,22 +1267,28 @@ function JournalPageInner() {
                 {journal.publisher_canonical ?? journal.publisher_name}
               </Link>
             ) : (
-              "Unknown publisher"
+              t("header.unknownPublisher")
             )}
             {journal.publisher_canonical &&
               journal.publisher_name &&
               journal.publisher_canonical !== journal.publisher_name && (
-                <span className="text-sm"> · imprint: {journal.publisher_name}</span>
+                <span className="text-sm">
+                  {" · "}
+                  {t("header.imprint", { name: journal.publisher_name })}
+                </span>
               )}
             {data.type ? ` · ${data.type.charAt(0).toUpperCase()}${data.type.slice(1)}` : ""}
           </p>
           {data.homepage_url && (
             <p className="mt-1.5 text-xs">
-              <External href={data.homepage_url}>Journal homepage</External>
+              <External href={data.homepage_url}>{t("header.homepage")}</External>
             </p>
           )}
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-            <SourceNote source="Metadata: OpenAlex" url={attribution.title?.url ?? undefined} />
+            <SourceNote
+              source={t("header.metadataSource")}
+              url={attribution.title?.url ?? undefined}
+            />
           </p>
         </header>
 
@@ -1262,14 +1297,21 @@ function JournalPageInner() {
             id="oa-per-year"
             title={
               <>
-                Open access per year{" "}
+                {t("oaPerYear.title")}{" "}
                 <span className="text-sm font-normal text-[var(--muted-foreground)]">
-                  ({site.short}
+                  (
                   {year_from !== undefined
-                    ? `, ${year_from}–${year_to}`
+                    ? t("oaPerYear.titleSuffixYears", {
+                        short: site.short,
+                        from: String(year_from),
+                        to: String(year_to),
+                      })
                     : site.windowStart === undefined
-                      ? ""
-                      : `, ${site.windowStart}+`}
+                      ? t("oaPerYear.titleSuffixShort", { short: site.short })
+                      : t("oaPerYear.titleSuffixWindow", {
+                          short: site.short,
+                          window: String(site.windowStart),
+                        })}
                   )
                 </span>
               </>
@@ -1278,29 +1320,32 @@ function JournalPageInner() {
             {recent.length > 0 ? (
               <OaTrend stats={recent} />
             ) : (
-              <p className="text-sm text-[var(--muted-foreground)]">
-                No publication statistics for this period yet.
-              </p>
+              <p className="text-sm text-[var(--muted-foreground)]">{t("oaPerYear.empty")}</p>
             )}
             <p className="mt-3 text-sm">
-              {year_from === undefined ? (
-                <>
-                  {totals.pure_canon.toLocaleString("en")} {site.short} works total
-                  {site.windowStart === undefined ? "" : ` since ${site.windowStart}`}{" "}
-                  <span className="text-[var(--muted-foreground)]">(Pure)</span> · OpenAlex
-                  institution filter:{" "}
-                  <span className="whitespace-nowrap">
-                    {totals.openalex_institution_filter.toLocaleString("en")}{" "}
-                    <span className="text-[var(--muted-foreground)]">(cross-check)</span>
-                  </span>
-                  .
-                </>
-              ) : (
-                <>
-                  {pureTotal.toLocaleString("en")} {site.short} works in {year_from}–{year_to}{" "}
-                  <span className="text-[var(--muted-foreground)]">(Pure)</span>.
-                </>
-              )}
+              {year_from === undefined
+                ? t.rich("oaPerYear.totals", {
+                    pure: totals.pure_canon.toLocaleString("en"),
+                    short: site.short,
+                    since: site.windowStart === undefined ? "" : ` since ${site.windowStart}`,
+                    openalex: totals.openalex_institution_filter.toLocaleString("en"),
+                    pureLabel: (chunks) => (
+                      <span className="text-[var(--muted-foreground)]">{chunks}</span>
+                    ),
+                    openalexLabel: (chunks) => <span className="whitespace-nowrap">{chunks}</span>,
+                    crossLabel: (chunks) => (
+                      <span className="text-[var(--muted-foreground)]">{chunks}</span>
+                    ),
+                  })
+                : t.rich("oaPerYear.totalsYears", {
+                    pure: pureTotal.toLocaleString("en"),
+                    short: site.short,
+                    from: String(year_from),
+                    to: String(year_to),
+                    pureLabel: (chunks) => (
+                      <span className="text-[var(--muted-foreground)]">{chunks}</span>
+                    ),
+                  })}
             </p>
             <div className="mt-2 flex flex-wrap gap-x-4">
               <SourceNote {...(attribution.stats ?? {})} codes={attribution.stats?.caveat_codes} />
@@ -1323,14 +1368,16 @@ function JournalPageInner() {
           ) : (
             <CollapsibleCard
               id="deal"
-              title="Open access deal"
+              title={t("deal.title")}
               contentClassName="text-sm text-[var(--muted-foreground)]"
             >
-              No current open access deal covering this journal for {site.name} authors. Check{" "}
-              <External href="https://www.openaccess.nl">openaccess.nl</External> and the{" "}
-              <External href="https://journalcheckertool.org">Journal Checker Tool</External> to
-              double-check; for green open access routes (self-archiving), see the library&apos;s
-              open access guide linked in the footer.
+              {t.rich("deal.noDeal", {
+                name: site.name,
+                oaNl: (chunks) => <External href="https://www.openaccess.nl">{chunks}</External>,
+                jct: (chunks) => (
+                  <External href="https://journalcheckertool.org">{chunks}</External>
+                ),
+              })}
               <div className="mt-2">
                 <SourceNote
                   {...(attribution.deals ?? {})}
@@ -1345,35 +1392,23 @@ function JournalPageInner() {
           {funder && <FunderFitCard fit={data.funder_fit ?? null} funder={funder} inst={inst} />}
 
           {hasApc && (
-            <CollapsibleCard id="apc" title="APC cost evidence" contentClassName="text-sm">
+            <CollapsibleCard id="apc" title={t("apc.title")} contentClassName="text-sm">
               {data.apc_aggregates.length > 0 && (
                 <table className="w-full text-xs">
-                  <caption className="sr-only">
-                    OpenAPC cost evidence per publishing year: number of recorded APCs, mean, and
-                    observed range in euros
-                  </caption>
+                  <caption className="sr-only">{t("apc.caption")}</caption>
                   <thead>
                     <tr className="text-left text-[var(--muted-foreground)]">
-                      <th
-                        className="py-1 pr-2 font-medium"
-                        title="Publishing year of the articles with recorded APCs"
-                      >
-                        Year
+                      <th className="py-1 pr-2 font-medium" title={t("apc.yearColHint")}>
+                        {t("apc.yearCol")}
                       </th>
-                      <th
-                        className="py-1 pr-2 font-medium"
-                        title="Articles with an APC recorded in OpenAPC for this journal and year"
-                      >
-                        APCs
+                      <th className="py-1 pr-2 font-medium" title={t("apc.countColHint")}>
+                        {t("apc.countCol")}
                       </th>
-                      <th className="py-1 pr-2 font-medium" title="Average APC paid, in euros">
-                        Mean €
+                      <th className="py-1 pr-2 font-medium" title={t("apc.meanColHint")}>
+                        {t("apc.meanCol")}
                       </th>
-                      <th
-                        className="py-1 font-medium"
-                        title="Lowest to highest APC recorded, in euros"
-                      >
-                        Range €
+                      <th className="py-1 font-medium" title={t("apc.rangeColHint")}>
+                        {t("apc.rangeCol")}
                       </th>
                     </tr>
                   </thead>
@@ -1399,13 +1434,15 @@ function JournalPageInner() {
               )}
               {data.apc_evidence.length > 0 && (
                 <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-                  {data.apc_evidence.length} {site.short} APC{" "}
-                  {data.apc_evidence.length === 1 ? "record" : "records"} (latest{" "}
-                  {data.apc_evidence[0].period ?? "—"}:{" "}
-                  {data.apc_evidence[0].euro !== null
-                    ? `€${Math.round(data.apc_evidence[0].euro!)}`
-                    : "amount unknown"}
-                  ).
+                  {t("apc.evidence", {
+                    count: data.apc_evidence.length,
+                    short: site.short,
+                    period: data.apc_evidence[0].period ?? "—",
+                    amount:
+                      data.apc_evidence[0].euro !== null
+                        ? `€${Math.round(data.apc_evidence[0].euro!)}`
+                        : t("apc.amountUnknown"),
+                  })}
                 </p>
               )}
               <div className="mt-3">
@@ -1418,24 +1455,24 @@ function JournalPageInner() {
           )}
 
           {similar && !similarEmpty && (
-            <CollapsibleCard id="similar" title="Similar journals">
+            <CollapsibleCard id="similar" title={t("similar.title")}>
               <div className="space-y-5">
                 {(
                   [
                     {
                       key: "institution",
-                      heading: `${site.short} publishes here`,
-                      note: `Nearest neighbors that carry at least one ${site.name} publication.`,
+                      heading: t("similar.institutionHeading", { short: site.short }),
+                      note: t("similar.institutionNote", { name: site.name }),
                     },
                     {
                       key: "deals",
-                      heading: "Covered by a publication deal",
-                      note: `Nearest neighbors with a current open access deal for ${site.short} authors.`,
+                      heading: t("similar.dealsHeading"),
+                      note: t("similar.dealsNote", { short: site.short }),
                     },
                     {
                       key: "all",
-                      heading: "Most similar overall",
-                      note: `Nearest neighbors by research-profile similarity alone, regardless of deals or ${site.short} output.`,
+                      heading: t("similar.allHeading"),
+                      note: t("similar.allNote", { short: site.short }),
                     },
                   ] as const
                 ).map(
@@ -1464,31 +1501,35 @@ function JournalPageInner() {
                                 {s.title ?? s.issn_l}
                               </Link>
                               <span className="text-xs text-[var(--muted-foreground)]">
-                                {s.publisher_canonical ?? s.publisher_name ?? "Unknown publisher"}
+                                {s.publisher_canonical ??
+                                  s.publisher_name ??
+                                  t("header.unknownPublisher")}
                               </span>
                               <span className="ml-auto flex flex-wrap items-center gap-2">
                                 <DealBadge covered={s.deal_covered} capped={s.deal_cap_reached} />
                                 {s.works > 0 && (
                                   <span
                                     className="text-xs text-[var(--muted-foreground)]"
-                                    title={`Known ${site.name} publications in this journal`}
+                                    title={t("similar.publicationsHint", { name: site.name })}
                                   >
-                                    {s.works.toLocaleString("en")} {site.short}{" "}
-                                    {s.works === 1 ? "publication" : "publications"}
+                                    {t("similar.publications", {
+                                      count: s.works,
+                                      short: site.short,
+                                    })}
                                   </span>
                                 )}
                                 <QuartileBadge quartile={s.quartile ?? null} />
                                 <span
                                   className="text-xs text-[var(--muted-foreground)]"
-                                  title="Embedding similarity between the journals' research profiles"
+                                  title={t("similar.similarityTitle")}
                                 >
                                   {s.similarity != null
-                                    ? `${Math.round(s.similarity * 100)}% match`
-                                    : `${s.shared_topics} shared ${
-                                        s.shared_topics === 1 ? "topic" : "topics"
-                                      }`}
+                                    ? t("similar.percentMatch", {
+                                        percent: String(Math.round(s.similarity * 100)),
+                                      })
+                                    : t("similar.sharedTopics", { count: s.shared_topics })}
                                   {s.similarity != null && (
-                                    <span className="sr-only"> (embedding similarity)</span>
+                                    <span className="sr-only">{` ${t("similar.embeddingNote")}`}</span>
                                   )}
                                 </span>
                               </span>
@@ -1501,7 +1542,9 @@ function JournalPageInner() {
                             onToggle={() =>
                               setOpenSimilar((m) => ({ ...m, [group.key]: !m[group.key] }))
                             }
-                            moreLabel={`Show all ${similar[group.key].length} journals`}
+                            moreLabel={t("similar.showAll", {
+                              count: String(similar[group.key].length),
+                            })}
                           />
                         )}
                       </div>
@@ -1514,12 +1557,12 @@ function JournalPageInner() {
           {(oaTopics.length > 0 || topics.length > 0) && (
             <CollapsibleCard
               id="topics"
-              title="Topics"
+              title={t("topics.title")}
               description={
                 <p className="text-sm text-[var(--muted-foreground)]">
                   {oaTopics.length > 0
-                    ? "Topics assigned by OpenAlex; the number is works in this journal classified under the topic."
-                    : "Topics assigned by OpenAlex."}
+                    ? t("topics.descriptionWithCounts")
+                    : t("topics.description")}
                 </p>
               }
               contentClassName="flex flex-wrap items-center gap-1.5"
@@ -1538,7 +1581,7 @@ function JournalPageInner() {
                         ]
                           .filter(Boolean)
                           .join(" → "),
-                        `${(topic.count ?? 0).toLocaleString("en")} works`,
+                        t("topics.worksCount", { count: topic.count ?? 0 }),
                       ]
                         .filter(Boolean)
                         .join(" · ")}
@@ -1558,9 +1601,11 @@ function JournalPageInner() {
                 <MoreToggle
                   open={allTopics}
                   onToggle={() => setAllTopics((v) => !v)}
-                  moreLabel={`+${
-                    (oaTopics.length > 0 ? oaTopics.length : topics.length) - TOPICS_LIMIT
-                  } more`}
+                  moreLabel={t("topics.showMore", {
+                    count: String(
+                      (oaTopics.length > 0 ? oaTopics.length : topics.length) - TOPICS_LIMIT,
+                    ),
+                  })}
                 />
               )}
               {oaTopics.length > 0 && (
@@ -1572,11 +1617,15 @@ function JournalPageInner() {
             </CollapsibleCard>
           )}
 
-          <CollapsibleCard id="metrics" title="Key stats" contentClassName="space-y-4 text-sm">
+          <CollapsibleCard
+            id="metrics"
+            title={t("metrics.title")}
+            contentClassName="space-y-4 text-sm"
+          >
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Metric
-                label="2-year mean citedness"
-                hint="Average number of citations that works from the last two years have received, as counted by OpenAlex."
+                label={t("metrics.citednessLabel")}
+                hint={t("metrics.citednessHint")}
                 value={
                   journal.twoyr_mean_citedness != null
                     ? journal.twoyr_mean_citedness.toFixed(1)
@@ -1584,14 +1633,14 @@ function JournalPageInner() {
                 }
               />
               <Metric
-                label="h-index"
-                hint="h works of this journal have received at least h citations each (OpenAlex)."
+                label={t("metrics.hIndexLabel")}
+                hint={t("metrics.hIndexHint")}
                 value={num("h_index")?.toLocaleString("en") ?? "—"}
                 note="OpenAlex"
               />
               <Metric
-                label="i10 index"
-                hint="Number of works of this journal with at least 10 citations (OpenAlex)."
+                label={t("metrics.i10Label")}
+                hint={t("metrics.i10Hint")}
                 value={num("i10_index")?.toLocaleString("en") ?? "—"}
                 note="OpenAlex"
               />
@@ -1605,8 +1654,8 @@ function JournalPageInner() {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   {openalex?.cited_by_count != null && (
                     <Metric
-                      label="Total citations"
-                      hint="All citations to works of this journal that OpenAlex has recorded."
+                      label={t("metrics.totalCitationsLabel")}
+                      hint={t("metrics.totalCitationsHint")}
                       value={openalex.cited_by_count.toLocaleString("en")}
                       note={
                         <SourceNote
@@ -1618,8 +1667,8 @@ function JournalPageInner() {
                   )}
                   {openalex?.works_count != null && (
                     <Metric
-                      label="Works count"
-                      hint="Number of works of this journal known to OpenAlex."
+                      label={t("metrics.worksCountLabel")}
+                      hint={t("metrics.worksCountHint")}
                       value={openalex.works_count.toLocaleString("en")}
                       note={
                         <SourceNote
@@ -1631,8 +1680,8 @@ function JournalPageInner() {
                   )}
                   {metrics && (
                     <Metric
-                      label={`FWCI (${site.short} works)`}
-                      hint={`Field-weighted citation impact of ${site.short} works: citations relative to the average for works of the same year, type, and field. 1.0 means average.`}
+                      label={t("metrics.fwciLabel", { short: site.short })}
+                      hint={t("metrics.fwciHint", { short: site.short })}
                       value={
                         metrics.fwci_avg != null && metrics.fwci_n > 0
                           ? metrics.fwci_avg.toFixed(2)
@@ -1640,7 +1689,7 @@ function JournalPageInner() {
                       }
                       note={
                         <>
-                          n = {metrics.fwci_n} works{" "}
+                          {t("metrics.fwciN", { count: metrics.fwci_n })}{" "}
                           <SourceNote
                             {...(attribution.openalex ?? {})}
                             codes={attribution.openalex?.caveat_codes}
@@ -1651,8 +1700,8 @@ function JournalPageInner() {
                   )}
                   {metrics && metrics.retracted > 0 && (
                     <Metric
-                      label={`Retracted ${site.short} works`}
-                      hint={`${site.short} works in this journal that OpenAlex marks as retracted.`}
+                      label={t("metrics.retractedLabel", { short: site.short })}
+                      hint={t("metrics.retractedHint", { short: site.short })}
                       value={metrics.retracted.toLocaleString("en")}
                       note={
                         <SourceNote
@@ -1664,8 +1713,8 @@ function JournalPageInner() {
                   )}
                   {openaire && (
                     <Metric
-                      label="Matched publications"
-                      hint={`${site.name} publications that OpenAIRE matched to this journal.`}
+                      label={t("metrics.openaireLabel")}
+                      hint={t("metrics.openaireHint", { name: site.name })}
                       value={openaire.matched_works.toLocaleString("en")}
                       note={
                         <SourceNote
@@ -1682,19 +1731,19 @@ function JournalPageInner() {
               <div className="border-t border-[var(--border)] pt-4">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   <Metric
-                    label="SJR"
-                    hint="SCImago Journal Rank: prestige-weighted average citations per recent work. Higher is better."
+                    label={t("metrics.sjrLabel")}
+                    hint={t("metrics.sjrHint")}
                     value={latestSjr.sjr !== null ? latestSjr.sjr.toFixed(3) : "—"}
                     note={latestSjr.year ? String(latestSjr.year) : undefined}
                   />
                   <Metric
-                    label="Best quartile"
-                    hint="Best quartile the journal reaches in any of its SCImago subject categories."
+                    label={t("metrics.bestQuartileLabel")}
+                    hint={t("metrics.bestQuartileHint")}
                     value={latestSjr.best_quartile ?? "—"}
                   />
                   <Metric
-                    label="SJR h-index"
-                    hint="h-index of the journal as computed by SCImago."
+                    label={t("metrics.sjrHIndexLabel")}
+                    hint={t("metrics.sjrHIndexHint")}
                     value={latestSjr.h_index?.toLocaleString("en") ?? "—"}
                   />
                 </div>

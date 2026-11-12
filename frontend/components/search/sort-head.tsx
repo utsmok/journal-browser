@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { COLUMN_SORTS } from "@/lib/search-config";
 
@@ -25,6 +26,7 @@ export function SortHead({
   };
   title?: string;
 }) {
+  const t = useTranslations("common");
   // Semantic ranking ignores sort params, so the buttons would lie.
   if (state.disabled)
     return <span className="inline-flex items-center gap-1 opacity-60">{label}</span>;
@@ -33,16 +35,16 @@ export function SortHead({
   const current = active ? (state.dir ?? spec!.natural) : null;
   const atNatural = active && current === spec!.natural;
   const Icon = !active ? ChevronsUpDown : current === "asc" ? ArrowUp : ArrowDown;
+  const sortedTitle = active
+    ? current === "asc"
+      ? t(atNatural ? "sortHead.sortedAscReverse" : "sortHead.sortedAscReset")
+      : t(atNatural ? "sortHead.sortedDescReverse" : "sortHead.sortedDescReset")
+    : "";
   return (
     <button
       type="button"
       onClick={() => state.cycleSort(columnId)}
-      title={
-        title ??
-        (active
-          ? `Sorted ${current === "asc" ? "A–Z, low–high" : "Z–A, high–low"}; click to ${atNatural ? "reverse" : "reset"}`
-          : `Sort by ${label}`)
-      }
+      title={title ?? (active ? sortedTitle : t("sortHead.sortBy", { label }))}
       className="inline-flex items-center gap-1 hover:text-[var(--foreground)]"
     >
       {label}

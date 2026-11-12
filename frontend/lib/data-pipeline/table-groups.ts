@@ -110,3 +110,16 @@ export const TABLE_GROUPS: TableGroup[] = [
     ],
   },
 ];
+
+// A group's name is its stable identifier (the domain map positions boxes by
+// it). The displayed heading is the message below in the dataPipeline
+// namespace, so translations can change the wording without touching this file.
+export const GROUP_LABEL_KEYS: Record<string, string> = {
+  "Journal universe": "domain.journalUniverse",
+  Works: "domain.works",
+  "People and orgs": "domain.peopleAndOrgs",
+  Deals: "domain.deals",
+  "Funders and policy": "domain.fundersAndPolicy",
+  "Landing and bookkeeping": "domain.landingAndBookkeeping",
+  "Site and configuration": "domain.siteAndConfiguration",
+};

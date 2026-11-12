@@ -2,6 +2,7 @@
 
 import { Search, X } from "lucide-react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import { useInstitution } from "@/hooks/use-institution";
@@ -12,6 +13,7 @@ import { useFunderPrefs } from "@/lib/funder-prefs";
  * select it (persisted in localStorage), or open its detail page. */
 export function FunderPicker() {
   const inst = useInstitution();
+  const t = useTranslations("common");
   const [funder, setFunder] = useFunderPrefs();
   const [input, setInput] = React.useState("");
   const [open, setOpen] = React.useState(false);
@@ -38,12 +40,15 @@ export function FunderPicker() {
   if (funder) {
     return (
       <span className="inline-flex h-10 items-center gap-1.5 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-2.5 text-sm">
-        <span className="max-w-[220px] truncate" title={`Funder fit shown for ${funder.name}`}>
-          Funder: {funder.name}
+        <span
+          className="max-w-[220px] truncate"
+          title={t("funder.selectedTitle", { name: funder.name })}
+        >
+          {t("funder.selectedLabel", { name: funder.name })}
         </span>
         <button
           type="button"
-          aria-label={`Clear funder ${funder.name}`}
+          aria-label={t("funder.clearLabel", { name: funder.name })}
           className="rounded p-0.5 hover:bg-[var(--muted)]"
           onClick={() => setFunder(null)}
         >
@@ -64,8 +69,8 @@ export function FunderPicker() {
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
-          placeholder="Funder…"
-          aria-label="Select your funder to see policy fit"
+          placeholder={t("funder.placeholder")}
+          aria-label={t("funder.inputLabel")}
           className="h-10 w-40 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] pl-7 pr-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 min-[560px]:w-56"
         />
         <Search
@@ -76,12 +81,14 @@ export function FunderPicker() {
       {open && debounced.trim().length >= 2 && (
         <ul
           role="listbox"
-          aria-label="Funder results"
+          aria-label={t("funder.resultsLabel")}
           className="absolute z-30 mt-1 max-h-72 w-72 overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-1 text-sm shadow-lg"
         >
-          {funders.isPending && <li className="px-2 py-1.5 opacity-60">Searching…</li>}
+          {funders.isPending && <li className="px-2 py-1.5 opacity-60">{t("funder.searching")}</li>}
           {funders.data?.items.length === 0 && (
-            <li className="px-2 py-1.5 opacity-60">No funder matches “{debounced}”</li>
+            <li className="px-2 py-1.5 opacity-60">
+              {t("funder.noMatches", { query: debounced })}
+            </li>
           )}
           {funders.data?.items.map((f) => (
             <li key={f.id} className="flex items-center gap-1 rounded px-1 hover:bg-[var(--muted)]">
@@ -89,7 +96,7 @@ export function FunderPicker() {
                 type="button"
                 className="min-w-0 flex-1 py-1.5 text-left"
                 onClick={() => {
-                  setFunder({ id: f.id, name: f.name ?? `Funder ${f.id}` });
+                  setFunder({ id: f.id, name: f.name ?? t("funder.fallbackName", { id: f.id }) });
                   setOpen(false);
                   setInput("");
                 }}
@@ -97,21 +104,23 @@ export function FunderPicker() {
                 <span className="block truncate font-medium">{f.name}</span>
                 <span className="text-xs opacity-70">
                   {(f.country ?? "").toUpperCase()}
-                  {f.policy_structured ? "" : " · text-only policy"}
+                  {f.policy_structured ? "" : t("funder.textOnlyPolicy")}
                 </span>
               </button>
               <span
                 className="shrink-0 rounded-full bg-[var(--muted)] px-1.5 py-0.5 text-xs"
-                title={`${f.n_ut_works} works from this institution credit this funder`}
+                title={t("funder.worksTitle", { count: f.n_ut_works })}
               >
                 {f.n_ut_works}
               </span>
               <Link
                 href={`/${inst}/funders/${f.id}`}
                 className="shrink-0 px-1.5 py-1 text-xs underline decoration-dotted"
-                title={`Open funder page for ${f.name}`}
+                title={t("funder.openPageTitle", {
+                  name: f.name ?? t("funder.fallbackName", { id: f.id }),
+                })}
               >
-                view
+                {t("funder.view")}
               </Link>
             </li>
           ))}

@@ -1,0 +1,52 @@
+{
+  "meta": {
+    "title": "Deals"
+  },
+  "page": {
+    "heading": "Open access deals",
+    "intro": "Transformative and read-and-publish agreements that cover {institution} authors. Each entry shows the caps, the conditions, and the workflow."
+  },
+  "section": {
+    "current": "Current deals",
+    "count": "{count, plural, one {# deal relevant to {institution} authors} other {# deals relevant to {institution} authors}}",
+    "loading": "Loading…",
+    "loadFailed": "Could not load deals.",
+    "retry": "Retry",
+    "archive": "Archive",
+    "archiveToggle": "Archive ({count})",
+    "archiveIntro": "Signed deals that no longer apply to {institution} authors.",
+    "archiveEmpty": "No archived deals."
+  },
+  "condition": {
+    "applies": "Applies to this deal",
+    "doesNotApply": "Does not apply to this deal",
+    "correspondingOnly": "Corresponding authors only",
+    "capped": "Discounted articles capped"
+  },
+  "card": {
+    "fallbackTitle": "Deal {id}",
+    "currentBadge": "Current",
+    "currentBadgeTitle": "Current deal: in effect for {institution} authors.",
+    "archiveBadge": "Archive",
+    "archiveBadgeTitle": "Archived deal: no longer in effect.",
+    "curationPending": "Curation pending",
+    "descriptionFallback": "{duration} · {count, plural, one {# journal} other {# journals}}",
+    "journals": "{count, plural, one {# journal} other {# journals}}",
+    "oaInYear": "{count, number} OA articles in {year}",
+    "capUsage": "Cap usage {year}: {count, number}",
+    "apcTotal": "{total} in APC fees",
+    "apcMean": "mean {mean}",
+    "conditions": "Conditions",
+    "workflow": "Workflow",
+    "articleTypes": "Article types",
+    "detailsSummary": "Conditions, workflow, and article types",
+    "capsLabel": "Caps:",
+    "capUsagePerYear": "Cap usage per year",
+    "oaPerYear": "OA articles per year (JCT output)",
+    "yearCount": "{year}: {count, number}",
+    "coveredJournals": "Covered journals (search)",
+    "openaccessNl": "openaccess.nl",
+    "contract": "Contract",
+    "jctData": "JCT data"
+  }
+}

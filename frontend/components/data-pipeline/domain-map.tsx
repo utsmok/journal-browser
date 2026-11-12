@@ -1,4 +1,6 @@
-import { TABLE_GROUPS } from "@/lib/data-pipeline/table-groups";
+import { getTranslations } from "next-intl/server";
+
+import { GROUP_LABEL_KEYS, TABLE_GROUPS } from "@/lib/data-pipeline/table-groups";
 
 const VIEW_W = 1000;
 const VIEW_H = 650;
@@ -14,7 +16,7 @@ const BOX: Record<string, { x: number; y: number; w: number; h: number }> = {
   "Site and configuration": { x: 700, y: 470, w: 260, h: 142 },
 };
 
-function GroupBox({ name }: { name: string }) {
+function GroupBox({ name, label }: { name: string; label: string }) {
   const box = BOX[name];
   const tables = TABLE_GROUPS.find((group) => group.name === name)?.tables ?? [];
   return (
@@ -34,7 +36,7 @@ function GroupBox({ name }: { name: string }) {
         fontWeight={600}
         className="fill-[var(--foreground)]"
       >
-        {name}
+        {label}
       </text>
       {tables.map((table, i) => (
         <text
@@ -51,13 +53,14 @@ function GroupBox({ name }: { name: string }) {
   );
 }
 
-export function DomainMap() {
+export async function DomainMap() {
+  const t = await getTranslations("dataPipeline");
   return (
     <svg
       viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
       className="w-full"
       role="img"
-      aria-label="How the seven table domains reference each other"
+      aria-label={t("domain.ariaLabel")}
     >
       <defs>
         <marker
@@ -218,7 +221,7 @@ export function DomainMap() {
       </text>
 
       {Object.keys(BOX).map((name) => (
-        <GroupBox key={name} name={name} />
+        <GroupBox key={name} name={name} label={t(GROUP_LABEL_KEYS[name] ?? name)} />
       ))}
     </svg>
   );

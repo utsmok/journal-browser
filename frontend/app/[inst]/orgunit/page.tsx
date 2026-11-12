@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -36,30 +37,17 @@ const SEARCH_INPUT_ID = "orgunit-search";
 
 const PAGE_SIZES = [25, 50, 100];
 
-const WORKS_LABELS: Record<string, string> = {
-  "1-4": "1–4 works",
-  "5-19": "5–19 works",
-  "20-49": "20–49 works",
-  "50+": "50+ works",
+/** Works-bucket facet value → message key for its label. */
+const WORKS_BUCKET_KEYS: Record<string, string> = {
+  "1-4": "list.works1to4",
+  "5-19": "list.works5to19",
+  "20-49": "list.works20to49",
+  "50+": "list.works50plus",
 };
 
 /** Matches the journal page's sort-select styling. */
 const SELECT_CLASS =
   "h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2";
-
-/** Unit noun per level ("12 research groups"), sentence-case singular. */
-const LEVEL_NOUN: Record<OrgUnitLevel, string> = {
-  faculty: "faculty",
-  group: "research group",
-  institute: "institute",
-};
-
-/** Lower-case plural for search placeholders and empty states. */
-const LEVEL_PLURAL: Record<OrgUnitLevel, string> = {
-  faculty: "faculties",
-  group: "research groups",
-  institute: "institutes",
-};
 
 /** Comma-joined multi-select param → list of values (journal-search convention). */
 function paramValues(sp: { get(key: string): string | null }, key: string): string[] {
@@ -78,9 +66,10 @@ function facetValues(counts: Record<string, number> | undefined, active: string[
 
 /** Deal-covered works as "12 (18%)"; the share needs a nonzero denominator. */
 function DealWorksCell({ unit }: { unit: OrgUnitItem }) {
+  const t = useTranslations("orgunits");
   const share = unit.n_works > 0 ? Math.round((unit.deal_works / unit.n_works) * 100) : 0;
   return (
-    <span className="tabular-nums" title="Works in journals covered by an open access deal">
+    <span className="tabular-nums" title={t("tooltips.dealWorks")}>
       {unit.deal_works.toLocaleString("en")}
       {unit.n_works > 0 && <span className="text-[var(--muted-foreground)]"> ({share}%)</span>}
     </span>
@@ -97,6 +86,8 @@ export default function OrgUnitSearchPage() {
 }
 
 function OrgUnitsView() {
+  const t = useTranslations("orgunits");
+  const tc = useTranslations("common");
   const inst = useInstitution();
   const site = useSiteMeta();
   const sp = useSearchParams();
@@ -239,7 +230,7 @@ function OrgUnitsView() {
       ? [
           {
             key: "faculty",
-            label: "Faculty",
+            label: t("columns.faculty"),
             defaultOpen: true,
             values: facetValues(facets?.faculty, faculty),
             activeValues: faculty,
@@ -248,11 +239,11 @@ function OrgUnitsView() {
       : []),
     {
       key: "works",
-      label: "Publications",
+      label: t("list.filter.publications"),
       defaultOpen: true,
       values: facetValues(facets?.size, works).map((v) => ({
         ...v,
-        label: WORKS_LABELS[v.value] ?? v.value,
+        label: WORKS_BUCKET_KEYS[v.value] ? t(WORKS_BUCKET_KEYS[v.value]) : v.value,
       })),
       activeValues: works,
     },
@@ -260,9 +251,9 @@ function OrgUnitsView() {
     // offered as a filter; the count is absent until facets load.
     {
       key: "uses_deals",
-      label: "Open access deal",
+      label: t("list.filter.deal"),
       defaultOpen: true,
-      values: [{ value: "yes", label: "Uses deals", count: facets?.uses_deals?.yes }],
+      values: [{ value: "yes", label: t("list.filter.usesDeals"), count: facets?.uses_deals?.yes }],
       activeValues: usesDeals ? ["yes"] : [],
     },
   ];
@@ -274,11 +265,9 @@ function OrgUnitsView() {
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
       <div className="flex flex-col min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[960px]:gap-6 min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
         <section className="order-1 mb-8 min-[960px]:col-start-2 min-[960px]:row-start-1 min-[960px]:mb-6">
-          <h1 className="mb-3 text-3xl font-bold text-balance">Faculties</h1>
+          <h1 className="mb-3 text-3xl font-bold text-balance">{t("list.title")}</h1>
           <p className="mb-6 max-w-2xl text-[var(--muted-foreground)]">
-            Browse the organisational units of {site.name}: faculties, their research groups, and
-            the interdisciplinary institutes, with publishing output, works in journals currently
-            covered by a deal, and APC spend.
+            {t("list.intro", { institution: site.name })}
           </p>
           <form
             className="flex max-w-2xl gap-2"
@@ -295,8 +284,8 @@ function OrgUnitsView() {
                 onKeyDown={(event) => {
                   if (event.key === "Escape") event.currentTarget.blur();
                 }}
-                placeholder={`Search ${LEVEL_PLURAL[level]}`}
-                aria-label={`Search ${LEVEL_PLURAL[level]}`}
+                placeholder={t(`list.search.${level}`)}
+                aria-label={t(`list.search.${level}`)}
               />
               {input === "" && (
                 <kbd
@@ -307,7 +296,7 @@ function OrgUnitsView() {
                 </kbd>
               )}
             </div>
-            <Button type="submit">Search</Button>
+            <Button type="submit">{t("list.search.action")}</Button>
           </form>
         </section>
 
@@ -331,7 +320,7 @@ function OrgUnitsView() {
               only applies to research groups. */}
             <div
               role="group"
-              aria-label="Unit level"
+              aria-label={t("list.levelLabel")}
               className="flex overflow-hidden rounded-[var(--radius)] border border-[var(--input)]"
             >
               <Button
@@ -341,7 +330,7 @@ function OrgUnitsView() {
                 aria-pressed={level === "faculty"}
                 onClick={() => setParams({ level: undefined, faculty: undefined })}
               >
-                Faculties
+                {t("list.levelToggle.faculty")}
               </Button>
               <Button
                 variant={level === "group" ? "secondary" : "ghost"}
@@ -350,7 +339,7 @@ function OrgUnitsView() {
                 aria-pressed={level === "group"}
                 onClick={() => setParams({ level: "group", faculty: undefined })}
               >
-                Research groups
+                {t("list.levelToggle.group")}
               </Button>
               <Button
                 variant={level === "institute" ? "secondary" : "ghost"}
@@ -359,15 +348,15 @@ function OrgUnitsView() {
                 aria-pressed={level === "institute"}
                 onClick={() => setParams({ level: "institute", faculty: undefined })}
               >
-                Institutes
+                {t("list.levelToggle.institute")}
               </Button>
             </div>
             <label htmlFor="orgunit-sort" className="whitespace-nowrap">
-              Sort by
+              {t("list.sortBy")}
             </label>
             <select
               id="orgunit-sort"
-              title="Order of the results"
+              title={t("list.sortOrderTitle")}
               value={sort ?? "default"}
               onChange={(event) =>
                 setParams({
@@ -381,13 +370,13 @@ function OrgUnitsView() {
             >
               {/* The backend default is relevance with a query, works count
                 without; say so instead of guessing one label. */}
-              <option value="default">{q ? "Relevance" : "Works (high→low)"}</option>
+              <option value="default">{q ? t("list.sort.relevance") : t("list.sort.works")}</option>
               {(
                 [
-                  ["name", "Name (A→Z)"],
-                  ["authors", "Authors (high→low)"],
-                  ["works", "Works (high→low)"],
-                  ["deal_works", "Deal-covered works (high→low)"],
+                  ["name", t("list.sort.name")],
+                  ["authors", t("list.sort.authors")],
+                  ["works", t("list.sort.works")],
+                  ["deal_works", t("list.sort.dealWorks")],
                 ] as [OrgUnitSearchSort, string][]
               ).map(([value, label]) => (
                 <option key={value} value={value}>
@@ -396,11 +385,11 @@ function OrgUnitsView() {
               ))}
             </select>
             <label htmlFor="orgunit-per-page" className="whitespace-nowrap">
-              Per page
+              {t("list.perPage")}
             </label>
             <select
               id="orgunit-per-page"
-              title="Results per page"
+              title={t("list.perPageTitle")}
               value={pageSize}
               onChange={(event) =>
                 setParams({
@@ -420,10 +409,10 @@ function OrgUnitsView() {
                 variant="ghost"
                 size="sm"
                 className="text-[var(--muted-foreground)]"
-                title="Clears all active filters"
+                title={t("list.resetFiltersTitle")}
                 onClick={clearFilters}
               >
-                Reset filters
+                {t("list.resetFilters")}
               </Button>
             )}
           </div>
@@ -435,17 +424,17 @@ function OrgUnitsView() {
                     region keeps its previous text, so typing never chatters. */}
                   <span aria-live="polite">
                     {data
-                      ? `${data.total.toLocaleString("en")} ${data.total === 1 ? LEVEL_NOUN[level] : LEVEL_PLURAL[level]}${q ? ` matching “${q}”` : ""}`
+                      ? `${t(`counts.${level}`, { count: data.total })}${q ? ` ${t("list.matching", { query: q })}` : ""}`
                       : ""}
                   </span>
-                  {isFetching && data ? " · updating…" : ""}
+                  {isFetching && data ? ` ${t("list.updating")}` : ""}
                 </p>
                 {showPager && (
                   <div className="flex items-center gap-2">
                     <Button
                       variant="outline"
                       size="sm"
-                      aria-label="Previous page"
+                      aria-label={t("list.pager.prevLabel")}
                       disabled={offset === 0}
                       onClick={() =>
                         setParams({
@@ -453,19 +442,19 @@ function OrgUnitsView() {
                         })
                       }
                     >
-                      <ChevronLeft aria-hidden className="size-4" /> Prev
+                      <ChevronLeft aria-hidden className="size-4" /> {t("list.pager.prev")}
                     </Button>
                     <span className="whitespace-nowrap text-sm tabular-nums text-[var(--muted-foreground)]">
-                      Page {page.toLocaleString("en")} of {pageCount.toLocaleString("en")}
+                      {t("list.pager.page", { page, pages: pageCount })}
                     </span>
                     <Button
                       variant="outline"
                       size="sm"
-                      aria-label="Next page"
+                      aria-label={t("list.pager.nextLabel")}
                       disabled={offset + pageSize >= total}
                       onClick={() => setParams({ offset: String(offset + pageSize) })}
                     >
-                      Next <ChevronRight aria-hidden className="size-4" />
+                      {t("list.pager.next")} <ChevronRight aria-hidden className="size-4" />
                     </Button>
                   </div>
                 )}
@@ -473,9 +462,9 @@ function OrgUnitsView() {
 
               {isError ? (
                 <div className="py-10 text-center">
-                  <p className="text-[var(--destructive)]">{errorMessage(error)}</p>
+                  <p className="text-[var(--destructive)]">{errorMessage(tc, error)}</p>
                   <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
-                    Retry
+                    {t("list.retry")}
                   </Button>
                 </div>
               ) : isPending ? (
@@ -483,22 +472,22 @@ function OrgUnitsView() {
               ) : rows.length === 0 ? (
                 <div className="py-10 text-center text-[var(--muted-foreground)]">
                   {q && !anyFilter ? (
-                    <>
-                      No {LEVEL_PLURAL[level]} match &ldquo;{q}&rdquo;.
-                    </>
+                    <>{t(`list.emptyQuery.${level}`, { query: q })}</>
                   ) : !anyFilter ? (
                     // Unfiltered empty: for an institution whose orgunit
                     // corpus was never harvested (e.g. rug) this is a data
                     // gap, not a filter problem.
                     <>
-                      No organisational data is available for {site.name || "this institution"} yet.
+                      {t("list.emptyNoData", {
+                        institution: site.name || t("list.institutionFallback"),
+                      })}
                     </>
                   ) : (
                     <>
-                      No {LEVEL_PLURAL[level]} match these filters.
+                      {t(`list.emptyFiltered.${level}`)}
                       <div className="mt-3">
                         <Button variant="outline" size="sm" onClick={clearFilters}>
-                          Clear filters
+                          {t("list.clearFilters")}
                         </Button>
                       </div>
                     </>
@@ -510,7 +499,7 @@ function OrgUnitsView() {
                     push the counts off-screen behind horizontal scrolling. */}
                   <ul
                     className={isFetching ? "opacity-60 md:hidden" : "md:hidden"}
-                    aria-label="Organisational unit results"
+                    aria-label={t("list.resultsListLabel")}
                   >
                     {rows.map((u) => (
                       <li
@@ -527,23 +516,22 @@ function OrgUnitsView() {
                           {u.faculty || "—"}
                         </div>
                         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs tabular-nums text-[var(--muted-foreground)]">
-                          <span>
-                            {u.n_authors.toLocaleString("en")}{" "}
-                            {u.n_authors === 1 ? "author" : "authors"}
-                          </span>
-                          <span>
-                            {u.n_works.toLocaleString("en")} {u.n_works === 1 ? "work" : "works"}
-                          </span>
+                          <span>{t("counts.author", { count: u.n_authors })}</span>
+                          <span>{t("counts.work", { count: u.n_works })}</span>
                           {u.deal_works > 0 && (
-                            <span>{u.deal_works.toLocaleString("en")} deal-covered works</span>
+                            <span>{t("counts.dealWork", { count: u.deal_works })}</span>
                           )}
-                          {u.apc_n > 0 && <span>APC {formatEur(u.apc_euro_total)} €</span>}
+                          {u.apc_n > 0 && (
+                            <span>
+                              {t("list.mobileApc", { euro: formatEur(u.apc_euro_total) })}
+                            </span>
+                          )}
                         </div>
                         {u.topics.length > 0 && (
                           <div className="mt-1 text-xs text-[var(--muted-foreground)]">
                             {u.topics
                               .slice(0, 2)
-                              .map((t) => t.name)
+                              .map((topic) => topic.name)
                               .join(" · ")}
                           </div>
                         )}
@@ -552,28 +540,42 @@ function OrgUnitsView() {
                   </ul>
                   <div className={isFetching ? "hidden opacity-60 md:block" : "hidden md:block"}>
                     <Table>
-                      <caption className="sr-only">Organisational unit search results</caption>
+                      <caption className="sr-only">{t("list.tableCaption")}</caption>
                       <TableHeader>
                         <TableRow>
                           <TableHead aria-sort={ariaSortFor("name")}>
-                            <SortHead columnId="name" label="Name" state={sortHeadState} />
+                            <SortHead
+                              columnId="name"
+                              label={t("columns.name")}
+                              state={sortHeadState}
+                            />
                           </TableHead>
-                          {level === "group" && <TableHead>Faculty</TableHead>}
+                          {level === "group" && <TableHead>{t("columns.faculty")}</TableHead>}
                           <TableHead className="text-right" aria-sort={ariaSortFor("authors")}>
-                            <SortHead columnId="authors" label="Authors" state={sortHeadState} />
+                            <SortHead
+                              columnId="authors"
+                              label={t("columns.authors")}
+                              state={sortHeadState}
+                            />
                           </TableHead>
                           <TableHead className="text-right" aria-sort={ariaSortFor("works")}>
-                            <SortHead columnId="works" label="Works" state={sortHeadState} />
+                            <SortHead
+                              columnId="works"
+                              label={t("columns.works")}
+                              state={sortHeadState}
+                            />
                           </TableHead>
                           <TableHead className="text-right" aria-sort={ariaSortFor("deal_works")}>
                             <SortHead
                               columnId="deal_works"
-                              label="Deal-covered works"
+                              label={t("columns.dealWorks")}
                               state={sortHeadState}
                             />
                           </TableHead>
-                          {showApc && <TableHead className="text-right">APC</TableHead>}
-                          <TableHead>Topics</TableHead>
+                          {showApc && (
+                            <TableHead className="text-right">{t("columns.apc")}</TableHead>
+                          )}
+                          <TableHead>{t("columns.topics")}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -613,11 +615,7 @@ function OrgUnitsView() {
                             {showApc && (
                               <TableCell className="whitespace-nowrap text-right tabular-nums">
                                 {u.apc_n > 0 ? (
-                                  <span
-                                    title={`APC paid for ${u.apc_n} ${
-                                      u.apc_n === 1 ? "article" : "articles"
-                                    }`}
-                                  >
+                                  <span title={t("tooltips.apc", { count: u.apc_n })}>
                                     {formatEur(u.apc_euro_total)} €{" "}
                                     <span className="text-[var(--muted-foreground)]">
                                       ({u.apc_n})
@@ -634,12 +632,12 @@ function OrgUnitsView() {
                                   className="block max-w-40 truncate"
                                   title={u.topics
                                     .slice(0, 2)
-                                    .map((t) => `${t.name} (${Math.round(t.n)})`)
+                                    .map((topic) => `${topic.name} (${Math.round(topic.n)})`)
                                     .join(" · ")}
                                 >
                                   {u.topics
                                     .slice(0, 2)
-                                    .map((t) => t.name)
+                                    .map((topic) => topic.name)
                                     .join(" · ")}
                                 </span>
                               ) : (
@@ -652,8 +650,7 @@ function OrgUnitsView() {
                     </Table>
                   </div>
                   <p className="mt-4 text-xs text-[var(--muted-foreground)]">
-                    Showing {rows.length.toLocaleString("en")} of{" "}
-                    {(data?.total ?? 0).toLocaleString("en")}
+                    {t("list.showing", { shown: rows.length, total: data?.total ?? 0 })}
                   </p>
                 </>
               )}

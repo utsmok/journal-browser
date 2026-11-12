@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -77,14 +78,22 @@ function capUsageToRows(usage: AdminDealDetail["cap_usage"]): CapUsageRow[] {
 }
 
 export function DealStatusBadge({ status }: { status: string }) {
-  return <Badge variant={status === "current" ? "default" : "muted"}>{status}</Badge>;
+  const t = useTranslations("admin");
+  const label =
+    status === "current"
+      ? t("deals.statusCurrent")
+      : status === "archive"
+        ? t("deals.statusArchive")
+        : status;
+  return <Badge variant={status === "current" ? "default" : "muted"}>{label}</Badge>;
 }
 
 function FlagBadge({ deal }: { deal: AdminDeal }) {
+  const t = useTranslations("admin");
   if (!deal.needs_curation) return null;
   return (
     <Badge variant="outline" title={deal.needs_curation_reason ?? undefined}>
-      flagged
+      {t("deals.flagged")}
     </Badge>
   );
 }
@@ -99,18 +108,19 @@ export function DealsTable({
   selectedId: number | null;
   onSelect: (id: number) => void;
 }) {
+  const t = useTranslations("admin");
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Publisher</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Years</TableHead>
-          <TableHead>Journals</TableHead>
-          <TableHead>Cap</TableHead>
-          <TableHead>Institutions</TableHead>
-          <TableHead>Flag</TableHead>
-          <TableHead aria-label="Actions" />
+          <TableHead>{t("deals.columnPublisher")}</TableHead>
+          <TableHead>{t("deals.columnStatus")}</TableHead>
+          <TableHead>{t("deals.columnYears")}</TableHead>
+          <TableHead>{t("deals.columnJournals")}</TableHead>
+          <TableHead>{t("deals.columnCap")}</TableHead>
+          <TableHead>{t("deals.columnInstitutions")}</TableHead>
+          <TableHead>{t("deals.columnFlag")}</TableHead>
+          <TableHead aria-label={t("deals.columnActions")} />
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -126,7 +136,9 @@ export function DealsTable({
             </TableCell>
             <TableCell className="whitespace-nowrap">{yearsSpan(d)}</TableCell>
             <TableCell>{d.journal_count}</TableCell>
-            <TableCell>{d.capped ? <Badge variant="secondary">capped</Badge> : "—"}</TableCell>
+            <TableCell>
+              {d.capped ? <Badge variant="secondary">{t("deals.capped")}</Badge> : "—"}
+            </TableCell>
             <TableCell
               className="max-w-xs truncate text-muted-foreground"
               title={d.participations.join(", ")}
@@ -145,7 +157,7 @@ export function DealsTable({
                   onSelect(d.id);
                 }}
               >
-                Edit
+                {t("deals.edit")}
               </Button>
             </TableCell>
           </TableRow>
@@ -174,6 +186,7 @@ export function DealEditor({
   /** Called after any mutation so the parent list can refetch. */
   onChanged: () => void;
 }) {
+  const t = useTranslations("admin");
   const [detail, setDetail] = useState<AdminDealDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -194,16 +207,21 @@ export function DealEditor({
   const [issnName, setIssnName] = useState("");
   const [journalBusy, setJournalBusy] = useState(false);
 
-  const fail = (err: unknown, what: string) => {
+  const fail = (err: unknown, action: string) => {
     if (err instanceof AdminError && err.status === 401) {
       onUnauthorized(null);
       return;
     }
     if (err instanceof AdminError && err.status === 409) {
-      setError("ESAC id already in use.");
+      setError(t("deals.esacInUse"));
       return;
     }
-    setError(`${what} failed (${err instanceof Error ? err.message : err}).`);
+    setError(
+      t("deals.actionFailed", {
+        action,
+        message: err instanceof Error ? err.message : String(err),
+      }),
+    );
   };
 
   const reload = useCallback(async () => {
@@ -227,26 +245,29 @@ export function DealEditor({
       setCapUsageRows(capUsageToRows(d.cap_usage));
     } catch (err) {
       if (err instanceof AdminError && err.status === 401) onUnauthorized(null);
-      else setLoadError(`Could not load deal (${err instanceof Error ? err.message : err}).`);
+      else
+        setLoadError(
+          t("deals.loadFailed", { message: err instanceof Error ? err.message : String(err) }),
+        );
     }
-  }, [dealId, token, onUnauthorized]);
+  }, [dealId, token, onUnauthorized, t]);
 
   useEffect(() => {
     void reload();
   }, [reload]);
 
   if (loadError) return <p className="text-sm text-destructive">{loadError}</p>;
-  if (!detail) return <p className="text-sm text-muted-foreground">Loading deal…</p>;
+  if (!detail) return <p className="text-sm text-muted-foreground">{t("deals.loading")}</p>;
 
   const save = async () => {
     const sy = startYear.trim() === "" ? null : Number(startYear);
     const ey = endYear.trim() === "" ? null : Number(endYear);
     if (startYear.trim() !== "" && !Number.isInteger(sy)) {
-      setError("Start year must be a whole year.");
+      setError(t("deals.startYearWhole"));
       return;
     }
     if (endYear.trim() !== "" && !Number.isInteger(ey)) {
-      setError("End year must be a whole year.");
+      setError(t("deals.endYearWhole"));
       return;
     }
     let cap: Record<string, number> | null = null;
@@ -254,12 +275,12 @@ export function DealEditor({
       cap = {};
       for (const row of capRows) {
         if (!/^\d{4}$/.test(row.year.trim())) {
-          setError("Cap years must be 4-digit years.");
+          setError(t("deals.capYearsFourDigits"));
           return;
         }
         const n = Number(row.count);
         if (!Number.isInteger(n)) {
-          setError("Cap counts must be whole numbers.");
+          setError(t("deals.capCountsWhole"));
           return;
         }
         cap[row.year.trim()] = n;
@@ -270,7 +291,7 @@ export function DealEditor({
       capUsage = [];
       for (const row of capUsageRows) {
         if (row.year.trim() === "" || row.total.trim() === "") {
-          setError("Cap usage rows need a year and a total.");
+          setError(t("deals.capUsageNeedsYearTotal"));
           return;
         }
         const year = Number(row.year);
@@ -281,7 +302,7 @@ export function DealEditor({
           !Number.isInteger(total) ||
           (used != null && !Number.isInteger(used))
         ) {
-          setError("Cap usage years, totals, and used counts must be whole numbers.");
+          setError(t("deals.capUsageWhole"));
           return;
         }
         capUsage.push({
@@ -308,7 +329,7 @@ export function DealEditor({
     if (canonicalJson(capUsage) !== canonicalJson(detail.cap_usage ?? null))
       body.cap_usage = capUsage;
     if (Object.keys(body).length === 0) {
-      setError("No changes to save.");
+      setError(t("deals.noChanges"));
       return;
     }
     setSaving(true);
@@ -319,7 +340,7 @@ export function DealEditor({
       setSaved(true);
       onChanged();
     } catch (err) {
-      fail(err, "Save");
+      fail(err, t("deals.actionSave"));
     } finally {
       setSaving(false);
     }
@@ -338,7 +359,7 @@ export function DealEditor({
       onChanged();
       return true;
     } catch (err) {
-      fail(err, "Journal update");
+      fail(err, t("deals.actionJournalUpdate"));
       return false;
     } finally {
       setJournalBusy(false);
@@ -348,7 +369,7 @@ export function DealEditor({
   const addJournal = () => {
     const clean = issn.trim().toUpperCase();
     if (!ISSN_RE.test(clean)) {
-      setError("ISSN must look like 9999-9999 or 9999-999X.");
+      setError(t("deals.issnFormat"));
       return;
     }
     const entry: { issn: string; journal_name?: string } = { issn: clean };
@@ -362,7 +383,12 @@ export function DealEditor({
   };
 
   const removeJournal = (j: AdminDealJournal) => {
-    if (!window.confirm(`Remove ${j.journal_name ?? j.issn} (${j.issn}) from this deal?`)) return;
+    if (
+      !window.confirm(
+        t("deals.removeJournalConfirm", { name: j.journal_name ?? j.issn, issn: j.issn }),
+      )
+    )
+      return;
     void putJournals({ remove: [j.issn] });
   };
 
@@ -377,26 +403,28 @@ export function DealEditor({
         setDetail(d);
         onChanged();
       })
-      .catch((err) => fail(err, "Participation update"));
+      .catch((err) => fail(err, t("deals.actionParticipationUpdate")));
   };
 
   return (
     <div className="space-y-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-base font-semibold">
-          Edit deal: {detail.publisher ?? `#${detail.id}`}
+          {t("deals.editTitle", { publisher: detail.publisher ?? `#${detail.id}` })}
         </h3>
         <DealStatusBadge status={detail.status} />
         <FlagBadge deal={detail} />
       </div>
       {detail.needs_curation && detail.needs_curation_reason && (
-        <p className="text-sm text-muted-foreground">Flag reason: {detail.needs_curation_reason}</p>
+        <p className="text-sm text-muted-foreground">
+          {t("deals.flagReason", { reason: detail.needs_curation_reason })}
+        </p>
       )}
 
       <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
         <div className="space-y-1">
           <label htmlFor="deal-status" className="text-sm font-medium">
-            Status
+            {t("deals.status")}
           </label>
           <select
             id="deal-status"
@@ -407,13 +435,13 @@ export function DealEditor({
               setStatus(e.target.value as "current" | "archive");
             }}
           >
-            <option value="current">current</option>
-            <option value="archive">archive</option>
+            <option value="current">{t("deals.statusCurrent")}</option>
+            <option value="archive">{t("deals.statusArchive")}</option>
           </select>
         </div>
         <div className="space-y-1">
           <label htmlFor="deal-esac" className="text-sm font-medium">
-            ESAC id
+            {t("deals.esacId")}
           </label>
           <Input
             id="deal-esac"
@@ -426,7 +454,7 @@ export function DealEditor({
         </div>
         <div className="space-y-1">
           <label htmlFor="deal-start" className="text-sm font-medium">
-            Start year
+            {t("deals.startYear")}
           </label>
           <Input
             id="deal-start"
@@ -440,7 +468,7 @@ export function DealEditor({
         </div>
         <div className="space-y-1">
           <label htmlFor="deal-end" className="text-sm font-medium">
-            End year
+            {t("deals.endYear")}
           </label>
           <Input
             id="deal-end"
@@ -464,12 +492,12 @@ export function DealEditor({
             setCao(e.target.checked);
           }}
         />
-        Corresponding authors only
+        {t("deals.correspondingOnly")}
       </label>
 
       <div className="space-y-1">
         <label htmlFor="deal-summary" className="text-sm font-medium">
-          Summary
+          {t("deals.summary")}
         </label>
         <textarea
           id="deal-summary"
@@ -485,14 +513,15 @@ export function DealEditor({
 
       <div className="space-y-2">
         <p className="text-sm font-medium">
-          Cap per year <span className="text-muted-foreground">(empty = not capped)</span>
+          {t("deals.capTitle")}{" "}
+          <span className="text-muted-foreground">{t("deals.capTitleHint")}</span>
         </p>
         {capRows.map((row, i) => (
           <div key={i} className="flex items-center gap-2">
             <Input
               type="number"
-              aria-label="Cap year"
-              placeholder="year"
+              aria-label={t("deals.capYear")}
+              placeholder={t("deals.capYearPlaceholder")}
               className="w-28"
               value={row.year}
               onChange={(e) => {
@@ -504,8 +533,8 @@ export function DealEditor({
             />
             <Input
               type="number"
-              aria-label="Cap amount"
-              placeholder="cap"
+              aria-label={t("deals.capAmount")}
+              placeholder={t("deals.capAmountPlaceholder")}
               className="w-28"
               value={row.count}
               onChange={(e) => {
@@ -523,7 +552,7 @@ export function DealEditor({
                 setCapRows((rows) => rows.filter((_, j) => j !== i));
               }}
             >
-              Remove
+              {t("deals.remove")}
             </Button>
           </div>
         ))}
@@ -535,11 +564,11 @@ export function DealEditor({
             setCapRows((rows) => [...rows, { year: String(new Date().getFullYear()), count: "" }]);
           }}
         >
-          Add year
+          {t("deals.addYear")}
         </Button>
         <div className="space-y-1">
           <label htmlFor="deal-cap-text" className="text-sm font-medium">
-            Cap text
+            {t("deals.capText")}
           </label>
           <Input
             id="deal-cap-text"
@@ -554,15 +583,15 @@ export function DealEditor({
 
       <div className="space-y-2">
         <p className="text-sm font-medium">
-          Cap usage{" "}
-          <span className="text-muted-foreground">(library email updates; empty = none)</span>
+          {t("deals.capUsageTitle")}{" "}
+          <span className="text-muted-foreground">{t("deals.capUsageTitleHint")}</span>
         </p>
         {capUsageRows.map((row, i) => (
           <div key={i} className="flex flex-wrap items-center gap-2">
             <Input
               type="number"
-              aria-label="Usage year"
-              placeholder="year"
+              aria-label={t("deals.usageYear")}
+              placeholder={t("deals.capYearPlaceholder")}
               className="w-24"
               value={row.year}
               onChange={(e) => {
@@ -573,8 +602,8 @@ export function DealEditor({
               }}
             />
             <Input
-              aria-label="Usage pool"
-              placeholder="pool (e.g. hybrid)"
+              aria-label={t("deals.usagePool")}
+              placeholder={t("deals.usagePoolPlaceholder")}
               className="w-40"
               value={row.pool}
               onChange={(e) => {
@@ -586,8 +615,8 @@ export function DealEditor({
             />
             <Input
               type="number"
-              aria-label="Usage total"
-              placeholder="total"
+              aria-label={t("deals.usageTotal")}
+              placeholder={t("deals.usageTotalPlaceholder")}
               className="w-24"
               value={row.total}
               onChange={(e) => {
@@ -599,8 +628,8 @@ export function DealEditor({
             />
             <Input
               type="number"
-              aria-label="APCs used"
-              placeholder="used"
+              aria-label={t("deals.apcsUsed")}
+              placeholder={t("deals.apcsUsedPlaceholder")}
               className="w-24"
               value={row.used}
               onChange={(e) => {
@@ -611,8 +640,8 @@ export function DealEditor({
               }}
             />
             <Input
-              aria-label="Reported as of"
-              placeholder="as of (e.g. October 2026)"
+              aria-label={t("deals.reportedAsOf")}
+              placeholder={t("deals.asOfPlaceholder")}
               className="w-56"
               value={row.asOf}
               onChange={(e) => {
@@ -623,8 +652,8 @@ export function DealEditor({
               }}
             />
             <Input
-              aria-label="Usage note"
-              placeholder="note"
+              aria-label={t("deals.usageNote")}
+              placeholder={t("deals.usageNotePlaceholder")}
               className="w-56"
               value={row.note}
               onChange={(e) => {
@@ -642,7 +671,7 @@ export function DealEditor({
                 setCapUsageRows((rows) => rows.filter((_, j) => j !== i));
               }}
             >
-              Remove
+              {t("deals.remove")}
             </Button>
           </div>
         ))}
@@ -664,24 +693,26 @@ export function DealEditor({
             ]);
           }}
         >
-          Add entry
+          {t("deals.addEntry")}
         </Button>
       </div>
 
       <div className="flex items-center gap-3">
         <Button onClick={() => void save()} disabled={saving}>
-          {saving ? "Saving…" : "Save"}
+          {saving ? t("deals.saving") : t("deals.save")}
         </Button>
-        {saved && <span className="text-sm text-muted-foreground">Saved.</span>}
+        {saved && <span className="text-sm text-muted-foreground">{t("deals.saved")}</span>}
         {error && <span className="text-sm text-destructive">{error}</span>}
       </div>
 
       <div className="space-y-2 border-t border-[var(--border)] pt-4">
-        <h4 className="text-sm font-semibold">Journals ({detail.journal_count})</h4>
+        <h4 className="text-sm font-semibold">
+          {t("deals.journalsTitle", { count: detail.journal_count })}
+        </h4>
         <div className="flex flex-wrap items-center gap-2">
           <Input
-            aria-label="ISSN"
-            placeholder="9999-9999 or 9999-999X"
+            aria-label={t("deals.issn")}
+            placeholder={t("deals.issnPlaceholder")}
             className="w-48"
             value={issn}
             onChange={(e) => setIssn(e.target.value)}
@@ -690,8 +721,8 @@ export function DealEditor({
             }}
           />
           <Input
-            aria-label="Journal name"
-            placeholder="Name (optional)"
+            aria-label={t("deals.journalName")}
+            placeholder={t("deals.journalNamePlaceholder")}
             className="w-56"
             value={issnName}
             onChange={(e) => setIssnName(e.target.value)}
@@ -700,17 +731,17 @@ export function DealEditor({
             }}
           />
           <Button size="sm" onClick={() => void addJournal()} disabled={journalBusy}>
-            Add
+            {t("deals.add")}
           </Button>
         </div>
         <div className="max-h-72 overflow-y-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ISSN</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Source</TableHead>
-                <TableHead aria-label="Actions" />
+                <TableHead>{t("deals.columnIssn")}</TableHead>
+                <TableHead>{t("deals.columnName")}</TableHead>
+                <TableHead>{t("deals.columnSource")}</TableHead>
+                <TableHead aria-label={t("deals.columnActions")} />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -735,7 +766,7 @@ export function DealEditor({
                       disabled={journalBusy}
                       onClick={() => removeJournal(j)}
                     >
-                      Remove
+                      {t("deals.remove")}
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -746,7 +777,7 @@ export function DealEditor({
       </div>
 
       <div className="space-y-2 border-t border-[var(--border)] pt-4">
-        <h4 className="text-sm font-semibold">Participating institutions</h4>
+        <h4 className="text-sm font-semibold">{t("deals.participations")}</h4>
         <div className="grid gap-2 sm:grid-cols-2">
           {institutions.map((inst) => (
             <label
@@ -781,6 +812,7 @@ export function CreateDealForm({
   onCreated: (id: number) => void;
   onCancel: () => void;
 }) {
+  const t = useTranslations("admin");
   const [publisherName, setPublisherName] = useState("");
   const [esacId, setEsacId] = useState("");
   const [status, setStatus] = useState<"current" | "archive">("current");
@@ -791,7 +823,7 @@ export function CreateDealForm({
 
   const create = async () => {
     if (!publisherName.trim()) {
-      setError("Publisher name is required.");
+      setError(t("deals.publisherRequired"));
       return;
     }
     const sy = startYear.trim() === "" ? undefined : Number(startYear);
@@ -800,7 +832,7 @@ export function CreateDealForm({
       (sy !== undefined && !Number.isInteger(sy)) ||
       (ey !== undefined && !Number.isInteger(ey))
     ) {
-      setError("Years must be whole numbers.");
+      setError(t("deals.yearsWhole"));
       return;
     }
     setSaving(true);
@@ -816,10 +848,13 @@ export function CreateDealForm({
       onCreated(detail.id);
     } catch (err) {
       if (err instanceof AdminError && err.status === 401) onUnauthorized(null);
-      else if (err instanceof AdminError && err.status === 409) setError("ESAC id already in use.");
+      else if (err instanceof AdminError && err.status === 409) setError(t("deals.esacInUse"));
       else if (err instanceof AdminError && err.status === 422)
-        setError("Publisher not found — provide a publisher name.");
-      else setError(`Create failed (${err instanceof Error ? err.message : err}).`);
+        setError(t("deals.publisherNotFound"));
+      else
+        setError(
+          t("deals.createFailed", { message: err instanceof Error ? err.message : String(err) }),
+        );
     } finally {
       setSaving(false);
     }
@@ -827,11 +862,11 @@ export function CreateDealForm({
 
   return (
     <div className="space-y-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4">
-      <h3 className="text-base font-semibold">Add deal</h3>
+      <h3 className="text-base font-semibold">{t("deals.createTitle")}</h3>
       <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
         <div className="space-y-1">
           <label htmlFor="new-deal-publisher" className="text-sm font-medium">
-            Publisher name
+            {t("deals.publisherName")}
           </label>
           <Input
             id="new-deal-publisher"
@@ -841,13 +876,14 @@ export function CreateDealForm({
         </div>
         <div className="space-y-1">
           <label htmlFor="new-deal-esac" className="text-sm font-medium">
-            ESAC id <span className="text-muted-foreground">(optional)</span>
+            {t("deals.esacId")}{" "}
+            <span className="text-muted-foreground">{t("deals.esacIdOptional")}</span>
           </label>
           <Input id="new-deal-esac" value={esacId} onChange={(e) => setEsacId(e.target.value)} />
         </div>
         <div className="space-y-1">
           <label htmlFor="new-deal-status" className="text-sm font-medium">
-            Status
+            {t("deals.status")}
           </label>
           <select
             id="new-deal-status"
@@ -855,14 +891,14 @@ export function CreateDealForm({
             value={status}
             onChange={(e) => setStatus(e.target.value as "current" | "archive")}
           >
-            <option value="current">current</option>
-            <option value="archive">archive</option>
+            <option value="current">{t("deals.statusCurrent")}</option>
+            <option value="archive">{t("deals.statusArchive")}</option>
           </select>
         </div>
         <div className="flex items-end gap-2">
           <div className="w-28 space-y-1">
             <label htmlFor="new-deal-start" className="text-sm font-medium">
-              Start year
+              {t("deals.startYear")}
             </label>
             <Input
               id="new-deal-start"
@@ -873,7 +909,7 @@ export function CreateDealForm({
           </div>
           <div className="w-28 space-y-1">
             <label htmlFor="new-deal-end" className="text-sm font-medium">
-              End year
+              {t("deals.endYear")}
             </label>
             <Input
               id="new-deal-end"
@@ -886,10 +922,10 @@ export function CreateDealForm({
       </div>
       <div className="flex items-center gap-3">
         <Button onClick={() => void create()} disabled={saving}>
-          {saving ? "Creating…" : "Create"}
+          {saving ? t("deals.creating") : t("deals.create")}
         </Button>
         <Button variant="ghost" onClick={onCancel} disabled={saving}>
-          Cancel
+          {t("deals.cancel")}
         </Button>
         {error && <span className="text-sm text-destructive">{error}</span>}
       </div>

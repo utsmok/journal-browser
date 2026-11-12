@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 
 import { buttonVariants } from "@/components/ui/button";
@@ -15,17 +16,18 @@ type Institution = {
   data_window_end: number | null;
 };
 
-function coverageLabel(start: number, end: number | null) {
-  if (end === null) return `Coverage: ${start} – present`;
-  if (end === start) return `Coverage: ${start}`;
-  return `Coverage: ${start} – ${end}`;
-}
-
 /** Landing: one card per hosted institution; straight redirect when solo. */
 export default function LandingPage() {
+  const t = useTranslations("home");
   const router = useRouter();
   const [institutions, setInstitutions] = React.useState<Institution[] | null>(null);
   const [error, setError] = React.useState(false);
+
+  const coverage = (start: number, end: number | null) => {
+    if (end === null) return t("landing.coverageToPresent", { start: String(start) });
+    if (end === start) return t("landing.coverageSingleYear", { year: String(start) });
+    return t("landing.coverageRange", { start: String(start), end: String(end) });
+  };
 
   const load = React.useCallback(() => {
     setError(false);
@@ -47,14 +49,12 @@ export default function LandingPage() {
     return (
       <div className="mx-auto max-w-2xl px-4 pb-10 pt-6 text-center">
         <h1 className="font-heading text-2xl font-bold">
-          <span className="sr-only">Open Journal Browser</span>
+          <span className="sr-only">{t("landing.siteName")}</span>
           <OjbWordmark className="mx-auto block h-36 w-auto" />
         </h1>
-        <p className="mt-4 text-[var(--muted-foreground)]">
-          The institution list is unavailable. Check that the backend is running.
-        </p>
+        <p className="mt-4 text-[var(--muted-foreground)]">{t("landing.loadError")}</p>
         <button type="button" onClick={load} className={buttonVariants({ className: "mt-6" })}>
-          Retry
+          {t("landing.retry")}
         </button>
       </div>
     );
@@ -65,10 +65,10 @@ export default function LandingPage() {
       <div
         className="mx-auto max-w-2xl px-4 pb-10 pt-6"
         aria-busy="true"
-        aria-label="Loading institutions"
+        aria-label={t("landing.loadingLabel")}
       >
         <h1 className="font-heading text-2xl font-bold">
-          <span className="sr-only">Open Journal Browser</span>
+          <span className="sr-only">{t("landing.siteName")}</span>
           <OjbWordmark className="mx-auto block h-36 w-auto" />
         </h1>
         <ul className="mt-8 space-y-3">
@@ -89,12 +89,10 @@ export default function LandingPage() {
   return (
     <div className="mx-auto max-w-2xl px-4 pb-10 pt-6">
       <h1 className="font-heading text-2xl font-bold">
-        <span className="sr-only">Open Journal Browser</span>
+        <span className="sr-only">{t("landing.siteName")}</span>
         <OjbWordmark className="mx-auto block h-36 w-auto" />
       </h1>
-      <p className="mt-3 text-center text-[var(--muted-foreground)]">
-        Choose your institution to browse its journal deals and publication data.
-      </p>
+      <p className="mt-3 text-center text-[var(--muted-foreground)]">{t("landing.intro")}</p>
       <ul className="mt-8 space-y-3">
         {institutions.map((inst) => (
           <li key={inst.code}>
@@ -111,7 +109,7 @@ export default function LandingPage() {
                 )}
               </span>
               <span className="mt-1 block text-sm text-[var(--muted-foreground)]">
-                {coverageLabel(inst.data_window_start, inst.data_window_end)}
+                {coverage(inst.data_window_start, inst.data_window_end)}
               </span>
             </Link>
           </li>

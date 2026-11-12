@@ -1,3 +1,7 @@
+"use client";
+
+import { useTranslations } from "next-intl";
+
 import { BackLink } from "@/components/back-link";
 
 /** Detail-page loading state: title bar plus a content block. */
@@ -16,9 +20,10 @@ export function DetailSkeleton() {
  * without the page reflowing underneath the reader.
  */
 export function JournalDetailSkeleton() {
+  const t = useTranslations("common");
   return (
     <div className="mx-auto max-w-5xl px-4 py-10" aria-busy="true" aria-live="polite">
-      <span className="sr-only">Loading journal details…</span>
+      <span className="sr-only">{t("states.loadingJournal")}</span>
       <div className="flex flex-wrap items-center gap-2">
         <div className="h-8 w-72 max-w-full animate-pulse rounded bg-[var(--muted)]" />
         <div className="h-6 w-24 animate-pulse rounded bg-[var(--muted)]" />
@@ -65,7 +70,7 @@ export function JournalDetailSkeleton() {
 export function ErrorPanel({
   message,
   backHref,
-  backLabel = "Back to search",
+  backLabel,
   backClassName = "mt-2",
 }: {
   message: string;
@@ -73,10 +78,15 @@ export function ErrorPanel({
   backLabel?: string;
   backClassName?: string;
 }) {
+  const t = useTranslations("common");
   return (
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
       <p className="text-[var(--destructive)]">{message}</p>
-      <BackLink href={backHref} label={backLabel} className={backClassName} />
+      <BackLink
+        href={backHref}
+        label={backLabel ?? t("states.backToSearch")}
+        className={backClassName}
+      />
     </div>
   );
 }

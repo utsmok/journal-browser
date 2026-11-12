@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -49,16 +51,17 @@ export function RunsTable({
   directory?: InstitutionDirectoryEntry[];
   onRowClick?: (run: AdminRun) => void;
 }) {
+  const t = useTranslations("admin");
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>#</TableHead>
-          <TableHead>Institution</TableHead>
-          <TableHead>Source</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Started</TableHead>
-          <TableHead>Stats</TableHead>
+          <TableHead>{t("runs.columnsNumber")}</TableHead>
+          <TableHead>{t("runs.columnsInstitution")}</TableHead>
+          <TableHead>{t("runs.columnsSource")}</TableHead>
+          <TableHead>{t("runs.columnsStatus")}</TableHead>
+          <TableHead>{t("runs.columnsStarted")}</TableHead>
+          <TableHead>{t("runs.columnsStats")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -66,13 +69,13 @@ export function RunsTable({
           <TableRow
             key={run.id}
             className={onRowClick ? "cursor-pointer" : undefined}
-            title={onRowClick ? "Click for run details" : undefined}
+            title={onRowClick ? t("runs.clickForDetails") : undefined}
             onClick={onRowClick ? () => onRowClick(run) : undefined}
           >
             <TableCell>{run.id}</TableCell>
             <TableCell>
               {run.institution_code == null
-                ? "shared"
+                ? t("runs.shared")
                 : (directory.find((i) => i.code === run.institution_code)?.short_name ??
                   run.institution_code)}
             </TableCell>

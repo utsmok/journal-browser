@@ -2,6 +2,7 @@
 
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -34,32 +35,11 @@ import {
 
 const SEARCH_INPUT_ID = "author-search";
 
-const SORTS: { value: AuthorSearchSort; label: string }[] = [
-  { value: "works_desc", label: "Publications (high→low)" },
-  { value: "name_asc", label: "Name (A→Z)" },
-  { value: "name_desc", label: "Name (Z→A)" },
-  { value: "last_pub_desc", label: "Last publication (new→old)" },
-];
-
 const PAGE_SIZES = [25, 50, 100];
 
 /** Matches the journal page's sort-select styling. */
 const SELECT_CLASS =
   "h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2";
-
-const WORKS_LABELS: Record<string, string> = {
-  "1-4": "1–4 works",
-  "5-19": "5–19 works",
-  "20-49": "20–49 works",
-  "50+": "50+ works",
-};
-
-const LAST_PUB_LABELS: Record<string, string> = {
-  "2025-2026": "2025–2026",
-  "2022-2024": "2022–2024",
-  "2020-2021": "2020–2021",
-  none: "Nothing since 2020",
-};
 
 /** Comma-joined multi-select param → list of values (journal-search convention). */
 function paramValues(sp: { get(key: string): string | null }, key: string): string[] {
@@ -85,8 +65,16 @@ export default function AuthorSearchPage() {
 }
 
 function AuthorsView() {
+  const t = useTranslations("authors");
+  const tc = useTranslations("common");
   const inst = useInstitution();
   const site = useSiteMeta();
+  const sorts: { value: AuthorSearchSort; label: string }[] = [
+    { value: "works_desc", label: t("sort.mostPublications") },
+    { value: "name_asc", label: t("sort.nameAZ") },
+    { value: "name_desc", label: t("sort.nameZA") },
+    { value: "last_pub_desc", label: t("sort.latestPublication") },
+  ];
   const sp = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -114,7 +102,7 @@ function AuthorsView() {
 
   // Sort and paging are URL state too; defaults stay out of the params.
   const sortParam = sp.get("sort");
-  const sort: AuthorSearchSort = SORTS.some((s) => s.value === sortParam)
+  const sort: AuthorSearchSort = sorts.some((s) => s.value === sortParam)
     ? (sortParam as AuthorSearchSort)
     : "works_desc";
   const limitParam = parseInt(sp.get("limit") ?? "", 10);
@@ -205,57 +193,70 @@ function AuthorsView() {
       has_orcid: undefined,
     });
 
+  const worksLabels: Record<string, string> = {
+    "1-4": t("filters.works1to4"),
+    "5-19": t("filters.works5to19"),
+    "20-49": t("filters.works20to49"),
+    "50+": t("filters.works50plus"),
+  };
+  const lastPubLabels: Record<string, string> = {
+    "2025-2026": t("filters.lastPub2025to2026"),
+    "2022-2024": t("filters.lastPub2022to2024"),
+    "2020-2021": t("filters.lastPub2020to2021"),
+    none: t("filters.lastPubNone"),
+  };
+
   const groups: FacetGroupDef[] = [
     {
       key: "faculty",
-      label: "Faculty",
+      label: t("filters.faculty"),
       defaultOpen: true,
       values: topBuckets(facets?.faculty, selected.faculty),
       activeValues: selected.faculty,
     },
     {
       key: "org",
-      label: "Research group",
+      label: t("filters.group"),
       defaultOpen: true,
       values: topBuckets(facets?.org, selected.org),
       activeValues: selected.org,
     },
     {
       key: "works",
-      label: "Publications",
+      label: t("filters.publications"),
       defaultOpen: true,
       values: (facets?.works ?? []).map((b) => ({
         value: b.value,
         count: b.count,
-        label: WORKS_LABELS[b.value] ?? b.value,
+        label: worksLabels[b.value] ?? b.value,
       })),
       activeValues: selected.works,
     },
     {
       key: "last_pub",
-      label: "Last publication",
+      label: t("filters.lastPublication"),
       defaultOpen: true,
       values: (facets?.last_pub ?? []).map((b) => ({
         value: b.value,
         count: b.count,
-        label: LAST_PUB_LABELS[b.value] ?? b.value,
+        label: lastPubLabels[b.value] ?? b.value,
       })),
       activeValues: selected.last_pub,
     },
     {
       key: "topic",
-      label: "Topic",
+      label: t("filters.topic"),
       defaultOpen: false,
       values: topBuckets(facets?.topic, selected.topic),
       activeValues: selected.topic,
     },
     {
       key: "has_orcid",
-      label: "ORCID",
+      label: t("filters.orcid"),
       defaultOpen: true,
       values: [
-        { value: "yes", label: "Has ORCID" },
-        { value: "no", label: "No ORCID" },
+        { value: "yes", label: t("filters.hasOrcid") },
+        { value: "no", label: t("filters.noOrcid") },
       ],
       activeValues: hasOrcid ? [hasOrcid] : [],
     },
@@ -265,10 +266,9 @@ function AuthorsView() {
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
       <div className="flex flex-col min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[960px]:gap-6 min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
         <section className="order-1 mb-8 min-[960px]:col-start-2 min-[960px]:row-start-1 min-[960px]:mb-6">
-          <h1 className="mb-3 text-3xl font-bold text-balance">Authors</h1>
+          <h1 className="mb-3 text-3xl font-bold text-balance">{t("list.heading")}</h1>
           <p className="mb-6 max-w-2xl text-[var(--muted-foreground)]">
-            Search researchers at {site.name} to find experts, co-authors, or reviewers, and see
-            where they publish.
+            {t("list.intro", { name: site.name })}
           </p>
           {!disabled && (
             <form
@@ -286,8 +286,8 @@ function AuthorsView() {
                   onKeyDown={(event) => {
                     if (event.key === "Escape") event.currentTarget.blur();
                   }}
-                  placeholder="Search by author name"
-                  aria-label="Search authors"
+                  placeholder={t("list.searchPlaceholder")}
+                  aria-label={t("list.searchLabel")}
                 />
                 {input === "" && (
                   <kbd
@@ -298,7 +298,7 @@ function AuthorsView() {
                   </kbd>
                 )}
               </div>
-              <Button type="submit">Search</Button>
+              <Button type="submit">{t("list.searchButton")}</Button>
             </form>
           )}
         </section>
@@ -322,11 +322,11 @@ function AuthorsView() {
           {!disabled && (
             <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
               <label htmlFor="author-sort" className="whitespace-nowrap">
-                Sort by
+                {t("list.sortBy")}
               </label>
               <select
                 id="author-sort"
-                title="Order of the results"
+                title={t("list.sortTitle")}
                 value={sort}
                 onChange={(event) =>
                   setParams({
@@ -335,18 +335,18 @@ function AuthorsView() {
                 }
                 className={SELECT_CLASS}
               >
-                {SORTS.map((s) => (
+                {sorts.map((s) => (
                   <option key={s.value} value={s.value}>
                     {s.label}
                   </option>
                 ))}
               </select>
               <label htmlFor="author-per-page" className="whitespace-nowrap">
-                Per page
+                {t("list.perPage")}
               </label>
               <select
                 id="author-per-page"
-                title="Results per page"
+                title={t("list.perPageTitle")}
                 value={pageSize}
                 onChange={(event) =>
                   setParams({
@@ -366,10 +366,10 @@ function AuthorsView() {
                   variant="ghost"
                   size="sm"
                   className="text-[var(--muted-foreground)]"
-                  title="Clears all active filters"
+                  title={t("list.resetTitle")}
                   onClick={clearFilters}
                 >
-                  Reset filters
+                  {t("list.resetFilters")}
                 </Button>
               )}
             </div>
@@ -377,10 +377,10 @@ function AuthorsView() {
           {disabled ? (
             <CollapsibleCard
               id="authors-disabled"
-              title="Author profiles"
+              title={t("list.disabledTitle")}
               contentClassName="text-sm text-[var(--muted-foreground)]"
             >
-              Author profiles are not available for this institution.
+              {t("list.disabledBody")}
             </CollapsibleCard>
           ) : (
             <Card>
@@ -391,17 +391,19 @@ function AuthorsView() {
                       region keeps its previous text, so typing never chatters. */}
                     <span aria-live="polite">
                       {data
-                        ? `${data.total.toLocaleString("en")} author${data.total === 1 ? "" : "s"}${q ? ` matching “${q}”` : ""}`
+                        ? q
+                          ? t("results.countMatching", { count: data.total, query: q })
+                          : t("results.count", { count: data.total })
                         : ""}
                     </span>
-                    {isFetching && data ? " · updating…" : ""}
+                    {isFetching && data ? ` · ${t("results.updating")}` : ""}
                   </p>
                   {showPager && (
                     <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        aria-label="Previous page"
+                        aria-label={t("results.prevLabel")}
                         disabled={offset === 0}
                         onClick={() =>
                           setParams({
@@ -409,19 +411,19 @@ function AuthorsView() {
                           })
                         }
                       >
-                        <ChevronLeft aria-hidden className="size-4" /> Prev
+                        <ChevronLeft aria-hidden className="size-4" /> {t("results.prevShort")}
                       </Button>
                       <span className="whitespace-nowrap text-sm tabular-nums text-[var(--muted-foreground)]">
-                        Page {page.toLocaleString("en")} of {pageCount.toLocaleString("en")}
+                        {t("results.pageOf", { page, total: pageCount })}
                       </span>
                       <Button
                         variant="outline"
                         size="sm"
-                        aria-label="Next page"
+                        aria-label={t("results.nextLabel")}
                         disabled={offset + pageSize >= total}
                         onClick={() => setParams({ offset: String(offset + pageSize) })}
                       >
-                        Next <ChevronRight aria-hidden className="size-4" />
+                        {t("results.nextShort")} <ChevronRight aria-hidden className="size-4" />
                       </Button>
                     </div>
                   )}
@@ -429,9 +431,9 @@ function AuthorsView() {
 
                 {isError ? (
                   <div className="py-10 text-center">
-                    <p className="text-[var(--destructive)]">{errorMessage(error)}</p>
+                    <p className="text-[var(--destructive)]">{errorMessage(tc, error)}</p>
                     <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
-                      Retry
+                      {t("results.retry")}
                     </Button>
                   </div>
                 ) : isPending ? (
@@ -439,14 +441,14 @@ function AuthorsView() {
                 ) : rows.length === 0 ? (
                   <div className="py-10 text-center text-[var(--muted-foreground)]">
                     {q && !anyFilter ? (
-                      <>No authors match &ldquo;{q}&rdquo;.</>
+                      <>{t("results.emptyQuery", { query: q })}</>
                     ) : (
                       <>
-                        No authors match{anyFilter ? " these filters" : ""}.
+                        {anyFilter ? t("results.emptyFiltered") : t("results.empty")}
                         {anyFilter && (
                           <div className="mt-3">
                             <Button variant="outline" size="sm" onClick={clearFilters}>
-                              Clear filters
+                              {t("results.clearFilters")}
                             </Button>
                           </div>
                         )}
@@ -459,7 +461,7 @@ function AuthorsView() {
                       the works count off-screen behind horizontal scrolling. */}
                     <ul
                       className={isFetching ? "opacity-60 md:hidden" : "md:hidden"}
-                      aria-label="Author results"
+                      aria-label={t("results.listLabel")}
                     >
                       {rows.map((a) => (
                         <li
@@ -476,10 +478,10 @@ function AuthorsView() {
                             {[a.faculty, a.research_group].filter(Boolean).join(" · ") || "—"}
                           </div>
                           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs tabular-nums text-[var(--muted-foreground)]">
-                            <span>
-                              {a.n_works.toLocaleString("en")} {a.n_works === 1 ? "work" : "works"}
-                            </span>
-                            {a.last_pub_year != null && <span>Last pub {a.last_pub_year}</span>}
+                            <span>{t("worksCount", { count: a.n_works })}</span>
+                            {a.last_pub_year != null && (
+                              <span>{t("results.lastPub", { year: a.last_pub_year })}</span>
+                            )}
                             {a.primary_topic && (
                               <span className="max-w-52 truncate" title={a.primary_topic}>
                                 {a.primary_topic}
@@ -492,16 +494,16 @@ function AuthorsView() {
                     </ul>
                     <div className={isFetching ? "hidden opacity-60 md:block" : "hidden md:block"}>
                       <Table>
-                        <caption className="sr-only">Author search results</caption>
+                        <caption className="sr-only">{t("results.caption")}</caption>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Name</TableHead>
-                            <TableHead>Faculty</TableHead>
-                            <TableHead>Research group</TableHead>
-                            <TableHead className="text-right">Works</TableHead>
-                            <TableHead className="text-right">Last pub</TableHead>
-                            <TableHead>Topic</TableHead>
-                            <TableHead>ORCID</TableHead>
+                            <TableHead>{t("results.colName")}</TableHead>
+                            <TableHead>{t("results.colFaculty")}</TableHead>
+                            <TableHead>{t("results.colGroup")}</TableHead>
+                            <TableHead className="text-right">{t("results.colWorks")}</TableHead>
+                            <TableHead className="text-right">{t("results.colLastPub")}</TableHead>
+                            <TableHead>{t("results.colTopic")}</TableHead>
+                            <TableHead>{t("results.colOrcid")}</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -561,8 +563,7 @@ function AuthorsView() {
                       </Table>
                     </div>
                     <p className="mt-4 text-xs text-[var(--muted-foreground)]">
-                      Showing {rows.length.toLocaleString("en")} of{" "}
-                      {(data?.total ?? 0).toLocaleString("en")}
+                      {t("results.showing", { shown: rows.length, total: data?.total ?? 0 })}
                     </p>
                   </>
                 )}

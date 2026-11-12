@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { AdminDrawer } from "@/components/admin/drawer";
 import { CopyButton, RecordField, RecordJson, useReviewer } from "@/components/admin/record";
@@ -24,20 +25,26 @@ export function WorkIdentityDrawer({
   onFlip: (row: WorkIdentityAdmin, status: string, note: string, changedBy: string) => void;
   busy: string | null;
 }) {
+  const t = useTranslations("admin");
   const [note, setNote] = useState("");
   const [reviewer, setReviewer] = useReviewer();
   const key = `${row.institution_id}:${row.source}:${row.source_pk}`;
   const flip = (status: string) => onFlip(row, status, note, reviewer);
 
   return (
-    <AdminDrawer title="Work identity review" onClose={onClose}>
+    <AdminDrawer title={t("workIdentity.title")} onClose={onClose}>
       <div className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
             <p className="truncate text-base font-semibold">{row.work_title ?? row.work_id}</p>
             <p className="text-xs text-muted-foreground">
-              {row.source} · matched by {row.matched_by}
-              {row.confidence != null ? ` · confidence ${row.confidence}` : ""}
+              {row.confidence != null
+                ? t("workIdentity.subtitleConfidence", {
+                    source: row.source,
+                    matchedBy: row.matched_by,
+                    confidence: row.confidence,
+                  })
+                : t("workIdentity.subtitle", { source: row.source, matchedBy: row.matched_by })}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -52,13 +59,13 @@ export function WorkIdentityDrawer({
             >
               {row.status}
             </Badge>
-            <CopyButton text={JSON.stringify(row, null, 2)} label="Copy record" />
+            <CopyButton text={JSON.stringify(row, null, 2)} label={t("workIdentity.copyRecord")} />
           </div>
         </div>
 
         <dl className="divide-y">
           <RecordField
-            label="External record"
+            label={t("workIdentity.fieldExternalRecord")}
             value={row.source_pk}
             mono
             href={
@@ -67,31 +74,34 @@ export function WorkIdentityDrawer({
                 : undefined
             }
           />
-          <RecordField label="Local work id" value={row.work_id} mono />
-          <RecordField label="Local work title" value={row.work_title} />
-          <RecordField label="Institution" value={row.institution_code ?? row.institution_id} />
-          <RecordField label="Note" value={row.note} />
-          <RecordField label="Updated" value={row.updated_at} />
+          <RecordField label={t("workIdentity.fieldLocalWorkId")} value={row.work_id} mono />
+          <RecordField label={t("workIdentity.fieldLocalWorkTitle")} value={row.work_title} />
+          <RecordField
+            label={t("workIdentity.fieldInstitution")}
+            value={row.institution_code ?? row.institution_id}
+          />
+          <RecordField label={t("workIdentity.fieldNote")} value={row.note} />
+          <RecordField label={t("workIdentity.fieldUpdated")} value={row.updated_at} />
         </dl>
 
-        <RecordJson label="Row as stored" data={row} />
+        <RecordJson label={t("workIdentity.rowAsStored")} data={row} />
 
         <section className="space-y-3 rounded-[var(--radius)] border p-4">
-          <h3 className="text-sm font-semibold">Decision</h3>
+          <h3 className="text-sm font-semibold">{t("workIdentity.decision")}</h3>
           <div className="flex flex-wrap items-center gap-2">
             <label htmlFor="wi-reviewer-name" className="text-sm text-muted-foreground">
-              Reviewer
+              {t("workIdentity.reviewer")}
             </label>
             <Input
               id="wi-reviewer-name"
-              placeholder="your name (stored locally, lands in the audit log)"
+              placeholder={t("workIdentity.reviewerPlaceholder")}
               value={reviewer}
               onChange={(event) => setReviewer(event.target.value)}
               className="w-72"
             />
           </div>
           <Input
-            placeholder="Optional note recorded with the flip"
+            placeholder={t("workIdentity.notePlaceholder")}
             value={note}
             onChange={(event) => setNote(event.target.value)}
           />
@@ -101,7 +111,7 @@ export function WorkIdentityDrawer({
               disabled={busy === key || row.status === "confirmed"}
               onClick={() => flip("confirmed")}
             >
-              Confirm link
+              {t("workIdentity.confirmLink")}
             </Button>
             <Button
               variant="outline"
@@ -109,17 +119,14 @@ export function WorkIdentityDrawer({
               disabled={busy === key || row.status === "missing"}
               onClick={() => flip("missing")}
             >
-              Mark as missing
+              {t("workIdentity.markMissing")}
             </Button>
             {row.status !== "candidate" && (
               <Button variant="ghost" size="sm" onClick={() => flip("candidate")}>
-                Reopen as candidate
+                {t("workIdentity.reopenCandidate")}
               </Button>
             )}
-            <span className="text-xs text-muted-foreground">
-              &lsquo;Missing&rsquo; records a lookup gap, not a bad link. Flips are durable and
-              audited.
-            </span>
+            <span className="text-xs text-muted-foreground">{t("workIdentity.missingNote")}</span>
           </div>
         </section>
       </div>

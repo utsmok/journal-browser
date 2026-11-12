@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { EditToolbar } from "@/components/docs/edit-toolbar";
@@ -28,6 +29,8 @@ import { cn } from "@/lib/utils";
 type SaveResult = Promise<string | null>;
 
 export default function DocPage() {
+  const t = useTranslations("docs");
+  const tc = useTranslations("common");
   const inst = useInstitution();
   const { slug } = useParams<{ slug: string }>();
   const [token, setToken] = useAdminToken();
@@ -51,7 +54,7 @@ export default function DocPage() {
   function handleAuthFailure() {
     setToken(null);
     setEditing(false);
-    setAuthError("Session expired — sign in again.");
+    setAuthError(t("doc.sessionExpired"));
   }
 
   function failure(err: unknown): string | null {
@@ -60,7 +63,9 @@ export default function DocPage() {
       return null;
     }
     console.error(err);
-    return err instanceof AdminError ? `Admin request failed (${err.message})` : String(err);
+    return err instanceof AdminError
+      ? t("doc.adminRequestFailed", { message: err.message })
+      : String(err);
   }
 
   async function saveBlock(block: DocBlock, replacement: string): SaveResult {
@@ -116,14 +121,18 @@ export default function DocPage() {
             href={`/${inst}/docs`}
             className="text-sm text-[var(--primary-text)] underline-offset-2 hover:underline"
           >
-            ← All docs
+            {t("doc.allDocs")}
           </Link>
           {doc.data && (
             <>
               <h1 className="mt-2 text-3xl font-bold">{doc.data.title}</h1>
               <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                {GROUP_LABEL[doc.data.group]}
-                {editedCount > 0 && ` · ${editedCount} edited`}
+                {editedCount > 0
+                  ? t("doc.metaWithEdits", {
+                      group: GROUP_LABEL[doc.data.group],
+                      count: editedCount,
+                    })
+                  : t("doc.metaGroup", { group: GROUP_LABEL[doc.data.group] })}
               </p>
             </>
           )}
@@ -131,15 +140,15 @@ export default function DocPage() {
       </div>
 
       <div className="docs-page-column mx-auto max-w-[72ch] space-y-6 px-4 py-10 text-[15px] leading-relaxed">
-        {doc.isPending && <p className="text-[var(--muted-foreground)]">Loading…</p>}
+        {doc.isPending && <p className="text-[var(--muted-foreground)]">{t("doc.loading")}</p>}
         {doc.isError && (
           <p className="text-destructive">
-            {errorMessage(doc.error)}{" "}
+            {errorMessage(tc, doc.error)}{" "}
             <Link
               href={`/${inst}/docs`}
               className="text-[var(--primary-text)] underline-offset-2 hover:underline"
             >
-              Back to the index.
+              {t("doc.backToIndex")}
             </Link>
           </p>
         )}
@@ -173,7 +182,7 @@ export default function DocPage() {
                 href={`/${inst}/docs/${prev.slug}`}
                 className="text-[var(--primary-text)] underline-offset-2 hover:underline"
               >
-                ← {prev.title}
+                {t("doc.prevPage", { title: prev.title })}
               </Link>
             ) : (
               <span />
@@ -183,7 +192,7 @@ export default function DocPage() {
                 href={`/${inst}/docs/${next.slug}`}
                 className="text-right text-[var(--primary-text)] underline-offset-2 hover:underline"
               >
-                {next.title} →
+                {t("doc.nextPage", { title: next.title })}
               </Link>
             )}
           </nav>
@@ -196,9 +205,10 @@ export default function DocPage() {
 // --- Block editors ---------------------------------------------------------
 
 function EditedDot() {
+  const t = useTranslations("docs");
   return (
     <span
-      title="Edited on this server"
+      title={t("doc.editedTitle")}
       className="absolute -right-3 top-2 size-2 rounded-full bg-[var(--primary-text)]"
     />
   );
@@ -213,6 +223,7 @@ function RevertButton({
   block: DocBlock;
   busy: boolean;
 }) {
+  const t = useTranslations("docs");
   const [error, setError] = useState<string | null>(null);
   return (
     <span className="mt-1 flex items-center gap-2 text-xs">
@@ -223,7 +234,7 @@ function RevertButton({
         disabled={busy}
         onClick={async () => setError(await onRevert(block))}
       >
-        Revert
+        {t("doc.revert")}
       </Button>
       {error && <span className="text-destructive">{error}</span>}
     </span>
@@ -243,6 +254,7 @@ function EditableTextBlock({
   onSave: (block: DocBlock, replacement: string) => SaveResult;
   onRevert: (block: DocBlock) => SaveResult;
 }) {
+  const t = useTranslations("docs");
   const [draft, setDraft] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -288,14 +300,12 @@ function EditableTextBlock({
         />
         <div className="flex items-center gap-2">
           <Button size="sm" disabled={busy} onClick={() => void save()}>
-            Save
+            {t("doc.save")}
           </Button>
           <Button size="sm" variant="outline" onClick={() => setDraft(null)}>
-            Cancel
+            {t("doc.cancel")}
           </Button>
-          <span className="text-xs text-[var(--muted-foreground)]">
-            ⌘/Ctrl+Enter saves, Esc cancels
-          </span>
+          <span className="text-xs text-[var(--muted-foreground)]">{t("doc.keyboardHint")}</span>
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
       </div>
@@ -332,6 +342,7 @@ function EditableTable({
   onSave: (block: DocBlock, replacement: string) => SaveResult;
   onRevert: (block: DocBlock) => SaveResult;
 }) {
+  const t = useTranslations("docs");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cell, setCell] = useState<{ row: number; col: number } | null>(null);
@@ -387,13 +398,13 @@ function EditableTable({
           {cell && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <Button size="sm" disabled={busy} onClick={() => void saveCell()}>
-                Save cell
+                {t("doc.saveCell")}
               </Button>
               <Button size="sm" variant="outline" onClick={() => setCell(null)}>
-                Cancel
+                {t("doc.cancel")}
               </Button>
               <span className="text-xs text-[var(--muted-foreground)]">
-                ⌘/Ctrl+Enter saves, Esc cancels
+                {t("doc.keyboardHint")}
               </span>
               {error && <p className="text-xs text-destructive">{error}</p>}
             </div>

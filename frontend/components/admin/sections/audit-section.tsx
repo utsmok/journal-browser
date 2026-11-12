@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { PageHeader } from "@/components/admin/admin-shell";
 import { AuditDrawer } from "@/components/admin/audit-drawer";
@@ -29,6 +30,7 @@ function subjectSummary(rowKey: StatusChange["row_key"]): string {
 
 /** Audit ledger: every audited admin status flip, filterable by surface. */
 export function AuditSection() {
+  const t = useTranslations("admin");
   const [token, setToken] = useAdminToken();
   const logout = () => setToken(null);
   const [surface, setSurface] = useState("all");
@@ -64,25 +66,22 @@ export function AuditSection() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Audit log"
-        lede="Every audited admin status flip, newest first. Click an entry for the full record; the API keeps the complete history."
-      >
+      <PageHeader title={t("audit.title")} lede={t("audit.lede")}>
         <Button variant="outline" size="sm" onClick={() => void changes.refresh()}>
-          Refresh
+          {t("refresh")}
         </Button>
       </PageHeader>
 
       <div className="flex flex-wrap items-center gap-4 text-sm">
         <div className="flex items-center gap-2">
-          <label htmlFor="audit-surface">Surface</label>
+          <label htmlFor="audit-surface">{t("audit.surfaceLabel")}</label>
           <select
             id="audit-surface"
             className="rounded-[var(--radius)] border border-input bg-[var(--card)] px-2 py-1"
             value={surface}
             onChange={(event) => setSurface(event.target.value)}
           >
-            <option value="all">All</option>
+            <option value="all">{t("all")}</option>
             {surfaces.map((name) => (
               <option key={name} value={name}>
                 {name}
@@ -91,14 +90,14 @@ export function AuditSection() {
           </select>
         </div>
         <Input
-          aria-label="Search audit entries"
-          placeholder="Search note, value, subject…"
+          aria-label={t("audit.searchAria")}
+          placeholder={t("audit.searchPlaceholder")}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           className="w-72"
         />
         <span className="text-muted-foreground" aria-live="polite">
-          {changes.loading ? "loading…" : `${rows.length.toLocaleString("en")} entries`}
+          {changes.loading ? t("loading") : t("audit.entriesCount", { count: rows.length })}
         </span>
       </div>
 
@@ -106,12 +105,12 @@ export function AuditSection() {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>When</TableHead>
-            <TableHead>Surface</TableHead>
-            <TableHead>Change</TableHead>
-            <TableHead>Subject</TableHead>
-            <TableHead>Note</TableHead>
-            <TableHead>By</TableHead>
+            <TableHead>{t("audit.columnWhen")}</TableHead>
+            <TableHead>{t("audit.columnSurface")}</TableHead>
+            <TableHead>{t("audit.columnChange")}</TableHead>
+            <TableHead>{t("audit.columnSubject")}</TableHead>
+            <TableHead>{t("audit.columnNote")}</TableHead>
+            <TableHead>{t("audit.columnBy")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -119,7 +118,7 @@ export function AuditSection() {
             <TableRow
               key={change.id}
               className="cursor-pointer"
-              title="Click for the full audit entry"
+              title={t("audit.rowTitle")}
               onClick={() => setSelected(change)}
             >
               <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
@@ -147,8 +146,7 @@ export function AuditSection() {
           {!changes.loading && rows.length === 0 && (
             <TableRow>
               <TableCell colSpan={6} className="text-center text-muted-foreground">
-                No audit entries match. Flips made in the identity and work-identity queues land
-                here.
+                {t("audit.empty")}
               </TableCell>
             </TableRow>
           )}

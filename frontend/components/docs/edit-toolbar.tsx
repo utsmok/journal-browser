@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ export function EditToolbar({
   setEditing: (on: boolean) => void;
   authError: string | null;
 }) {
+  const t = useTranslations("docs");
   const [loginOpen, setLoginOpen] = useState(false);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -42,8 +44,8 @@ export function EditToolbar({
     } catch (err) {
       setError(
         err instanceof AdminError && err.status === 403
-          ? "Wrong password (or admin disabled)."
-          : "Sign-in failed.",
+          ? t("toolbar.wrongPassword")
+          : t("toolbar.signInFailed"),
       );
     } finally {
       setBusy(false);
@@ -63,7 +65,7 @@ export function EditToolbar({
           variant={editing ? "default" : "outline"}
           onClick={() => setEditing(!editing)}
         >
-          Editing: {editing ? "on" : "off"}
+          {editing ? t("toolbar.editingOn") : t("toolbar.editingOff")}
         </Button>
       )}
       {loginOpen ? (
@@ -74,15 +76,15 @@ export function EditToolbar({
           <Input
             type="password"
             autoFocus
-            aria-label="Admin password"
-            placeholder="Admin password"
+            aria-label={t("toolbar.adminPassword")}
+            placeholder={t("toolbar.adminPassword")}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="h-8 text-sm"
           />
           <div className="flex gap-2">
             <Button type="submit" size="sm" className="flex-1" disabled={busy}>
-              Sign in
+              {t("toolbar.signIn")}
             </Button>
             <Button
               type="button"
@@ -93,7 +95,7 @@ export function EditToolbar({
                 setError(null);
               }}
             >
-              Cancel
+              {t("doc.cancel")}
             </Button>
           </div>
           {error && <p className="text-xs text-destructive">{error}</p>}
@@ -107,11 +109,11 @@ export function EditToolbar({
               className="shadow"
               onClick={() => setLoginOpen(true)}
             >
-              Edit
+              {t("toolbar.edit")}
             </Button>
           )}
           <Button size="sm" variant="outline" className="shadow" onClick={() => window.print()}>
-            Save as PDF
+            {t("toolbar.saveAsPdf")}
           </Button>
         </div>
       )}

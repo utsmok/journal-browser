@@ -6,7 +6,6 @@ export type SourceKey = "openalex" | "crossref" | "openaire" | "pure" | "registe
 
 export type DagStep = {
   id: string;
-  label: string;
   job: string;
   band: DagBand;
   sources: SourceKey[];
@@ -17,7 +16,6 @@ export type DagStep = {
 
 export type DagBandRect = {
   id: DagBand;
-  label: string;
   x: number;
   y: number;
   w: number;
@@ -46,60 +44,39 @@ export const VIEW_W = 1080;
 export const VIEW_H = 860;
 
 export const DAG_BANDS: DagBandRect[] = [
-  { id: "global", label: "Global band", x: 20, y: 40, w: 1040, h: 250 },
-  {
-    id: "institution",
-    label: "Institution band (per institution)",
-    x: 20,
-    y: 330,
-    w: 1040,
-    h: 370,
-  },
-  { id: "final", label: "Final step", x: 330, y: 740, w: 420, h: 90 },
+  { id: "global", x: 20, y: 40, w: 1040, h: 250 },
+  { id: "institution", x: 20, y: 330, w: 1040, h: 370 },
+  { id: "final", x: 330, y: 740, w: 420, h: 90 },
 ];
 
-// Presentation only: display labels, source dots, and coordinates. Step ids,
-// bands, scripts, and dependencies come from the generated plan JSON and are
-// verified against the drawn edges below.
-const LAYOUT: Record<
-  string,
-  { label: string; sources: SourceKey[]; x: number; y: number; jobSuffix?: string }
-> = {
-  journals: { label: "Journal sweep", sources: ["openalex"], x: 40, y: 70 },
-  publishers: { label: "Publisher lineage", sources: ["openalex"], x: 40, y: 170 },
-  "deals-openaccess-nl": { label: "openaccess.nl deals", sources: ["register"], x: 240, y: 70 },
-  "deals-jct": { label: "JCT sheets", sources: ["register"], x: 440, y: 70 },
-  openapc: { label: "OpenAPC", sources: ["register"], x: 640, y: 70 },
-  "deals-reconcile": { label: "Deal reconcile", sources: ["db"], x: 840, y: 70 },
-  "deals-issn-l": { label: "Deal ISSN-L", sources: ["db"], x: 40, y: 240 },
-  scimagojr: { label: "Scimago quartiles", sources: ["register"], x: 240, y: 170 },
-  flags: { label: "Corpus flags", sources: ["db"], x: 440, y: 170 },
-  doaj: { label: "DOAJ canon", sources: ["register"], x: 628, y: 170 },
-  "oa-colors": { label: "OA color sample", sources: ["openalex"], x: 824, y: 170 },
-  pure: { label: "Pure works sweep", sources: ["pure"], x: 40, y: 390 },
-  "pure-cerif": {
-    label: "CERIF authors",
-    sources: ["pure"],
-    x: 240,
-    y: 340,
-    jobSuffix: " --cerif",
-  },
-  "pure-entities": { label: "Orgs and persons", sources: ["pure"], x: 240, y: 520 },
-  enrich: { label: "Enrich works", sources: ["openalex", "crossref"], x: 240, y: 430 },
-  openaire: { label: "OpenAIRE products", sources: ["openaire"], x: 240, y: 610 },
-  stats: { label: "Institution stats", sources: ["openalex"], x: 440, y: 430 },
-  "openalex-works": { label: "Works store", sources: ["db"], x: 640, y: 530 },
-  "pure-authors": { label: "Pure author edges", sources: ["db"], x: 640, y: 440 },
-  reconcile: {
-    label: "Coverage flags",
-    sources: ["db"],
-    x: 840,
-    y: 340,
-    jobSuffix: " --institution",
-  },
-  "author-ids": { label: "Author identity cascade", sources: ["openalex"], x: 840, y: 430 },
-  authors: { label: "Author roster", sources: ["db"], x: 840, y: 520 },
-  embeddings: { label: "Journal embeddings", sources: ["db"], x: 440, y: 760 },
+// Presentation only: source dots and coordinates. Step labels are messages in
+// frontend/messages/en/dataPipeline.json under steps.<id>; band labels under
+// bands.<id>. Step ids, bands, scripts, and dependencies come from the
+// generated plan JSON and are verified against the drawn edges below.
+const LAYOUT: Record<string, { sources: SourceKey[]; x: number; y: number; jobSuffix?: string }> = {
+  journals: { sources: ["openalex"], x: 40, y: 70 },
+  publishers: { sources: ["openalex"], x: 40, y: 170 },
+  "deals-openaccess-nl": { sources: ["register"], x: 240, y: 70 },
+  "deals-jct": { sources: ["register"], x: 440, y: 70 },
+  openapc: { sources: ["register"], x: 640, y: 70 },
+  "deals-reconcile": { sources: ["db"], x: 840, y: 70 },
+  "deals-issn-l": { sources: ["db"], x: 40, y: 240 },
+  scimagojr: { sources: ["register"], x: 240, y: 170 },
+  flags: { sources: ["db"], x: 440, y: 170 },
+  doaj: { sources: ["register"], x: 628, y: 170 },
+  "oa-colors": { sources: ["openalex"], x: 824, y: 170 },
+  pure: { sources: ["pure"], x: 40, y: 390 },
+  "pure-cerif": { sources: ["pure"], x: 240, y: 340, jobSuffix: " --cerif" },
+  "pure-entities": { sources: ["pure"], x: 240, y: 520 },
+  enrich: { sources: ["openalex", "crossref"], x: 240, y: 430 },
+  openaire: { sources: ["openaire"], x: 240, y: 610 },
+  stats: { sources: ["openalex"], x: 440, y: 430 },
+  "openalex-works": { sources: ["db"], x: 640, y: 530 },
+  "pure-authors": { sources: ["db"], x: 640, y: 440 },
+  reconcile: { sources: ["db"], x: 840, y: 340, jobSuffix: " --institution" },
+  "author-ids": { sources: ["openalex"], x: 840, y: 430 },
+  authors: { sources: ["db"], x: 840, y: 520 },
+  embeddings: { sources: ["db"], x: 440, y: 760 },
 };
 
 export const DAG_STEPS: DagStep[] = PLAN.steps.map((step) => {
@@ -111,7 +88,6 @@ export const DAG_STEPS: DagStep[] = PLAN.steps.map((step) => {
   }
   return {
     id: step.id,
-    label: lay.label,
     job: step.script + (lay.jobSuffix ?? ""),
     band: step.band,
     sources: lay.sources,
@@ -137,7 +113,7 @@ export const DAG_EDGES: DagEdge[] = [
   {
     from: "deals-openaccess-nl",
     to: "deals-reconcile",
-    d: "M 324 70 C 340 56 360 46 400 46 L 760 46 C 812 46 848 54 856 70",
+    d: "M 324 70 C 340 56 360 46 400 46 L 760 46 C 812 54 848 54 856 70",
   },
   {
     from: "deals-jct",

@@ -1,0 +1,295 @@
+{
+  "appTitle": "Open Journal Browser",
+  "appTitleTemplate": "%s — OJB",
+  "appDescription": "Find the best home for your next article: open access deals, publication statistics, and journal information.",
+  "skipToContent": "Skip to content",
+
+  "notFound": {
+    "title": "Page not found",
+    "intro": "This address does not exist.",
+    "pathLine": "Journal pages live at <code>{path}</code>. Search for the journal by title, ISSN, or topic from your institution's search page."
+  },
+
+  "nav": {
+    "mainLabel": "Main",
+    "search": "Search",
+    "deals": "Deals",
+    "funders": "Funders",
+    "publishers": "Publishers",
+    "authors": "Authors",
+    "faculties": "Faculties",
+    "about": "About",
+    "allUniversities": "All universities"
+  },
+
+  "footer": {
+    "libraryLink": "{name} Library",
+    "oaGuideLink": "Open access publishing guide",
+    "adminContact": "{email} (admin)",
+    "sourceLink": "Source code on GitHub",
+    "dataSources": "Data: OpenAlex, the cOAlition S Journal Checker Tool, openaccess.nl, OpenAPC, Scimago, and the Jisc Open Policy Finder. Links on every page lead to the upstream source."
+  },
+
+  "theme": {
+    "switchToLight": "Switch to light mode",
+    "switchToDark": "Switch to dark mode",
+    "switchToSystem": "Switch to system theme",
+    "label": "Theme: {mode}"
+  },
+
+  "yearFilter": {
+    "groupLabel": "Publication year range",
+    "presetLabel": "Publication years",
+    "presetHint": "Limit publication counts, lists, and charts to these years. The choice is saved per university.",
+    "allYears": "All years",
+    "last5Years": "Last 5 years",
+    "customRange": "Custom range…",
+    "fromYear": "From year",
+    "toYear": "To year"
+  },
+
+  "states": {
+    "loadingJournal": "Loading journal details…",
+    "backToSearch": "Back to search"
+  },
+
+  "badges": {
+    "oaTypeGoldTitle": "Gold open access. Every article is published open access on the journal's own site.",
+    "oaTypeDiamondTitle": "Diamond open access. The journal is fully open access and charges no fees for readers or authors.",
+    "oaTypeGenericTitle": "Open access journal. The exact model (gold or diamond) could not be determined from the sources.",
+    "oaTypeHybridTitle": "Hybrid journal. A subscription journal where individual articles can be made open access, often through an open access deal.",
+    "oaTypeSubscriptionTitle": "Subscription journal. Reading the published version requires a subscription.",
+    "statusClosedTitle": "Closed. No openly accessible version of this publication was found.",
+    "statusGreenTitle": "Green open access. An author copy of this publication is freely available in a repository.",
+    "statusBronzeTitle": "Bronze open access. Free to read on the publisher's site, without an explicit open license.",
+    "statusPureTitle": "Pure holds a freely readable file. Without a DOI we cannot tell the venue's open access model.",
+    "pureMatchOtherRecordLabel": "In Pure (other record)",
+    "pureMatchOtherRecordTitle": "A Pure record with this DOI exists, but this page does not link to it. Examples are a book that the page leaves out, or a record not linked to this author.",
+    "pureMatchParentBookLabel": "Book in Pure",
+    "pureMatchParentBookTitle": "The parent book of this chapter has a Pure record.",
+    "pureMatchSameTitleLabel": "Same title in Pure",
+    "pureMatchSameTitleTitle": "A Pure record with the same title shares an author. It is probably another version or DOI of the same publication.",
+    "dealCoveredTitle": "Open access deal. APCs for corresponding authors are covered, fully or partly, by an institutional agreement.",
+    "dealCappedTitle": "Open access deal. The publisher's article cap for this contract year is used up, so free open access publishing is no longer guaranteed.",
+    "quartileTitle": "Journal impact quartile in its subject category. Q1 means the top 25%. This journal: {quartile}.",
+    "funderFitCompliant": "Compliant",
+    "funderFitCheck": "Check",
+    "funderFitNo": "Not compliant",
+    "funderFitTooltip": "Funder fit: {label}"
+  },
+
+  "facets": {
+    "filterBy": "Filter by {label}",
+
+    "groupVenueType": "Venue type",
+    "groupDeal": "Deal",
+    "groupOpenAccess": "Open access",
+    "groupOaType": "OA type",
+    "groupLanguage": "Language",
+    "groupDoaj": "DOAJ",
+    "groupApc": "APC",
+    "groupGreenOa": "Green OA",
+    "groupInstWorks": "{short} works",
+    "groupFunderFit": "Funder fit",
+    "groupTopic": "Topic",
+    "groupPublisher": "Publisher",
+    "groupQuartile": "Quartile",
+
+    "oaTypeGold": "Gold OA",
+    "oaTypeDiamond": "Diamond OA",
+    "oaTypeGeneric": "OA (model unknown)",
+    "oaTypeHybrid": "Hybrid",
+    "oaTypeSubscription": "Subscription (closed)",
+    "greenOaSubmitted": "Submitted version",
+    "greenOaAccepted": "Accepted version",
+    "greenOaPublished": "Published version",
+    "greenOaNone": "No green route or prohibited",
+    "dealCovered": "Covered by a deal",
+    "dealNone": "No deal",
+    "oaYes": "OA journal",
+    "oaNo": "Not OA",
+    "doajYes": "In DOAJ",
+    "doajNo": "Not in DOAJ",
+    "apcKnown": "APC data known",
+    "apcUnknown": "No APC data",
+    "instWorksYes": "Has {short} works",
+    "instWorksNo": "No {short} works",
+    "funderFitCompliant": "Compliant",
+    "funderFitCheck": "Check manually",
+    "funderFitNo": "Not compliant",
+
+    "hintVenueType": "What kind of venue this is: a journal, a book series, conference proceedings, and so on. One choice; click it again to clear.",
+    "hintOpenAccess": "Is the journal open access as a whole, for any OA type? One choice; click it again to clear.",
+    "hintOaType": "How the journal makes content open access. You can combine several types; click a selected type to remove it.",
+    "hintDoaj": "Is the journal listed in DOAJ, the quality-controlled open access directory? One choice; click it again to clear.",
+    "hintQuartile": "SCImago impact quartile of the journal in its subject category. One choice; click it again to clear.",
+    "hintApc": "Is any APC known for this journal: a list price from OpenAlex, or costs reported to OpenAPC? One choice; click it again to clear.",
+    "hintGreenOa": "Which versions of an article the publisher lets authors self-archive, according to the Jisc Open Policy Finder. One choice; click it again to clear.",
+    "hintTopic": "OpenAlex topic of the journal's works. One choice; click it again to clear.",
+    "hintPublisher": "The journal's publisher. One choice; click it again to clear.",
+    "hintDeal": "Does an open access deal with {name} cover APCs in this journal? One choice; click it again to clear.",
+    "hintInstWorks": "Has {name} published in this journal? One choice; click it again to clear.",
+    "hintInstWorksSince": "Has {name} published in this journal since {windowStart}? One choice; click it again to clear.",
+
+    "titleVenueTypeJournal": "A conventional scholarly journal.",
+    "titleVenueTypeBookSeries": "A book series, for example Springer's Lecture Notes. Articles appear as book chapters, not journal issues.",
+    "titleVenueTypeConference": "Conference proceedings published as their own venue.",
+    "titleVenueTypeEbookPlatform": "A platform hosting e-books, as classified by OpenAlex.",
+    "titleVenueTypeRepository": "An institutional or subject repository, as classified by OpenAlex.",
+    "titleOaYes": "The journal is fully or partly open access.",
+    "titleOaNo": "A subscription journal with no open access.",
+    "titleOaTypeGold": "Every article is published open access on the journal's own site.",
+    "titleOaTypeDiamond": "A fully open access journal without fees for readers or authors.",
+    "titleOaTypeHybrid": "A subscription journal where individual articles can be made open access.",
+    "titleOaTypeGeneric": "An open access journal whose business model could not be determined. It is open access, but no source shows whether it charges authors.",
+    "titleOaTypeSubscription": "No open access. Reading the published version requires a subscription.",
+    "titleDoajYes": "Listed in DOAJ, the Directory of Open Access Journals, a quality-controlled registry for open access journals.",
+    "titleDoajNo": "Not listed in DOAJ. Hybrid and subscription journals usually are not.",
+    "titleQuartileQ1": "Top 25% of its SCImago subject category by citation metrics.",
+    "titleQuartileQ2": "Second quarter, 25 to 50%, of its SCImago subject category.",
+    "titleQuartileQ3": "Third quarter, 50 to 75%, of its SCImago subject category.",
+    "titleQuartileQ4": "Last quarter, past 75%, of its SCImago subject category by citation metrics.",
+    "titleApcKnown": "APCs are known for this journal: a list price from OpenAlex, or costs reported to OpenAPC.",
+    "titleApcUnknown": "No APC is known for this journal from either source.",
+    "titleGreenOaSubmitted": "You may self-archive the submitted version (preprint), for example on a preprint server or your own website.",
+    "titleGreenOaAccepted": "You may self-archive the peer-reviewed accepted version (postprint), for example in an institutional repository.",
+    "titleGreenOaPublished": "You may self-archive the publisher's final published version.",
+    "titleGreenOaNone": "The journal is listed by the Jisc Open Policy Finder, but it permits no self-archiving route or prohibits open access outright.",
+    "titleDealCovered": "APCs for corresponding {short} authors are covered, fully or partly, by a deal.",
+    "titleInstWorksYes": "{name} has at least one publication in this journal.",
+    "titleInstWorksYesSince": "{name} has at least one publication in this journal since {windowStart}.",
+    "titleInstWorksNo": "{name} has no known publications in this journal.",
+    "titleInstWorksNoSince": "{name} has no known publications in this journal since {windowStart}."
+  },
+
+  "trend": {
+    "noWorks": "No works recorded for this period.",
+    "chartLabel": "Open access status of {short} publications per year",
+    "yearTitle": "{year}: {count} works",
+    "segmentTitle": "{year} · {label}: {count}",
+    "srWorks": "{year}: {total} works",
+    "srStatus": "{label} {count}",
+    "statusGold": "Gold",
+    "statusHybrid": "Hybrid",
+    "statusGreen": "Green",
+    "statusBronze": "Bronze",
+    "statusDiamond": "Diamond",
+    "statusClosed": "Closed",
+    "yearInProgress": "Year in progress",
+    "yearInProgressLegend": "* Year in progress",
+    "bronzeNote": "Bronze means that the article is free to read on the publisher's site without an explicit open license. It is open access, but free sharing is not guaranteed."
+  },
+
+  "composition": {
+    "barLabel": "Journal access mix: {mix}",
+    "segmentTitle": "{label}: {count}"
+  },
+
+  "sourceNote": {
+    "fallbackLabel": "Source",
+    "moreInfo": "More info"
+  },
+
+  "cardPager": {
+    "prev": "‹ Prev",
+    "next": "Next ›",
+    "itemsLabel": "items",
+    "total": "{total} {label}",
+    "navAriaLabel": "Browse {label} by page"
+  },
+
+  "orcid": {
+    "profileLabel": "ORCID profile {orcid}"
+  },
+
+  "utAuthors": {
+    "label": "UT authors:"
+  },
+
+  "gapCsv": {
+    "download": "Download list (CSV)"
+  },
+
+  "funder": {
+    "selectedTitle": "Funder fit shown for {name}",
+    "selectedLabel": "Funder: {name}",
+    "clearLabel": "Clear funder {name}",
+    "placeholder": "Funder…",
+    "inputLabel": "Select your funder to see policy fit",
+    "resultsLabel": "Funder results",
+    "searching": "Searching…",
+    "noMatches": "No funder matches “{query}”",
+    "fallbackName": "Funder {id}",
+    "textOnlyPolicy": " · text-only policy",
+    "worksTitle": "{count, plural, one {# work from this institution credits this funder} other {# works from this institution credit this funder}}",
+    "openPageTitle": "Open funder page for {name}",
+    "view": "View"
+  },
+
+  "pagination": {
+    "count": "{count, plural, one {# journal} other {# journals}}",
+    "updating": " · updating…",
+    "prev": "Prev",
+    "next": "Next"
+  },
+
+  "sortHead": {
+    "sortBy": "Sort by {label}",
+    "sortedAscReverse": "Sorted A to Z, low to high. Click to reverse.",
+    "sortedAscReset": "Sorted A to Z, low to high. Click to reset.",
+    "sortedDescReverse": "Sorted Z to A, high to low. Click to reverse.",
+    "sortedDescReset": "Sorted Z to A, high to low. Click to reset."
+  },
+
+  "feedback": {
+    "reportIssue": "Report an issue",
+    "close": "Close",
+    "success": "Thanks. Your report is in, including the page data.",
+    "titlePlaceholder": "Short title *",
+    "categoryLabel": "Category",
+    "categoryPlaceholder": "Category…",
+    "categoryBug": "Bug",
+    "categoryWrongData": "Wrong data",
+    "categoryFeature": "Feature request",
+    "categoryImprovement": "Improvement",
+    "categoryOther": "Other",
+    "descriptionPlaceholder": "What did you see, and what did you expect? *",
+    "privacyNote": "The current URL and the data shown on this page are included automatically.",
+    "error": "Something went wrong while sending the report. Try again.",
+    "cancel": "Cancel",
+    "sending": "Sending…",
+    "send": "Send report"
+  },
+
+  "workTypes": {
+    "article": "Article",
+    "book": "Book",
+    "bookChapter": "Book chapter",
+    "conferenceAbstract": "Conference abstract",
+    "conferencePaper": "Conference paper",
+    "editorial": "Editorial",
+    "letter": "Letter",
+    "magazineArticle": "Magazine article",
+    "report": "Report",
+    "review": "Review",
+    "thesis": "Thesis"
+  },
+
+  "dealLinks": {
+    "contact": "Contact",
+    "contract": "Contract",
+    "flyer": "Flyer",
+    "information": "Information",
+    "journalBrowser": "Journal browser",
+    "openAccessInfo": "Open Access info",
+    "publisherPage": "Publisher page",
+    "workflow": "Workflow"
+  },
+
+  "errors": {
+    "badRequest": "The request was not valid. Adjust the filters and try again.",
+    "notFound": "We could not find that information. Check the address, or go back and adjust your search.",
+    "server": "The server could not process the search. Try again in a moment.",
+    "unknown": "Something went wrong while loading this data. Try again in a moment."
+  }
+}

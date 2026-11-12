@@ -1,20 +1,24 @@
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 
 import { buttonVariants } from "@/components/ui/button";
 
-export default function NotFound() {
+export default async function NotFound() {
+  const t = await getTranslations("common");
   return (
     <div className="mx-auto max-w-screen-2xl px-4 py-24 text-center">
-      <h1 className="text-3xl font-bold">Page not found</h1>
+      <h1 className="text-3xl font-bold">{t("notFound.title")}</h1>
       <p className="mx-auto mt-2 max-w-prose text-[var(--muted-foreground)]">
-        This address does not exist. Journal pages live at
-        <code className="mx-1 rounded bg-[var(--muted)] px-1 py-0.5">
-          /&lt;institution&gt;/journals/&lt;issn&gt;
-        </code>
-        – search for the journal by title, ISSN, or topic from your institution&rsquo;s search page.
+        {t("notFound.intro")}{" "}
+        {t.rich("notFound.pathLine", {
+          path: "/<institution>/journals/<issn>",
+          code: (chunks) => (
+            <code className="mx-1 rounded bg-[var(--muted)] px-1 py-0.5">{chunks}</code>
+          ),
+        })}
       </p>
       <Link href="/" className={buttonVariants({ className: "mt-6" })}>
-        All universities
+        {t("nav.allUniversities")}
       </Link>
     </div>
   );

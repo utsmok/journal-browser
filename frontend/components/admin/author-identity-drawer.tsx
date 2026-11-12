@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { AdminDrawer } from "@/components/admin/drawer";
 import { CopyButton, RecordField, RecordJson, useReviewer } from "@/components/admin/record";
@@ -66,6 +67,7 @@ export function AuthorIdentityDrawer({
   onFlip: (row: AuthorIdentityAdmin, status: string, note: string, changedBy: string) => void;
   busy: string | null;
 }) {
+  const t = useTranslations("admin");
   const [note, setNote] = useState("");
   const [reviewer, setReviewer] = useReviewer();
   const [local, setLocal] = useState<LocalProfile | null>(null);
@@ -132,13 +134,17 @@ export function AuthorIdentityDrawer({
   const flip = (status: string) => onFlip(row, status, note, reviewer);
 
   return (
-    <AdminDrawer title="Author identity review" onClose={onClose}>
+    <AdminDrawer title={t("authorIdentity.title")} onClose={onClose}>
       <div className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="text-base font-semibold">{row.author_name ?? row.author_pure_uuid}</p>
             <p className="text-xs text-muted-foreground">
-              {row.source} · {row.method ?? "—"} · confidence {row.confidence ?? "—"}
+              {t("authorIdentity.subtitle", {
+                source: row.source,
+                method: row.method ?? "—",
+                confidence: row.confidence ?? "—",
+              })}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -153,36 +159,66 @@ export function AuthorIdentityDrawer({
             >
               {row.status}
             </Badge>
-            <CopyButton text={JSON.stringify(row, null, 2)} label="Copy record" />
+            <CopyButton
+              text={JSON.stringify(row, null, 2)}
+              label={t("authorIdentity.copyRecord")}
+            />
           </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
           <section className="rounded-[var(--radius)] border p-4">
             <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Local — Pure</h3>
+              <h3 className="text-sm font-semibold">{t("authorIdentity.localTitle")}</h3>
               {local && payload.display_name && (
-                <MatchBadge ok={nameMatch} yes="name matches" no="name differs" />
+                <MatchBadge
+                  ok={nameMatch}
+                  yes={t("authorIdentity.nameMatches")}
+                  no={t("authorIdentity.nameDiffers")}
+                />
               )}
             </div>
             {local ? (
               <div className="space-y-0.5">
-                <RecordField label="Name" value={local.author.name} />
-                <RecordField label="Pure uuid" value={local.author.pure_uuid} mono />
-                <RecordField label="ORCID" value={localOrcid} mono />
-                <RecordField label="Institute" value={local.author.institute} />
-                <RecordField label="Faculty" value={local.author.faculty} />
-                <RecordField label="Research group" value={local.author.research_group} />
-                <RecordField label="Orgs" value={local.author.orgs.join(", ")} />
-                <RecordField label="Works (local)" value={local.author.n_works} />
+                <RecordField label={t("authorIdentity.fieldName")} value={local.author.name} />
+                <RecordField
+                  label={t("authorIdentity.fieldPureUuid")}
+                  value={local.author.pure_uuid}
+                  mono
+                />
+                <RecordField label={t("authorIdentity.fieldOrcid")} value={localOrcid} mono />
+                <RecordField
+                  label={t("authorIdentity.fieldInstitute")}
+                  value={local.author.institute}
+                />
+                <RecordField
+                  label={t("authorIdentity.fieldFaculty")}
+                  value={local.author.faculty}
+                />
+                <RecordField
+                  label={t("authorIdentity.fieldResearchGroup")}
+                  value={local.author.research_group}
+                />
+                <RecordField
+                  label={t("authorIdentity.fieldOrgs")}
+                  value={local.author.orgs.join(", ")}
+                />
+                <RecordField
+                  label={t("authorIdentity.fieldWorksLocal")}
+                  value={local.author.n_works}
+                />
                 {localOrcid && externalOrcid && (
                   <div className="pt-1">
-                    <MatchBadge ok={orcidOverlap} yes="ORCID agrees" no="ORCID conflict" />
+                    <MatchBadge
+                      ok={orcidOverlap}
+                      yes={t("authorIdentity.orcidAgrees")}
+                      no={t("authorIdentity.orcidConflict")}
+                    />
                   </div>
                 )}
                 <div className="pt-2">
                   <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Recent local works
+                    {t("authorIdentity.recentLocalWorks")}
                   </p>
                   <ul className="mt-1 space-y-1 text-sm">
                     {local.works.slice(0, 8).map((work) => (
@@ -199,9 +235,7 @@ export function AuthorIdentityDrawer({
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                {localMissing
-                  ? "Local author not in the current roster (authors re-ingest may have dropped them)."
-                  : "Loading local profile…"}
+                {localMissing ? t("authorIdentity.localMissing") : t("authorIdentity.loadingLocal")}
               </p>
             )}
           </section>
@@ -209,29 +243,42 @@ export function AuthorIdentityDrawer({
           <section className="rounded-[var(--radius)] border p-4">
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-sm font-semibold">
-                External — {isOpenalex ? "OpenAlex" : "OpenAIRE"}
+                {t("authorIdentity.externalTitle", {
+                  source: isOpenalex ? "OpenAlex" : "OpenAIRE",
+                })}
               </h3>
               {external && (
                 <p className="text-[10px] text-muted-foreground">
-                  stored {external.harvested_at ? formatDate(external.harvested_at) : "—"}
+                  {t("authorIdentity.stored", {
+                    date: external.harvested_at ? formatDate(external.harvested_at) : "—",
+                  })}
                 </p>
               )}
             </div>
             {isOpenalex ? (
               external ? (
                 <div className="space-y-0.5">
-                  <RecordField label="Display name" value={payload.display_name} />
                   <RecordField
-                    label="OpenAlex id"
+                    label={t("authorIdentity.fieldDisplayName")}
+                    value={payload.display_name}
+                  />
+                  <RecordField
+                    label={t("authorIdentity.fieldOpenalexId")}
                     value={row.external_id}
                     mono
                     href={`https://openalex.org/${row.external_id}`}
                   />
-                  <RecordField label="ORCID" value={externalOrcid} mono />
-                  <RecordField label="Works (OpenAlex)" value={payload.works_count} />
-                  <RecordField label="Citations" value={payload.cited_by_count} />
+                  <RecordField label={t("authorIdentity.fieldOrcid")} value={externalOrcid} mono />
                   <RecordField
-                    label="Last known institution"
+                    label={t("authorIdentity.fieldWorksOpenalex")}
+                    value={payload.works_count}
+                  />
+                  <RecordField
+                    label={t("authorIdentity.fieldCitations")}
+                    value={payload.cited_by_count}
+                  />
+                  <RecordField
+                    label={t("authorIdentity.fieldLastInstitution")}
                     value={
                       payload.last_known_institutions?.[0]?.display_name ??
                       payload.last_known_institution?.display_name ??
@@ -239,7 +286,7 @@ export function AuthorIdentityDrawer({
                     }
                   />
                   <RecordField
-                    label="Topics"
+                    label={t("authorIdentity.fieldTopics")}
                     value={(payload.topics ?? [])
                       .slice(0, 3)
                       .map((topic) => topic.display_name)
@@ -247,13 +294,13 @@ export function AuthorIdentityDrawer({
                   />
                   {(payload.display_name_alternatives ?? []).length > 0 && (
                     <RecordField
-                      label="Alternative names"
+                      label={t("authorIdentity.fieldAltNames")}
                       value={(payload.display_name_alternatives ?? []).slice(0, 4).join(", ")}
                     />
                   )}
                   <div className="pt-2">
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      Recent works (from the works harvest)
+                      {t("authorIdentity.recentHarvestWorks")}
                     </p>
                     <ul className="mt-1 space-y-1 text-sm">
                       {external.works.map((work) => (
@@ -269,11 +316,11 @@ export function AuthorIdentityDrawer({
                 <div className="space-y-2 text-sm">
                   <p className="text-muted-foreground">
                     {externalMissing
-                      ? "No stored profile for this id — it fell outside the author sweep. Open it on OpenAlex instead:"
-                      : "Loading stored OpenAlex profile…"}
+                      ? t("authorIdentity.externalMissing")
+                      : t("authorIdentity.loadingExternal")}
                   </p>
                   <RecordField
-                    label="OpenAlex id"
+                    label={t("authorIdentity.fieldOpenalexId")}
                     value={row.external_id}
                     mono
                     href={`https://openalex.org/${row.external_id}`}
@@ -282,12 +329,9 @@ export function AuthorIdentityDrawer({
               )
             ) : (
               <div className="space-y-2 text-sm">
-                <p className="text-muted-foreground">
-                  OpenAIRE records are not fetched in-app. Review via the evidence and the record id
-                  below.
-                </p>
+                <p className="text-muted-foreground">{t("authorIdentity.openaireNote")}</p>
                 <RecordField
-                  label="OpenAIRE id"
+                  label={t("authorIdentity.fieldOpenaireId")}
                   value={row.external_id}
                   mono
                   href={`https://explore.openaire.eu/search/find?keyword=${encodeURIComponent(row.external_id)}`}
@@ -297,24 +341,24 @@ export function AuthorIdentityDrawer({
           </section>
         </div>
 
-        <RecordJson label="Cascade evidence" data={row.evidence} />
+        <RecordJson label={t("authorIdentity.evidence")} data={row.evidence} />
 
         <section className="space-y-3 rounded-[var(--radius)] border p-4">
-          <h3 className="text-sm font-semibold">Decision</h3>
+          <h3 className="text-sm font-semibold">{t("authorIdentity.decision")}</h3>
           <div className="flex flex-wrap items-center gap-2">
             <label htmlFor="reviewer-name" className="text-sm text-muted-foreground">
-              Reviewer
+              {t("authorIdentity.reviewer")}
             </label>
             <Input
               id="reviewer-name"
-              placeholder="your name (stored locally, lands in the audit log)"
+              placeholder={t("authorIdentity.reviewerPlaceholder")}
               value={reviewer}
               onChange={(event) => setReviewer(event.target.value)}
               className="w-72"
             />
           </div>
           <Input
-            placeholder="Optional note recorded with the flip"
+            placeholder={t("authorIdentity.notePlaceholder")}
             value={note}
             onChange={(event) => setNote(event.target.value)}
           />
@@ -324,7 +368,7 @@ export function AuthorIdentityDrawer({
               disabled={busy === `${row.source}:${row.external_id}` || row.status === "confirmed"}
               onClick={() => flip("confirmed")}
             >
-              Confirm match
+              {t("authorIdentity.confirmMatch")}
             </Button>
             <Button
               variant="outline"
@@ -332,16 +376,14 @@ export function AuthorIdentityDrawer({
               disabled={busy === `${row.source}:${row.external_id}` || row.status === "rejected"}
               onClick={() => flip("rejected")}
             >
-              Reject
+              {t("authorIdentity.reject")}
             </Button>
             {row.status !== "candidate" && (
               <Button variant="ghost" size="sm" onClick={() => flip("candidate")}>
-                Back to candidate
+                {t("authorIdentity.backToCandidate")}
               </Button>
             )}
-            <span className="text-xs text-muted-foreground">
-              Flips are sticky across harvest re-runs and audited.
-            </span>
+            <span className="text-xs text-muted-foreground">{t("authorIdentity.flipsNote")}</span>
           </div>
         </section>
       </div>

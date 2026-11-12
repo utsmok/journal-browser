@@ -7,15 +7,18 @@ import { usePathname } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useTranslations } from "next-intl";
 
-const CATEGORIES = [
-  { value: "", label: "Category…" },
-  { value: "bug", label: "Bug" },
-  { value: "data", label: "Wrong data" },
-  { value: "feature", label: "Feature request" },
-  { value: "improvement", label: "Improvement" },
-  { value: "other", label: "Other" },
-] as const;
+const CATEGORY_VALUES = ["", "bug", "data", "feature", "improvement", "other"] as const;
+
+const CATEGORY_LABEL_KEYS: Record<string, string> = {
+  "": "feedback.categoryPlaceholder",
+  bug: "feedback.categoryBug",
+  data: "feedback.categoryWrongData",
+  feature: "feedback.categoryFeature",
+  improvement: "feedback.categoryImprovement",
+  other: "feedback.categoryOther",
+};
 
 const MAX_DUMP_BYTES = 700_000;
 
@@ -50,6 +53,7 @@ function buildPageDump(queries: { key: readonly unknown[]; updated: number; data
 }
 
 export function FeedbackWidget() {
+  const t = useTranslations("common");
   const queryClient = useQueryClient();
   const pathname = usePathname();
   const [open, setOpen] = React.useState(false);
@@ -111,7 +115,7 @@ export function FeedbackWidget() {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        aria-label="Report an issue"
+        aria-label={t("feedback.reportIssue")}
         aria-expanded={open}
         className={`fixed right-4 bottom-4 z-50 flex size-12 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] shadow-lg transition-opacity hover:opacity-90 sm:right-6 sm:bottom-6 ${
           open ? "pointer-events-none opacity-0" : ""
@@ -123,15 +127,15 @@ export function FeedbackWidget() {
       {open && (
         <div
           role="dialog"
-          aria-label="Report an issue"
+          aria-label={t("feedback.reportIssue")}
           className="fixed inset-x-4 bottom-20 z-50 max-h-[75dvh] overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 sm:inset-x-auto sm:right-6 sm:bottom-24 sm:w-96"
         >
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Report an issue</h2>
+            <h2 className="text-sm font-semibold">{t("feedback.reportIssue")}</h2>
             <button
               type="button"
               onClick={() => setOpen(false)}
-              aria-label="Close"
+              aria-label={t("feedback.close")}
               className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
             >
               <X className="size-4" aria-hidden="true" />
@@ -139,13 +143,11 @@ export function FeedbackWidget() {
           </div>
 
           {phase === "success" ? (
-            <p className="py-6 text-center text-sm">
-              Thanks — your report is in, including the page data.
-            </p>
+            <p className="py-6 text-center text-sm">{t("feedback.success")}</p>
           ) : (
             <form onSubmit={submit} className="space-y-3">
               <Input
-                placeholder="Short title *"
+                placeholder={t("feedback.titlePlaceholder")}
                 value={title}
                 maxLength={255}
                 onChange={(e) => setTitle(e.target.value)}
@@ -155,36 +157,32 @@ export function FeedbackWidget() {
                 className={field}
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                aria-label="Category"
+                aria-label={t("feedback.categoryLabel")}
               >
-                {CATEGORIES.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
+                {CATEGORY_VALUES.map((c) => (
+                  <option key={c} value={c}>
+                    {t(CATEGORY_LABEL_KEYS[c])}
                   </option>
                 ))}
               </select>
               <textarea
                 className={`${field} min-h-24`}
-                placeholder="What did you see, and what did you expect? *"
+                placeholder={t("feedback.descriptionPlaceholder")}
                 value={description}
                 maxLength={8000}
                 onChange={(e) => setDescription(e.target.value)}
                 required
               />
-              <p className="text-xs text-[var(--muted-foreground)]">
-                The current URL and the data shown on this page are included automatically.
-              </p>
+              <p className="text-xs text-[var(--muted-foreground)]">{t("feedback.privacyNote")}</p>
               {phase === "error" && (
-                <p className="text-sm text-[var(--destructive)]">
-                  Something went wrong sending the report — try again.
-                </p>
+                <p className="text-sm text-[var(--destructive)]">{t("feedback.error")}</p>
               )}
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>
-                  Cancel
+                  {t("feedback.cancel")}
                 </Button>
                 <Button type="submit" size="sm" disabled={phase === "submitting"}>
-                  {phase === "submitting" ? "Sending…" : "Send report"}
+                  {phase === "submitting" ? t("feedback.sending") : t("feedback.send")}
                 </Button>
               </div>
             </form>

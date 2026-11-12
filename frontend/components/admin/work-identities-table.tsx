@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { WorkIdentityDrawer } from "@/components/admin/work-identity-drawer";
 import { CardPager } from "@/components/card-pager";
@@ -22,6 +23,23 @@ import { adminPut, type WorkIdentityAdmin, type WorkIdentityPage } from "@/lib/a
 /** Matches the backend's WORK_IDENTITY_STATUSES; "all" omits the filter. */
 const STATUS_FILTERS = ["candidate", "confirmed", "missing", "all"] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
+
+const FILTER_LABEL_KEYS: Record<
+  StatusFilter,
+  `workIdentities.status${string}` | "workIdentities.all"
+> = {
+  candidate: "workIdentities.statusCandidate",
+  confirmed: "workIdentities.statusConfirmed",
+  missing: "workIdentities.statusMissing",
+  all: "workIdentities.all",
+};
+
+/** Lowercase status word for the empty-state sentence. */
+const EMPTY_STATUS_WORDS: Record<Exclude<StatusFilter, "all">, string> = {
+  candidate: "candidate",
+  confirmed: "confirmed",
+  missing: "missing",
+};
 
 const SELECT_CLASS =
   "h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]";
@@ -53,6 +71,7 @@ export function WorkIdentitiesPanel({
   inst?: string;
   onUnauthorized: () => void;
 }) {
+  const t = useTranslations("admin");
   const [filter, setFilter] = useState<StatusFilter>("candidate");
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState<string | null>(null);
@@ -98,7 +117,12 @@ export function WorkIdentitiesPanel({
           : current,
       );
     } catch (err) {
-      setError(`Could not flip ${row.source_pk} (${err instanceof Error ? err.message : err}).`);
+      setError(
+        t("workIdentities.flipFailed", {
+          id: row.source_pk,
+          message: err instanceof Error ? err.message : String(err),
+        }),
+      );
     } finally {
       setBusy(null);
     }
@@ -108,11 +132,11 @@ export function WorkIdentitiesPanel({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <label htmlFor="work-identity-status-filter" className="whitespace-nowrap">
-          Status
+          {t("workIdentities.statusLabel")}
         </label>
         <select
           id="work-identity-status-filter"
-          title="Which identity statuses to list"
+          title={t("workIdentities.statusFilterTitle")}
           value={filter}
           onChange={(event) => {
             setFilter(event.target.value as StatusFilter);
@@ -122,37 +146,37 @@ export function WorkIdentitiesPanel({
         >
           {STATUS_FILTERS.map((value) => (
             <option key={value} value={value}>
-              {value === "all" ? "All" : `${value[0].toUpperCase()}${value.slice(1)}`}
+              {t(FILTER_LABEL_KEYS[value])}
             </option>
           ))}
         </select>
         <label htmlFor="work-identity-reviewer" className="whitespace-nowrap text-muted-foreground">
-          Reviewer
+          {t("workIdentities.reviewer")}
         </label>
         <Input
           id="work-identity-reviewer"
-          placeholder="your name (for the audit log)"
+          placeholder={t("workIdentities.reviewerPlaceholder")}
           value={reviewer}
           onChange={(event) => setReviewer(event.target.value)}
           className="h-9 w-56"
         />
         <span className="text-[var(--muted-foreground)]" aria-live="polite">
-          {loading ? "loading…" : `${total.toLocaleString("en")} rows`}
+          {loading ? t("loading") : t("workIdentities.rowsCount", { count: total })}
         </span>
         {error && <p className="text-sm text-destructive">{error}</p>}
       </div>
       <Table>
-        <caption className="sr-only">Work identity resolution rows</caption>
+        <caption className="sr-only">{t("workIdentities.caption")}</caption>
         <TableHeader>
           <TableRow>
-            <TableHead>Work</TableHead>
-            <TableHead>External id</TableHead>
-            <TableHead>Source</TableHead>
-            {!inst && <TableHead>Institution</TableHead>}
-            <TableHead>Matched by</TableHead>
-            <TableHead>Confidence</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Review</TableHead>
+            <TableHead>{t("workIdentities.columnWork")}</TableHead>
+            <TableHead>{t("workIdentities.columnExternalId")}</TableHead>
+            <TableHead>{t("workIdentities.columnSource")}</TableHead>
+            {!inst && <TableHead>{t("workIdentities.columnInstitution")}</TableHead>}
+            <TableHead>{t("workIdentities.columnMatchedBy")}</TableHead>
+            <TableHead>{t("workIdentities.columnConfidence")}</TableHead>
+            <TableHead>{t("workIdentities.columnStatus")}</TableHead>
+            <TableHead>{t("workIdentities.columnReview")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -162,7 +186,7 @@ export function WorkIdentitiesPanel({
               <TableRow
                 key={key}
                 className="cursor-pointer"
-                title="Click to open the full record"
+                title={t("workIdentities.rowTitle")}
                 onClick={() => setSelectedKey(key)}
               >
                 <TableCell className="max-w-72 truncate font-medium" title={row.work_title ?? ""}>
@@ -181,7 +205,7 @@ export function WorkIdentitiesPanel({
                   <StatusBadge status={row.status} />
                   {row.note && (
                     <Badge variant="muted" className="ml-1" title={row.note}>
-                      note
+                      {t("workIdentities.noteBadge")}
                     </Badge>
                   )}
                 </TableCell>
@@ -196,7 +220,7 @@ export function WorkIdentitiesPanel({
                         void flip(row, "confirmed");
                       }}
                     >
-                      Confirm
+                      {t("workIdentities.confirm")}
                     </Button>
                     <Button
                       variant="outline"
@@ -206,9 +230,9 @@ export function WorkIdentitiesPanel({
                         event.stopPropagation();
                         void flip(row, "candidate");
                       }}
-                      title="Back to the review queue"
+                      title={t("workIdentities.reopenTitle")}
                     >
-                      Reopen
+                      {t("workIdentities.reopen")}
                     </Button>
                     <Button
                       variant="outline"
@@ -218,9 +242,9 @@ export function WorkIdentitiesPanel({
                         event.stopPropagation();
                         void flip(row, "missing");
                       }}
-                      title="Recorded lookup miss: no evidence, not a bad link"
+                      title={t("workIdentities.missTitle")}
                     >
-                      Miss
+                      {t("workIdentities.miss")}
                     </Button>
                   </div>
                 </TableCell>
@@ -233,15 +257,24 @@ export function WorkIdentitiesPanel({
                 colSpan={inst ? 7 : 8}
                 className="text-center text-[var(--muted-foreground)]"
               >
-                No {filter === "all" ? "" : `${filter} `}work identity rows
-                {inst ? " for this institution" : " across institutions"}.
+                {filter === "all"
+                  ? t(inst ? "workIdentities.emptyAllInst" : "workIdentities.emptyAll")
+                  : t(inst ? "workIdentities.emptyStatusInst" : "workIdentities.emptyStatus", {
+                      status: EMPTY_STATUS_WORDS[filter],
+                    })}
               </TableCell>
             </TableRow>
           )}
         </TableBody>
       </Table>
       {pages > 1 && (
-        <CardPager page={page} pages={pages} total={total} onPage={setPage} label="rows" />
+        <CardPager
+          page={page}
+          pages={pages}
+          total={total}
+          onPage={setPage}
+          label={t("workIdentities.pagerRows")}
+        />
       )}
       {selected && (
         <WorkIdentityDrawer

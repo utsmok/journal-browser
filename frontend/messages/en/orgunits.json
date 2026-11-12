@@ -1,0 +1,152 @@
+{
+  "meta": {
+    "title": "Faculties",
+    "titleTemplate": "%s — OJB"
+  },
+  "columns": {
+    "name": "Name",
+    "faculty": "Faculty",
+    "authors": "Authors",
+    "author": "Author",
+    "works": "Works",
+    "dealWorks": "Deal-covered works",
+    "apc": "APC",
+    "topics": "Topics",
+    "topic": "Topic",
+    "journal": "Journal",
+    "access": "Access",
+    "quartile": "Q",
+    "deal": "Deal",
+    "agreement": "Agreement"
+  },
+  "counts": {
+    "author": "{count, plural, one {# author} other {# authors}}",
+    "work": "{count, plural, one {# work} other {# works}}",
+    "dealWork": "{count, plural, one {# deal-covered work} other {# deal-covered works}}",
+    "faculty": "{count, plural, one {# faculty} other {# faculties}}",
+    "group": "{count, plural, one {# research group} other {# research groups}}",
+    "institute": "{count, plural, one {# institute} other {# institutes}}"
+  },
+  "tooltips": {
+    "dealWorks": "Works in journals covered by an open access deal",
+    "apc": "APC paid for {count, plural, one {# article} other {# articles}}"
+  },
+  "list": {
+    "title": "Faculties",
+    "intro": "Browse the organisational units of {institution}: faculties, research groups, and interdisciplinary institutes. Each unit page shows publishing output, works in journals currently covered by an open access deal, and APC spend.",
+    "search": {
+      "action": "Search",
+      "faculty": "Search faculties",
+      "group": "Search research groups",
+      "institute": "Search institutes"
+    },
+    "levelLabel": "Unit level",
+    "levelToggle": {
+      "faculty": "Faculties",
+      "group": "Research groups",
+      "institute": "Institutes"
+    },
+    "sortBy": "Sort by",
+    "sortOrderTitle": "Order of the results",
+    "perPage": "Per page",
+    "perPageTitle": "Results per page",
+    "sort": {
+      "relevance": "Relevance",
+      "name": "Name (A→Z)",
+      "authors": "Authors (high→low)",
+      "works": "Works (high→low)",
+      "dealWorks": "Deal-covered works (high→low)"
+    },
+    "works1to4": "1 to 4 works",
+    "works5to19": "5 to 19 works",
+    "works20to49": "20 to 49 works",
+    "works50plus": "50+ works",
+    "filter": {
+      "publications": "Publications",
+      "deal": "Open access deal",
+      "usesDeals": "Uses deals"
+    },
+    "resetFilters": "Reset filters",
+    "resetFiltersTitle": "Clears all active filters",
+    "matching": "matching “{query}”",
+    "updating": "· updating…",
+    "pager": {
+      "prev": "Prev",
+      "prevLabel": "Previous page",
+      "next": "Next",
+      "nextLabel": "Next page",
+      "page": "Page {page} of {pages}"
+    },
+    "retry": "Retry",
+    "emptyQuery": {
+      "faculty": "No faculties match “{query}”.",
+      "group": "No research groups match “{query}”.",
+      "institute": "No institutes match “{query}”."
+    },
+    "emptyFiltered": {
+      "faculty": "No faculties match these filters.",
+      "group": "No research groups match these filters.",
+      "institute": "No institutes match these filters."
+    },
+    "clearFilters": "Clear filters",
+    "emptyNoData": "No organisational data is available for {institution} yet.",
+    "institutionFallback": "this institution",
+    "resultsListLabel": "Organisational unit results",
+    "tableCaption": "Organisational unit search results",
+    "mobileApc": "APC {euro} €",
+    "showing": "Showing {shown} of {total}"
+  },
+  "detail": {
+    "unknownType": "Unknown unit type. Use a faculty, group, or institute page.",
+    "back": {
+      "faculty": "Back to faculties",
+      "group": "Back to research groups",
+      "institute": "Back to institutes"
+    },
+    "backGeneric": "Back",
+    "badge": {
+      "faculty": "Faculty",
+      "group": "Research group",
+      "institute": "Institute"
+    },
+    "stats": {
+      "share": "({share}%)",
+      "apc": "{euro} € APC ({count})"
+    },
+    "groups": {
+      "title": "Research groups",
+      "caption": "Research groups in this unit",
+      "column": "Research group",
+      "pager": "groups"
+    },
+    "authors": {
+      "title": "Top authors",
+      "caption": "Authors of this unit",
+      "rankBy": "Rank authors by",
+      "shareSort": "Diamond + gold share",
+      "shareSortTitle": "Rank by the share of the author's counted works published diamond or gold open access. Authors with fewer than 4 counted works are not ranked by share.",
+      "worksSort": "Works count",
+      "shareHeader": "Diamond + gold",
+      "shareHeaderTitle": "Share of the author's counted works published diamond or gold open access. Ranked from 4 counted works; authors with fewer rank last and show no share.",
+      "shareUnavailable": "fewer than 4 works",
+      "pager": "authors"
+    },
+    "crisGaps": {
+      "title": "Not registered in Pure",
+      "description": "OpenAlex attributes {count, plural, one {# work} other {# works}} to this unit's members that match no Pure record. These works are likely missing from the research information system.",
+      "showing": "Showing {count} most recent.",
+      "empty": "None found. Every OpenAlex work in this list has a Pure record.",
+      "untitled": "Untitled"
+    },
+    "journals": {
+      "title": "Journals",
+      "caption": "Journals this unit publishes in"
+    },
+    "trendTitle": "Open access over time",
+    "dealUsage": {
+      "title": "Deal usage",
+      "description": "Publications in journals that are currently part of each deal. Historical deal usage is not shown.",
+      "caption": "Open access deals used by this unit"
+    }
+  }
+}

@@ -1,4 +1,7 @@
+"use client";
+
 import { CircleCheck, CircleHelp, CircleX } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 /**
  * Access lockups: single-family SVG badges that replace generic pills.
@@ -238,44 +241,44 @@ function Lockup({
 
 type OaType = "gold" | "diamond" | "generic" | "hybrid" | "subscription";
 
-/** Access-type lockups: progressive shackle + integrated wordmark. */
+/** Access-type lockups: progressive shackle + integrated wordmark. The
+ * SVG wordmark labels stay fixed (they set the viewBox width); the hover
+ * text and aria-label come from the messages. */
 const OA_TYPE_META: Record<
   OaType,
-  { label: string; title: string; lock: LockState; className: string; width: number }
+  { label: string; titleKey: string; lock: LockState; className: string; width: number }
 > = {
   gold: {
     label: "OPEN",
-    title: "Gold open access — every article is published open access on the journal's own site.",
+    titleKey: "badges.oaTypeGoldTitle",
     lock: "open",
     className: ACCESS_TEXT.gold,
     width: 50,
   },
   diamond: {
     label: "DIAMOND",
-    title: "Diamond open access — fully open access journal without fees for readers or authors.",
+    titleKey: "badges.oaTypeDiamondTitle",
     lock: "wide",
     className: ACCESS_TEXT.diamond,
     width: 76,
   },
   generic: {
     label: "OA",
-    title:
-      "Open access journal — the exact OA model (gold or diamond) could not be determined from the sources.",
+    titleKey: "badges.oaTypeGenericTitle",
     lock: "wide",
     className: ACCESS_TEXT.generic,
     width: 34,
   },
   hybrid: {
     label: "HYBRID",
-    title:
-      "Hybrid journal — subscription journal where individual articles can be made open access, often via an open access deal.",
+    titleKey: "badges.oaTypeHybridTitle",
     lock: "ajar",
     className: ACCESS_TEXT.hybrid,
     width: 68,
   },
   subscription: {
     label: "CLOSED",
-    title: "Subscription journal — reading the published version requires a subscription.",
+    titleKey: "badges.oaTypeSubscriptionTitle",
     lock: "closed",
     className: ACCESS_TEXT.closed,
     width: 68,
@@ -288,11 +291,17 @@ const OA_TYPE_META: Record<
  * rather than guessing.
  */
 export function OaTypeBadge({ oaType, isOa }: { oaType?: string | null; isOa?: boolean | null }) {
+  const t = useTranslations("common");
   const type: string | null = oaType ?? (isOa === false ? "subscription" : null);
   if (!type || !(type in OA_TYPE_META)) return null;
   const meta = OA_TYPE_META[type as OaType];
   return (
-    <Lockup label={meta.label} width={meta.width} title={meta.title} className={meta.className}>
+    <Lockup
+      label={meta.label}
+      width={meta.width}
+      title={t(meta.titleKey)}
+      className={meta.className}
+    >
       <LockIcon state={meta.lock} />
     </Lockup>
   );
@@ -301,42 +310,42 @@ export function OaTypeBadge({ oaType, isOa }: { oaType?: string | null; isOa?: b
 /** Work-level OA statuses; one color map shared by chips and the trend chart. */
 export const OA_STATUS_ORDER = ["gold", "hybrid", "green", "bronze", "diamond", "closed"] as const;
 
-export const OA_STATUS_META: Record<string, { label: string; bar: string }> = {
-  gold: { label: "Gold", bar: "bg-amber-400 dark:bg-amber-500" },
-  hybrid: { label: "Hybrid", bar: "bg-blue-400 dark:bg-blue-500" },
-  green: { label: "Green", bar: "bg-green-600 dark:bg-green-500" },
-  bronze: { label: "Bronze", bar: "bg-orange-400 dark:bg-orange-500/80" },
-  diamond: { label: "Diamond", bar: "bg-[#4fe4f8] dark:bg-cyan-300" },
-  closed: { label: "Closed", bar: "bg-slate-300 dark:bg-slate-600" },
+/** Work-level OA statuses; one color map shared by chips and the trend
+ * chart. Display names live in the messages (trend.status*). */
+export const OA_STATUS_META: Record<string, { bar: string }> = {
+  gold: { bar: "bg-amber-400 dark:bg-amber-500" },
+  hybrid: { bar: "bg-blue-400 dark:bg-blue-500" },
+  green: { bar: "bg-green-600 dark:bg-green-500" },
+  bronze: { bar: "bg-orange-400 dark:bg-orange-500/80" },
+  diamond: { bar: "bg-[#4fe4f8] dark:bg-cyan-300" },
+  closed: { bar: "bg-slate-300 dark:bg-slate-600" },
 };
 
 /** Work-level status lockup; reuses the journal lock icons where they map. */
 const OA_STATUS_LOCKUP: Record<
   string,
-  { label: string; title: string; className: string; width: number; glyph: React.ReactNode }
+  { label: string; titleKey: string; className: string; width: number; glyph: React.ReactNode }
 > = {
   gold: { ...OA_TYPE_META.gold, glyph: <LockIcon state="open" /> },
   hybrid: { ...OA_TYPE_META.hybrid, glyph: <LockIcon state="ajar" /> },
   diamond: { ...OA_TYPE_META.diamond, glyph: <LockIcon state="wide" /> },
   closed: {
     label: "CLOSED",
-    title: "Closed — no openly accessible version of this publication was found.",
+    titleKey: "badges.statusClosedTitle",
     className: OA_TYPE_META.subscription.className,
     width: OA_TYPE_META.subscription.width,
     glyph: <LockIcon state="closed" />,
   },
   green: {
     label: "GREEN",
-    title:
-      "Green open access — an author copy of this publication is freely available in a repository.",
+    titleKey: "badges.statusGreenTitle",
     className: "text-emerald-700 dark:text-emerald-300",
     width: 59,
     glyph: <GreenGlyph />,
   },
   bronze: {
     label: "BRONZE",
-    title:
-      "Bronze open access — free to read on the publisher's site, without an explicit open license.",
+    titleKey: "badges.statusBronzeTitle",
     className: "text-orange-700 dark:text-orange-300",
     width: 68,
     glyph: <BronzeGlyph />,
@@ -353,6 +362,7 @@ export function OaStatusChip({
    * DOI-less rows means the repository copy, not the venue's OA model. */
   source?: string | null;
 }) {
+  const t = useTranslations("common");
   if (!status) return null;
   // The OpenAlex oa_status sync only overwrites DOI-matched rows, so a
   // green status on a DOI-less Pure record is Pure's own access flag:
@@ -361,8 +371,7 @@ export function OaStatusChip({
     status === "green" && source === "pure"
       ? {
           label: "OPEN (PURE)",
-          title:
-            "Pure holds a freely readable file. Without a DOI we cannot tell the venue's open-access model.",
+          titleKey: "badges.statusPureTitle",
           className: "text-emerald-700 dark:text-emerald-300",
           width: 122,
           glyph: <GreenGlyph />,
@@ -370,7 +379,12 @@ export function OaStatusChip({
       : OA_STATUS_LOCKUP[status];
   if (!meta) return null;
   return (
-    <Lockup label={meta.label} width={meta.width} title={meta.title} className={meta.className}>
+    <Lockup
+      label={meta.label}
+      width={meta.width}
+      title={t(meta.titleKey)}
+      className={meta.className}
+    >
       {meta.glyph}
     </Lockup>
   );
@@ -378,33 +392,32 @@ export function OaStatusChip({
 
 /** Why a "missing from Pure" row is in fact held by Pure, when a record
  * was identified. Linked to that record's public page when known. */
-const PURE_MATCH_META: Record<string, { label: string; title: string }> = {
+const PURE_MATCH_META: Record<string, { labelKey: string; titleKey: string }> = {
   doi_in_pure: {
-    label: "In Pure (other record)",
-    title:
-      "A Pure record with this DOI exists but is not linked here — for example a book that the page leaves out, or a record not linked to this author.",
+    labelKey: "badges.pureMatchOtherRecordLabel",
+    titleKey: "badges.pureMatchOtherRecordTitle",
   },
   parent_book_in_pure: {
-    label: "Book in Pure",
-    title: "The parent book of this chapter has a Pure record.",
+    labelKey: "badges.pureMatchParentBookLabel",
+    titleKey: "badges.pureMatchParentBookTitle",
   },
   same_title_in_pure: {
-    label: "Same title in Pure",
-    title:
-      "A Pure record with the same title shares an author — likely another version or DOI of the same publication.",
+    labelKey: "badges.pureMatchSameTitleLabel",
+    titleKey: "badges.pureMatchSameTitleTitle",
   },
 };
 
 export function PureMatchBadge({ match, url }: { match?: string | null; url?: string | null }) {
+  const t = useTranslations("common");
   if (!match) return null;
   const meta = PURE_MATCH_META[match];
   if (!meta) return null;
   const badge = (
     <span
       className="inline-flex shrink-0 items-center rounded-[var(--radius)] border border-[var(--border)] px-2 py-0.5 text-[11px] font-normal text-[var(--muted-foreground)]"
-      title={meta.title}
+      title={t(meta.titleKey)}
     >
-      {meta.label}
+      {t(meta.labelKey)}
     </span>
   );
   if (!url) return badge;
@@ -414,7 +427,7 @@ export function PureMatchBadge({ match, url }: { match?: string | null; url?: st
       target="_blank"
       rel="noopener noreferrer"
       className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-      title={meta.title}
+      title={t(meta.titleKey)}
     >
       {badge}
     </a>
@@ -422,16 +435,13 @@ export function PureMatchBadge({ match, url }: { match?: string | null; url?: st
 }
 
 export function DealBadge({ covered, capped = false }: { covered: boolean; capped?: boolean }) {
+  const t = useTranslations("common");
   if (!covered) return null;
   return (
     <Lockup
       label="DEAL"
       width={50}
-      title={
-        capped
-          ? "Open access deal — cap reached: the publisher's article cap for this contract year is used up, so free OA publishing is no longer guaranteed."
-          : "Open access deal — APCs for corresponding authors are covered (fully or partly) by an institutional agreement."
-      }
+      title={capped ? t("badges.dealCappedTitle") : t("badges.dealCoveredTitle")}
       className={capped ? `${ACCESS_TEXT.deal} grayscale opacity-60` : ACCESS_TEXT.deal}
       overlay={
         capped ? (
@@ -455,13 +465,14 @@ export function DealBadge({ covered, capped = false }: { covered: boolean; cappe
 }
 
 export function QuartileBadge({ quartile }: { quartile: string | null }) {
+  const t = useTranslations("common");
   if (!quartile) return null;
   const isTop = quartile === "Q1";
   return (
     <Lockup
       label={quartile.toUpperCase()}
       width={30}
-      title={`Journal impact quartile in its subject category — Q1 means top 25%. This journal: ${quartile}.`}
+      title={t("badges.quartileTitle", { quartile })}
       className={isTop ? "text-[var(--primary-text)]" : "text-[var(--muted-foreground)]"}
     >
       <QuartileGlyph />
@@ -477,10 +488,15 @@ const FIT_SPEC = {
   compliant: {
     Icon: CircleCheck,
     color: "text-emerald-700 dark:text-emerald-400",
-    label: "Compliant",
   },
-  check: { Icon: CircleHelp, color: "text-amber-600 dark:text-amber-400", label: "Check" },
-  no: { Icon: CircleX, color: "text-red-700 dark:text-red-400", label: "Not compliant" },
+  check: { Icon: CircleHelp, color: "text-amber-600 dark:text-amber-400" },
+  no: { Icon: CircleX, color: "text-red-700 dark:text-red-400" },
+} as const;
+
+const FIT_LABEL_KEYS = {
+  compliant: "badges.funderFitCompliant",
+  check: "badges.funderFitCheck",
+  no: "badges.funderFitNo",
 } as const;
 
 export function FunderFitBadge({
@@ -490,14 +506,16 @@ export function FunderFitBadge({
   status: "compliant" | "check" | "no" | null | undefined;
   reasons: string[];
 }) {
+  const t = useTranslations("common");
   if (!status) return null;
-  const { Icon, color, label } = FIT_SPEC[status];
+  const { Icon, color } = FIT_SPEC[status];
+  const label = t(FIT_LABEL_KEYS[status]);
   return (
     <span
       className={`jb-badge inline-flex shrink-0 items-center gap-0.5 ${color}`}
-      title={`Funder fit: ${label}${reasons.length ? " — " + reasons.join(" ") : ""}`}
+      title={reasons.length > 0 ? `${label}. ${reasons.join(" ")}` : label}
     >
-      <Icon aria-label={`Funder fit: ${label}`} className="size-4" role="img" />
+      <Icon aria-label={t("badges.funderFitTooltip", { label })} className="size-4" role="img" />
     </span>
   );
 }

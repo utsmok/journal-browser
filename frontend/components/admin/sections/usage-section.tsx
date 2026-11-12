@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { PageHeader } from "@/components/admin/admin-shell";
 import { Badge } from "@/components/ui/badge";
@@ -25,10 +26,10 @@ const EVENT_BARS: Record<string, string> = {
   search: "bg-orange-400 dark:bg-orange-500",
   error: "bg-red-400 dark:bg-red-500",
 };
-const EVENT_LABELS: Record<string, string> = {
-  page_view: "Page views",
-  search: "Searches",
-  error: "Errors",
+const EVENT_LABEL_KEYS: Record<(typeof EVENT_TYPES)[number], `usage.event${string}`> = {
+  page_view: "usage.eventPageViews",
+  search: "usage.eventSearches",
+  error: "usage.eventErrors",
 };
 
 function StatCard({ label, value, sub }: { label: string; value: number | null; sub?: string }) {
@@ -48,13 +49,14 @@ function StatCard({ label, value, sub }: { label: string; value: number | null; 
 /** Hand-rolled stacked per-day event chart (no chart library), StatBars
  * spirit: one column per day, segments stack page views → searches → errors. */
 function DailyChart({ daily }: { daily: UsageSummary["daily"] }) {
+  const t = useTranslations("admin");
   const max = Math.max(1, ...daily.map((d) => d.page_view + d.search + d.error));
   const labelEvery = Math.ceil(daily.length / 16);
   return (
     <div>
-      <div className="flex h-40 items-end gap-1" role="img" aria-label="Usage events per day">
+      <div className="flex h-40 items-end gap-1" role="img" aria-label={t("usage.chartAria")}>
         {daily.map((d, i) => {
-          const t = d.page_view + d.search + d.error;
+          const total = d.page_view + d.search + d.error;
           return (
             <div
               key={d.date}
@@ -62,8 +64,8 @@ function DailyChart({ daily }: { daily: UsageSummary["daily"] }) {
             >
               <div
                 className="flex w-full flex-col-reverse overflow-hidden rounded-t"
-                style={{ height: `${Math.max((t / max) * 100, t > 0 ? 2 : 0)}%` }}
-                title={`${d.date}: ${t} events`}
+                style={{ height: `${Math.max((total / max) * 100, total > 0 ? 2 : 0)}%` }}
+                title={t("usage.chartDayTitle", { date: d.date, count: total })}
               >
                 {EVENT_TYPES.map((type) => {
                   const n = d[type];
@@ -73,7 +75,11 @@ function DailyChart({ daily }: { daily: UsageSummary["daily"] }) {
                       key={type}
                       className={EVENT_BARS[type]}
                       style={{ flexGrow: n, flexBasis: 0 }}
-                      title={`${d.date} · ${EVENT_LABELS[type]}: ${n}`}
+                      title={t("usage.chartSegmentTitle", {
+                        date: d.date,
+                        label: t(EVENT_LABEL_KEYS[type]),
+                        count: n,
+                      })}
                     />
                   );
                 })}
@@ -94,7 +100,7 @@ function DailyChart({ daily }: { daily: UsageSummary["daily"] }) {
               aria-hidden
               className={`inline-block size-2.5 rounded-full ${EVENT_BARS[type]}`}
             />
-            {EVENT_LABELS[type]}
+            {t(EVENT_LABEL_KEYS[type])}
           </li>
         ))}
       </ul>
@@ -105,6 +111,7 @@ function DailyChart({ daily }: { daily: UsageSummary["daily"] }) {
 /** Usage analytics: rollup dashboard plus the raw event list, so the owner
  * can see what the anonymous tracker actually records. */
 export function UsageSection() {
+  const t = useTranslations("admin");
   const [token, setToken] = useAdminToken();
   const logout = () => setToken(null);
   const [days, setDays] = useState(30);
@@ -140,10 +147,7 @@ export function UsageSection() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Usage"
-        lede="Anonymous client activity: page views, searches (real queries vs default browse loads), and errors, with the raw event feed below. Raw IPs are nulled after the retention window."
-      >
+      <PageHeader title={t("usage.title")} lede={t("usage.lede")}>
         <Button
           variant="outline"
           size="sm"
@@ -152,44 +156,50 @@ export function UsageSection() {
             void events.refresh();
           }}
         >
-          Refresh
+          {t("refresh")}
         </Button>
       </PageHeader>
 
       <div className="flex flex-wrap items-center gap-4 text-sm">
         <div className="flex items-center gap-2">
-          <label htmlFor="usage-days">Window</label>
+          <label htmlFor="usage-days">{t("usage.windowLabel")}</label>
           <select
             id="usage-days"
             className="rounded-[var(--radius)] border border-input bg-[var(--card)] px-2 py-1"
             value={days}
             onChange={(event) => changeDays(Number(event.target.value))}
           >
-            <option value={7}>7 days</option>
-            <option value={30}>30 days</option>
-            <option value={90}>90 days</option>
+            <option value={7}>{t("usage.days7")}</option>
+            <option value={30}>{t("usage.days30")}</option>
+            <option value={90}>{t("usage.days90")}</option>
           </select>
         </div>
         <span className="text-muted-foreground" aria-live="polite">
-          {summary.loading ? "loading…" : `${days}-day window`}
+          {summary.loading ? t("loading") : t("usage.windowCount", { days })}
         </span>
       </div>
 
       {summary.error && <p className="text-sm text-destructive">{summary.error}</p>}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Page views" value={totals ? (totals.page_view ?? 0) : null} />
         <StatCard
-          label="Searches"
+          label={t("usage.eventPageViews")}
+          value={totals ? (totals.page_view ?? 0) : null}
+        />
+        <StatCard
+          label={t("usage.eventSearches")}
           value={s ? s.searches.browse + s.searches.queries : null}
           sub={
             s
-              ? `${s.searches.queries.toLocaleString("en")} queries · ${s.searches.browse.toLocaleString("en")} browse loads`
+              ? t("usage.searchesSub", {
+                  queries: s.searches.queries.toLocaleString("en"),
+                  browse: s.searches.browse.toLocaleString("en"),
+                })
               : undefined
           }
         />
-        <StatCard label="Errors" value={totals ? (totals.error ?? 0) : null} />
-        <StatCard label="Sessions" value={s ? s.sessions : null} />
+        <StatCard label={t("usage.eventErrors")} value={totals ? (totals.error ?? 0) : null} />
+        <StatCard label={t("usage.statSessions")} value={s ? s.sessions : null} />
       </div>
 
       {s && s.daily.length > 0 && <DailyChart daily={s.daily} />}
@@ -197,13 +207,13 @@ export function UsageSection() {
       {s && (
         <div className="grid gap-6 lg:grid-cols-2">
           <div>
-            <h3 className="mb-2 text-sm font-semibold">Top paths</h3>
+            <h3 className="mb-2 text-sm font-semibold">{t("usage.topPaths")}</h3>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Path</TableHead>
-                  <TableHead className="text-right">Views</TableHead>
-                  <TableHead className="text-right">Avg dwell</TableHead>
+                  <TableHead>{t("usage.columnPath")}</TableHead>
+                  <TableHead className="text-right">{t("usage.columnViews")}</TableHead>
+                  <TableHead className="text-right">{t("usage.columnAvgDwell")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -225,7 +235,7 @@ export function UsageSection() {
                 {s.top_paths.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={3} className="text-center text-muted-foreground">
-                      No page views in this window.
+                      {t("usage.noPaths")}
                     </TableCell>
                   </TableRow>
                 )}
@@ -234,13 +244,13 @@ export function UsageSection() {
           </div>
 
           <div>
-            <h3 className="mb-2 text-sm font-semibold">Top queries</h3>
+            <h3 className="mb-2 text-sm font-semibold">{t("usage.topQueries")}</h3>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Query</TableHead>
-                  <TableHead className="text-right">Count</TableHead>
-                  <TableHead className="text-right">Zero results</TableHead>
+                  <TableHead>{t("usage.columnQuery")}</TableHead>
+                  <TableHead className="text-right">{t("usage.columnCount")}</TableHead>
+                  <TableHead className="text-right">{t("usage.columnZeroResults")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -260,7 +270,7 @@ export function UsageSection() {
                 {s.top_queries.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={3} className="text-center text-muted-foreground">
-                      No search queries in this window.
+                      {t("usage.noQueries")}
                     </TableCell>
                   </TableRow>
                 )}
@@ -269,12 +279,12 @@ export function UsageSection() {
           </div>
 
           <div>
-            <h3 className="mb-2 text-sm font-semibold">Top refs</h3>
+            <h3 className="mb-2 text-sm font-semibold">{t("usage.topRefs")}</h3>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Ref</TableHead>
-                  <TableHead className="text-right">Views</TableHead>
+                  <TableHead>{t("usage.columnRef")}</TableHead>
+                  <TableHead className="text-right">{t("usage.columnViews")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -291,7 +301,7 @@ export function UsageSection() {
                 {s.top_refs.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={2} className="text-center text-muted-foreground">
-                      No ref-tracked views in this window.
+                      {t("usage.noRefs")}
                     </TableCell>
                   </TableRow>
                 )}
@@ -300,14 +310,14 @@ export function UsageSection() {
           </div>
 
           <div>
-            <h3 className="mb-2 text-sm font-semibold">Errors</h3>
+            <h3 className="mb-2 text-sm font-semibold">{t("usage.errorsTitle")}</h3>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Message</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead className="text-right">Count</TableHead>
-                  <TableHead>Last</TableHead>
+                  <TableHead>{t("usage.columnMessage")}</TableHead>
+                  <TableHead>{t("usage.columnSource")}</TableHead>
+                  <TableHead className="text-right">{t("usage.columnCount")}</TableHead>
+                  <TableHead>{t("usage.columnLast")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -327,7 +337,7 @@ export function UsageSection() {
                 {s.errors.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={4} className="text-center text-muted-foreground">
-                      No client errors in this window.
+                      {t("usage.noErrors")}
                     </TableCell>
                   </TableRow>
                 )}
@@ -336,12 +346,12 @@ export function UsageSection() {
           </div>
 
           <div>
-            <h3 className="mb-2 text-sm font-semibold">Countries</h3>
+            <h3 className="mb-2 text-sm font-semibold">{t("usage.countriesTitle")}</h3>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Country</TableHead>
-                  <TableHead className="text-right">Events</TableHead>
+                  <TableHead>{t("usage.columnCountry")}</TableHead>
+                  <TableHead className="text-right">{t("usage.columnEvents")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -356,7 +366,7 @@ export function UsageSection() {
                 {s.countries.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={2} className="text-center text-muted-foreground">
-                      No geo-enriched events in this window.
+                      {t("usage.noCountries")}
                     </TableCell>
                   </TableRow>
                 )}
@@ -367,30 +377,34 @@ export function UsageSection() {
       )}
 
       <div>
-        <h3 className="mb-2 text-sm font-semibold">Recent events</h3>
+        <h3 className="mb-2 text-sm font-semibold">{t("usage.recentEvents")}</h3>
         <div className="mb-2 flex flex-wrap items-center gap-4 text-sm">
           <div className="flex items-center gap-2">
-            <label htmlFor="usage-event-type">Type</label>
+            <label htmlFor="usage-event-type">{t("usage.typeLabel")}</label>
             <select
               id="usage-event-type"
               className="rounded-[var(--radius)] border border-input bg-[var(--card)] px-2 py-1"
               value={eventType}
               onChange={(event) => changeFilter(event.target.value)}
             >
-              <option value="all">All</option>
+              <option value="all">{t("all")}</option>
               {EVENT_TYPES.map((type) => (
                 <option key={type} value={type}>
-                  {EVENT_LABELS[type]}
+                  {t(EVENT_LABEL_KEYS[type])}
                 </option>
               ))}
             </select>
           </div>
           <span className="text-muted-foreground" aria-live="polite">
             {events.loading
-              ? "loading…"
+              ? t("loading")
               : total === 0
-                ? "no events"
-                : `${offset + 1}–${offset + items.length} of ${total.toLocaleString("en")}`}
+                ? t("usage.noEvents")
+                : t("usage.eventsRange", {
+                    from: offset + 1,
+                    to: offset + items.length,
+                    total: total.toLocaleString("en"),
+                  })}
           </span>
           <div className="ml-auto flex items-center gap-2">
             <Button
@@ -399,7 +413,7 @@ export function UsageSection() {
               disabled={offset === 0 || events.loading}
               onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
             >
-              Prev
+              {t("usage.prev")}
             </Button>
             <Button
               variant="outline"
@@ -407,7 +421,7 @@ export function UsageSection() {
               disabled={offset + PAGE_SIZE >= total || events.loading}
               onClick={() => setOffset(offset + PAGE_SIZE)}
             >
-              Next
+              {t("usage.next")}
             </Button>
           </div>
         </div>
@@ -416,15 +430,15 @@ export function UsageSection() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>When</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Path</TableHead>
-              <TableHead>Query</TableHead>
-              <TableHead>Ref</TableHead>
-              <TableHead>Source / status</TableHead>
-              <TableHead className="text-right">Duration</TableHead>
-              <TableHead>Country</TableHead>
-              <TableHead>IP</TableHead>
+              <TableHead>{t("usage.columnWhen")}</TableHead>
+              <TableHead>{t("usage.columnType")}</TableHead>
+              <TableHead>{t("usage.columnPath")}</TableHead>
+              <TableHead>{t("usage.columnQuery")}</TableHead>
+              <TableHead>{t("usage.columnRef")}</TableHead>
+              <TableHead>{t("usage.columnSourceStatus")}</TableHead>
+              <TableHead className="text-right">{t("usage.columnDuration")}</TableHead>
+              <TableHead>{t("usage.columnCountry")}</TableHead>
+              <TableHead>{t("usage.columnIp")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -440,7 +454,7 @@ export function UsageSection() {
                 <TableCell className="text-xs">
                   {item.event_type === "search" ? (
                     item.is_browse ? (
-                      <Badge variant="muted">browse load</Badge>
+                      <Badge variant="muted">{t("usage.browseLoad")}</Badge>
                     ) : (
                       (item.query ?? "—")
                     )
@@ -468,7 +482,7 @@ export function UsageSection() {
             {!events.loading && items.length === 0 && (
               <TableRow>
                 <TableCell colSpan={9} className="text-center text-muted-foreground">
-                  No events match this window and type.
+                  {t("usage.noEventsMatch")}
                 </TableCell>
               </TableRow>
             )}

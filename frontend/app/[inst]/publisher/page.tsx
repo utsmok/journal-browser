@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -37,17 +38,18 @@ const SEARCH_INPUT_ID = "publisher-search";
 
 const PAGE_SIZES = [25, 50, 100];
 
-const OA_TYPE_LABELS: Record<string, string> = {
-  gold: "Gold OA",
-  diamond: "Diamond OA",
-  generic: "OA (model unknown)",
-  hybrid: "Hybrid",
-  subscription: "Subscription (closed)",
+/** Facet codes → message keys; unknown codes fall back to the raw value. */
+const OA_TYPE_KEYS: Record<string, string> = {
+  gold: "facets.oaTypes.gold",
+  diamond: "facets.oaTypes.diamond",
+  generic: "facets.oaTypes.modelUnknown",
+  hybrid: "facets.oaTypes.hybrid",
+  subscription: "facets.oaTypes.subscription",
 };
 
-const DEAL_LABELS: Record<string, string> = {
-  covered: "Has deal",
-  none: "No deal",
+const DEAL_KEYS: Record<string, string> = {
+  covered: "facets.dealCovered",
+  none: "facets.dealNone",
 };
 
 /** Matches the journal page's sort-select styling. */
@@ -76,6 +78,7 @@ function facetValues(
 
 /** Compact Q1–Q4 chips with counts; a quartile with no journals dims out. */
 function QuartileChips({ item }: { item: PublisherListItem }) {
+  const t = useTranslations("publishers");
   return (
     <span className="flex flex-wrap gap-1 text-[11px] tabular-nums">
       {(["q1", "q2", "q3", "q4"] as const).map((q) => {
@@ -85,8 +88,8 @@ function QuartileChips({ item }: { item: PublisherListItem }) {
             key={q}
             title={
               n
-                ? `${q.toUpperCase()}: ${n} ${n === 1 ? "journal" : "journals"}`
-                : `No ${q.toUpperCase()} journals`
+                ? t("quartileChipHint", { quartile: q.toUpperCase(), count: n })
+                : t("quartileChipNoneHint", { quartile: q.toUpperCase() })
             }
             className={
               n
@@ -105,6 +108,7 @@ function QuartileChips({ item }: { item: PublisherListItem }) {
 
 /** APC range over the publisher's journals with a known price. */
 function ApcCell({ item }: { item: PublisherListItem }) {
+  const t = useTranslations("publishers");
   const { n_journals, eur_min: min, eur_max: max } = item.apc;
   if (n_journals === 0 || (min == null && max == null))
     return <span className="text-[var(--muted-foreground)]">—</span>;
@@ -113,10 +117,7 @@ function ApcCell({ item }: { item: PublisherListItem }) {
       ? `€${formatEur(min)}–${formatEur(max)}`
       : `€${formatEur(max ?? (min as number))}`;
   return (
-    <span
-      className="tabular-nums"
-      title={`APC known for ${n_journals} ${n_journals === 1 ? "journal" : "journals"}; list prices and OpenAPC ranges combined`}
-    >
+    <span className="tabular-nums" title={t("apcCoverage", { count: n_journals })}>
       {range}{" "}
       <span className="text-[var(--muted-foreground)]">({n_journals.toLocaleString("en")})</span>
     </span>
@@ -133,6 +134,8 @@ export default function PublisherSearchPage() {
 }
 
 function PublishersView() {
+  const t = useTranslations("publishers");
+  const tc = useTranslations("common");
   const inst = useInstitution();
   const site = useSiteMeta();
   const sp = useSearchParams();
@@ -302,55 +305,61 @@ function PublishersView() {
   const groups: FacetGroupDef[] = [
     {
       key: "oa_type",
-      label: "Open access",
+      label: t("facets.openAccess"),
       defaultOpen: true,
-      values: facetValues(facets?.oa_type, oaTypes, (v) => OA_TYPE_LABELS[v] ?? v),
+      values: facetValues(facets?.oa_type, oaTypes, (v) =>
+        v in OA_TYPE_KEYS ? t(OA_TYPE_KEYS[v]) : v,
+      ),
       activeValues: oaTypes,
     },
     {
       key: "deal",
-      label: "Open access deal",
+      label: t("facets.deal"),
       defaultOpen: true,
-      values: facetValues(facets?.deal, deal ? [deal] : [], (v) => DEAL_LABELS[v] ?? v),
+      values: facetValues(facets?.deal, deal ? [deal] : [], (v) =>
+        v in DEAL_KEYS ? t(DEAL_KEYS[v]) : v,
+      ),
       activeValues: deal ? [deal] : [],
     },
     {
       key: "quartile",
-      label: "Quartile",
+      label: t("facets.quartile"),
       defaultOpen: true,
       values: facetValues(facets?.quartile, quartiles),
       activeValues: quartiles,
     },
     {
       key: "has_apc",
-      label: "APC price",
+      label: t("facets.apcPrice"),
       defaultOpen: true,
       values: facetValues(facets?.has_apc, hasApc ? [hasApc] : [], (v) =>
-        v === "yes" ? "Has price info" : "No price info",
+        v === "yes" ? t("facets.priceInfo") : t("facets.noPriceInfo"),
       ),
       activeValues: hasApc ? [hasApc] : [],
     },
     {
       key: "has_works",
-      label: "Works",
+      label: t("facets.works"),
       defaultOpen: false,
       values: facetValues(facets?.has_works, hasWorks ? [hasWorks] : [], (v) =>
-        v === "true" ? "Has works" : "No works",
+        v === "true" ? t("facets.hasWorks") : t("facets.noWorks"),
       ),
       activeValues: hasWorks ? [hasWorks] : [],
     },
     {
       key: "size",
-      label: "Journal count",
+      label: t("facets.journalCount"),
       defaultOpen: false,
       values: facetValues(facets?.size, sizes, (v) =>
-        v === "10+" ? "10+ journals" : `${v.replace("-", "–")} journals`,
+        v === "10+"
+          ? t("facets.sizeTenPlus")
+          : t("facets.sizeRange", { range: v.replace("-", " to ") }),
       ),
       activeValues: sizes,
     },
     {
       key: "topic",
-      label: "Topic",
+      label: t("facets.topic"),
       defaultOpen: false,
       values: facetValues(facets?.topic, topic ? [topic] : []),
       activeValues: topic ? [topic] : [],
@@ -361,10 +370,9 @@ function PublishersView() {
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
       <div className="flex flex-col min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[960px]:gap-6 min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
         <section className="order-1 mb-8 min-[960px]:col-start-2 min-[960px]:row-start-1 min-[960px]:mb-6">
-          <h1 className="mb-3 text-3xl font-bold text-balance">Publishers</h1>
+          <h1 className="mb-3 text-3xl font-bold text-balance">{t("title")}</h1>
           <p className="mb-6 max-w-2xl text-[var(--muted-foreground)]">
-            Browse {site.short}&rsquo;s journals by publisher, with their output, open access mix,
-            deals, and article costs.
+            {t("search.intro", { inst: site.short })}
           </p>
           <form
             className="flex max-w-2xl gap-2"
@@ -381,8 +389,8 @@ function PublishersView() {
                 onKeyDown={(event) => {
                   if (event.key === "Escape") event.currentTarget.blur();
                 }}
-                placeholder="Search by publisher name"
-                aria-label="Search publishers"
+                placeholder={t("search.placeholder")}
+                aria-label={t("search.searchAria")}
               />
               {input === "" && (
                 <kbd
@@ -393,7 +401,7 @@ function PublishersView() {
                 </kbd>
               )}
             </div>
-            <Button type="submit">Search</Button>
+            <Button type="submit">{t("search.searchButton")}</Button>
           </form>
         </section>
 
@@ -414,11 +422,11 @@ function PublishersView() {
         <div className="order-3 min-w-0 min-[960px]:col-start-2 min-[960px]:row-start-2">
           <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
             <label htmlFor="publisher-sort" className="whitespace-nowrap">
-              Sort by
+              {t("search.sortBy")}
             </label>
             <select
               id="publisher-sort"
-              title="Order of the results"
+              title={t("search.sortHint")}
               value={sort ?? "default"}
               onChange={(event) =>
                 setParams({
@@ -432,14 +440,14 @@ function PublishersView() {
             >
               {/* The backend default is relevance with a query, works count
                 without; say so instead of guessing one label. */}
-              <option value="default">{q ? "Relevance" : "Works (high→low)"}</option>
+              <option value="default">{q ? t("sort.relevance") : t("sort.works")}</option>
               {(
                 [
-                  ["name", "Name (A→Z)"],
-                  ["journals", "Journals (high→low)"],
-                  ["works", "Works (high→low)"],
-                  ["deals", "Deal-covered journals (high→low)"],
-                  ["apc", "APC (high→low)"],
+                  ["name", t("sort.name")],
+                  ["journals", t("sort.journals")],
+                  ["works", t("sort.works")],
+                  ["deals", t("sort.deals")],
+                  ["apc", t("sort.apc")],
                 ] as [PublisherSearchSort, string][]
               ).map(([value, label]) => (
                 <option key={value} value={value}>
@@ -448,11 +456,11 @@ function PublishersView() {
               ))}
             </select>
             <label htmlFor="publisher-per-page" className="whitespace-nowrap">
-              Per page
+              {t("search.perPage")}
             </label>
             <select
               id="publisher-per-page"
-              title="Results per page"
+              title={t("search.perPageHint")}
               value={pageSize}
               onChange={(event) =>
                 setParams({
@@ -472,10 +480,10 @@ function PublishersView() {
                 variant="ghost"
                 size="sm"
                 className="text-[var(--muted-foreground)]"
-                title="Clears all active filters"
+                title={t("search.resetHint")}
                 onClick={clearFilters}
               >
-                Reset filters
+                {t("search.reset")}
               </Button>
             )}
           </div>
@@ -487,17 +495,19 @@ function PublishersView() {
                     region keeps its previous text, so typing never chatters. */}
                   <span aria-live="polite">
                     {data
-                      ? `${data.total.toLocaleString("en")} publisher${data.total === 1 ? "" : "s"}${q ? ` matching “${q}”` : ""}`
+                      ? q
+                        ? t("results.countMatching", { count: data.total, q })
+                        : t("results.count", { count: data.total })
                       : ""}
                   </span>
-                  {isFetching && data ? " · updating…" : ""}
+                  {isFetching && data ? t("results.updating") : ""}
                 </p>
                 {showPager && (
                   <div className="flex items-center gap-2">
                     <Button
                       variant="outline"
                       size="sm"
-                      aria-label="Previous page"
+                      aria-label={t("results.prevPageAria")}
                       disabled={offset === 0}
                       onClick={() =>
                         setParams({
@@ -505,19 +515,19 @@ function PublishersView() {
                         })
                       }
                     >
-                      <ChevronLeft aria-hidden className="size-4" /> Prev
+                      <ChevronLeft aria-hidden className="size-4" /> {t("results.prev")}
                     </Button>
                     <span className="whitespace-nowrap text-sm tabular-nums text-[var(--muted-foreground)]">
-                      Page {page.toLocaleString("en")} of {pageCount.toLocaleString("en")}
+                      {t("results.pageOf", { page, pages: pageCount })}
                     </span>
                     <Button
                       variant="outline"
                       size="sm"
-                      aria-label="Next page"
+                      aria-label={t("results.nextPageAria")}
                       disabled={offset + pageSize >= total}
                       onClick={() => setParams({ offset: String(offset + pageSize) })}
                     >
-                      Next <ChevronRight aria-hidden className="size-4" />
+                      {t("results.next")} <ChevronRight aria-hidden className="size-4" />
                     </Button>
                   </div>
                 )}
@@ -525,9 +535,9 @@ function PublishersView() {
 
               {isError ? (
                 <div className="py-10 text-center">
-                  <p className="text-[var(--destructive)]">{errorMessage(error)}</p>
+                  <p className="text-[var(--destructive)]">{errorMessage(tc, error)}</p>
                   <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
-                    Retry
+                    {t("results.retry")}
                   </Button>
                 </div>
               ) : isPending ? (
@@ -535,14 +545,14 @@ function PublishersView() {
               ) : rows.length === 0 ? (
                 <div className="py-10 text-center text-[var(--muted-foreground)]">
                   {q && !anyFilter ? (
-                    <>No publishers match &ldquo;{q}&rdquo;.</>
+                    <>{t("results.emptyQuery", { q })}</>
                   ) : (
                     <>
-                      No publishers match{anyFilter ? " these filters" : ""}.
+                      {anyFilter ? t("results.emptyFilters") : t("results.empty")}
                       {anyFilter && (
                         <div className="mt-3">
                           <Button variant="outline" size="sm" onClick={clearFilters}>
-                            Clear filters
+                            {t("results.clearFilters")}
                           </Button>
                         </div>
                       )}
@@ -555,7 +565,7 @@ function PublishersView() {
                     push the counts off-screen behind horizontal scrolling. */}
                   <ul
                     className={isFetching ? "opacity-60 md:hidden" : "md:hidden"}
-                    aria-label="Publisher results"
+                    aria-label={t("results.listAria")}
                   >
                     {rows.map((p) => (
                       <li
@@ -569,14 +579,11 @@ function PublishersView() {
                           {displayPublisherName(p.name)}
                         </Link>
                         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs tabular-nums text-[var(--muted-foreground)]">
-                          <span>
-                            {p.n_journals.toLocaleString("en")}{" "}
-                            {p.n_journals === 1 ? "journal" : "journals"}
-                          </span>
-                          <span>
-                            {p.n_works.toLocaleString("en")} {p.n_works === 1 ? "work" : "works"}
-                          </span>
-                          {p.deal_journals > 0 && <span>{p.deal_journals} deal-covered</span>}
+                          <span>{t("units.journals", { count: p.n_journals })}</span>
+                          <span>{t("units.works", { count: p.n_works })}</span>
+                          {p.deal_journals > 0 && (
+                            <span>{t("units.dealCoveredShort", { count: p.deal_journals })}</span>
+                          )}
                         </div>
                         <div className="mt-1.5 max-w-48">
                           <OaCompositionBar counts={p.oa_types} total={p.n_journals} />
@@ -585,7 +592,7 @@ function PublishersView() {
                           <div className="mt-1 text-xs text-[var(--muted-foreground)]">
                             {p.topics
                               .slice(0, 2)
-                              .map((t) => t.name)
+                              .map((topic) => topic.name)
                               .join(" · ")}
                           </div>
                         )}
@@ -594,27 +601,43 @@ function PublishersView() {
                   </ul>
                   <div className={isFetching ? "hidden opacity-60 md:block" : "hidden md:block"}>
                     <Table>
-                      <caption className="sr-only">Publisher search results</caption>
+                      <caption className="sr-only">{t("results.tableCaption")}</caption>
                       <TableHeader>
                         <TableRow>
                           <TableHead aria-sort={ariaSortFor("name")}>
-                            <SortHead columnId="name" label="Publisher" state={sortHeadState} />
+                            <SortHead
+                              columnId="name"
+                              label={t("table.publisher")}
+                              state={sortHeadState}
+                            />
                           </TableHead>
                           <TableHead className="text-right" aria-sort={ariaSortFor("journals")}>
-                            <SortHead columnId="journals" label="Journals" state={sortHeadState} />
+                            <SortHead
+                              columnId="journals"
+                              label={t("table.journals")}
+                              state={sortHeadState}
+                            />
                           </TableHead>
                           <TableHead className="text-right" aria-sort={ariaSortFor("works")}>
-                            <SortHead columnId="works" label="Works" state={sortHeadState} />
+                            <SortHead
+                              columnId="works"
+                              label={t("table.works")}
+                              state={sortHeadState}
+                            />
                           </TableHead>
-                          <TableHead>OA composition</TableHead>
+                          <TableHead>{t("table.oaComposition")}</TableHead>
                           <TableHead className="text-right" aria-sort={ariaSortFor("deals")}>
-                            <SortHead columnId="deals" label="Deals" state={sortHeadState} />
+                            <SortHead
+                              columnId="deals"
+                              label={t("table.deals")}
+                              state={sortHeadState}
+                            />
                           </TableHead>
-                          <TableHead>Quartiles</TableHead>
+                          <TableHead>{t("table.quartiles")}</TableHead>
                           <TableHead aria-sort={ariaSortFor("apc")}>
-                            <SortHead columnId="apc" label="APC" state={sortHeadState} />
+                            <SortHead columnId="apc" label={t("table.apc")} state={sortHeadState} />
                           </TableHead>
-                          <TableHead>Topics</TableHead>
+                          <TableHead>{t("table.topics")}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -663,12 +686,12 @@ function PublishersView() {
                                   className="block max-w-40 truncate"
                                   title={p.topics
                                     .slice(0, 2)
-                                    .map((t) => `${t.name} (${Math.round(t.n)})`)
+                                    .map((topic) => `${topic.name} (${Math.round(topic.n)})`)
                                     .join(" · ")}
                                 >
                                   {p.topics
                                     .slice(0, 2)
-                                    .map((t) => t.name)
+                                    .map((topic) => topic.name)
                                     .join(" · ")}
                                 </span>
                               ) : (
@@ -681,8 +704,7 @@ function PublishersView() {
                     </Table>
                   </div>
                   <p className="mt-4 text-xs text-[var(--muted-foreground)]">
-                    Showing {rows.length.toLocaleString("en")} of{" "}
-                    {(data?.total ?? 0).toLocaleString("en")}
+                    {t("results.showingOf", { shown: rows.length, total: data?.total ?? 0 })}
                   </p>
                 </>
               )}

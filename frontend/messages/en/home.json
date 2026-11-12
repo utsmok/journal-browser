@@ -1,0 +1,86 @@
+{
+  "metadata": {
+    "title": "Journals"
+  },
+  "landing": {
+    "siteName": "Open Journal Browser",
+    "loadingLabel": "Loading institutions",
+    "loadError": "The institution list is unavailable. Check that the backend is running.",
+    "retry": "Retry",
+    "intro": "Choose your institution to browse its journal deals and publication data.",
+    "coverageToPresent": "Coverage: {start} to present",
+    "coverageSingleYear": "Coverage: {year}",
+    "coverageRange": "Coverage: {start} to {end}"
+  },
+  "hero": {
+    "title": "Find the best home for your next article",
+    "intro": "Search journals to see whether they are covered by an open access deal, what publishing there costs, and how the {institution} publishes in them."
+  },
+  "search": {
+    "placeholder": "Search by title, ISSN, publisher, or topic",
+    "placeholderSemantic": "Describe your topic, or paste an abstract",
+    "inputLabel": "Search journals",
+    "scopeLabel": "Search scope",
+    "scopeTitle": "Which field the query matches: everything, journal title, publisher, or topic",
+    "semanticTitle": "Ranks journals by meaning instead of exact words. Filters and sorting are off in this mode.",
+    "semanticLabel": "Match by meaning",
+    "submit": "Search"
+  },
+  "toolbar": {
+    "sortBy": "Sort by",
+    "sortTitle": "Order of the results. Match by meaning always ranks by similarity instead.",
+    "sortInstitutionWorks": "{inst} works",
+    "resetTitle": "Clears the search text and all active filters.",
+    "resetFilters": "Reset filters",
+    "resetSearch": "Reset search",
+    "semanticStatusActive": "Ranked by meaning. Filters and sorting are off in this mode.",
+    "semanticStatusPending": "Match by meaning activates once the query has two characters. Regular search runs until then."
+  },
+  "table": {
+    "journal": "Journal",
+    "publisher": "Publisher",
+    "works": "Works",
+    "citedness": "2yr cited",
+    "quartile": "Q",
+    "apc": "APC",
+    "topic": "Topic",
+    "dealCoverage": "Deal coverage",
+    "funderFit": "Funder fit",
+    "oaType": "Open access type",
+    "resultsCaption": "Journal search results",
+    "listAria": "Journal results",
+    "sortHint": "Click to sort. Click again to reverse. Click again to reset.",
+    "worksTitle": "{inst} works in this journal{windowStart, select, none {} other { from {windowStart} onwards}}{yearRange, select, none {} other { ({yearRange})}}.",
+    "pubTypeTooltip": "This is an OpenAlex {type}, not a conventional journal",
+    "doajTooltip": "Listed in DOAJ, the authoritative registry of gold and diamond open access journals",
+    "citednessTooltip": "2-year mean citedness from OpenAlex. This is the average number of citations that the journal's works from the last two years have received.",
+    "citednessCellTitle": "2-year mean citedness (OpenAlex)",
+    "quartileTooltip": "SCImago quartile.",
+    "apcTooltip": "Article processing charge (APC). This is the journal's list price from OpenAlex where the price is known. When it is not, this is the range of APCs that institutions reported to OpenAPC in the two newest reporting periods.",
+    "topicTooltip": "Primary OpenAlex topic of the journal's works.",
+    "listPriceTitle": "List price (OpenAlex)",
+    "openapcDetail": "Reported to OpenAPC per year:\n{detail}",
+    "openapcAria": "OpenAPC APC detail",
+    "topicFilterTitle": "Filter the search by topic “{topic}”",
+    "fuzzy": "No exact matches for “{query}”. Showing close name matches.",
+    "unknownPublisher": "Unknown publisher",
+    "listWorks": "{count} {inst} works",
+    "listApcOpenalex": "APC {amount}",
+    "listApcOpenapc": "APC €{range}"
+  },
+  "empty": {
+    "query": "No journals match “{query}”.",
+    "filters": "No journals match these filters.",
+    "plain": "No journals match.",
+    "trySemantic": "Try match by meaning",
+    "clearFilters": "Clear filters"
+  },
+  "error": {
+    "retry": "Retry",
+    "backToPage1": "Back to page 1"
+  },
+  "footer": {
+    "showing": "Showing {start} to {end} of {total}",
+    "sources": "OpenAlex · DOAJ · Scimago · JCT · openaccess.nl"
+  }
+}

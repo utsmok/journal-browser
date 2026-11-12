@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { PageHeader } from "@/components/admin/admin-shell";
 import { InstitutionSelect } from "@/components/admin/institution-select";
@@ -10,6 +11,7 @@ import { useAdminToken } from "@/lib/admin";
 
 /** Per-university settings: locked to one institution, or behind a picker. */
 export function InstitutionsSection({ inst }: { inst?: string }) {
+  const t = useTranslations("admin");
   const [token, setToken] = useAdminToken();
   const [picked, setPicked] = useState("");
   const directory = useInstitutionsDirectory();
@@ -25,13 +27,10 @@ export function InstitutionsSection({ inst }: { inst?: string }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Institution settings"
-        lede="Per-university display name, short name, and ROR id."
-      />
+      <PageHeader title={t("institutions.title")} lede={t("institutions.lede")} />
       {!inst && (
         <div className="flex items-center gap-2 text-sm">
-          <label htmlFor="inst-settings-picker">University</label>
+          <label htmlFor="inst-settings-picker">{t("institutions.universityLabel")}</label>
           <InstitutionSelect id="inst-settings-picker" value={picked} onChange={setPicked} />
         </div>
       )}

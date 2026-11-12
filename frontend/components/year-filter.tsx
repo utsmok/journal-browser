@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useTranslations } from "next-intl";
 
 import { effectiveYearRange, useYearBounds, useYearRange } from "@/hooks/use-year-filter";
 
@@ -13,6 +14,7 @@ const LAST5_SPAN = 5;
  * mount, so server and client render the same thing.
  */
 export function YearFilterControl() {
+  const t = useTranslations("common");
   const { inst, range, setRange } = useYearRange();
   const { start, end } = useYearBounds();
   const [mounted, setMounted] = React.useState(false);
@@ -43,10 +45,10 @@ export function YearFilterControl() {
   };
 
   return (
-    <div className="flex items-center gap-1" aria-label="Publication year range" role="group">
+    <div className="flex items-center gap-1" aria-label={t("yearFilter.groupLabel")} role="group">
       <select
-        aria-label="Publication years"
-        title="Limit publication counts, lists, and charts to these years. Saved per university."
+        aria-label={t("yearFilter.presetLabel")}
+        title={t("yearFilter.presetHint")}
         className={selectClass}
         value={preset}
         onChange={(event) => {
@@ -58,14 +60,14 @@ export function YearFilterControl() {
           else setRange({ from: fromYear, to: toYear });
         }}
       >
-        <option value="all">All years</option>
-        <option value="last5">Last 5 years</option>
-        <option value="custom">Custom range…</option>
+        <option value="all">{t("yearFilter.allYears")}</option>
+        <option value="last5">{t("yearFilter.last5Years")}</option>
+        <option value="custom">{t("yearFilter.customRange")}</option>
       </select>
       {preset === "custom" && active && (
         <>
           <select
-            aria-label="From year"
+            aria-label={t("yearFilter.fromYear")}
             className={selectClass}
             value={active.from}
             onChange={(event) => setCustom(Number(event.target.value), active.to)}
@@ -80,7 +82,7 @@ export function YearFilterControl() {
             –
           </span>
           <select
-            aria-label="To year"
+            aria-label={t("yearFilter.toYear")}
             className={selectClass}
             value={active.to}
             onChange={(event) => setCustom(active.from, Number(event.target.value))}

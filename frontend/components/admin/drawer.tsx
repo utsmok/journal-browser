@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import type { ReactNode } from "react";
+import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 
@@ -21,6 +22,7 @@ export function AdminDrawer({
   actions?: ReactNode;
   children: ReactNode;
 }) {
+  const t = useTranslations("admin");
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -33,7 +35,7 @@ export function AdminDrawer({
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={title}>
       <button
         type="button"
-        aria-label="Close panel"
+        aria-label={t("drawer.closePanel")}
         tabIndex={-1}
         className="absolute inset-0 h-full w-full cursor-default bg-black/40"
         onClick={onClose}
@@ -44,7 +46,7 @@ export function AdminDrawer({
           <div className="flex shrink-0 items-center gap-2">
             {actions}
             <Button variant="ghost" size="sm" onClick={onClose}>
-              Close
+              {t("drawer.close")}
             </Button>
           </div>
         </div>

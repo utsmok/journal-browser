@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { PageHeader } from "@/components/admin/admin-shell";
 import { AdminDrawer } from "@/components/admin/drawer";
@@ -27,6 +28,7 @@ import { useAdminToken, type AdminDeal, type FlaggedDeal } from "@/lib/admin";
 
 /** Deal management: searchable table, curation queue, create/edit drawer. */
 export function DealsSection({ basePath }: { basePath?: string }) {
+  const t = useTranslations("admin");
   void basePath;
   const [token, setToken] = useAdminToken();
   const logout = () => setToken(null);
@@ -63,13 +65,10 @@ export function DealsSection({ basePath }: { basePath?: string }) {
 
   return (
     <div className="space-y-8">
-      <PageHeader
-        title="Deals"
-        lede="Publisher agreements with their journals and participations. Click a row to edit; participations are per-institution."
-      >
+      <PageHeader title={t("deals.title")} lede={t("deals.lede")}>
         <Input
-          aria-label="Filter deals by publisher or ESAC id"
-          placeholder="Filter publisher / ESAC id…"
+          aria-label={t("deals.filterAria")}
+          placeholder={t("deals.filterPlaceholder")}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           className="w-64"
@@ -81,36 +80,33 @@ export function DealsSection({ basePath }: { basePath?: string }) {
             setCreating(true);
           }}
         >
-          Add deal
+          {t("deals.createTitle")}
         </Button>
         <Button variant="outline" size="sm" onClick={() => void deals.refresh()}>
-          Refresh
+          {t("refresh")}
         </Button>
       </PageHeader>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">All deals ({rows.length})</h2>
+        <h2 className="text-lg font-semibold">{t("deals.allDeals", { count: rows.length })}</h2>
         {deals.error && <p className="text-sm text-destructive">{deals.error}</p>}
         <DealsTable deals={rows} selectedId={selectedId} onSelect={openDeal} />
       </section>
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">
-          Flagged for curation ({flagged.data?.length ?? 0})
+          {t("deals.flaggedTitle", { count: flagged.data?.length ?? 0 })}
         </h2>
-        <p className="text-sm text-muted-foreground">
-          Clearing a flag here is recorded with a resolution reason and can be re-flagged by later
-          harvests.
-        </p>
+        <p className="text-sm text-muted-foreground">{t("deals.flaggedHint")}</p>
         {flagged.error && <p className="text-sm text-destructive">{flagged.error}</p>}
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Publisher</TableHead>
-              <TableHead>ESAC</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Journals</TableHead>
-              <TableHead>Reason</TableHead>
+              <TableHead>{t("deals.flaggedColumnPublisher")}</TableHead>
+              <TableHead>{t("deals.flaggedColumnEsac")}</TableHead>
+              <TableHead>{t("deals.flaggedColumnStatus")}</TableHead>
+              <TableHead>{t("deals.flaggedColumnJournals")}</TableHead>
+              <TableHead>{t("deals.flaggedColumnReason")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -118,7 +114,7 @@ export function DealsSection({ basePath }: { basePath?: string }) {
               <TableRow
                 key={deal.id}
                 className="cursor-pointer"
-                title="Click to review this deal"
+                title={t("deals.flaggedRowTitle")}
                 onClick={() => openDeal(deal.id)}
               >
                 <TableCell className="font-medium">{deal.publisher}</TableCell>
@@ -141,11 +137,18 @@ export function DealsSection({ basePath }: { basePath?: string }) {
 
       {(creating || selectedId !== null) && (
         <AdminDrawer
-          title={creating ? "New deal" : `Deal #${selectedId}`}
+          title={
+            creating || selectedId === null
+              ? t("deals.drawerTitleNew")
+              : t("deals.drawerTitle", { id: selectedId })
+          }
           onClose={closeDrawer}
           actions={
             selectedDeal ? (
-              <CopyButton text={JSON.stringify(selectedDeal, null, 2)} label="Copy deal" />
+              <CopyButton
+                text={JSON.stringify(selectedDeal, null, 2)}
+                label={t("deals.copyDeal")}
+              />
             ) : undefined
           }
         >

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { AuthorIdentityDrawer } from "@/components/admin/author-identity-drawer";
 import { CardPager } from "@/components/card-pager";
@@ -22,6 +23,20 @@ import { adminPut, type AuthorIdentityAdmin, type AuthorIdentityPage } from "@/l
 /** Matches the backend's IDENTITY_STATUSES; "all" omits the filter param. */
 const STATUS_FILTERS = ["candidate", "confirmed", "rejected", "all"] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
+
+const FILTER_LABEL_KEYS: Record<StatusFilter, `identities.status${string}` | "identities.all"> = {
+  candidate: "identities.statusCandidate",
+  confirmed: "identities.statusConfirmed",
+  rejected: "identities.statusRejected",
+  all: "identities.all",
+};
+
+/** Lowercase status word for the empty-state sentence. */
+const EMPTY_STATUS_WORDS: Record<Exclude<StatusFilter, "all">, string> = {
+  candidate: "candidate",
+  confirmed: "confirmed",
+  rejected: "rejected",
+};
 
 const SELECT_CLASS =
   "h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]";
@@ -53,6 +68,7 @@ export function IdentitiesPanel({
   inst?: string;
   onUnauthorized: () => void;
 }) {
+  const t = useTranslations("admin");
   const [filter, setFilter] = useState<StatusFilter>("candidate");
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState<string | null>(null);
@@ -101,7 +117,12 @@ export function IdentitiesPanel({
           : current,
       );
     } catch (err) {
-      setError(`Could not flip ${row.external_id} (${err instanceof Error ? err.message : err}).`);
+      setError(
+        t("identities.flipFailed", {
+          id: row.external_id,
+          message: err instanceof Error ? err.message : String(err),
+        }),
+      );
     } finally {
       setBusy(null);
     }
@@ -111,11 +132,11 @@ export function IdentitiesPanel({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <label htmlFor="identity-status-filter" className="whitespace-nowrap">
-          Status
+          {t("identities.statusLabel")}
         </label>
         <select
           id="identity-status-filter"
-          title="Which resolution statuses to list"
+          title={t("identities.statusFilterTitle")}
           value={filter}
           onChange={(event) => {
             setFilter(event.target.value as StatusFilter);
@@ -125,37 +146,37 @@ export function IdentitiesPanel({
         >
           {STATUS_FILTERS.map((value) => (
             <option key={value} value={value}>
-              {value === "all" ? "All" : `${value[0].toUpperCase()}${value.slice(1)}`}
+              {t(FILTER_LABEL_KEYS[value])}
             </option>
           ))}
         </select>
         <label htmlFor="identity-reviewer" className="whitespace-nowrap text-muted-foreground">
-          Reviewer
+          {t("identities.reviewer")}
         </label>
         <Input
           id="identity-reviewer"
-          placeholder="your name (for the audit log)"
+          placeholder={t("identities.reviewerPlaceholder")}
           value={reviewer}
           onChange={(event) => setReviewer(event.target.value)}
           className="h-9 w-56"
         />
         <span className="text-[var(--muted-foreground)]" aria-live="polite">
-          {loading ? "loading…" : `${total.toLocaleString("en")} rows`}
+          {loading ? t("loading") : t("identities.rowsCount", { count: total })}
         </span>
         {error && <p className="text-sm text-destructive">{error}</p>}
       </div>
       <Table>
-        <caption className="sr-only">Author identity resolution rows</caption>
+        <caption className="sr-only">{t("identities.caption")}</caption>
         <TableHeader>
           <TableRow>
-            <TableHead>Author</TableHead>
-            <TableHead>External id</TableHead>
-            <TableHead>Source</TableHead>
-            {!inst && <TableHead>Institution</TableHead>}
-            <TableHead>Status</TableHead>
-            <TableHead>Method</TableHead>
-            <TableHead className="text-right">Works</TableHead>
-            <TableHead>Review</TableHead>
+            <TableHead>{t("identities.columnAuthor")}</TableHead>
+            <TableHead>{t("identities.columnExternalId")}</TableHead>
+            <TableHead>{t("identities.columnSource")}</TableHead>
+            {!inst && <TableHead>{t("identities.columnInstitution")}</TableHead>}
+            <TableHead>{t("identities.columnStatus")}</TableHead>
+            <TableHead>{t("identities.columnMethod")}</TableHead>
+            <TableHead className="text-right">{t("identities.columnWorks")}</TableHead>
+            <TableHead>{t("identities.columnReview")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -165,7 +186,7 @@ export function IdentitiesPanel({
               <TableRow
                 key={key}
                 className="cursor-pointer"
-                title="Click to open the side-by-side comparison"
+                title={t("identities.rowTitle")}
                 onClick={() => setSelectedKey(key)}
               >
                 <TableCell className="font-medium">
@@ -193,12 +214,8 @@ export function IdentitiesPanel({
                 <TableCell>
                   <StatusBadge status={row.status} />
                   {row.orcid_corroborated && (
-                    <Badge
-                      variant="muted"
-                      className="ml-1"
-                      title="An ORCID iD on the matched profile corroborates this binding"
-                    >
-                      orcid
+                    <Badge variant="muted" className="ml-1" title={t("identities.orcidBadgeTitle")}>
+                      {t("identities.orcidBadge")}
                     </Badge>
                   )}
                 </TableCell>
@@ -217,7 +234,7 @@ export function IdentitiesPanel({
                         void flip(row, "confirmed");
                       }}
                     >
-                      Confirm
+                      {t("identities.confirm")}
                     </Button>
                     <Button
                       variant="outline"
@@ -228,7 +245,7 @@ export function IdentitiesPanel({
                         void flip(row, "rejected");
                       }}
                     >
-                      Reject
+                      {t("identities.reject")}
                     </Button>
                   </div>
                 </TableCell>
@@ -241,15 +258,24 @@ export function IdentitiesPanel({
                 colSpan={inst ? 8 : 9}
                 className="text-center text-[var(--muted-foreground)]"
               >
-                No {filter === "all" ? "" : `${filter} `}identity rows
-                {inst ? " for this institution" : " across institutions"}.
+                {filter === "all"
+                  ? t(inst ? "identities.emptyAllInst" : "identities.emptyAll")
+                  : t(inst ? "identities.emptyStatusInst" : "identities.emptyStatus", {
+                      status: EMPTY_STATUS_WORDS[filter],
+                    })}
               </TableCell>
             </TableRow>
           )}
         </TableBody>
       </Table>
       {pages > 1 && (
-        <CardPager page={page} pages={pages} total={total} onPage={setPage} label="rows" />
+        <CardPager
+          page={page}
+          pages={pages}
+          total={total}
+          onPage={setPage}
+          label={t("identities.pagerRows")}
+        />
       )}
       {selected && (
         <AuthorIdentityDrawer

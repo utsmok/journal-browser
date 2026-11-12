@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { PageHeader } from "@/components/admin/admin-shell";
 import { RunDrawer } from "@/components/admin/run-drawer";
@@ -47,6 +48,7 @@ function StatCard({
 
 /** Admin landing page: pipeline health counters plus recent activity. */
 export function OverviewSection({ inst, basePath }: { inst?: string; basePath: string }) {
+  const t = useTranslations("admin");
   const [token, setToken] = useAdminToken();
   const logout = () => setToken(null);
   const scope = inst ? `?institution=${encodeURIComponent(inst)}` : "";
@@ -72,12 +74,8 @@ export function OverviewSection({ inst, basePath }: { inst?: string; basePath: s
   return (
     <div className="space-y-8">
       <PageHeader
-        title="Overview"
-        lede={
-          inst
-            ? `Pipeline health and open curation work for ${inst}.`
-            : "Pipeline health and open curation work across all institutions."
-        }
+        title={t("overview.title")}
+        lede={inst ? t("overview.ledeInst", { inst }) : t("overview.ledeAll")}
       />
 
       {summary.error && <p className="text-sm text-destructive">{summary.error}</p>}
@@ -85,85 +83,97 @@ export function OverviewSection({ inst, basePath }: { inst?: string; basePath: s
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <StatCard
           href={`${basePath}/runs`}
-          label="Failed runs (24h)"
+          label={t("overview.statFailedRuns")}
           value={s?.failed_runs_24h ?? null}
           warn
         />
-        <StatCard href={`${basePath}/runs`} label="Running" value={s?.running_runs ?? null} warn />
+        <StatCard
+          href={`${basePath}/runs`}
+          label={t("overview.statRunning")}
+          value={s?.running_runs ?? null}
+          warn
+        />
         <StatCard
           href={`${basePath}/deals`}
-          label="Flagged deals"
+          label={t("overview.statFlaggedDeals")}
           value={s?.flagged_deals ?? null}
           warn
         />
         <StatCard
           href={`${basePath}/feedback`}
-          label="Open feedback"
+          label={t("overview.statOpenFeedback")}
           value={s?.open_feedback ?? null}
           warn
         />
         <StatCard
           href={`${basePath}/identities`}
-          label="Author candidates"
+          label={t("overview.statAuthorCandidates")}
           value={s?.author_identity_candidates ?? null}
         />
         <StatCard
           href={`${basePath}/work-identities`}
-          label="Work candidates"
+          label={t("overview.statWorkCandidates")}
           value={s?.work_identity_candidates ?? null}
         />
       </div>
 
       {!inst && (s?.flagged_deals ?? 0) > 0 && (
-        <p className="text-xs text-muted-foreground">
-          Deal and feedback counters are instance-global; run and candidate counters follow the
-          institution scope of this page.
-        </p>
+        <p className="text-xs text-muted-foreground">{t("overview.scopeNote")}</p>
       )}
 
       {lastRun && (
         <p className="text-sm text-muted-foreground">
-          Last run:{" "}
+          {t("overview.lastRunPrefix")}{" "}
           <span className="font-medium text-[var(--foreground)]">
             {lastRun.source} / {lastRun.entity_type}
           </span>{" "}
-          — {lastRun.status}, started {formatDateTime(lastRun.started_at)}
-          {lastRun.institution_code ? ` for ${lastRun.institution_code}` : ""}
+          {lastRun.institution_code
+            ? t("overview.lastRunMetaInst", {
+                status: lastRun.status,
+                started: formatDateTime(lastRun.started_at),
+                instCode: lastRun.institution_code,
+              })
+            : t("overview.lastRunMeta", {
+                status: lastRun.status,
+                started: formatDateTime(lastRun.started_at),
+              })}
         </p>
       )}
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Recent harvest runs</h2>
+          <h2 className="text-lg font-semibold">{t("overview.recentRunsTitle")}</h2>
           <Link href={`${basePath}/runs`} className="text-sm underline-offset-2 hover:underline">
-            View all
+            {t("overview.viewAll")}
           </Link>
         </div>
         {runs.error && <p className="text-sm text-destructive">{runs.error}</p>}
         <RunsTable runs={runs.data ?? []} onRowClick={setSelectedRun} />
         {!runs.loading && (runs.data ?? []).length === 0 && (
-          <p className="text-sm text-muted-foreground">No harvest runs recorded yet.</p>
+          <p className="text-sm text-muted-foreground">{t("overview.noRuns")}</p>
         )}
       </section>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">
-            Flagged deals{flagged.data ? ` (${flagged.data.length})` : ""}
+            {flagged.data
+              ? t("overview.flaggedTitle", { count: flagged.data.length })
+              : t("overview.flaggedTitleLoading")}
           </h2>
           <Link href={`${basePath}/deals`} className="text-sm underline-offset-2 hover:underline">
-            Review in deals
+            {t("overview.reviewInDeals")}
           </Link>
         </div>
         {flagged.error && <p className="text-sm text-destructive">{flagged.error}</p>}
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Publisher</TableHead>
-              <TableHead>ESAC</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Journals</TableHead>
-              <TableHead>Reason</TableHead>
+              <TableHead>{t("deals.flaggedColumnPublisher")}</TableHead>
+              <TableHead>{t("deals.flaggedColumnEsac")}</TableHead>
+              <TableHead>{t("deals.flaggedColumnStatus")}</TableHead>
+              <TableHead>{t("deals.flaggedColumnJournals")}</TableHead>
+              <TableHead>{t("deals.flaggedColumnReason")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -184,7 +194,7 @@ export function OverviewSection({ inst, basePath }: { inst?: string; basePath: s
           </TableBody>
         </Table>
         {!flagged.loading && (flagged.data ?? []).length === 0 && (
-          <p className="text-sm text-muted-foreground">No deals are flagged for review.</p>
+          <p className="text-sm text-muted-foreground">{t("overview.noFlagged")}</p>
         )}
       </section>
 

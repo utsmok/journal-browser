@@ -1,44 +1,38 @@
-const HARVEST_STAGES: { title: string; detail: string }[] = [
-  {
-    title: "External inputs",
-    detail: "11 network sources, 1 tracked CSV set, 1 read-only database connection",
-  },
-  { title: "download_to_landing", detail: "writes files to landing/ and rows to raw_files" },
-  { title: "source_records", detail: "verbatim payloads, versioned by content hash" },
-  {
-    title: "normalized tables",
-    detail: "journals, works, openalex_works, deals, pure_*, jisc_*, authors",
-  },
-  {
-    title: "denormalized columns",
-    detail:
-      "journal_flags, works_2020_plus, latest_apc_euro, publisher_canonical, oa_status_observed, search_vector, embedding",
-  },
-  { title: "caches", detail: "24 hour lifetime, keyed on cache_epoch" },
-  { title: "API responses", detail: "routers under /api/v1" },
+import { getTranslations } from "next-intl/server";
+
+const HARVEST_STAGES: { titleKey: string; detailKey: string }[] = [
+  { titleKey: "storage.stageExternalInputs", detailKey: "storage.stageExternalInputsDetail" },
+  { titleKey: "storage.stageDownload", detailKey: "storage.stageDownloadDetail" },
+  { titleKey: "storage.stageSourceRecords", detailKey: "storage.stageSourceRecordsDetail" },
+  { titleKey: "storage.stageNormalized", detailKey: "storage.stageNormalizedDetail" },
+  { titleKey: "storage.stageDenormalized", detailKey: "storage.stageDenormalizedDetail" },
+  { titleKey: "storage.stageCaches", detailKey: "storage.stageCachesDetail" },
+  { titleKey: "storage.stageApiResponses", detailKey: "storage.stageApiResponsesDetail" },
 ];
 
-const USER_WRITES: { title: string; detail: string }[] = [
-  { title: "usage_events", detail: "page views, searches, errors" },
-  { title: "feedback_items", detail: "the reporter's search state" },
-  { title: "doc_edits", detail: "admin edits applied over the served documents" },
-  { title: "manual_overrides", detail: "reapplied after every harvest" },
-  { title: "status_changes", detail: "append-only audit log" },
+const USER_WRITES: { titleKey: string; detailKey: string }[] = [
+  { titleKey: "storage.stageUsageEvents", detailKey: "storage.stageUsageEventsDetail" },
+  { titleKey: "storage.stageFeedbackItems", detailKey: "storage.stageFeedbackItemsDetail" },
+  { titleKey: "storage.stageDocEdits", detailKey: "storage.stageDocEditsDetail" },
+  { titleKey: "storage.stageManualOverrides", detailKey: "storage.stageManualOverridesDetail" },
+  { titleKey: "storage.stageStatusChanges", detailKey: "storage.stageStatusChangesDetail" },
 ];
 
-function StageRow({ stages }: { stages: { title: string; detail: string }[] }) {
+type Stage = { titleKey: string; detailKey: string };
+
+function StageRow({ stages, t }: { stages: Stage[]; t: (key: string) => string }) {
   return (
     <div className="flex flex-row flex-wrap items-stretch gap-2">
       {stages.map((stage, i) => (
-        <div key={stage.title} className="contents">
+        <div key={stage.titleKey} className="contents">
           {i > 0 && (
             <span aria-hidden className="self-center text-[var(--muted-foreground)]">
               →
             </span>
           )}
           <div className="max-w-[13rem] min-w-[10rem] rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-3">
-            <p className="text-sm font-semibold">{stage.title}</p>
-            <p className="mt-1 text-xs text-[var(--muted-foreground)]">{stage.detail}</p>
+            <p className="text-sm font-semibold">{t(stage.titleKey)}</p>
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">{t(stage.detailKey)}</p>
           </div>
         </div>
       ))}
@@ -46,20 +40,21 @@ function StageRow({ stages }: { stages: { title: string; detail: string }[] }) {
   );
 }
 
-export function StorageFlow() {
+export async function StorageFlow() {
+  const t = await getTranslations("dataPipeline");
   return (
     <div className="space-y-3">
       <div>
         <p className="mb-2 text-xs font-medium tracking-wide text-[var(--muted-foreground)] uppercase">
-          Harvest path
+          {t("storage.flowHarvestTitle")}
         </p>
-        <StageRow stages={HARVEST_STAGES} />
+        <StageRow stages={HARVEST_STAGES} t={t} />
       </div>
       <div>
         <p className="mb-2 text-xs font-medium tracking-wide text-[var(--muted-foreground)] uppercase">
-          User writes (bypass the harvest path)
+          {t("storage.flowUserWritesTitle")}
         </p>
-        <StageRow stages={USER_WRITES} />
+        <StageRow stages={USER_WRITES} t={t} />
       </div>
     </div>
   );

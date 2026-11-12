@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import * as React from "react";
 
@@ -37,6 +38,7 @@ function useDebounced(value: string, delayMs: number) {
 }
 
 function FunderRow({ funder, inst }: { funder: FunderListItem; inst: string }) {
+  const t = useTranslations("funders");
   return (
     <TableRow>
       <TableCell>
@@ -44,7 +46,7 @@ function FunderRow({ funder, inst }: { funder: FunderListItem; inst: string }) {
           href={`/${inst}/funders/${funder.id}`}
           className="underline decoration-dotted underline-offset-2 hover:decoration-solid"
         >
-          {funder.name ?? `Funder ${funder.id}`}
+          {funder.name ?? t("unnamedFunder", { id: funder.id })}
         </Link>
       </TableCell>
       <TableCell className="text-[var(--muted-foreground)]">
@@ -56,6 +58,8 @@ function FunderRow({ funder, inst }: { funder: FunderListItem; inst: string }) {
 }
 
 export default function FundersPage() {
+  const t = useTranslations("funders");
+  const tc = useTranslations("common");
   const inst = useInstitution();
   const site = useSiteMeta();
   const [input, setInput] = React.useState("");
@@ -72,27 +76,26 @@ export default function FundersPage() {
 
   return (
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
-      <h1 className="text-3xl font-bold text-balance">Funders</h1>
+      <h1 className="text-3xl font-bold text-balance">{t("title")}</h1>
       <p className="mt-1 mb-4 text-sm text-[var(--muted-foreground)]">
-        OA policies from the Jisc Open Policy Finder, ordered by {site.short} author works. Open a
-        funder for its policy details and funding streams.
+        {t("search.intro", { inst: site.short })}
       </p>
       <div className="mb-4 flex items-center gap-2">
         <Input
           type="search"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Search funders…"
-          aria-label="Search funders by name"
+          placeholder={t("search.placeholder")}
+          aria-label={t("search.searchAria")}
           className="max-w-xs"
         />
       </div>
       {isPending && <ListSkeletonRows rows={8} />}
       {isError && (
         <div>
-          <p className="text-[var(--destructive)]">{errorMessage(error)}</p>
+          <p className="text-[var(--destructive)]">{errorMessage(tc, error)}</p>
           <Button variant="outline" size="sm" className="mt-2" onClick={() => refetch()}>
-            Retry
+            {t("search.retry")}
           </Button>
         </div>
       )}
@@ -102,16 +105,16 @@ export default function FundersPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Funder</TableHead>
-                  <TableHead>Country</TableHead>
-                  <TableHead>{site.short} works</TableHead>
+                  <TableHead>{t("search.funder")}</TableHead>
+                  <TableHead>{t("search.country")}</TableHead>
+                  <TableHead>{t("instWorks", { inst: site.short })}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {data.items.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={3} className="text-[var(--muted-foreground)]">
-                      No funder matches “{q}”
+                      {t("search.empty", { q })}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -122,7 +125,7 @@ export default function FundersPage() {
             {total > PAGE_SIZE && (
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm text-[var(--muted-foreground)]">
-                  {offset + 1}–{offset + shown} of {total.toLocaleString()}
+                  {t("search.range", { from: offset + 1, to: offset + shown, total })}
                 </p>
                 <div className="flex items-center gap-2">
                   <Button
@@ -131,7 +134,7 @@ export default function FundersPage() {
                     disabled={offset === 0}
                     onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
                   >
-                    <ChevronLeft aria-hidden className="size-4" /> Prev
+                    <ChevronLeft aria-hidden className="size-4" /> {t("search.prev")}
                   </Button>
                   <Button
                     variant="outline"
@@ -139,17 +142,13 @@ export default function FundersPage() {
                     disabled={offset + shown >= total}
                     onClick={() => setOffset(offset + PAGE_SIZE)}
                   >
-                    Next <ChevronRight aria-hidden className="size-4" />
+                    {t("search.next")} <ChevronRight aria-hidden className="size-4" />
                   </Button>
                 </div>
               </div>
             )}
             <div className="mt-3">
-              <SourceNote
-                source="Jisc Open Policy Finder"
-                url={OPF_URL}
-                codes={["jisc-policy-currency"]}
-              />
+              <SourceNote source={t("sourceJisc")} url={OPF_URL} codes={["jisc-policy-currency"]} />
             </div>
           </CardContent>
         </Card>
