@@ -71,6 +71,8 @@ def test_oa_type_value_mirror():
     assert (
         oa_type_value(False, True, False, False, doaj_in_doaj=True, doaj_has_apc=False) == "diamond"
     )
+    # OpenAIRE isInDiamondJournal: second diamond evidence source
+    assert oa_type_value(False, True, False, False, openaire_diamond=True) == "diamond"
     # Observed prices (OpenAlex list price / OpenAPC) make it gold even
     # without a DOAJ match (has_charges=True).
     assert oa_type_value(True, True, True, False, doaj_in_doaj=False, doaj_has_apc=False) == "gold"

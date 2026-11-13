@@ -209,6 +209,7 @@ async def api(client, db_engine):
                     source_pk="W1",
                     work_id="u1",
                     matched_by="doi",
+                    status="confirmed",
                 ),
                 WorkIdentity(
                     institution_id=home.id,
@@ -216,6 +217,7 @@ async def api(client, db_engine):
                     source_pk="W9",
                     work_id="u1",
                     matched_by="doi",
+                    status="confirmed",
                 ),
                 WorkIdentity(
                     institution_id=home.id,
@@ -223,6 +225,7 @@ async def api(client, db_engine):
                     source_pk="W2",
                     work_id="u2",
                     matched_by="doi",
+                    status="confirmed",
                 ),
                 WorkIdentity(
                     institution_id=home.id,
@@ -230,9 +233,28 @@ async def api(client, db_engine):
                     source_pk="W4",
                     work_id="u3",
                     matched_by="doi",
+                    status="confirmed",
                 ),
             ]
         )
+        # OpenAIRE facts derive needs a stored record per confirmed
+        # identity (any payload: the card only counts rows here).
+        oaf_run = HarvestRun(
+            source="openaire", entity_type="work", config_fingerprint="t", institution_id=home.id
+        )
+        session.add(oaf_run)
+        await session.flush()
+        for pk in ("W1", "W9", "W2", "W4"):
+            session.add(
+                SourceRecord(
+                    source="openaire",
+                    entity_type="work",
+                    source_pk=pk,
+                    payload={"id": pk},
+                    content_hash=f"h-{pk}",
+                    harvest_run_id=oaf_run.id,
+                )
+            )
 
         session.add_all(
             [
@@ -266,6 +288,11 @@ async def api(client, db_engine):
                 ),
             ]
         )
+        await session.commit()
+        # Fold the confirmed identities into the facts store the card reads.
+        from journal_browser.harvest.openaire_facts import derive_openaire_facts
+
+        await derive_openaire_facts(session, home)
         await session.commit()
     return client
 
@@ -326,6 +353,7 @@ async def test_works_item_shape(api):
         "in_openalex": True,
         "ut_authors": [{"id": "anchor-author", "name": "Anchor Author"}],
         "ut_groups": [],
+        "openaire": None,
     }
     # W1: authorships must never surface; the DOI keeps the URL form and
     # store metrics enrich the Pure row.
@@ -357,7 +385,16 @@ async def test_detail_enrichment(api):
     assert openalex["topics"][1]["subfield"] == {"id": "sf", "display_name": "S"}
     assert openalex["topics"][0]["subfield"] is None
 
-    assert body["openaire"] == {"matched_works": 2}
+    assert body["openaire"] == {
+        "matched_works": 2,
+        "with_fulltext": 0,
+        "with_usage": 0,
+        "diamond_works": 0,
+        "oa_color_total": 0,
+        "oa_color_disagree": 0,
+        "top_fos": [],
+        "top_funders": [],
+    }
 
     assert body["institution_metrics"] == {
         "openalex_matched": 2,
@@ -436,7 +473,16 @@ async def test_detail_enrichment_without_source_rows(api):
     body = r.json()
     assert body["openalex"] is None
     # u3 matched once for this journal.
-    assert body["openaire"] == {"matched_works": 1}
+    assert body["openaire"] == {
+        "matched_works": 1,
+        "with_fulltext": 0,
+        "with_usage": 0,
+        "diamond_works": 0,
+        "oa_color_total": 0,
+        "oa_color_disagree": 0,
+        "top_fos": [],
+        "top_funders": [],
+    }
     # Only W4 (no fwci) belongs to this journal; identity work u3 has no
     # store row, so the canonical side lists just it.
     assert body["institution_metrics"] == {

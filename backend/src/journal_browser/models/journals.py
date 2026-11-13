@@ -161,6 +161,11 @@ class JournalFlags(Base):
     deal_cap_reached: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
+    # Some work of this journal is diamond per OpenAIRE isInDiamondJournal
+    # (second diamond evidence source beside DOAJ; denorm-refreshed).
+    openaire_diamond: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     # Journal's own works inside THIS institution's data window; the >3
     # corpus cutoff reads it (owner decision 2026-10-23).
     works_window_plus: Mapped[int] = mapped_column(

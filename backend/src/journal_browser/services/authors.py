@@ -309,7 +309,7 @@ async def _author_journals(
     iid = institution.id
     ignored = get_settings().ignored_issns
     flags = (
-        select(JournalFlags.issn_l, JournalFlags.deal_covered)
+        select(JournalFlags.issn_l, JournalFlags.deal_covered, JournalFlags.openaire_diamond)
         .where(JournalFlags.institution_id == iid)
         .subquery()
     )
@@ -319,7 +319,7 @@ async def _author_journals(
                 Work.journal_issn_l.label("issn_l"),
                 Journal.title.label("title"),
                 func.count().label("n_works"),
-                _oa_type(flags.c.deal_covered),
+                _oa_type(flags.c.deal_covered, flags.c.openaire_diamond),
             )
             .select_from(Work)
             .join(
@@ -340,6 +340,7 @@ async def _author_journals(
                 Journal.title,
                 Journal.is_in_doaj,
                 flags.c.deal_covered,
+                flags.c.openaire_diamond,
             )
             .order_by(func.count().desc(), Work.journal_issn_l)
         )

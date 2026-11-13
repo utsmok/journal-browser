@@ -132,7 +132,7 @@ def _snapshot_query(institution_id: int, years: tuple[int, int] | None = None) -
         J.publisher_name.label("member"),
         works,
         F.deal_covered.label("deal_covered"),
-        _oa_type(F.deal_covered).label("oa_type"),
+        _oa_type(F.deal_covered, F.openaire_diamond).label("oa_type"),
         J.latest_quartile.label("quartile"),
         APC_SHOWN.label("apc_any"),
         J.latest_apc_euro.label("apc_euro"),

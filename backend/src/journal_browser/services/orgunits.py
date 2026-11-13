@@ -566,7 +566,7 @@ async def orgunit_detail(
     # admin ignore-list removes venues just like the author profile.
     ignored = get_settings().ignored_issns
     flags = (
-        select(JournalFlags.issn_l, JournalFlags.deal_covered)
+        select(JournalFlags.issn_l, JournalFlags.deal_covered, JournalFlags.openaire_diamond)
         .where(JournalFlags.institution_id == iid)
         .subquery()
     )
@@ -577,7 +577,7 @@ async def orgunit_detail(
                 Journal.title.label("title"),
                 func.count(func.distinct(Work.pure_uuid)).label("n_works"),
                 flags.c.deal_covered,
-                _oa_type(flags.c.deal_covered).label("oa_type"),
+                _oa_type(flags.c.deal_covered, flags.c.openaire_diamond).label("oa_type"),
                 Journal.latest_quartile.label("quartile"),
             )
             .select_from(Author)
@@ -605,6 +605,7 @@ async def orgunit_detail(
                 Journal.is_in_doaj,
                 Journal.latest_quartile,
                 flags.c.deal_covered,
+                flags.c.openaire_diamond,
             )
             .order_by(func.count(func.distinct(Work.pure_uuid)).desc(), Work.journal_issn_l)
             .limit(JOURNAL_CAP)

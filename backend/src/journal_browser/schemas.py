@@ -1,6 +1,6 @@
 """Pydantic response schemas for the API (openapi-typescript feeds on these)."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -283,8 +283,32 @@ class OpenalexInfo(BaseModel):
     topics: list[OpenalexTopicOut] = []
 
 
+class OpenaireTopFos(BaseModel):
+    subject: str
+    works: int
+
+
+class OpenaireTopFunder(BaseModel):
+    funder: str
+    works: int
+
+
 class OpenaireInfo(BaseModel):
+    """OpenAIRE cross-check for one journal, over the confirmed-identity
+    facts store (openaire_work_facts)."""
+
     matched_works: int = 0
+    # Facts rows carrying a fulltext url / any usage count / the diamond
+    # flag.
+    with_fulltext: int = 0
+    with_usage: int = 0
+    diamond_works: int = 0
+    # OA-color cross-check vs OpenAlex: rows where both sides state a
+    # label, and how many of those disagree (case-insensitive).
+    oa_color_total: int = 0
+    oa_color_disagree: int = 0
+    top_fos: list[OpenaireTopFos] = []
+    top_funders: list[OpenaireTopFunder] = []
 
 
 class CanonicalOa(BaseModel):
@@ -401,6 +425,29 @@ class WorkUtGroup(BaseModel):
     name: str
 
 
+class OpenaireProjectOut(BaseModel):
+    """One project linked to the work by OpenAIRE (fields may be null)."""
+
+    id: str | None = None
+    funder: str | None = None
+    code: str | None = None
+    acronym: str | None = None
+
+
+class OpenaireFactsOut(BaseModel):
+    """OpenAIRE-derived facts for one work (openaire_work_facts row)."""
+
+    views: int | None = None
+    downloads: int | None = None
+    oa_url: str | None = None
+    license: str | None = None
+    oa_color: str | None = None
+    diamond: bool = False
+    embargo_end: date | None = None
+    fos: list[str] = []
+    projects: list[OpenaireProjectOut] = []
+
+
 class WorkItem(BaseModel):
     id: str | None = None
     url: str | None = None
@@ -419,6 +466,9 @@ class WorkItem(BaseModel):
     # The work's Pure authors (roster order) and their research groups.
     ut_authors: list[WorkUtAuthor] = []
     ut_groups: list[WorkUtGroup] = []
+    # OpenAIRE-derived facts; None when the work has no confirmed
+    # openaire identity (no facts row).
+    openaire: OpenaireFactsOut | None = None
 
 
 class WorksPage(BaseModel):

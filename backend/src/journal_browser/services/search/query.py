@@ -169,6 +169,7 @@ def base_query(
             F.works_count,
             F.deal_covered,
             F.deal_cap_reached,
+            F.openaire_diamond,
             F.works_window_plus,
             F.browse_excluded,
         )
@@ -197,6 +198,7 @@ def base_query(
         )
     year_works = func.coalesce(yearly.c.works_count, 0) if year_active else flags.c.works_count
     covered = flags.c.deal_covered
+    openaire_diamond = flags.c.openaire_diamond
     if q and not fuzzy:
         qstr = q.strip()
         # Relevance = title-prefix match tier + FTS rank + prominence nudge
@@ -212,7 +214,7 @@ def base_query(
         ).label("rank")
     else:
         rank = cast(text("0"), Numeric).label("rank")
-    oa_type = _oa_type(covered)
+    oa_type = _oa_type(covered, openaire_diamond)
     query = (
         select(
             J.issn_l,

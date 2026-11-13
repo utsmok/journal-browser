@@ -21,6 +21,7 @@ from journal_browser.models import (
     InstitutionWorksStats,
     JournalFlags,
     OpenalexWork,
+    SourceRecord,
     Work,
     WorkIdentity,
     WorkPureAuthor,
@@ -197,6 +198,7 @@ async def details_api(client, db, institution_factory):
                 source_pk="O1",
                 work_id="pw2021",
                 matched_by="doi",
+                status="confirmed",
             ),
             WorkIdentity(
                 institution_id=ut.id,
@@ -204,6 +206,7 @@ async def details_api(client, db, institution_factory):
                 source_pk="O2",
                 work_id="pw2023",
                 matched_by="doi",
+                status="confirmed",
             ),
             # APC evidence attaches to the 2021 work's DOI only (latest
             # period), so a 2023+ range narrows the euro sum to zero.
@@ -212,6 +215,26 @@ async def details_api(client, db, institution_factory):
         ]
     )
     db.add_all(pair_rows(*store_works))
+    # Matched-works counts read the facts store: confirm + derive.
+    oaf_run = HarvestRun(
+        source="openaire", entity_type="work", config_fingerprint="t", institution_id=ut.id
+    )
+    db.add(oaf_run)
+    await db.flush()
+    for pk in ("O1", "O2"):
+        db.add(
+            SourceRecord(
+                source="openaire",
+                entity_type="work",
+                source_pk=pk,
+                payload={"id": pk},
+                content_hash=f"h-{pk}",
+                harvest_run_id=oaf_run.id,
+            )
+        )
+    from journal_browser.harvest.openaire_facts import derive_openaire_facts
+
+    await derive_openaire_facts(db, ut)
     await db.commit()
     return client
 

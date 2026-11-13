@@ -229,6 +229,38 @@ DEAL_CAP_REACHED_SQL = text(
 )
 
 
+# Diamond evidence from the OpenAIRE facts store: the journal carries at
+# least one non-retired work whose OpenAIRE record says isInDiamondJournal.
+# Second evidence source beside DOAJ in search/classify (2026-11-13).
+OPENAIRE_DIAMOND_SQL = text(
+    """
+    UPDATE journal_flags f SET openaire_diamond = EXISTS (
+        SELECT 1
+        FROM openaire_work_facts oaf
+        JOIN works w
+          ON w.institution_id = oaf.institution_id
+         AND w.pure_uuid = oaf.pure_uuid
+        WHERE oaf.institution_id = f.institution_id
+          AND oaf.diamond
+          AND w.journal_issn_l = f.issn_l
+          AND w.retired_at IS NULL
+    )
+    WHERE f.institution_id = :iid
+      AND f.openaire_diamond IS DISTINCT FROM EXISTS (
+        SELECT 1
+        FROM openaire_work_facts oaf
+        JOIN works w
+          ON w.institution_id = oaf.institution_id
+         AND w.pure_uuid = oaf.pure_uuid
+        WHERE oaf.institution_id = f.institution_id
+          AND oaf.diamond
+          AND w.journal_issn_l = f.issn_l
+          AND w.retired_at IS NULL
+      )
+    """
+)
+
+
 async def refresh_institution_stats(session: AsyncSession, institution: Institution) -> None:
     """Recompute one institution's works_count + window cutoff + exclusion.
 
@@ -243,6 +275,7 @@ async def refresh_institution_stats(session: AsyncSession, institution: Institut
         WORKS_WINDOW_SQL, {"iid": iid, "ws": institution.data_window_start, "we": window_end}
     )
     await session.execute(DEAL_FLAGS_SQL, {"iid": iid})
+    await session.execute(OPENAIRE_DIAMOND_SQL, {"iid": iid})
     await session.execute(BROWSE_EXCLUDED_SQL, {"iid": iid})
     await bump_cache_epoch(session)
 

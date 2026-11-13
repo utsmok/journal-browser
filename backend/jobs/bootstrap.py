@@ -78,6 +78,10 @@ INST_STEPS: list[tuple[str, list[str]]] = [
     ("pure-entities", ["jobs/harvest_pure_entities.py"]),
     ("enrich", ["jobs/enrich_works.py"]),
     ("openaire", ["jobs/harvest_openaire.py"]),
+    # Derived per-work OpenAIRE facts store (diamond flag, usage, FOS,
+    # projects); must precede stats so the denorm diamond flag refresh
+    # sees fresh facts.
+    ("openaire-facts", ["jobs/derive_openaire_facts.py"]),
     ("stats", ["jobs/harvest_stats.py"]),
     # Participation derive + coverage flags: makes onboarding (one row +
     # this layer) self-sufficient without rerunning global deal merging.
@@ -106,7 +110,8 @@ INST_DEPS: dict[str, list[str]] = {
     "enrich": ["pure"],
     # DOI-to-work matching reads the institution's works
     "openaire": ["pure", "deals-issn-l"],
-    "stats": ["enrich", "openaire", "openapc", "scimagojr", "flags"],
+    "openaire-facts": ["openaire"],
+    "stats": ["enrich", "openaire", "openaire-facts", "openapc", "scimagojr", "flags"],
     "reconcile": ["stats", "deals-reconcile"],
     "openalex-works": ["stats"],
     "pure-authors": ["pure-cerif", "openalex-works"],

@@ -35,7 +35,7 @@ from .openalex import AuthorIdentity, OpenalexFunder, OpenalexWork, OpenalexWork
 from .people import PeopleUtwentePerson, PeopleUtwentePersonOrg
 from .pure import PureOrg, PureOrgParent, PurePerson, PurePersonOrg, WorkPureAuthor
 from .reference import Institution, IssnMap, OpenalexPublisher, Publisher
-from .works import WORK_IDENTITY_UQ, Work, WorkFunder, WorkIdentity
+from .works import WORK_IDENTITY_UQ, OpenaireWorkFacts, Work, WorkFunder, WorkIdentity
 
 __all__ = [
     "WORK_IDENTITY_UQ",
@@ -70,6 +70,7 @@ __all__ = [
     "ManualOverride",
     "OpenaireFunder",
     "OpenaireFunderStream",
+    "OpenaireWorkFacts",
     "OpenalexFunder",
     "OpenalexPublisher",
     "OpenalexWork",

@@ -422,15 +422,17 @@ async def journal_detail(
     ).all()
     deals = [d for d, _name in deal_rows]
     publisher_names = {d.id: name for d, name in deal_rows}
-    # Reads the denormalized flag (harvest.denorm) shared with the search list.
-    deal_cap_reached = (
+    # Reads the denormalized flags (harvest.denorm) shared with the search list.
+    flags_row = (
         await session.execute(
-            select(JournalFlags.deal_cap_reached).where(
+            select(JournalFlags.deal_cap_reached, JournalFlags.openaire_diamond).where(
                 JournalFlags.institution_id == institution.id,
                 JournalFlags.issn_l == journal.issn_l,
             )
         )
-    ).scalar() or False
+    ).one_or_none()
+    deal_cap_reached = bool(flags_row.deal_cap_reached) if flags_row else False
+    openaire_diamond = bool(flags_row.openaire_diamond) if flags_row else False
     # Phase 10: pure_canon is the primary works count; the OpenAlex
     # institution-filter rows keep the OA split and stay visible as the
     # labeled cross-check (decision 13-style honesty about sources).
@@ -556,6 +558,7 @@ async def journal_detail(
         journal.oa_status_observed,
         doaj_in_doaj=journal.doaj_in_doaj,
         doaj_has_apc=journal.doaj_has_apc,
+        openaire_diamond=openaire_diamond,
     )
     funder_policy = await _funder_policy(session, funder)
     funder_fit = None
@@ -641,8 +644,8 @@ async def journal_detail(
         apc_evidence=[ApcEvidenceOut.model_validate(e) for e in evidence],
         openalex=OpenalexInfo(**openalex_info) if openalex_info else None,
         openaire=OpenaireInfo(
-            matched_works=await detail_enrichment.openaire_matched(
-                session, journal.issn_l, institution.id, year_range
+            **await detail_enrichment.openaire_info(
+                session, institution, journal.issn_l, year_range
             )
         ),
         green_oa=green_oa,

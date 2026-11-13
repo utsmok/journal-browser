@@ -11,7 +11,7 @@ FWCI, retraction, most-open OA record), never as the population.
 
 from typing import Any
 
-from sqlalchemy import case, func, select
+from sqlalchemy import Integer, bindparam, case, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import normalize_work_type
@@ -19,10 +19,10 @@ from ..harvest.common import oa_openness_desc
 from ..models import (
     Author,
     Institution,
+    OpenaireWorkFacts,
     OpenalexWork,
     SourceRecord,
     Work,
-    WorkIdentity,
     WorkPureAuthor,
 )
 from . import ut_metadata
@@ -115,6 +115,40 @@ def _work_item(row: Any, store: OpenalexWork | None) -> dict[str, Any]:
     }
 
 
+async def _facts_by_uuid(
+    session: AsyncSession, institution_id: int, pure_uuids: list[str]
+) -> dict[str, OpenaireWorkFacts]:
+    """OpenAIRE facts rows per work for one page of works."""
+    if not pure_uuids:
+        return {}
+    rows = (
+        await session.execute(
+            select(OpenaireWorkFacts).where(
+                OpenaireWorkFacts.institution_id == institution_id,
+                OpenaireWorkFacts.pure_uuid.in_(pure_uuids),
+            )
+        )
+    ).scalars()
+    return {row.pure_uuid: row for row in rows}
+
+
+def _openaire_block(facts: OpenaireWorkFacts | None) -> dict[str, Any] | None:
+    """The WorkItem `openaire` dict from a facts row; None when absent."""
+    if facts is None:
+        return None
+    return {
+        "views": facts.views,
+        "downloads": facts.downloads,
+        "oa_url": facts.oa_url,
+        "license": facts.license,
+        "oa_color": facts.oa_color,
+        "diamond": facts.diamond,
+        "embargo_end": facts.embargo_end,
+        "fos": facts.fos or [],
+        "projects": facts.projects or [],
+    }
+
+
 async def _page_authors(
     session: AsyncSession, institution_id: int, pure_uuids: list[str]
 ) -> dict[str, dict[str, list[dict[str, str]]]]:
@@ -163,8 +197,10 @@ async def list_works(
     """Paginated works over the stats population (see _venue_work_rows),
     store-enriched per DOI. Sorting stays in Python (bounded per journal):
     publication_year desc nulls last, cited_by_count desc, title asc.
-    Page rows carry their Pure authors and research groups; pure_uuid
-    rides along for the author lookup and WorkItem drops it on render."""
+    Page rows carry their Pure authors and research groups, plus the
+    OpenAIRE facts block (openaire_work_facts row, None without a
+    confirmed identity); pure_uuid rides along for the lookups and
+    WorkItem drops it on render."""
     rows = await _venue_work_rows(session, issn_l, institution, year_range)
     store_by_doi = await _store_by_doi(
         session, institution.id, sorted({r.doi_normalized for r in rows if r.doi_normalized})
@@ -177,10 +213,12 @@ async def list_works(
     items = ut_metadata.sort_work_items(items)
     page_items = items[(page - 1) * page_size : page * page_size]
     authors = await _page_authors(session, institution.id, [i["pure_uuid"] for i in page_items])
+    facts = await _facts_by_uuid(session, institution.id, [i["pure_uuid"] for i in page_items])
     for item in page_items:
         entry = authors.get(item["pure_uuid"]) or {"ut_authors": [], "ut_groups": []}
         item["ut_authors"] = entry["ut_authors"]
         item["ut_groups"] = entry["ut_groups"]
+        item["openaire"] = _openaire_block(facts.get(item["pure_uuid"]))
     return {
         "items": page_items,
         "total": len(items),
@@ -284,28 +322,111 @@ async def openalex_info(session: AsyncSession, issn_l: str) -> dict[str, Any] | 
     }
 
 
-async def openaire_matched(
+#: One-pass journal OpenAIRE card: counts over the facts store (page =
+#: confirmed facts rows of this journal's non-retired works) plus the
+#: work's most-open OpenAlex store row per DOI for the OA-color cross-check
+#: (the CASE mirrors harvest.common.oa_openness_rank).
+_OPENAIRE_INFO_SQL = text(
+    """
+    WITH page AS (
+        SELECT oaf.pure_uuid, oaf.views, oaf.oa_url, oaf.diamond,
+               oaf.oa_color, oaf.fos, oaf.projects, w.doi_normalized
+        FROM openaire_work_facts oaf
+        JOIN works w
+          ON w.institution_id = oaf.institution_id
+         AND w.pure_uuid = oaf.pure_uuid
+        WHERE oaf.institution_id = :iid
+          AND w.journal_issn_l = :issn_l
+          AND w.retired_at IS NULL
+          AND (:y0 IS NULL OR w.year BETWEEN :y0 AND :y1)
+    ),
+    store AS (
+        SELECT DISTINCT ON (ow.doi_normalized) ow.doi_normalized, ow.oa_status
+        FROM openalex_works ow
+        WHERE ow.institution_id = :iid
+          AND ow.doi_normalized IN (
+              SELECT doi_normalized FROM page WHERE doi_normalized IS NOT NULL
+          )
+        ORDER BY ow.doi_normalized,
+                 CASE ow.oa_status
+                     WHEN 'diamond' THEN 5 WHEN 'gold' THEN 4 WHEN 'hybrid' THEN 3
+                     WHEN 'bronze' THEN 2 WHEN 'green' THEN 1 ELSE 0
+                 END DESC,
+                 ow.w_id
+    )
+    SELECT
+        (SELECT count(*) FROM page) AS matched_works,
+        (SELECT count(*) FROM page WHERE oa_url IS NOT NULL) AS with_fulltext,
+        (SELECT count(*) FROM page WHERE views IS NOT NULL) AS with_usage,
+        (SELECT count(*) FROM page WHERE diamond) AS diamond_works,
+        (
+            SELECT count(*) FROM page p
+            JOIN store s ON s.doi_normalized = p.doi_normalized
+            WHERE p.oa_color IS NOT NULL AND s.oa_status IS NOT NULL
+        ) AS oa_color_total,
+        (
+            SELECT count(*) FROM page p
+            JOIN store s ON s.doi_normalized = p.doi_normalized
+            WHERE p.oa_color IS NOT NULL AND s.oa_status IS NOT NULL
+              AND lower(p.oa_color) <> lower(s.oa_status)
+        ) AS oa_color_disagree,
+        (
+            SELECT coalesce(jsonb_agg(t), '[]'::jsonb) FROM (
+                SELECT e.value AS subject, count(*) AS works
+                FROM page p, jsonb_array_elements_text(p.fos) e
+                GROUP BY e.value
+                ORDER BY works DESC, e.value
+                LIMIT 5
+            ) t
+        ) AS top_fos,
+        (
+            SELECT coalesce(jsonb_agg(t), '[]'::jsonb) FROM (
+                SELECT pr->>'funder' AS funder, count(*) AS works
+                FROM page p, jsonb_array_elements(p.projects) pr
+                WHERE pr->>'funder' IS NOT NULL
+                GROUP BY pr->>'funder'
+                ORDER BY works DESC, funder
+                LIMIT 5
+            ) t
+        ) AS top_funders
+    """
+).bindparams(
+    # asyncpg needs the param types to bind NULL year bounds.
+    bindparam("y0", type_=Integer),
+    bindparam("y1", type_=Integer),
+)
+
+
+async def openaire_info(
     session: AsyncSession,
+    institution: Institution,
     issn_l: str,
-    institution_id: int,
     year_range: tuple[int, int] | None = None,
-) -> int:
-    """Distinct works of the institution matched in OpenAIRE for the journal
-    (inside the explicit publication-year range when one is active; the
-    unfiltered default keeps today's query)."""
-    return (
-        await session.scalar(
-            select(func.count(func.distinct(WorkIdentity.work_id)))
-            .join(
-                Work,
-                (Work.institution_id == WorkIdentity.institution_id)
-                & (Work.pure_uuid == WorkIdentity.work_id),
-            )
-            .where(
-                WorkIdentity.institution_id == institution_id,
-                WorkIdentity.source == "openaire",
-                Work.journal_issn_l == issn_l,
-                *([Work.year.between(year_range[0], year_range[1])] if year_range else []),
-            )
+) -> dict[str, Any]:
+    """OpenAIRE cross-check for one journal, over the openaire_work_facts
+    store (confirmed identities only, retired works dropped): match count,
+    usage/fulltext/diamond tallies, the OA-color disagreement vs the work's
+    most-open OpenAlex record, and the top subjects/funders. The counts
+    narrow to the explicit publication-year range like the other detail
+    sections."""
+    row = (
+        await session.execute(
+            _OPENAIRE_INFO_SQL,
+            {
+                "iid": institution.id,
+                "issn_l": issn_l,
+                "y0": year_range[0] if year_range else None,
+                "y1": year_range[1] if year_range else None,
+            },
         )
-    ) or 0
+    ).one()
+    return {
+        "matched_works": row.matched_works,
+        "with_fulltext": row.with_fulltext,
+        "with_usage": row.with_usage,
+        "diamond_works": row.diamond_works,
+        "oa_color_total": row.oa_color_total,
+        "oa_color_disagree": row.oa_color_disagree,
+        "top_fos": list(row.top_fos),
+        "top_funders": list(row.top_funders),
+    }

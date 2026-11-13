@@ -1,8 +1,11 @@
-from datetime import datetime
+from datetime import date, datetime
+from typing import Any
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -14,6 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, _tstamp
@@ -121,6 +125,52 @@ class WorkFunder(Base):
     funder_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     award: Mapped[str | None] = mapped_column(Text, nullable=True)
     harvested_at: Mapped[datetime] = _tstamp()
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["institution_id", "pure_uuid"],
+            ["works.institution_id", "works.pure_uuid"],
+            ondelete="CASCADE",
+        ),
+    )
+
+
+class OpenaireWorkFacts(Base):
+    """OpenAIRE-derived facts per confirmed OpenAIRE work identity.
+
+    Derived store, rebuilt from the latest source_records payload by
+    harvest.openaire_facts (full idempotent refresh keyed on the confirmed
+    work_identity set): usage counts, the diamond flag, the OA color and
+    the license/fulltext/embargo facts serve journal detail enrichment;
+    fos/projects feed the detail card's subject and funder breakdowns.
+    Labels stay as OpenAIRE serves them (oa_color verbatim, 'FOS' scheme
+    values verbatim) so a later re-derive never rewrites history.
+    """
+
+    __tablename__ = "openaire_work_facts"
+
+    institution_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("institutions.id", ondelete="CASCADE"), primary_key=True
+    )
+    pure_uuid: Mapped[str] = mapped_column(Text, primary_key=True)
+    # Provenance: the OpenAIRE record id that fed this row.
+    source_pk: Mapped[str] = mapped_column(Text, nullable=False)
+    views: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    downloads: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    diamond: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    # OpenAIRE openAccessColor, verbatim (e.g. 'gold', 'hybrid').
+    oa_color: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # aireloom computed license (first non-empty instance license).
+    license: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # aireloom computed open_access_url (first OPEN instance url).
+    oa_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Max embargo end across instances.
+    embargo_end: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Sorted unique FOS subject values ("0101 mathematics", ...).
+    fos: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, server_default=text("'[]'"))
+    # Project list [{id, funder, code, acronym}] as stored verbatim above.
+    projects: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, server_default=text("'[]'"))
+    updated_at: Mapped[datetime] = _tstamp()
 
     __table_args__ = (
         ForeignKeyConstraint(
