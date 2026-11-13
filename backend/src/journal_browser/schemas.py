@@ -1031,6 +1031,46 @@ class WorkIdentityPageOut(BaseModel):
     items: list[WorkIdentityAdminOut]
 
 
+# --- Work identity bulk curation ---------------------------------------
+# Admin bulk review of work_identity rows (POST /admin/work-identities/bulk
+# and the jobs/bulk_work_identity.py deploy CLI). Kept as its own section;
+# everything above serves the existing single-row surfaces.
+
+
+class WorkIdentityBulkUpdate(BaseModel):
+    """One row decision inside a bulk work-identity request."""
+
+    source_pk: str
+    status: WorkIdentityStatus
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class WorkIdentityBulkIn(BaseModel):
+    """POST /admin/work-identities/bulk: many rows, one reviewer, one source."""
+
+    institution_id: int
+    source: str
+    reviewer: str = Field(max_length=200)
+    updates: list[WorkIdentityBulkUpdate] = Field(max_length=5000)
+
+
+class WorkIdentityBulkRowError(BaseModel):
+    """One bulk row that could not be applied (e.g. unknown source_pk)."""
+
+    source_pk: str
+    error: str
+
+
+class WorkIdentityBulkOut(BaseModel):
+    """POST /admin/work-identities/bulk result: a tally plus per-row errors."""
+
+    confirmed: int
+    missing: int
+    reopened: int
+    unchanged: int
+    errors: list[WorkIdentityBulkRowError] = []
+
+
 class StatusChangeOut(BaseModel):
     """One audited admin status flip (status_changes rows)."""
 

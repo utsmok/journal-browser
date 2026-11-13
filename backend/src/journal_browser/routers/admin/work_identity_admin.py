@@ -3,10 +3,11 @@
 GET /admin/work-identities lists work_identity rows (filter by status,
 institution, or source) with the work's title joined in. This is the
 in-app half of the loop that used to close only via the curation report
-file. PUT /admin/work-identities flips one row's status; flips are
-durable by construction — every harvest write is on_conflict_do_nothing,
-so re-runs never touch an existing row — and every actual transition
-appends a status_changes audit row.
+file. PUT /admin/work-identities flips one row's status; POST
+/admin/work-identities/bulk applies many rows for one reviewer in a
+single transaction. Flips are durable by construction — every harvest
+write is on_conflict_do_nothing, so re-runs never touch an existing
+row — and every actual transition appends a status_changes audit row.
 """
 
 from typing import Any
@@ -16,7 +17,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import desc, func, select
 
 from ...models import Institution, StatusChangeLog, Work, WorkIdentity
-from ...schemas import WorkIdentityAdminOut, WorkIdentityPageOut
+from ...schemas import (
+    WorkIdentityAdminOut,
+    WorkIdentityBulkIn,
+    WorkIdentityBulkOut,
+    WorkIdentityPageOut,
+)
 from .auth import AdminDep, SessionDep
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -107,6 +113,19 @@ async def set_work_identity_status(
     """
     if body.status not in WORK_IDENTITY_STATUSES:
         raise HTTPException(422, f"status must be one of {list(WORK_IDENTITY_STATUSES)}")
+    try:
+        await apply_decision(
+            session,
+            institution_id=body.institution_id,
+            source=body.source,
+            source_pk=body.source_pk,
+            status=body.status,
+            note=body.note,
+            reviewer=body.changed_by,
+        )
+    except ValueError as exc:
+        raise HTTPException(404, "work identity row not found") from exc
+    await session.commit()
     row = await session.scalar(
         select(WorkIdentity).where(
             WorkIdentity.institution_id == body.institution_id,
@@ -114,28 +133,100 @@ async def set_work_identity_status(
             WorkIdentity.source_pk == body.source_pk,
         )
     )
+    return await _identity_payload(session, row)
+
+
+@router.post("/work-identities/bulk", response_model=WorkIdentityBulkOut)
+async def bulk_work_identity_decisions(
+    body: WorkIdentityBulkIn, session: SessionDep, _: AdminDep
+) -> WorkIdentityBulkOut:
+    """Apply one reviewer's decisions to many work-identity rows.
+
+    One transaction: each row that exists gets the same audited flip the
+    PUT does; unknown rows land in `errors` without aborting the batch.
+    An unexpected database error rolls the whole batch back.
+    """
+    outcomes = {"confirmed": 0, "missing": 0, "reopened": 0, "unchanged": 0}
+    errors: list[dict[str, str]] = []
+    try:
+        for update in body.updates:
+            try:
+                result = await apply_decision(
+                    session,
+                    institution_id=body.institution_id,
+                    source=body.source,
+                    source_pk=update.source_pk,
+                    status=update.status,
+                    note=update.note,
+                    reviewer=body.reviewer,
+                )
+            except ValueError as exc:
+                errors.append({"source_pk": update.source_pk, "error": str(exc)})
+                continue
+            outcomes[result] += 1
+        await session.commit()
+    except Exception as exc:
+        await session.rollback()
+        raise HTTPException(500, "bulk update failed; rolled back") from exc
+    return WorkIdentityBulkOut(
+        confirmed=outcomes["confirmed"],
+        missing=outcomes["missing"],
+        reopened=outcomes["reopened"],
+        unchanged=outcomes["unchanged"],
+        errors=errors,
+    )
+
+
+async def apply_decision(
+    session: SessionDep,
+    *,
+    institution_id: int,
+    source: str,
+    source_pk: str,
+    status: str,
+    note: str | None,
+    reviewer: str | None,
+) -> str:
+    """Apply one review decision to a work-identity row, without committing.
+
+    Returns what happened: 'confirmed', 'missing', 'reopened' (back to
+    candidate), or 'unchanged' (no transition, no audit row). Raises
+    ValueError when the row does not exist. The caller owns the
+    transaction: the PUT commits per row, the bulk endpoint and the
+    bulk_review CLI commit once for the whole batch.
+    """
+    row = await session.scalar(
+        select(WorkIdentity).where(
+            WorkIdentity.institution_id == institution_id,
+            WorkIdentity.source == source,
+            WorkIdentity.source_pk == source_pk,
+        )
+    )
     if row is None:
-        raise HTTPException(404, "work identity row not found")
-    if row.status == body.status:
-        return await _identity_payload(session, row)
+        raise ValueError(f"work identity row not found: {source_pk}")
+    if row.status == status:
+        return "unchanged"
     old_status = row.status
-    row.status = body.status
+    row.status = status
     session.add(
         StatusChangeLog(
             table_name="work_identity",
             row_key={
-                "institution_id": body.institution_id,
-                "source": body.source,
-                "source_pk": body.source_pk,
+                "institution_id": institution_id,
+                "source": source,
+                "source_pk": source_pk,
             },
             old_value=old_status,
-            new_value=body.status,
-            note=body.note,
-            changed_by=body.changed_by,
+            new_value=status,
+            note=note,
+            changed_by=reviewer,
         )
     )
-    await session.commit()
-    return await _identity_payload(session, row)
+    if status == "confirmed":
+        return "confirmed"
+    if status == "missing":
+        return "missing"
+    return "reopened"
 
 
 async def _identity_payload(session: SessionDep, row: WorkIdentity) -> dict[str, Any]:

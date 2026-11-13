@@ -502,6 +502,106 @@ async def test_work_identities_list_flip_and_audit(admin_api, db_engine):
 
 
 @requires_db
+async def test_work_identities_bulk_decisions(admin_api, db_engine):
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with maker() as session:
+        inst_id = (await session.execute(select(Institution.id).limit(1))).scalar_one()
+        run_id = (await session.execute(select(HarvestRun.id).limit(1))).scalar_one()
+        session.add(
+            Work(
+                institution_id=inst_id,
+                pure_uuid="w-bulk",
+                title="A bulk work",
+                norm_title="a bulk work",
+                year=2025,
+                first_seen_run=run_id,
+                last_seen_run=run_id,
+            )
+        )
+        for pk in ("doi:10.1/a", "doi:10.1/b", "doi:10.1/c"):
+            session.add(
+                WorkIdentity(
+                    institution_id=inst_id,
+                    source="openalex",
+                    source_pk=pk,
+                    work_id="w-bulk",
+                    matched_by="trgm:0.82",
+                    confidence=0.9,
+                    status="candidate",
+                )
+            )
+        await session.commit()
+
+    headers = await _login(admin_api)
+    body = {
+        "institution_id": inst_id,
+        "source": "openalex",
+        "reviewer": "bulk-sam",
+        "updates": [
+            {"source_pk": "doi:10.1/a", "status": "confirmed", "note": "safe band"},
+            {"source_pk": "doi:10.1/b", "status": "confirmed"},
+            {"source_pk": "doi:10.1/c", "status": "missing"},
+            # Unknown row: reported in errors, batch still applies.
+            {"source_pk": "doi:10.1/none", "status": "confirmed"},
+        ],
+    }
+    r = await admin_api.post("/api/v1/admin/work-identities/bulk", headers=headers, json=body)
+    assert r.status_code == 200
+    assert r.json()["confirmed"] == 2
+    assert r.json()["missing"] == 1
+    assert r.json()["errors"] == [
+        {
+            "source_pk": "doi:10.1/none",
+            "error": "work identity row not found: doi:10.1/none",
+        }
+    ]
+    assert r.json()["reopened"] == 0 and r.json()["unchanged"] == 0
+
+    async with maker() as session:
+        statuses = dict(
+            (
+                await session.execute(
+                    select(WorkIdentity.source_pk, WorkIdentity.status).where(
+                        WorkIdentity.source == "openalex"
+                    )
+                )
+            ).all()
+        )
+        assert statuses == {
+            "doi:10.1/a": "confirmed",
+            "doi:10.1/b": "confirmed",
+            "doi:10.1/c": "missing",
+        }
+        changes = (
+            (
+                await session.execute(
+                    select(StatusChangeLog)
+                    .where(StatusChangeLog.table_name == "work_identity")
+                    .order_by(StatusChangeLog.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(changes) == 3
+        assert [(c.old_value, c.new_value) for c in changes] == [
+            ("candidate", "confirmed"),
+            ("candidate", "confirmed"),
+            ("candidate", "missing"),
+        ]
+        assert {c.changed_by for c in changes} == {"bulk-sam"}
+        assert changes[0].note == "safe band"
+
+    # Invalid status words fail validation before anything is applied.
+    r = await admin_api.post(
+        "/api/v1/admin/work-identities/bulk",
+        headers=headers,
+        json={**body, "updates": [{"source_pk": "doi:10.1/a", "status": "maybe"}]},
+    )
+    assert r.status_code == 422
+
+
+@requires_db
 async def test_author_identities_paging_envelope(admin_api, db_engine):
     """total reflects all filtered rows; offset pages through without overlap."""
     maker = async_sessionmaker(db_engine, expire_on_commit=False)
