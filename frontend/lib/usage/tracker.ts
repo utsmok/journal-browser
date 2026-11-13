@@ -181,6 +181,7 @@ export function endPageView(): void {
 export function trackSearch(input: {
   query: string;
   results_count?: number;
+  duration_ms?: number;
   search_scope: UsageScope;
   filters?: Record<string, unknown>;
 }): void {
@@ -194,6 +195,7 @@ export function trackSearch(input: {
     // Empty query = a default browse load, never a query string.
     ...(query === "" ? { is_browse: true } : { query: query.slice(0, 512) }),
     results_count: input.results_count,
+    duration_ms: input.duration_ms,
     search_scope: input.search_scope,
     filters: input.filters,
   });

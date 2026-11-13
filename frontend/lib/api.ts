@@ -183,6 +183,7 @@ export async function fetchAuthors(
   filters: AuthorSearchFilters = {},
   opts: AuthorFetchOptions = {},
 ): Promise<AuthorSearchResponse> {
+  const startedAt = Date.now();
   const data = await apiGet<AuthorSearchResponse>(`/${inst}/authors`, {
     q,
     limit: opts.limit,
@@ -200,6 +201,7 @@ export async function fetchAuthors(
   trackSearch({
     query: q ?? "",
     results_count: data.total,
+    duration_ms: Date.now() - startedAt,
     search_scope: "authors",
     filters: Object.keys(filters).length ? { ...filters } : undefined,
   });
@@ -303,6 +305,7 @@ export async function fetchPublishers(
   inst: string,
   params: PublisherSearchParams = {},
 ): Promise<PublisherSearchResponse> {
+  const startedAt = Date.now();
   const data = await apiGet<PublisherSearchResponse>(`/${inst}/publishers`, {
     q: params.q,
     oa_type: params.oa_type?.join("|"),
@@ -322,6 +325,7 @@ export async function fetchPublishers(
   trackSearch({
     query: params.q ?? "",
     results_count: data.total,
+    duration_ms: Date.now() - startedAt,
     search_scope: "publishers",
     filters: usageDirectoryFilters(params),
   });
@@ -343,6 +347,7 @@ export async function fetchOrgUnits(
   inst: string,
   params: OrgUnitSearchParams = {},
 ): Promise<OrgUnitSearchResponse> {
+  const startedAt = Date.now();
   const data = await apiGet<OrgUnitSearchResponse>(`/${inst}/orgunits`, {
     level: params.level,
     q: params.q,
@@ -358,6 +363,7 @@ export async function fetchOrgUnits(
   trackSearch({
     query: params.q ?? "",
     results_count: data.total,
+    duration_ms: Date.now() - startedAt,
     search_scope: "orgunits",
     filters: usageDirectoryFilters(params),
   });

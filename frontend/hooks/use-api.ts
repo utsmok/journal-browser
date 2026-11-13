@@ -99,6 +99,7 @@ export function useJournals(params: JournalSearchParams, semantic?: boolean) {
     queryKey: [...qk.journals(inst, params), semantic ? "semantic" : "fts"] as const,
     queryFn: async () => {
       const at = epoch.current;
+      const startedAt = Date.now();
       const data = semantic
         ? // Free-text "journals like this description": embeddings, not FTS.
           // Filter/sort params do not apply to the vector ranking, but the
@@ -115,6 +116,7 @@ export function useJournals(params: JournalSearchParams, semantic?: boolean) {
       trackSearch({
         query: params.q ?? "",
         results_count: data.total,
+        duration_ms: Date.now() - startedAt,
         search_scope: "journals",
         // Filter/sort params do not apply to the semantic ranking.
         filters: semantic ? undefined : usageFilters(params),
@@ -327,12 +329,18 @@ export function useFunderDirectory(q: string, offset: number, limit: number) {
   return useQuery({
     queryKey: [...qk.funders(inst, q), offset, limit] as const,
     queryFn: async () => {
+      const startedAt = Date.now();
       const data = await apiGet<FunderSearchResponse>(`/${inst}/funders`, {
         q: q || undefined,
         offset,
         limit,
       });
-      trackSearch({ query: q, results_count: data.total, search_scope: "funders" });
+      trackSearch({
+        query: q,
+        results_count: data.total,
+        duration_ms: Date.now() - startedAt,
+        search_scope: "funders",
+      });
       return data;
     },
     enabled: inst !== "",
