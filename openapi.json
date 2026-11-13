@@ -1215,6 +1215,48 @@
         }
       }
     },
+    "/api/v1/admin/work-identities/bulk": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Bulk Work Identity Decisions",
+        "description": "Apply one reviewer's decisions to many work-identity rows.\n\nOne transaction: each row that exists gets the same audited flip the\nPUT does; unknown rows land in `errors` without aborting the batch.\nAn unexpected database error rolls the whole batch back.",
+        "operationId": "bulk_work_identity_decisions_api_v1_admin_work_identities_bulk_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkIdentityBulkIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkIdentityBulkOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/status-changes": {
       "get": {
         "tags": [
@@ -9361,7 +9403,14 @@
           "openaire": {
             "$ref": "#/components/schemas/OpenaireInfo",
             "default": {
-              "matched_works": 0
+              "matched_works": 0,
+              "with_fulltext": 0,
+              "with_usage": 0,
+              "diamond_works": 0,
+              "oa_color_total": 0,
+              "oa_color_disagree": 0,
+              "top_fos": [],
+              "top_funders": []
             }
           },
           "green_oa": {
@@ -9764,16 +9813,240 @@
         "title": "OaType",
         "description": "Journal-level OA classification (journals.oa_type; services/search.py\nSQL case + Python mirror, search filter vocabulary).\n\nMember order is the facet display order (most open first); every\noa_type facet/composition dict iterates OA_TYPES, so do not reorder\nalphabetically."
       },
+      "OpenaireFactsOut": {
+        "properties": {
+          "views": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Views"
+          },
+          "downloads": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Downloads"
+          },
+          "oa_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Url"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
+          },
+          "oa_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Color"
+          },
+          "diamond": {
+            "type": "boolean",
+            "title": "Diamond",
+            "default": false
+          },
+          "embargo_end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embargo End"
+          },
+          "fos": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Fos",
+            "default": []
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/OpenaireProjectOut"
+            },
+            "type": "array",
+            "title": "Projects",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "OpenaireFactsOut",
+        "description": "OpenAIRE-derived facts for one work (openaire_work_facts row)."
+      },
       "OpenaireInfo": {
         "properties": {
           "matched_works": {
             "type": "integer",
             "title": "Matched Works",
             "default": 0
+          },
+          "with_fulltext": {
+            "type": "integer",
+            "title": "With Fulltext",
+            "default": 0
+          },
+          "with_usage": {
+            "type": "integer",
+            "title": "With Usage",
+            "default": 0
+          },
+          "diamond_works": {
+            "type": "integer",
+            "title": "Diamond Works",
+            "default": 0
+          },
+          "oa_color_total": {
+            "type": "integer",
+            "title": "Oa Color Total",
+            "default": 0
+          },
+          "oa_color_disagree": {
+            "type": "integer",
+            "title": "Oa Color Disagree",
+            "default": 0
+          },
+          "top_fos": {
+            "items": {
+              "$ref": "#/components/schemas/OpenaireTopFos"
+            },
+            "type": "array",
+            "title": "Top Fos",
+            "default": []
+          },
+          "top_funders": {
+            "items": {
+              "$ref": "#/components/schemas/OpenaireTopFunder"
+            },
+            "type": "array",
+            "title": "Top Funders",
+            "default": []
           }
         },
         "type": "object",
-        "title": "OpenaireInfo"
+        "title": "OpenaireInfo",
+        "description": "OpenAIRE cross-check for one journal, over the confirmed-identity\nfacts store (openaire_work_facts)."
+      },
+      "OpenaireProjectOut": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "funder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Funder"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "acronym": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acronym"
+          }
+        },
+        "type": "object",
+        "title": "OpenaireProjectOut",
+        "description": "One project linked to the work by OpenAIRE (fields may be null)."
+      },
+      "OpenaireTopFos": {
+        "properties": {
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "works": {
+            "type": "integer",
+            "title": "Works"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subject",
+          "works"
+        ],
+        "title": "OpenaireTopFos"
+      },
+      "OpenaireTopFunder": {
+        "properties": {
+          "funder": {
+            "type": "string",
+            "title": "Funder"
+          },
+          "works": {
+            "type": "integer",
+            "title": "Works"
+          }
+        },
+        "type": "object",
+        "required": [
+          "funder",
+          "works"
+        ],
+        "title": "OpenaireTopFunder"
       },
       "OpenalexInfo": {
         "properties": {
@@ -12077,6 +12350,126 @@
         "title": "WorkIdentityAdminOut",
         "description": "One cross-source work-identity row for the admin review list.\n\nFlips are durable: every harvest write is on_conflict_do_nothing, so\nre-runs never overwrite an admin decision."
       },
+      "WorkIdentityBulkIn": {
+        "properties": {
+          "institution_id": {
+            "type": "integer",
+            "title": "Institution Id"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "reviewer": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Reviewer"
+          },
+          "updates": {
+            "items": {
+              "$ref": "#/components/schemas/WorkIdentityBulkUpdate"
+            },
+            "type": "array",
+            "maxItems": 5000,
+            "title": "Updates"
+          }
+        },
+        "type": "object",
+        "required": [
+          "institution_id",
+          "source",
+          "reviewer",
+          "updates"
+        ],
+        "title": "WorkIdentityBulkIn",
+        "description": "POST /admin/work-identities/bulk: many rows, one reviewer, one source."
+      },
+      "WorkIdentityBulkOut": {
+        "properties": {
+          "confirmed": {
+            "type": "integer",
+            "title": "Confirmed"
+          },
+          "missing": {
+            "type": "integer",
+            "title": "Missing"
+          },
+          "reopened": {
+            "type": "integer",
+            "title": "Reopened"
+          },
+          "unchanged": {
+            "type": "integer",
+            "title": "Unchanged"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/WorkIdentityBulkRowError"
+            },
+            "type": "array",
+            "title": "Errors",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "confirmed",
+          "missing",
+          "reopened",
+          "unchanged"
+        ],
+        "title": "WorkIdentityBulkOut",
+        "description": "POST /admin/work-identities/bulk result: a tally plus per-row errors."
+      },
+      "WorkIdentityBulkRowError": {
+        "properties": {
+          "source_pk": {
+            "type": "string",
+            "title": "Source Pk"
+          },
+          "error": {
+            "type": "string",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_pk",
+          "error"
+        ],
+        "title": "WorkIdentityBulkRowError",
+        "description": "One bulk row that could not be applied (e.g. unknown source_pk)."
+      },
+      "WorkIdentityBulkUpdate": {
+        "properties": {
+          "source_pk": {
+            "type": "string",
+            "title": "Source Pk"
+          },
+          "status": {
+            "$ref": "#/components/schemas/WorkIdentityStatus"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_pk",
+          "status"
+        ],
+        "title": "WorkIdentityBulkUpdate",
+        "description": "One row decision inside a bulk work-identity request."
+      },
       "WorkIdentityPageOut": {
         "properties": {
           "total": {
@@ -12309,6 +12702,16 @@
             "type": "array",
             "title": "Ut Groups",
             "default": []
+          },
+          "openaire": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpenaireFactsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",

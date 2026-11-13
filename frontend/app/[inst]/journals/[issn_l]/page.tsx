@@ -50,6 +50,7 @@ import {
   type DealOut,
   type FunderFitOut,
   type JournalDetailResponse,
+  type OpenaireInfo,
   type OpenalexSource,
   type OpenalexTopic,
   type WorksPage,
@@ -67,16 +68,19 @@ function External({
   href,
   children,
   className,
+  title,
 }: {
   href: string;
   children: React.ReactNode;
   className?: string;
+  title?: string;
 }) {
   return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
+      title={title}
       className={cn(
         "inline-flex items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline",
         className,
@@ -85,6 +89,16 @@ function External({
       {children} <ExternalLink aria-hidden className="size-3.5 shrink-0" />
     </a>
   );
+}
+
+/** Hostname of a URL, for compact license badges; falls back to the raw
+    string when the value does not parse as a URL. */
+function urlHost(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
 }
 
 function Metric({
@@ -793,6 +807,23 @@ function PublicationsCard({
         <ul className="divide-y divide-[var(--border)]">
           {works.map((w) => {
             const href = doiHref(w.doi ?? null) ?? w.url;
+            const oa = w.openaire ?? null;
+            const usage = [
+              oa?.views != null ? t("publications.usageViews", { count: oa.views }) : null,
+              oa?.downloads != null
+                ? t("publications.usageDownloads", { count: oa.downloads })
+                : null,
+            ].filter((part): part is string => part !== null);
+            const licenseUrl = oa?.license?.startsWith("http") ? oa.license : null;
+            const funders = Array.from(
+              new Set(
+                (oa?.projects ?? []).flatMap((p) => {
+                  const name = p.funder ?? p.acronym ?? p.id;
+                  if (name == null) return [];
+                  return [p.code ? `${name} (${p.code})` : name];
+                }),
+              ),
+            );
             return (
               <li
                 key={w.id}
@@ -837,6 +868,32 @@ function PublicationsCard({
                 >
                   {t("publications.fwci", { value: w.fwci != null ? w.fwci.toFixed(2) : "—" })}
                 </span>
+                {oa?.oa_url && (
+                  <External
+                    href={oa.oa_url}
+                    className="text-xs"
+                    title={t("publications.openaireCopyHint")}
+                  >
+                    {t("publications.openaireCopy")}
+                  </External>
+                )}
+                {usage.length > 0 && (
+                  <span
+                    className="text-xs tabular-nums text-[var(--muted-foreground)]"
+                    title={t("publications.usageTitle")}
+                  >
+                    {usage.join(" · ")}
+                  </span>
+                )}
+                {oa?.license && (
+                  <Badge
+                    variant="outline"
+                    className="font-normal text-[11px] text-[var(--muted-foreground)]"
+                    title={licenseUrl ?? t("publications.licenseHint")}
+                  >
+                    {licenseUrl ? urlHost(licenseUrl) : oa.license}
+                  </Badge>
+                )}
                 {w.is_retracted && (
                   <Badge
                     variant="outline"
@@ -846,7 +903,7 @@ function PublicationsCard({
                     {t("publications.retracted")}
                   </Badge>
                 )}
-                {(w.ut_authors.length > 0 || w.ut_groups.length > 0) && (
+                {(w.ut_authors.length > 0 || w.ut_groups.length > 0 || funders.length > 0) && (
                   <div className="w-full text-xs text-[var(--muted-foreground)]">
                     {w.ut_authors.length > 0 && (
                       <span>
@@ -874,6 +931,14 @@ function PublicationsCard({
                         </Link>
                       </React.Fragment>
                     ))}
+                    {funders.length > 0 && (
+                      <>
+                        {(w.ut_authors.length > 0 || w.ut_groups.length > 0) && " · "}
+                        <span>
+                          {t("publications.funders")} {funders.join(", ")}
+                        </span>
+                      </>
+                    )}
                   </div>
                 )}
               </li>
@@ -905,6 +970,86 @@ function PublicationsCard({
           {t("publications.openaireLink")}
         </External>
         <SourceNote {...worksNote} codes={worksNote.caveat_codes} />
+      </div>
+    </CollapsibleCard>
+  );
+}
+
+/** OpenAIRE Graph cross-check for this journal, over the confirmed-identity
+ * facts store: what OpenAIRE matches and what it adds beyond OpenAlex
+ * (fulltext links, usage events, diamond OA evidence, subjects, funders). */
+function OpenaireCard({ openaire, note }: { openaire: OpenaireInfo; note: Partial<Attribution> }) {
+  const t = useTranslations("journals");
+  const site = useSiteMeta();
+  return (
+    <CollapsibleCard
+      id="openaire"
+      title={t("openaire.title")}
+      description={
+        <p className="text-sm text-[var(--muted-foreground)]">{t("openaire.description")}</p>
+      }
+      contentClassName="space-y-4 text-sm"
+    >
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Metric
+          label={t("metrics.openaireLabel")}
+          hint={t("metrics.openaireHint", { name: site.name })}
+          value={openaire.matched_works.toLocaleString("en")}
+        />
+        <Metric
+          label={t("openaire.fulltextLabel")}
+          hint={t("openaire.fulltextHint")}
+          value={openaire.with_fulltext.toLocaleString("en")}
+        />
+        <Metric
+          label={t("openaire.usageLabel")}
+          hint={t("openaire.usageHint")}
+          value={openaire.with_usage.toLocaleString("en")}
+        />
+        <Metric
+          label={t("openaire.diamondLabel")}
+          hint={t("openaire.diamondHint")}
+          value={openaire.diamond_works.toLocaleString("en")}
+        />
+      </div>
+      {openaire.oa_color_total > 0 && (
+        <p className="text-xs text-[var(--muted-foreground)]">
+          {t("openaire.colorCheck", {
+            agree: openaire.oa_color_total - openaire.oa_color_disagree,
+            total: openaire.oa_color_total,
+            disagree: openaire.oa_color_disagree,
+          })}
+        </p>
+      )}
+      {openaire.top_fos.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {openaire.top_fos.map((f) => (
+            <Badge key={f.subject} variant="outline" className="font-normal normal-case">
+              {f.subject}
+              <span className="ml-1.5 tabular-nums text-[var(--muted-foreground)]">
+                {f.works.toLocaleString("en")}
+              </span>
+            </Badge>
+          ))}
+        </div>
+      )}
+      {openaire.top_funders.length > 0 && (
+        <ul className="divide-y divide-[var(--border)]">
+          {openaire.top_funders.map((f) => (
+            <li
+              key={f.funder}
+              className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-1.5 first:pt-0 last:pb-0"
+            >
+              <span>{f.funder}</span>
+              <span className="tabular-nums text-xs text-[var(--muted-foreground)]">
+                {t("openaire.funderWorks", { count: f.works })}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-[var(--border)] pt-3">
+        <SourceNote {...note} codes={note.caveat_codes} />
       </div>
     </CollapsibleCard>
   );
@@ -1210,6 +1355,9 @@ function JournalPageInner() {
     { id: "metrics", label: t("metrics.title") },
     { id: "ut-authorship", label: t("utAuthorship.title") },
     { id: "publications", label: t("publications.navLabel") },
+    ...(openaire && openaire.matched_works > 0
+      ? [{ id: "openaire", label: t("openaire.title") }]
+      : []),
     ...(data.openalex_only.available ? [{ id: "cris-gaps", label: t("crisGaps.title") }] : []),
     ...(data.alternate_titles.length > 0 ? [{ id: "names", label: t("names.title") }] : []),
     { id: "identifiers", label: t("identifiers.title") },
@@ -1767,6 +1915,10 @@ function JournalPageInner() {
             requested={requestedWorksPage}
             worksQuery={worksQuery}
           />
+
+          {openaire && openaire.matched_works > 0 && (
+            <OpenaireCard openaire={openaire} note={attribution.openaire ?? {}} />
+          )}
 
           {data.openalex_only.available && (
             <CrisGapsCard openalexOnly={data.openalex_only} inst={inst} issnL={journal.issn_l} />

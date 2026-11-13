@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06",
+  "generatedAt": "2026-11-13",
   "steps": [
     {
       "id": "journals",
@@ -124,6 +124,14 @@
       ]
     },
     {
+      "id": "openaire-facts",
+      "band": "institution",
+      "script": "derive_openaire_facts.py",
+      "deps": [
+        "openaire"
+      ]
+    },
+    {
       "id": "stats",
       "band": "institution",
       "script": "harvest_stats.py",
@@ -131,6 +139,7 @@
         "enrich",
         "flags",
         "openaire",
+        "openaire-facts",
         "openapc",
         "scimagojr"
       ]

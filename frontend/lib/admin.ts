@@ -76,6 +76,36 @@ export function adminDelete(path: string, token: string): Promise<void> {
   return adminFetch<void>(path, token, { method: "DELETE" });
 }
 
+/** POST /admin/work-identities/bulk: local types until the generated
+ * contract regenerates (api-types.ts is not hand-edited). */
+export type WorkIdentityBulkUpdate = {
+  source_pk: string;
+  status: "confirmed" | "missing" | "candidate";
+  note?: string | null;
+};
+
+export type WorkIdentityBulkIn = {
+  institution_id: number;
+  source: string;
+  reviewer: string;
+  updates: WorkIdentityBulkUpdate[];
+};
+
+export type WorkIdentityBulkOut = {
+  confirmed: number;
+  missing: number;
+  reopened: number;
+  unchanged: number;
+  errors: { source_pk: string; error: string }[];
+};
+
+export function bulkWorkIdentities(
+  token: string,
+  body: WorkIdentityBulkIn,
+): Promise<WorkIdentityBulkOut> {
+  return adminPost<WorkIdentityBulkOut>("/work-identities/bulk", token, body);
+}
+
 /** Session-cached admin token plus a setter that persists/removes it. */
 export function useAdminToken(): [string | null, (token: string | null) => void] {
   const [token, setToken] = useState<string | null>(null);

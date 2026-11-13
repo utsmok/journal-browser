@@ -182,7 +182,26 @@
     "pagerLabel": "publications",
     "allOpenalexLink": "All works on OpenAlex",
     "openaireLink": "Search on OpenAIRE",
+    "openaireCopy": "OpenAIRE",
+    "openaireCopyHint": "Open this publication on OpenAIRE Explore",
+    "usageViews": "{count, plural, one {# view} other {# views}}",
+    "usageDownloads": "{count, plural, one {# download} other {# downloads}}",
+    "usageTitle": "Views and downloads that OpenAIRE recorded for this publication",
+    "licenseHint": "License that OpenAIRE recorded for this publication",
+    "funders": "Funders:",
     "untitled": "Untitled"
+  },
+  "openaire": {
+    "title": "OpenAIRE cross-check",
+    "description": "What the OpenAIRE Graph adds for this journal: matched publications, open-access links, usage events, diamond evidence, subjects, and funders.",
+    "fulltextLabel": "With full-text link",
+    "fulltextHint": "Matched publications for which OpenAIRE knows an open-access landing page.",
+    "usageLabel": "With usage data",
+    "usageHint": "Matched publications for which OpenAIRE has recorded views or downloads.",
+    "diamondLabel": "Diamond works",
+    "diamondHint": "Matched publications in diamond open-access venues (no article processing charge), evidenced by the journal's entry in the OpenAIRE journal registry.",
+    "colorCheck": "The open-access color agrees with OpenAlex for {agree} of {total} publications; {disagree} disagree.",
+    "funderWorks": "{count, plural, one {# work} other {# works}}"
   },
   "crisGaps": {
     "title": "Not registered in Pure",

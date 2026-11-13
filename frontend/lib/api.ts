@@ -26,6 +26,9 @@ export type InstitutionMetrics = Schemas["InstitutionMetrics"];
 
 export type WorksPage = Schemas["WorksPage"];
 
+/** OpenAIRE cross-check facts for one journal. */
+export type OpenaireInfo = Schemas["OpenaireInfo"];
+
 export type LimitationOut = Schemas["LimitationOut"];
 export type FreshnessResponse = Schemas["FreshnessResponse"];
 export type StatsYear = Schemas["StatsYear"];

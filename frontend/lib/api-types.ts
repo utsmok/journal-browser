@@ -362,6 +362,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/work-identities/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk Work Identity Decisions
+         * @description Apply one reviewer's decisions to many work-identity rows.
+         *
+         *     One transaction: each row that exists gets the same audited flip the
+         *     PUT does; unknown rows land in `errors` without aborting the batch.
+         *     An unexpected database error rolls the whole batch back.
+         */
+        post: operations["bulk_work_identity_decisions_api_v1_admin_work_identities_bulk_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/status-changes": {
         parameters: {
             query?: never;
@@ -2485,7 +2509,14 @@ export interface components {
             openalex?: components["schemas"]["OpenalexInfo"] | null;
             /**
              * @default {
-             *       "matched_works": 0
+             *       "matched_works": 0,
+             *       "with_fulltext": 0,
+             *       "with_usage": 0,
+             *       "diamond_works": 0,
+             *       "oa_color_total": 0,
+             *       "oa_color_disagree": 0,
+             *       "top_fos": [],
+             *       "top_funders": []
              *     }
              */
             openaire: components["schemas"]["OpenaireInfo"];
@@ -2621,13 +2652,113 @@ export interface components {
          * @enum {string}
          */
         OaType: "diamond" | "gold" | "hybrid" | "generic" | "subscription";
-        /** OpenaireInfo */
+        /**
+         * OpenaireFactsOut
+         * @description OpenAIRE-derived facts for one work (openaire_work_facts row).
+         */
+        OpenaireFactsOut: {
+            /** Views */
+            views?: number | null;
+            /** Downloads */
+            downloads?: number | null;
+            /** Oa Url */
+            oa_url?: string | null;
+            /** License */
+            license?: string | null;
+            /** Oa Color */
+            oa_color?: string | null;
+            /**
+             * Diamond
+             * @default false
+             */
+            diamond: boolean;
+            /** Embargo End */
+            embargo_end?: string | null;
+            /**
+             * Fos
+             * @default []
+             */
+            fos: string[];
+            /**
+             * Projects
+             * @default []
+             */
+            projects: components["schemas"]["OpenaireProjectOut"][];
+        };
+        /**
+         * OpenaireInfo
+         * @description OpenAIRE cross-check for one journal, over the confirmed-identity
+         *     facts store (openaire_work_facts).
+         */
         OpenaireInfo: {
             /**
              * Matched Works
              * @default 0
              */
             matched_works: number;
+            /**
+             * With Fulltext
+             * @default 0
+             */
+            with_fulltext: number;
+            /**
+             * With Usage
+             * @default 0
+             */
+            with_usage: number;
+            /**
+             * Diamond Works
+             * @default 0
+             */
+            diamond_works: number;
+            /**
+             * Oa Color Total
+             * @default 0
+             */
+            oa_color_total: number;
+            /**
+             * Oa Color Disagree
+             * @default 0
+             */
+            oa_color_disagree: number;
+            /**
+             * Top Fos
+             * @default []
+             */
+            top_fos: components["schemas"]["OpenaireTopFos"][];
+            /**
+             * Top Funders
+             * @default []
+             */
+            top_funders: components["schemas"]["OpenaireTopFunder"][];
+        };
+        /**
+         * OpenaireProjectOut
+         * @description One project linked to the work by OpenAIRE (fields may be null).
+         */
+        OpenaireProjectOut: {
+            /** Id */
+            id?: string | null;
+            /** Funder */
+            funder?: string | null;
+            /** Code */
+            code?: string | null;
+            /** Acronym */
+            acronym?: string | null;
+        };
+        /** OpenaireTopFos */
+        OpenaireTopFos: {
+            /** Subject */
+            subject: string;
+            /** Works */
+            works: number;
+        };
+        /** OpenaireTopFunder */
+        OpenaireTopFunder: {
+            /** Funder */
+            funder: string;
+            /** Works */
+            works: number;
         };
         /**
          * OpenalexInfo
@@ -3398,6 +3529,60 @@ export interface components {
             updated_at: string | null;
         };
         /**
+         * WorkIdentityBulkIn
+         * @description POST /admin/work-identities/bulk: many rows, one reviewer, one source.
+         */
+        WorkIdentityBulkIn: {
+            /** Institution Id */
+            institution_id: number;
+            /** Source */
+            source: string;
+            /** Reviewer */
+            reviewer: string;
+            /** Updates */
+            updates: components["schemas"]["WorkIdentityBulkUpdate"][];
+        };
+        /**
+         * WorkIdentityBulkOut
+         * @description POST /admin/work-identities/bulk result: a tally plus per-row errors.
+         */
+        WorkIdentityBulkOut: {
+            /** Confirmed */
+            confirmed: number;
+            /** Missing */
+            missing: number;
+            /** Reopened */
+            reopened: number;
+            /** Unchanged */
+            unchanged: number;
+            /**
+             * Errors
+             * @default []
+             */
+            errors: components["schemas"]["WorkIdentityBulkRowError"][];
+        };
+        /**
+         * WorkIdentityBulkRowError
+         * @description One bulk row that could not be applied (e.g. unknown source_pk).
+         */
+        WorkIdentityBulkRowError: {
+            /** Source Pk */
+            source_pk: string;
+            /** Error */
+            error: string;
+        };
+        /**
+         * WorkIdentityBulkUpdate
+         * @description One row decision inside a bulk work-identity request.
+         */
+        WorkIdentityBulkUpdate: {
+            /** Source Pk */
+            source_pk: string;
+            status: components["schemas"]["WorkIdentityStatus"];
+            /** Note */
+            note?: string | null;
+        };
+        /**
          * WorkIdentityPageOut
          * @description Paged work-identity review queue (total is the unpaginated count).
          */
@@ -3476,6 +3661,7 @@ export interface components {
              * @default []
              */
             ut_groups: components["schemas"]["WorkUtGroup"][];
+            openaire?: components["schemas"]["OpenaireFactsOut"] | null;
         };
         /** WorkUtAuthor */
         WorkUtAuthor: {
@@ -4284,6 +4470,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkIdentityAdminOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_work_identity_decisions_api_v1_admin_work_identities_bulk_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkIdentityBulkIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkIdentityBulkOut"];
                 };
             };
             /** @description Validation Error */

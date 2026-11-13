@@ -231,7 +231,16 @@
     "emptyStatus": "No {status} work identity rows across institutions.",
     "emptyStatusInst": "No {status} work identity rows for this institution.",
     "emptyAll": "No work identity rows across institutions.",
-    "emptyAllInst": "No work identity rows for this institution."
+    "emptyAllInst": "No work identity rows for this institution.",
+    "selectAll": "Select every row on this page",
+    "selectRow": "Select this row",
+    "bulkSelected": "{count, plural, one {# row selected} other {# rows selected}}",
+    "bulkNotePlaceholder": "note for all selected (optional)",
+    "bulkNeedsReviewer": "Enter a reviewer name first",
+    "confirmSelected": "Confirm selected",
+    "markMissing": "Mark missing",
+    "bulkDone": "Bulk review: {confirmed} confirmed, {missing} missing, {reopened} reopened, {unchanged} unchanged, {errors} errors.",
+    "bulkFailed": "Could not apply the bulk review ({message})."
   },
 
   "authorIdentity": {

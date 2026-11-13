@@ -18,7 +18,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAdminResource } from "@/hooks/use-admin-resource";
-import { adminPut, type WorkIdentityAdmin, type WorkIdentityPage } from "@/lib/admin";
+import {
+  adminPut,
+  bulkWorkIdentities,
+  type WorkIdentityAdmin,
+  type WorkIdentityBulkOut,
+  type WorkIdentityPage,
+} from "@/lib/admin";
 
 /** Matches the backend's WORK_IDENTITY_STATUSES; "all" omits the filter. */
 const STATUS_FILTERS = ["candidate", "confirmed", "missing", "all"] as const;
@@ -77,12 +83,16 @@ export function WorkIdentitiesPanel({
   const [busy, setBusy] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [reviewer, setReviewer] = useReviewer();
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [bulkNote, setBulkNote] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   // The institution prop changes the query outside this panel; without a
   // reset a stale page can land past the new total and read as "no rows".
   useEffect(() => setPage(1), [inst]);
   const instQ = inst ? `&institution=${encodeURIComponent(inst)}` : "";
   const query = `/work-identities?limit=50&offset=${(page - 1) * 50}${instQ}${filter === "all" ? "" : `&status=${filter}`}`;
-  const { data, setData, loading, error, setError } = useAdminResource<WorkIdentityPage>(
+  const { data, setData, loading, error, setError, refresh } = useAdminResource<WorkIdentityPage>(
     query,
     token,
     onUnauthorized,
@@ -92,6 +102,9 @@ export function WorkIdentitiesPanel({
   const total = data?.total ?? 0;
   const pages = Math.max(1, Math.ceil(total / 50));
   const selected = items.find((row) => rowKey(row) === selectedKey) ?? null;
+  // Any refetch (paging, filter change, flip, bulk apply) replaces `data`;
+  // clearing the checks then keeps the selection truthful to the page shown.
+  useEffect(() => setChecked(new Set()), [data]);
 
   const flip = async (
     row: WorkIdentityAdmin,
@@ -126,6 +139,75 @@ export function WorkIdentitiesPanel({
     } finally {
       setBusy(null);
     }
+  };
+
+  /** Apply one decision to every checked row; reviewer is required, the
+   * note is optional and lands on all of them. The endpoint takes one
+   * (institution, source) pair per call, so rows are sent in groups. */
+  const runBulk = async (status: "confirmed" | "missing"): Promise<void> => {
+    if (bulkBusy || !reviewer.trim()) return;
+    const chosen = items.filter((row) => checked.has(rowKey(row)));
+    if (chosen.length === 0) return;
+    setBulkBusy(true);
+    setNotice(null);
+    const groups = new Map<
+      string,
+      { institutionId: number; source: string; rows: WorkIdentityAdmin[] }
+    >();
+    for (const row of chosen) {
+      const gk = `${row.institution_id}:${row.source}`;
+      const group = groups.get(gk);
+      if (group) group.rows.push(row);
+      else groups.set(gk, { institutionId: row.institution_id, source: row.source, rows: [row] });
+    }
+    const note = bulkNote.trim();
+    const tally = { confirmed: 0, missing: 0, reopened: 0, unchanged: 0 };
+    const bulkErrors: WorkIdentityBulkOut["errors"] = [];
+    try {
+      for (const group of groups.values()) {
+        const result = await bulkWorkIdentities(token, {
+          institution_id: group.institutionId,
+          source: group.source,
+          reviewer: reviewer.trim(),
+          updates: group.rows.map((row) => ({
+            source_pk: row.source_pk,
+            status,
+            ...(note ? { note } : {}),
+          })),
+        });
+        tally.confirmed += result.confirmed;
+        tally.missing += result.missing;
+        tally.reopened += result.reopened;
+        tally.unchanged += result.unchanged;
+        bulkErrors.push(...result.errors);
+      }
+      await refresh();
+      setBulkNote("");
+      setNotice(
+        t("workIdentities.bulkDone", {
+          confirmed: tally.confirmed,
+          missing: tally.missing,
+          reopened: tally.reopened,
+          unchanged: tally.unchanged,
+          errors: bulkErrors.length,
+        }),
+      );
+    } catch (err) {
+      setError(
+        t("workIdentities.bulkFailed", {
+          message: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const toggleChecked = (key: string, on: boolean): void => {
+    const next = new Set(checked);
+    if (on) next.add(key);
+    else next.delete(key);
+    setChecked(next);
   };
 
   return (
@@ -164,11 +246,63 @@ export function WorkIdentitiesPanel({
           {loading ? t("loading") : t("workIdentities.rowsCount", { count: total })}
         </span>
         {error && <p className="text-sm text-destructive">{error}</p>}
+        {notice && (
+          <p className="text-sm" aria-live="polite">
+            {notice}
+          </p>
+        )}
       </div>
+      {checked.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span aria-live="polite">
+            {t("workIdentities.bulkSelected", { count: checked.size })}
+          </span>
+          <Input
+            id="work-identity-bulk-note"
+            placeholder={t("workIdentities.bulkNotePlaceholder")}
+            value={bulkNote}
+            onChange={(event) => setBulkNote(event.target.value)}
+            className="h-9 w-64"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={bulkBusy || !reviewer.trim()}
+            title={reviewer.trim() ? undefined : t("workIdentities.bulkNeedsReviewer")}
+            onClick={() => void runBulk("confirmed")}
+          >
+            {t("workIdentities.confirmSelected")}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={bulkBusy || !reviewer.trim()}
+            title={reviewer.trim() ? undefined : t("workIdentities.bulkNeedsReviewer")}
+            onClick={() => void runBulk("missing")}
+          >
+            {t("workIdentities.markMissing")}
+          </Button>
+        </div>
+      )}
       <Table>
         <caption className="sr-only">{t("workIdentities.caption")}</caption>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-10">
+              <input
+                type="checkbox"
+                aria-label={t("workIdentities.selectAll")}
+                checked={items.length > 0 && items.every((row) => checked.has(rowKey(row)))}
+                onChange={(event) => {
+                  const next = new Set(checked);
+                  for (const row of items) {
+                    if (event.target.checked) next.add(rowKey(row));
+                    else next.delete(rowKey(row));
+                  }
+                  setChecked(next);
+                }}
+              />
+            </TableHead>
             <TableHead>{t("workIdentities.columnWork")}</TableHead>
             <TableHead>{t("workIdentities.columnExternalId")}</TableHead>
             <TableHead>{t("workIdentities.columnSource")}</TableHead>
@@ -189,6 +323,14 @@ export function WorkIdentitiesPanel({
                 title={t("workIdentities.rowTitle")}
                 onClick={() => setSelectedKey(key)}
               >
+                <TableCell onClick={(event) => event.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    aria-label={t("workIdentities.selectRow")}
+                    checked={checked.has(key)}
+                    onChange={(event) => toggleChecked(key, event.target.checked)}
+                  />
+                </TableCell>
                 <TableCell className="max-w-72 truncate font-medium" title={row.work_title ?? ""}>
                   {row.work_title ?? <span className="font-mono text-xs">{row.work_id}</span>}
                 </TableCell>
@@ -254,7 +396,7 @@ export function WorkIdentitiesPanel({
           {!loading && items.length === 0 && (
             <TableRow>
               <TableCell
-                colSpan={inst ? 7 : 8}
+                colSpan={inst ? 8 : 9}
                 className="text-center text-[var(--muted-foreground)]"
               >
                 {filter === "all"

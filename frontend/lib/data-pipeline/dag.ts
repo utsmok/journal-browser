@@ -70,6 +70,7 @@ const LAYOUT: Record<string, { sources: SourceKey[]; x: number; y: number; jobSu
   "pure-entities": { sources: ["pure"], x: 240, y: 520 },
   enrich: { sources: ["openalex", "crossref"], x: 240, y: 430 },
   openaire: { sources: ["openaire"], x: 240, y: 610 },
+  "openaire-facts": { sources: ["db"], x: 440, y: 610 },
   stats: { sources: ["openalex"], x: 440, y: 430 },
   "openalex-works": { sources: ["db"], x: 640, y: 530 },
   "pure-authors": { sources: ["db"], x: 640, y: 440 },
@@ -149,6 +150,8 @@ export const DAG_EDGES: DagEdge[] = [
   { from: "pure", to: "openaire", d: "M 208 430 C 224 430 224 618 240 618" },
   { from: "enrich", to: "stats", d: "M 408 452 C 424 452 424 460 440 460" },
   { from: "openaire", to: "stats", d: "M 408 632 C 424 632 424 470 440 470" },
+  { from: "openaire", to: "openaire-facts", d: "M 408 632 L 440 632" },
+  { from: "openaire-facts", to: "stats", d: "M 524 610 L 524 474" },
   { from: "pure-cerif", to: "pure-authors", d: "M 408 362 C 500 362 640 380 700 440" },
   { from: "pure-cerif", to: "author-ids", d: "M 408 350 C 500 362 720 392 840 432" },
   {
