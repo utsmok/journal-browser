@@ -148,8 +148,11 @@ async def search_authors(
     """Author roster for one institution. total is the filter match count
     (the whole roster when nothing is set); items are the offset/limit page
     of the sorted matches. require_confirmed restricts the search list to
-    authors.confirmed; profile endpoints stay unfiltered. Facet counts and
-    total describe the filtered set, never the page.
+    authors.confirmed; profile endpoints stay unfiltered. When the gate
+    empties a q search, the query reruns without it so a real (unconfirmed)
+    researcher stays findable; total, items and facets then all come from
+    the ungated pass. Facet counts and total describe the filtered set,
+    never the page.
 
     With an active publication-year range, n_works / last_pub_year (payload,
     sorts, strata and last-pub filters, facet buckets) become query-time
@@ -210,6 +213,26 @@ async def search_authors(
     if scoped is not None:
         total_stmt = total_stmt.outerjoin(scoped, scoped.c.author_pure_uuid == Author.pure_uuid)
     total = await session.scalar(total_stmt)
+    if total == 0 and require_confirmed and q_cond is not None:
+        # The gate hid every q match (e.g. Loorbach is real but unconfirmed):
+        # rerun the same query ungated so total, page and facets describe
+        # what the caller gets.
+        return await search_authors(
+            session,
+            institution_id,
+            q,
+            limit,
+            require_confirmed=False,
+            faculty=faculty,
+            org=org,
+            has_orcid=has_orcid,
+            works=works,
+            last_pub=last_pub,
+            topic=topic,
+            sort=sort,
+            offset=offset,
+            year_range=year_range,
+        )
     # Sort after filters; stable tiebreak by name, then pure_uuid. The q
     # prefix-rank boost only applies to the default works sort.
     if sort == "name_asc":

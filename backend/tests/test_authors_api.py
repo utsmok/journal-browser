@@ -447,10 +447,11 @@ async def test_require_confirmed_affiliation_toggle(authors_api, db):
 
     from journal_browser.models import Institution
 
-    # Default on: Bob (unconfirmed) is hidden from search but his profile
-    # endpoint stays reachable.
+    # Default on: Bob (unconfirmed) is hidden from the roster, but a name
+    # hit falls back to the ungated pass; his profile endpoint stays
+    # reachable.
     body = (await authors_api.get("/api/v1/ut/authors", params={"q": "bob"})).json()
-    assert body["total"] == 0 and body["items"] == []
+    assert body["total"] == 1 and body["items"][0]["confirmed"] is False
     assert (await authors_api.get("/api/v1/ut/authors/bob-uuid")).status_code == 200
 
     await db.execute(
@@ -478,6 +479,24 @@ async def test_require_confirmed_affiliation_toggle(authors_api, db):
         "2025-2026": 1,
         "none": 1,
     }
+
+
+@requires_db
+async def test_search_confirmed_gate_fallback(authors_api):
+    """Gate on: a q matching only unconfirmed authors falls back to the
+    ungated pass (total, items, facets); a q matching confirmed authors
+    keeps the gate."""
+    body = (await authors_api.get("/api/v1/ut/authors", params={"q": "noaffiliation"})).json()
+    assert body["total"] == 1
+    (item,) = body["items"]
+    assert item["pure_uuid"] == "bob-uuid" and item["confirmed"] is False
+    # Facets describe the returned set: Bob alone.
+    assert {f["value"]: f["count"] for f in body["facets"]["works"]} == {"50+": 1}
+    assert {f["value"]: f["count"] for f in body["facets"]["last_pub"]} == {"2025-2026": 1}
+
+    body = (await authors_api.get("/api/v1/ut/authors", params={"q": "navigator"})).json()
+    assert body["total"] == 1
+    assert [i["pure_uuid"] for i in body["items"]] == ["carol-uuid"]
 
 
 @requires_db
