@@ -457,6 +457,11 @@ function AuthorsView() {
                   </div>
                 ) : (
                   <>
+                    {q && rows.every((r) => !r.confirmed) && (
+                      <p className="mb-3 text-sm text-[var(--muted-foreground)]">
+                        {t("results.unverifiedHint", { query: q })}
+                      </p>
+                    )}
                     {/* Stacked cards on narrow viewports: seven columns would push
                       the works count off-screen behind horizontal scrolling. */}
                     <ul

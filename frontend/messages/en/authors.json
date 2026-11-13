@@ -54,6 +54,7 @@
     "retry": "Retry",
     "emptyQuery": "No authors match “{query}”.",
     "empty": "No authors match.",
+    "unverifiedHint": "No verified match for “{query}”. These people come from the publication data and are not verified yet.",
     "emptyFiltered": "No authors match these filters.",
     "clearFilters": "Clear filters",
     "listLabel": "Author results",
