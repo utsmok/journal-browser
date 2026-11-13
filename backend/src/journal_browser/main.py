@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager, suppress
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -128,6 +128,55 @@ def _warm_embedding_model() -> None:
 USAGE_PRUNE_FIRST_DELAY_S = 60
 USAGE_PRUNE_INTERVAL_S = 24 * 60 * 60
 VECTOR_WARM_DELAY_S = 5
+SNAPSHOT_WARM_DELAY_S = 2
+SNAPSHOT_REFRESH_INTERVAL_S = 6 * 3600
+
+
+async def _warm_snapshots_task() -> None:
+    """Build the orgunits/publishers/authors snapshots and the default
+    journals browse facets for every institution with authors: the first
+    visitor to those pages otherwise pays multi-second cold builds after a
+    restart or a cache-TTL/harvest-bump invalidation. Errors are logged,
+    never propagated (a pass over an empty or unreachable DB must not
+    break boot)."""
+    # Boot warmers skip wholesale in CI and offline dumps.
+    if os.environ.get("JB_SKIP_EMBEDDING_WARMUP") == "1":
+        return
+    await asyncio.sleep(SNAPSHOT_WARM_DELAY_S)
+    while True:
+        try:
+            from .models import Author, Institution
+            from .services.authors import search_authors
+            from .services.orgunits import search_orgunits
+            from .services.publishers import search_publishers
+            from .services.search import search_journals
+
+            async with async_sessionmaker(get_engine(), expire_on_commit=False)() as session:
+                subq = select(Author.institution_id).distinct()
+                rows = await session.scalars(select(Institution).where(Institution.id.in_(subq)))
+                insts = rows.all()
+                for inst in insts:
+                    # One faculty-level orgunits call builds the whole
+                    # snapshot (faculty+group+institute).
+                    await search_orgunits(session, institution=inst, level="faculty")
+                    await search_publishers(session, institution_id=inst.id)
+                    await search_authors(
+                        session,
+                        inst.id,
+                        None,
+                        limit=20,
+                        require_confirmed=inst.require_confirmed_affiliation,
+                    )
+                    # Defaults fill the default browse FACET_CACHE key;
+                    # facets ignore limit.
+                    await search_journals(session, institution_id=inst.id, limit=1)
+            logger.info("snapshot warm: %d institution(s)", len(insts))
+        except Exception:
+            logger.exception("snapshot warm failed")
+        # 6h beats the caches' 86400s TTL, and a harvest bump changes the
+        # cache_epoch cache key: the next pass rebuilds the new key in the
+        # background, so no visitor pays a cold build.
+        await asyncio.sleep(SNAPSHOT_REFRESH_INTERVAL_S)
 
 
 async def _warm_vector_index_task() -> None:
@@ -173,8 +222,9 @@ async def _lifespan(app: FastAPI):
     days = get_settings().usage_retention_days
     task = asyncio.create_task(_usage_ip_retention_loop(days)) if days > 0 else None
     warm_task = asyncio.create_task(_warm_vector_index_task())
+    snapshot_task = asyncio.create_task(_warm_snapshots_task())
     yield
-    for t in (task, warm_task):
+    for t in (task, warm_task, snapshot_task):
         if t is not None:
             t.cancel()
             with suppress(asyncio.CancelledError):
