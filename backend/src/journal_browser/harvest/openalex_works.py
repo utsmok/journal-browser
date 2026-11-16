@@ -14,6 +14,7 @@ re-runs fold in new sweep data automatically.
 """
 
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import delete, func, select, update
@@ -72,6 +73,25 @@ def _authorships(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+def _parent_works(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Compact parent works: [{id: bare W-id, name: display name, rel:
+    relationship}] — OpenAlex work parts (Graph v12, 2026-11-15); payloads
+    harvested before it carry none. Ids may be full URLs; all parents are
+    kept, capped at 10."""
+    out: list[dict[str, Any]] = []
+    for pw in (payload.get("parent_works") or [])[:10]:
+        if not isinstance(pw, dict):
+            continue
+        out.append(
+            {
+                "id": _w_id(pw.get("id")),
+                "name": (pw.get("display_name") or "").strip() or None,
+                "rel": pw.get("relationship"),
+            }
+        )
+    return out
+
+
 def work_row(payload: dict[str, Any], issn_by_source: dict[str, str]) -> dict[str, Any] | None:
     """One openalex_works row from a stored works payload; None when the
     record has no usable W-id or is of an excluded type (never app
@@ -84,6 +104,7 @@ def work_row(payload: dict[str, Any], issn_by_source: dict[str, str]) -> dict[st
     oa_status = canonical_oa_status((payload.get("open_access") or {}).get("oa_status"))
     fwci = payload.get("fwci")
     authorships = _authorships(payload)
+    parents = _parent_works(payload)
     return {
         "w_id": w_id,
         "doi_normalized": normalize_doi(payload.get("doi")),
@@ -96,6 +117,8 @@ def work_row(payload: dict[str, Any], issn_by_source: dict[str, str]) -> dict[st
         "venue_name": source.get("display_name") or None,
         "source_type": source.get("type") or None,
         "authorships": authorships,
+        "parent_works": parents,
+        "is_part": bool(parents),
         "cited_by_count": payload.get("cited_by_count") or 0,
         "fwci": float(fwci) if isinstance(fwci, (int, float)) else None,
         "is_retracted": bool(payload.get("is_retracted")),
@@ -113,7 +136,9 @@ async def _issn_map(session: AsyncSession) -> dict[str, str]:
 
 async def rebuild_openalex_works(session: AsyncSession, institution: Institution) -> dict[str, Any]:
     """Full-replace the institution's openalex_works from the latest stored
-    works_stats payload per W-id (scoped to the institution's runs)."""
+    works_stats payload per W-id (scoped to the institution's runs).
+    Part-of facts survive: payload-carried parents mark the row checked,
+    silent payloads inherit prior backfill facts."""
     # filter_set rides HarvestState (keyed by last_run_id), not the run row.
     # DISTINCT ON keeps only each W-id's newest payload server-side and the
     # result streams in partitions: materialising every payload at once
@@ -164,6 +189,31 @@ async def rebuild_openalex_works(session: AsyncSession, institution: Institution
             # One publication under two W-ids (merged profiles): first wins,
             # which is the most-mentioned-at-first-sweep id — deterministic.
             rows.setdefault(row["w_id"], row)
+    # Part-of facts survive the full replace: payloads harvested before
+    # OpenAlex's 2026-11 part-of release carry no parent_works, so a plain
+    # rebuild would flip is_part back to false and re-queue every row for
+    # the per-DOI backfill (jobs/backfill_parts.py). A payload that DOES
+    # name parents wins (newer knowledge from OpenAlex itself) and counts
+    # as checked; a silent payload inherits the stored facts.
+    prior_parts = {
+        w_id: (parents, is_part, checked)
+        for w_id, parents, is_part, checked in (
+            await session.execute(
+                select(
+                    OpenalexWork.w_id,
+                    OpenalexWork.parent_works,
+                    OpenalexWork.is_part,
+                    OpenalexWork.parts_checked_at,
+                ).where(OpenalexWork.institution_id == institution.id)
+            )
+        ).all()
+    }
+    checked_now = datetime.now(UTC)
+    for row in rows.values():
+        if row["parent_works"]:
+            row["parts_checked_at"] = checked_now
+        elif prior := prior_parts.get(row["w_id"]):
+            row["parent_works"], row["is_part"], row["parts_checked_at"] = prior
     await session.execute(delete(OpenalexWork).where(OpenalexWork.institution_id == institution.id))
     await session.execute(
         delete(OpenalexWorkAuthor).where(OpenalexWorkAuthor.institution_id == institution.id)

@@ -41,7 +41,7 @@ from ..models import (
     JournalFlags,
     Publisher,
 )
-from .authorship import venue_authorship, venue_openalex_only
+from .authorship import chapter_rollup, venue_authorship, venue_gap_predicate, venue_openalex_only
 from .cache import SNAPSHOT_CACHE, SNAPSHOT_TTL, cache_get, cache_put
 from .deal_coverage import deal_institution_join, dj_scope
 from .facets import passes, publisher_facets, publisher_predicates, publisher_topic_facet
@@ -485,10 +485,13 @@ async def publisher_detail(
     institution: Institution,
     name: str,
     years: tuple[int, int] | None = None,
+    parts: list[str] | None = None,
 ) -> dict[str, Any] | None:
     """Full publisher bundle; None = no browsable journal under this
     canonical key (404 upstream). Deals reuse the journal-detail
-    participation join.
+    participation join. parts (pipe-joined standalone|chapter|part)
+    filters the CRIS-gap card's rows and total; the chapter rollup runs
+    over the same filtered population.
 
     An active publication-year range serves the year-scoped snapshot
     (search convention): the header's works sum and the journal table's
@@ -722,6 +725,9 @@ async def publisher_detail(
             session, institution, issns=issns, year_range=years
         ),
         "openalex_only": await venue_openalex_only(
-            session, institution, issns=issns, year_range=years
+            session, institution, issns=issns, year_range=years, parts=parts
+        ),
+        "chapter_rollup": await chapter_rollup(
+            session, institution, venue_gap_predicate(institution, issns, years), parts=parts
         ),
     }

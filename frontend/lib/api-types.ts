@@ -1366,6 +1366,16 @@ export interface components {
              * @default []
              */
             ut_authors: components["schemas"]["UtAuthorAttribution"][];
+            /**
+             * Parent Works
+             * @default []
+             */
+            parent_works: components["schemas"]["WorkParent"][];
+            /**
+             * Is Part
+             * @default false
+             */
+            is_part: boolean;
             /** Pure Match */
             pure_match?: ("doi_in_pure" | "parent_book_in_pure" | "same_title_in_pure") | null;
             /** Pure Match Url */
@@ -1617,6 +1627,25 @@ export interface components {
             as_of?: string | null;
             /** Note */
             note?: string | null;
+        };
+        /**
+         * ChapterBook
+         * @description One parent book of the parts rollup: a distinct volume parent of
+         *     the page's chapter-kind gap works, with its chapter count and up to
+         *     3 sample chapter titles.
+         */
+        ChapterBook: {
+            /** Parent Id */
+            parent_id?: string | null;
+            /** Name */
+            name: string;
+            /** Chapters */
+            chapters: number;
+            /**
+             * Sample
+             * @default []
+             */
+            sample: string[];
         };
         /** ClientInfo */
         ClientInfo: {
@@ -2855,6 +2884,16 @@ export interface components {
             journal_title?: string | null;
             /** Publisher Name */
             publisher_name?: string | null;
+            /**
+             * Parent Works
+             * @default []
+             */
+            parent_works: components["schemas"]["WorkParent"][];
+            /**
+             * Is Part
+             * @default false
+             */
+            is_part: boolean;
             /** Pure Match */
             pure_match?: ("doi_in_pure" | "parent_book_in_pure" | "same_title_in_pure") | null;
             /** Pure Match Url */
@@ -2927,6 +2966,7 @@ export interface components {
              */
             deal_usage: components["schemas"]["DealUsageRow"][];
             openalex_only: components["schemas"]["OpenalexOnly"];
+            chapter_rollup: components["schemas"]["PartsRollup"];
         };
         /** OrgUnitItem */
         OrgUnitItem: {
@@ -3010,6 +3050,30 @@ export interface components {
             /** Ref Id */
             ref_id?: string | null;
         };
+        /**
+         * PartsRollup
+         * @description Chapter/book rollup over the page's full openalex-only population
+         *     (before the gap card's item cap): chapters_total counts chapter-kind
+         *     works (is_part with a rel=volume parent), books_total the distinct
+         *     parents. books is the top 10 by chapter count.
+         */
+        PartsRollup: {
+            /**
+             * Chapters Total
+             * @default 0
+             */
+            chapters_total: number;
+            /**
+             * Books Total
+             * @default 0
+             */
+            books_total: number;
+            /**
+             * Books
+             * @default []
+             */
+            books: components["schemas"]["ChapterBook"][];
+        };
         /** PublisherApcSummary */
         PublisherApcSummary: {
             /** N Journals */
@@ -3046,6 +3110,7 @@ export interface components {
             works_by_year: components["schemas"]["StatsYear"][];
             ut_authorship: components["schemas"]["UTAuthorship"];
             openalex_only: components["schemas"]["OpenalexOnly"];
+            chapter_rollup: components["schemas"]["PartsRollup"];
         };
         /**
          * PublisherExternalIds
@@ -3662,6 +3727,20 @@ export interface components {
              */
             ut_groups: components["schemas"]["WorkUtGroup"][];
             openaire?: components["schemas"]["OpenaireFactsOut"] | null;
+        };
+        /**
+         * WorkParent
+         * @description One parent work of a store row (compact {id, name, rel}): id is
+         *     the bare OpenAlex W-id, rel one of volume/component/data-series/part
+         *     (chapter of a book, figure of a paper, ...).
+         */
+        WorkParent: {
+            /** Id */
+            id?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Rel */
+            rel?: string | null;
         };
         /** WorkUtAuthor */
         WorkUtAuthor: {
@@ -5255,6 +5334,7 @@ export interface operations {
                 year_from?: number | null;
                 /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
                 year_to?: number | null;
+                parts?: ("standalone" | "chapter" | "part")[] | null;
             };
             header?: never;
             path: {
@@ -5292,6 +5372,7 @@ export interface operations {
                 year_from?: number | null;
                 /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
                 year_to?: number | null;
+                parts?: ("standalone" | "chapter" | "part")[] | null;
             };
             header?: never;
             path: {

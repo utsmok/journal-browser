@@ -384,6 +384,16 @@ class UtAuthorAttribution(BaseModel):
     institute: str | None = None
 
 
+class WorkParent(BaseModel):
+    """One parent work of a store row (compact {id, name, rel}): id is
+    the bare OpenAlex W-id, rel one of volume/component/data-series/part
+    (chapter of a book, figure of a paper, ...)."""
+
+    id: str | None = None
+    name: str | None = None
+    rel: str | None = None
+
+
 class OpenalexOnlyWork(BaseModel):
     title: str | None = None
     year: int | None = None
@@ -398,6 +408,10 @@ class OpenalexOnlyWork(BaseModel):
     journal_issn_l: str | None = None
     journal_title: str | None = None
     publisher_name: str | None = None
+    # Work parts (OpenAlex, Nov 2026): compact parent works and the
+    # is_part flag — chapter of a book when a parent has rel=volume.
+    parent_works: list[WorkParent] = []
+    is_part: bool = False
     # Why the row is not truly missing from Pure, when a record was
     # identified; None = likely missing. pure_match_url is that record's
     # public page (None without a portal URL).
@@ -414,6 +428,28 @@ class OpenalexOnly(BaseModel):
     total: int = 0
     items: list[OpenalexOnlyWork] = []
     available: bool = True
+
+
+class ChapterBook(BaseModel):
+    """One parent book of the parts rollup: a distinct volume parent of
+    the page's chapter-kind gap works, with its chapter count and up to
+    3 sample chapter titles."""
+
+    parent_id: str | None = None
+    name: str
+    chapters: int
+    sample: list[str] = []
+
+
+class PartsRollup(BaseModel):
+    """Chapter/book rollup over the page's full openalex-only population
+    (before the gap card's item cap): chapters_total counts chapter-kind
+    works (is_part with a rel=volume parent), books_total the distinct
+    parents. books is the top 10 by chapter count."""
+
+    chapters_total: int = 0
+    books_total: int = 0
+    books: list[ChapterBook] = []
 
 
 class WorkUtAuthor(BaseModel):
@@ -739,6 +775,10 @@ class AuthorOpenalexOnlyWork(BaseModel):
     openalex_url: str | None = None
     in_pure: bool = False
     ut_authors: list[UtAuthorAttribution] = []
+    # Work parts (OpenAlex, Nov 2026): compact parent works and the
+    # is_part flag — chapter of a book when a parent has rel=volume.
+    parent_works: list[WorkParent] = []
+    is_part: bool = False
     # Why the row is not truly missing from Pure, when a record was
     # identified; None = likely missing. pure_match_url is that record's
     # public page (None without a portal URL).
@@ -840,6 +880,9 @@ class PublisherDetailResponse(BaseModel):
     ut_authorship: UTAuthorship
     # Store works in the group's journals missing from the Pure population.
     openalex_only: OpenalexOnly
+    # Chapter/book rollup over the same gap population (before the list
+    # cap): chapter-kind works and their volume parents.
+    chapter_rollup: PartsRollup
 
 
 # ── Org-unit browsing (faculties + research groups) ────────────────────────
@@ -904,6 +947,9 @@ class OrgUnitDetailResponse(BaseModel):
     # Store works attributed to the unit's member authors and missing
     # from the Pure population.
     openalex_only: OpenalexOnly
+    # Chapter/book rollup over the same gap population (before the card's
+    # item cap): chapter-kind works and their volume parents.
+    chapter_rollup: PartsRollup
 
 
 # ── Admin responses (dict payload shapes in routers/admin.py) ──────────────

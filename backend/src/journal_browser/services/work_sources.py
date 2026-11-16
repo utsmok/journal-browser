@@ -78,6 +78,8 @@ async def openalex_only_works_for_author(
                 OpenalexWork.work_type,
                 OpenalexWork.venue_name,
                 OpenalexWork.venue_issn_l,
+                OpenalexWork.parent_works,
+                OpenalexWork.is_part,
             ).where(
                 OpenalexWork.institution_id == institution.id,
                 attributed_to_any(aids),
@@ -101,6 +103,10 @@ async def openalex_only_works_for_author(
             # Fetched separately for the shown slice only (the bulk fetch
             # stays scalar; authorships jsonb is the store's bulk mass).
             "authorships": None,
+            # Work parts ride along (compact parents + flag); the DSN
+            # path's rows lack them and the caller defaults to []/False.
+            "parent_works": r.parent_works or [],
+            "is_part": bool(r.is_part),
         }
         for r in rows
     ]

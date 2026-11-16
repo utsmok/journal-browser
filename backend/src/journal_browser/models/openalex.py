@@ -21,7 +21,7 @@ from sqlalchemy import (
     Text,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, _tstamp
@@ -64,6 +64,21 @@ class OpenalexWork(Base):
     is_retracted: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     # Provenance tag of the feeding harvest (works_stats / author:<n>).
     source: Mapped[str] = mapped_column(Text, nullable=False, server_default="works_stats")
+    # OpenAlex work parts (Graph v12, 2026-11-15): parent works of this
+    # work (chapter of a book, figure of a paper) in compact form
+    # [{id: bare W-id, name: display name, rel: relationship}]. is_part
+    # drives the standalone/chapter/part serving filter. Payloads
+    # harvested before v12 carry no parent_works; jobs/backfill_parts.py
+    # fills those rows per DOI and stamps parts_checked_at.
+    parent_works: Mapped[list[Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'")
+    )
+    is_part: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    # When the parts backfill fetched this row's DOI (regardless of
+    # outcome); NULL marks the backfill's pending queue.
+    parts_checked_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
     updated_at: Mapped[datetime] = _tstamp()
 
     __table_args__ = (

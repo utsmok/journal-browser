@@ -20,10 +20,12 @@ degradation the author page applies); the frontend hides the card
 instead of showing a misleading zero.
 """
 
+import warnings
 from collections.abc import Iterable
 from typing import Any, Literal
 
-from sqlalchemy import column, exists, false, func, select
+from sqlalchemy import and_, column, exists, false, func, or_, select
+from sqlalchemy import exc as sa_exc
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,6 +48,36 @@ TOP_AUTHORS = 10
 GAP_ITEM_CAP = 50
 #: Canonical OpenAlex work url prefix (openalex.org/W...).
 OPENALEX_URL = "https://openalex.org"
+
+
+#: SQL predicate per parts filter value (the shared contract's part_kind):
+#: standalone rows have no parents; chapter rows name a volume parent
+#: (the book); other relationships (component, data-series, part) stay
+#: "part". Values validate at the API boundary (422 on unknown).
+PART_KIND_PREDICATES: dict[str, Any] = {
+    "standalone": OpenalexWork.is_part.is_(False),
+    "chapter": and_(
+        OpenalexWork.is_part.is_(True),
+        OpenalexWork.parent_works.contains([{"rel": "volume"}]),
+    ),
+    "part": and_(
+        OpenalexWork.is_part.is_(True),
+        ~OpenalexWork.parent_works.contains([{"rel": "volume"}]),
+    ),
+}
+
+#: Books listed per chapter_rollup; sample chapter titles per book.
+CHAPTER_ROLLUP_BOOKS = 10
+CHAPTER_ROLLUP_SAMPLE = 3
+
+
+def parts_predicate(parts: list[str] | None) -> Any | None:
+    """OR'd predicate for the pipe-joined parts filter; None = no filter.
+    Unknown kinds KeyError: the boundary validates, services must not
+    silently narrow."""
+    if not parts:
+        return None
+    return or_(*(PART_KIND_PREDICATES[kind] for kind in sorted(set(parts))))
 
 
 async def local_store_ready(session: AsyncSession, institution: Institution) -> bool:
@@ -328,16 +360,23 @@ async def journal_publisher_map(session: AsyncSession, issns: Iterable[str]) -> 
 
 
 async def _store_gap_payload(
-    session: AsyncSession, institution: Institution, predicate: list[Any]
+    session: AsyncSession,
+    institution: Institution,
+    predicate: list[Any],
+    parts: list[str] | None = None,
 ) -> dict[str, Any]:
     """Shared shape: exact total + capped items over one store predicate
     (gates + attribution + anti-join), most recent first. Items carry the
     work identity (openalex id/url), the compact authorships, roster
-    attribution for the institution's own authors, and venue context
-    (journal + publisher)."""
+    attribution for the institution's own authors, venue context
+    (journal + publisher) and the work-parts fields (compact parent_works,
+    is_part). The parts filter (pipe-joined standalone|chapter|part) ORs
+    its kinds over the same population."""
     if not await local_store_ready(session, institution):
         return _unavailable()
     where = [OpenalexWork.institution_id == institution.id, *predicate]
+    if (parts_sql := parts_predicate(parts)) is not None:
+        where.append(parts_sql)
     total = await session.scalar(select(func.count()).select_from(OpenalexWork).where(*where))
     rows = (
         await session.execute(
@@ -351,6 +390,8 @@ async def _store_gap_payload(
                 OpenalexWork.venue_issn_l,
                 OpenalexWork.venue_name,
                 OpenalexWork.authorships,
+                OpenalexWork.parent_works,
+                OpenalexWork.is_part,
             )
             .where(*where)
             .order_by(OpenalexWork.year.desc().nulls_last(), func.lower(OpenalexWork.title))
@@ -383,6 +424,8 @@ async def _store_gap_payload(
             "journal_issn_l": r.venue_issn_l,
             "journal_title": r.venue_name,
             "publisher_name": publishers.get(r.venue_issn_l),
+            "parent_works": r.parent_works or [],
+            "is_part": bool(r.is_part),
         }
         for r in rows
     ]
@@ -409,6 +452,119 @@ async def _store_gap_payload(
     return {"total": int(total or 0), "items": items, "available": True}
 
 
+def venue_gap_predicate(
+    institution: Institution, venue_issns: list[str], year_range: tuple[int, int] | None = None
+) -> list[Any]:
+    """One venue-attributed gap predicate: the venue(s)' issn set, the
+    institution-filter corpus cutoff (source != author-sweep), the store
+    gates and the Pure DOI anti-join — the exact population
+    venue_openalex_only serves, shared with the chapter rollup."""
+    return [
+        OpenalexWork.venue_issn_l.in_(sorted(set(venue_issns))),
+        OpenalexWork.source != AUTHOR_SWEEP_PREFIX,
+        *store_gates(institution, year_range),
+        not_in_pure(),
+    ]
+
+
+def _flat_aids(aids: list[str]) -> list[str]:
+    """Bare lowercase OpenAlex author ids from the possibly nested list
+    (authors.openalex_ids stores lowercase ids; the store's authorships
+    carry OpenAlex's canonical uppercase form)."""
+    return sorted(
+        {aid.lower() for row in aids for aid in (row if isinstance(row, list) else [row]) if aid}
+    )
+
+
+def aids_gap_predicate(
+    institution: Institution, aids: list[str], year_range: tuple[int, int] | None = None
+) -> list[Any]:
+    """One attribution-keyed gap predicate: any of the given OpenAlex
+    author ids, the store gates and the Pure DOI anti-join — the exact
+    population author_ids_openalex_only serves, shared with the chapter
+    rollup."""
+    return [
+        attributed_to_any(_flat_aids(aids)),
+        *store_gates(institution, year_range),
+        not_in_pure(),
+    ]
+
+
+async def chapter_rollup(
+    session: AsyncSession,
+    institution: Institution,
+    predicate: list[Any],
+    parts: list[str] | None = None,
+) -> dict[str, Any]:
+    """Chapter/book rollup over one gap predicate: the same population
+    the page's openalex-only card serves, before its item cap.
+
+    chapters_total counts chapter-kind works (is_part with a volume
+    parent); books_total the distinct volume parents. books is the top
+    CHAPTER_ROLLUP_BOOKS by chapter count (ties by name, id), each with
+    up to CHAPTER_ROLLUP_SAMPLE sample chapter titles. One unnest pass
+    aggregates every book's titles — bounded work for chapter-sized
+    groups."""
+    where = [OpenalexWork.institution_id == institution.id, *predicate]
+    if (parts_sql := parts_predicate(parts)) is not None:
+        where.append(parts_sql)
+    where.append(PART_KIND_PREDICATES["chapter"])
+    chapters_total = (
+        await session.scalar(select(func.count()).select_from(OpenalexWork).where(*where))
+    ) or 0
+    parents = (
+        func.jsonb_array_elements(OpenalexWork.parent_works)
+        .table_valued("value", name="parent")
+        .render_derived()
+    )
+    parent_id = func.coalesce(parents.c.value.op("->>")("id"), "")
+    parent_name = func.coalesce(parents.c.value.op("->>")("name"), "")
+    # The set-returning function in FROM is implicitly lateral in
+    # Postgres; SQLAlchemy mistakes it for a cartesian product.
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore", message=".*cartesian product.*", category=sa_exc.SAWarning
+        )
+        rows = (
+            await session.execute(
+                select(
+                    parent_id.label("parent_id"),
+                    parent_name.label("name"),
+                    func.count(func.distinct(OpenalexWork.w_id)).label("chapters"),
+                    func.jsonb_agg(func.distinct(OpenalexWork.title)).label("titles"),
+                )
+                .select_from(OpenalexWork, parents)
+                .where(*where, parents.c.value.op("->>")("rel") == "volume")
+                .group_by(parent_id, parent_name)
+            )
+        ).all()
+    books = sorted(
+        (
+            {
+                "parent_id": r.parent_id or None,
+                "name": r.name,
+                "chapters": int(r.chapters),
+                "titles": sorted(t for t in (r.titles or ()) if t),
+            }
+            for r in rows
+        ),
+        key=lambda b: (-b["chapters"], b["name"].lower(), b["parent_id"] or ""),
+    )
+    return {
+        "chapters_total": int(chapters_total),
+        "books_total": len(books),
+        "books": [
+            {
+                "parent_id": b["parent_id"],
+                "name": b["name"],
+                "chapters": b["chapters"],
+                "sample": b["titles"][:CHAPTER_ROLLUP_SAMPLE],
+            }
+            for b in books[:CHAPTER_ROLLUP_BOOKS]
+        ],
+    }
+
+
 async def venue_openalex_only(
     session: AsyncSession,
     institution: Institution,
@@ -416,12 +572,14 @@ async def venue_openalex_only(
     issn_l: str | None = None,
     issns: list[str] | None = None,
     year_range: tuple[int, int] | None = None,
+    parts: list[str] | None = None,
 ) -> dict[str, Any]:
     """Store works in the venue(s) the Pure population does not hold.
 
     One issn for the journal view, the publisher group's issn set for the
     publisher view. Attribution key is venue_issn_l — the same key the
-    OpenAlex-side institution metrics use.
+    OpenAlex-side institution metrics use. parts (pipe-joined
+    standalone|chapter|part) filters the served rows and totals.
 
     Restricted to the institution-filter corpus (source != author-sweep):
     those rows were harvested under OpenAlex's institutions.id filter, so
@@ -435,12 +593,8 @@ async def venue_openalex_only(
     return await _store_gap_payload(
         session,
         institution,
-        [
-            OpenalexWork.venue_issn_l.in_(venue_issns),
-            OpenalexWork.source != AUTHOR_SWEEP_PREFIX,
-            *store_gates(institution, year_range),
-            not_in_pure(),
-        ],
+        venue_gap_predicate(institution, venue_issns, year_range),
+        parts=parts,
     )
 
 
@@ -449,6 +603,7 @@ async def author_ids_openalex_only(
     institution: Institution,
     aids: list[str],
     year_range: tuple[int, int] | None = None,
+    parts: list[str] | None = None,
 ) -> dict[str, Any]:
     """Store works attributed to any of the given OpenAlex author ids the
     Pure population does not hold (org-unit gap card).
@@ -456,16 +611,15 @@ async def author_ids_openalex_only(
     Attribution unnests the authorships array and compares bare A-ids
     case-insensitively: authors.openalex_ids stores lowercase ids while
     the store's authorships carry OpenAlex's canonical uppercase form, so
-    a work counts once however many of the unit's authors it names."""
-    flat = sorted(
-        {aid.lower() for row in aids for aid in (row if isinstance(row, list) else [row]) if aid}
-    )
-    if not flat:
+    a work counts once however many of the unit's authors it names.
+    parts (pipe-joined standalone|chapter|part) filters rows and total."""
+    if not _flat_aids(aids):
         return {"total": 0, "items": [], "available": await local_store_ready(session, institution)}
     return await _store_gap_payload(
         session,
         institution,
-        [attributed_to_any(flat), *store_gates(institution, year_range), not_in_pure()],
+        aids_gap_predicate(institution, aids, year_range),
+        parts=parts,
     )
 
 

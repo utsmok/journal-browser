@@ -14,6 +14,7 @@ from ..schemas import (
     DealOut,
     JournalListItem,
     OpenalexOnly,
+    PartsRollup,
     PublisherDetailResponse,
     PublisherSearchResponse,
     UTAuthorship,
@@ -47,6 +48,13 @@ QuartileFilter = Annotated[
     list[Literal["Q1", "Q2", "Q3", "Q4"]] | None,
     BeforeValidator(_split),
     Query(max_length=20),
+]
+#: Pipe-joined work-parts multi-select for the CRIS-gap card (422 on
+#: unknown values).
+PartsFilter = Annotated[
+    list[Literal["standalone", "chapter", "part"]] | None,
+    BeforeValidator(_split),
+    Query(max_length=30),
 ]
 
 
@@ -142,6 +150,7 @@ async def publisher_openalex_only_csv(
             "institution's data window; default: the full window)",
         ),
     ] = None,
+    parts: PartsFilter = None,
 ) -> StreamingResponse:
     """Uncapped CSV of the publisher group's CRIS-gap (OpenAlex-only) list."""
     return await exports.publisher_openalex_only_csv(
@@ -149,6 +158,7 @@ async def publisher_openalex_only_csv(
         institution,
         name,
         year_range=clamped_year_range(institution, year_from, year_to),
+        parts=list(parts) if parts else None,
     )
 
 
@@ -175,12 +185,14 @@ async def publisher_detail(
             "institution's data window; default: the full window)",
         ),
     ] = None,
+    parts: PartsFilter = None,
 ) -> PublisherDetailResponse:
     detail = await publishers_service.publisher_detail(
         session,
         institution,
         name,
         years=clamped_year_range(institution, year_from, year_to),
+        parts=list(parts) if parts else None,
     )
     if detail is None:
         raise HTTPException(status_code=404, detail="publisher not found")
@@ -200,4 +212,5 @@ async def publisher_detail(
         works_by_year=detail["works_by_year"],
         ut_authorship=UTAuthorship(**detail["ut_authorship"]),
         openalex_only=OpenalexOnly(**detail["openalex_only"]),
+        chapter_rollup=PartsRollup(**detail["chapter_rollup"]),
     )

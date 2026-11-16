@@ -520,6 +520,10 @@ async def _openalex_only_section(
                 "journal_title": row["venue_name"],
                 "openalex_id": row.get("openalex_id"),
                 "authorships": row.get("authorships"),
+                # Work parts (OpenAlex, Nov 2026); the DSN path's rows
+                # lack them and default to []/False.
+                "parent_works": row.get("parent_works") or [],
+                "is_part": bool(row.get("is_part")),
             }
         )
     # Explain rows that are in fact in Pure: a DOI belonging to a Pure

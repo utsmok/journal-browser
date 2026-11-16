@@ -3514,6 +3514,31 @@
               "title": "Year To"
             },
             "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "parts",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "standalone",
+                      "chapter",
+                      "part"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 30,
+              "title": "Parts"
+            }
           }
         ],
         "responses": {
@@ -3603,6 +3628,31 @@
               "title": "Year To"
             },
             "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "parts",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "standalone",
+                      "chapter",
+                      "part"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 30,
+              "title": "Parts"
+            }
           }
         ],
         "responses": {
@@ -5988,6 +6038,19 @@
             "title": "Ut Authors",
             "default": []
           },
+          "parent_works": {
+            "items": {
+              "$ref": "#/components/schemas/WorkParent"
+            },
+            "type": "array",
+            "title": "Parent Works",
+            "default": []
+          },
+          "is_part": {
+            "type": "boolean",
+            "title": "Is Part",
+            "default": false
+          },
           "pure_match": {
             "anyOf": [
               {
@@ -6717,6 +6780,44 @@
         ],
         "title": "CapUsageEntry",
         "description": "One contract year's publisher-reported APC cap usage (admin-entered\nfrom library email updates; the harvest never rewrites it)."
+      },
+      "ChapterBook": {
+        "properties": {
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "chapters": {
+            "type": "integer",
+            "title": "Chapters"
+          },
+          "sample": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sample",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "chapters"
+        ],
+        "title": "ChapterBook",
+        "description": "One parent book of the parts rollup: a distinct volume parent of\nthe page's chapter-kind gap works, with its chapter count and up to\n3 sample chapter titles."
       },
       "ClientInfo": {
         "properties": {
@@ -10340,6 +10441,19 @@
             ],
             "title": "Publisher Name"
           },
+          "parent_works": {
+            "items": {
+              "$ref": "#/components/schemas/WorkParent"
+            },
+            "type": "array",
+            "title": "Parent Works",
+            "default": []
+          },
+          "is_part": {
+            "type": "boolean",
+            "title": "Is Part",
+            "default": false
+          },
           "pure_match": {
             "anyOf": [
               {
@@ -10569,12 +10683,16 @@
           },
           "openalex_only": {
             "$ref": "#/components/schemas/OpenalexOnly"
+          },
+          "chapter_rollup": {
+            "$ref": "#/components/schemas/PartsRollup"
           }
         },
         "type": "object",
         "required": [
           "unit",
-          "openalex_only"
+          "openalex_only",
+          "chapter_rollup"
         ],
         "title": "OrgUnitDetailResponse"
       },
@@ -10824,6 +10942,31 @@
         ],
         "title": "PageViewIn"
       },
+      "PartsRollup": {
+        "properties": {
+          "chapters_total": {
+            "type": "integer",
+            "title": "Chapters Total",
+            "default": 0
+          },
+          "books_total": {
+            "type": "integer",
+            "title": "Books Total",
+            "default": 0
+          },
+          "books": {
+            "items": {
+              "$ref": "#/components/schemas/ChapterBook"
+            },
+            "type": "array",
+            "title": "Books",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "PartsRollup",
+        "description": "Chapter/book rollup over the page's full openalex-only population\n(before the gap card's item cap): chapters_total counts chapter-kind\nworks (is_part with a rel=volume parent), books_total the distinct\nparents. books is the top 10 by chapter count."
+      },
       "PublisherApcSummary": {
         "properties": {
           "n_journals": {
@@ -10905,6 +11048,9 @@
           },
           "openalex_only": {
             "$ref": "#/components/schemas/OpenalexOnly"
+          },
+          "chapter_rollup": {
+            "$ref": "#/components/schemas/PartsRollup"
           }
         },
         "type": "object",
@@ -10912,7 +11058,8 @@
           "publisher",
           "journals",
           "ut_authorship",
-          "openalex_only"
+          "openalex_only",
+          "chapter_rollup"
         ],
         "title": "PublisherDetailResponse"
       },
@@ -12716,6 +12863,46 @@
         },
         "type": "object",
         "title": "WorkItem"
+      },
+      "WorkParent": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "rel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rel"
+          }
+        },
+        "type": "object",
+        "title": "WorkParent",
+        "description": "One parent work of a store row (compact {id, name, rel}): id is\nthe bare OpenAlex W-id, rel one of volume/component/data-series/part\n(chapter of a book, figure of a paper, ...)."
       },
       "WorkUtAuthor": {
         "properties": {

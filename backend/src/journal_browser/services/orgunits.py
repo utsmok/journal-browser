@@ -31,7 +31,7 @@ from ..models import (
     JournalFlags,
     Work,
 )
-from .authorship import author_ids_openalex_only
+from .authorship import aids_gap_predicate, author_ids_openalex_only, chapter_rollup
 from .cache import SNAPSHOT_CACHE, SNAPSHOT_TTL, cache_get, cache_put
 from .search import _oa_type
 from .works_query import (
@@ -837,6 +837,11 @@ async def orgunit_detail(
         "works_by_year": works_by_year,
         "openalex_only": await author_ids_openalex_only(
             session, institution, member_aids, year_range
+        ),
+        # Chapter rollup over the gap card's exact population (member
+        # authors' store rows missing from Pure), before the item cap.
+        "chapter_rollup": await chapter_rollup(
+            session, institution, aids_gap_predicate(institution, member_aids, year_range)
         ),
         "deal_usage": [
             {"label": r.label, "n_works": int(r.n_works), "euro": float(r.euro)} for r in usage_rows

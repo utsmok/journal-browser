@@ -37,6 +37,7 @@ from .authorship import (
     attributed_to_any,
     journal_publisher_map,
     not_in_pure,
+    parts_predicate,
     store_gates,
     ut_authors_for_authorships,
     ut_roster_by_aids,
@@ -74,6 +75,9 @@ CSV_COLUMNS = (
     "fwci",
     "is_retracted",
     "in_pure",
+    # "rel:Parent Title" per parent work ("volume:Book Title"), "; "-joined
+    # when multiple; empty for standalone rows and Pure-side works.
+    "part_of",
 )
 
 #: Rows buffered per streaming chunk.
@@ -83,6 +87,17 @@ FLUSH_EVERY = 500
 def _t(value: Any) -> str:
     """Cell text: empty string when missing, str() otherwise."""
     return "" if value is None else str(value)
+
+
+def _part_of(parent_works: Any) -> str:
+    """part_of cell: "rel:Parent Title" per parent work
+    ("volume:Book Title"), "; "-joined when multiple; empty for
+    standalone rows."""
+    return "; ".join(
+        f"{p['rel']}:{p['name']}"
+        for p in parent_works or []
+        if isinstance(p, dict) and p.get("rel") and p.get("name")
+    )
 
 
 def _safe_filename(name: str) -> str:
@@ -181,6 +196,7 @@ def _export_stmt(institution: Institution, predicate: list[Any]) -> Any:
             OpenalexWork.cited_by_count,
             OpenalexWork.fwci,
             OpenalexWork.is_retracted,
+            OpenalexWork.parent_works,
             raw.c.payload,
         )
         .outerjoin(raw, literal(True))
@@ -229,6 +245,7 @@ def _store_csv_row(
         _t(r.fwci),
         _t(r.is_retracted),
         "false",
+        _part_of(r.parent_works),
     ]
 
 
@@ -276,6 +293,7 @@ def _canon_csv_row(
         "",
         "",
         "true",
+        "",
     ]
 
 
@@ -356,9 +374,11 @@ async def publisher_openalex_only_csv(
     institution: Institution,
     name: str,
     year_range: tuple[int, int] | None = None,
+    parts: list[str] | None = None,
 ) -> StreamingResponse:
     """Uncapped CSV of the publisher group's CRIS-gap list (same issn
-    resolution and gates as the on-screen card)."""
+    resolution and gates as the on-screen card). parts (pipe-joined
+    standalone|chapter|part) filters the rows."""
     issns = await group_issns(session, institution.id, name)
     if not issns:
         raise HTTPException(status_code=404, detail="publisher not found")
@@ -368,6 +388,8 @@ async def publisher_openalex_only_csv(
         *store_gates(institution, year_range),
         not_in_pure(),
     ]
+    if (parts_sql := parts_predicate(parts)) is not None:
+        predicate.append(parts_sql)
     rows = (await session.execute(_export_stmt(institution, predicate))).all()
     return await _store_csv_response(
         session, institution, rows, f"{_safe_filename(name)}-openalex-only.csv"
