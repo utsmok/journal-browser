@@ -1,22 +1,15 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
-import {
-  DealBadge,
-  OaStatusChip,
-  OaTypeBadge,
-  PartChip,
-  PureMatchBadge,
-  QuartileBadge,
-} from "@/components/badges";
+import { DealBadge, OaTypeBadge, QuartileBadge } from "@/components/badges";
 import { BackLink } from "@/components/back-link";
 import { CardPager } from "@/components/card-pager";
 import { CollapsibleCard } from "@/components/collapsible-card";
+import { GapEntryList } from "@/components/gap-entries";
 import { OaTrend } from "@/components/oa-trend";
 import { OrcidLink } from "@/components/orcid-link";
 import { DetailSkeleton, ErrorPanel } from "@/components/states";
@@ -42,7 +35,7 @@ import {
   type OrgUnitLevel,
 } from "@/lib/api";
 import { formatEur } from "@/lib/format";
-import { workTypeLabel } from "@/lib/work-type";
+import { entriesTotal, toGapEntries } from "@/lib/gap-entries";
 
 const PAGE_SIZE = 20;
 
@@ -50,10 +43,11 @@ type OpenalexOnly = OrgUnitDetailResponse["openalex_only"];
 
 /** OpenAlex works attributed to this unit's members that match no Pure
  * record: candidates missing from the research information system. */
-function CrisGapsCard({ openalexOnly }: { openalexOnly: OpenalexOnly }) {
+function CrisGapsCard({ openalexOnly, inst }: { openalexOnly: OpenalexOnly; inst: string }) {
   const t = useTranslations("orgunits");
-  const tc = useTranslations("common");
-  const { total, items } = openalexOnly;
+  const { total } = openalexOnly;
+  const entries = toGapEntries(openalexOnly.items);
+  const shownTotal = entriesTotal(openalexOnly);
   return (
     <CollapsibleCard
       id="cris-gaps"
@@ -61,7 +55,9 @@ function CrisGapsCard({ openalexOnly }: { openalexOnly: OpenalexOnly }) {
       description={
         <p className="text-sm text-[var(--muted-foreground)]">
           {t("detail.crisGaps.description", { count: total })}
-          {total > items.length ? ` ${t("detail.crisGaps.showing", { count: items.length })}` : ""}
+          {shownTotal > entries.length
+            ? ` ${t("detail.crisGaps.showing", { count: entries.length })}`
+            : ""}
         </p>
       }
       contentClassName="text-sm"
@@ -69,42 +65,7 @@ function CrisGapsCard({ openalexOnly }: { openalexOnly: OpenalexOnly }) {
       {total === 0 ? (
         <p className="text-[var(--muted-foreground)]">{t("detail.crisGaps.empty")}</p>
       ) : (
-        <ul className="divide-y divide-[var(--border)]">
-          {items.map((w, i) => {
-            const href = w.doi ? `https://doi.org/${w.doi}` : null;
-            return (
-              <li
-                key={i}
-                className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 py-2 first:pt-0 last:pb-0"
-              >
-                {href ? (
-                  <a
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex min-w-0 w-full min-[480px]:w-auto min-[480px]:flex-1 items-center gap-1 font-medium text-[var(--primary-text)] underline-offset-2 hover:underline"
-                  >
-                    {w.title ?? w.doi} <ExternalLink aria-hidden className="size-3.5 shrink-0" />
-                  </a>
-                ) : (
-                  <span className="min-w-0 w-full min-[480px]:w-auto min-[480px]:flex-1 font-medium">
-                    {w.title ?? t("detail.crisGaps.untitled")}
-                  </span>
-                )}
-                {w.year != null && (
-                  <span className="tabular-nums text-[var(--muted-foreground)]">{w.year}</span>
-                )}
-                {w.venue && (
-                  <span className="min-w-0 text-xs text-[var(--muted-foreground)]">{w.venue}</span>
-                )}
-                {w.work_type && <span className="text-xs">{workTypeLabel(tc, w.work_type)}</span>}
-                <PartChip isPart={w.is_part} parents={w.parent_works} />
-                <PureMatchBadge match={w.pure_match} url={w.pure_match_url} />
-                <OaStatusChip status={w.oa_status} />
-              </li>
-            );
-          })}
-        </ul>
+        <GapEntryList entries={entries} inst={inst} untitledLabel={t("detail.crisGaps.untitled")} />
       )}
     </CollapsibleCard>
   );
@@ -462,7 +423,9 @@ function OrgUnitDetail({
 
         <ChapterRollupCard rollup={data.chapter_rollup} />
 
-        {data.openalex_only.available && <CrisGapsCard openalexOnly={data.openalex_only} />}
+        {data.openalex_only.available && (
+          <CrisGapsCard openalexOnly={data.openalex_only} inst={inst} />
+        )}
 
         {journals.length > 0 && (
           <CollapsibleCard

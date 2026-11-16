@@ -1303,7 +1303,9 @@ export interface components {
         /**
          * AuthorOpenalexOnly
          * @description The author's OpenAlex-only works as their own section: total is
-         *     exact, items carry the gated missed works (safety-capped).
+         *     exact, items hold the grouped entries (missing parts under their main
+         *     work), safety-capped at the entry level; entries_total counts entries
+         *     before the cap.
          */
         AuthorOpenalexOnly: {
             /**
@@ -1312,10 +1314,15 @@ export interface components {
              */
             total: number;
             /**
+             * Entries Total
+             * @default 0
+             */
+            entries_total: number;
+            /**
              * Items
              * @default []
              */
-            items: components["schemas"]["AuthorOpenalexOnlyWork"][];
+            items: (components["schemas"]["AuthorOpenalexOnlySingle"] | components["schemas"]["AuthorOpenalexOnlyGroup"])[];
             /**
              * Available
              * @default true
@@ -1326,6 +1333,87 @@ export interface components {
              * @default 0
              */
             likely_missing: number;
+        };
+        /**
+         * AuthorOpenalexOnlyGroup
+         * @description One main work with its missing parts (only missing works are
+         *     listed); the parent itself may well be registered.
+         */
+        AuthorOpenalexOnlyGroup: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "group";
+            parent: components["schemas"]["GapGroupParent"];
+            /**
+             * Parts
+             * @default []
+             */
+            parts: components["schemas"]["AuthorOpenalexOnlyWork"][];
+            /**
+             * Parts Total
+             * @default 0
+             */
+            parts_total: number;
+        };
+        /**
+         * AuthorOpenalexOnlySingle
+         * @description One standalone gap work (no parent works): all work-row fields at
+         *     the top level.
+         */
+        AuthorOpenalexOnlySingle: {
+            /** Pure Uuid */
+            pure_uuid?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Year */
+            year?: number | null;
+            /** Doi */
+            doi?: string | null;
+            /** Oa Status */
+            oa_status?: string | null;
+            /** Work Type */
+            work_type?: string | null;
+            /** Journal Issn L */
+            journal_issn_l?: string | null;
+            /** Journal Title */
+            journal_title?: string | null;
+            /** Publisher Name */
+            publisher_name?: string | null;
+            /** Openalex Id */
+            openalex_id?: string | null;
+            /** Openalex Url */
+            openalex_url?: string | null;
+            /**
+             * In Pure
+             * @default false
+             */
+            in_pure: boolean;
+            /**
+             * Ut Authors
+             * @default []
+             */
+            ut_authors: components["schemas"]["UtAuthorAttribution"][];
+            /**
+             * Parent Works
+             * @default []
+             */
+            parent_works: components["schemas"]["WorkParent"][];
+            /**
+             * Is Part
+             * @default false
+             */
+            is_part: boolean;
+            /** Pure Match */
+            pure_match?: ("doi_in_pure" | "parent_book_in_pure" | "same_title_in_pure") | null;
+            /** Pure Match Url */
+            pure_match_url?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "single";
         };
         /**
          * AuthorOpenalexOnlyWork
@@ -1448,6 +1536,7 @@ export interface components {
             /**
              * @default {
              *       "total": 0,
+             *       "entries_total": 0,
              *       "items": [],
              *       "available": true,
              *       "likely_missing": 0
@@ -2252,6 +2341,28 @@ export interface components {
             n_works: number;
         };
         /**
+         * GapGroupParent
+         * @description The main work a group entry's missing parts belong to: the parts'
+         *     primary parent (the first rel=volume parent among a part's
+         *     parent_works, else the first listed parent). name comes from the
+         *     parts' parent_works (registry title when the registry row has one);
+         *     work_type/doi/pure_registered are null without an openalex_work_parents
+         *     row (parts backfill pending). pure_registered is derived live from the
+         *     works table and false includes no-DOI parents.
+         */
+        GapGroupParent: {
+            /** W Id */
+            w_id?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Work Type */
+            work_type?: string | null;
+            /** Doi */
+            doi?: string | null;
+            /** Pure Registered */
+            pure_registered?: boolean | null;
+        };
+        /**
          * GreenOa
          * @description Best green (self-archiving) route per Jisc Open Policy Finder
          *     (journals.jisc_allows_sa_* / jisc_in_opf; search filter + facet
@@ -2818,8 +2929,11 @@ export interface components {
          * OpenalexOnly
          * @description OpenAlex store works attributed to the venue or to the unit's
          *     member authors whose DOI matches no Pure work — candidates missing
-         *     from the CRIS. items is capped; total is exact. available=False when
-         *     the openalex_works projection never ran (frontend hides the card).
+         *     from the CRIS. items holds the grouped entries (missing parts
+         *     collected under their main work), capped; total counts works and
+         *     entries_total counts entries (before the cap), both exact.
+         *     available=False when the openalex_works projection never ran
+         *     (frontend hides the card).
          */
         OpenalexOnly: {
             /**
@@ -2828,10 +2942,15 @@ export interface components {
              */
             total: number;
             /**
+             * Entries Total
+             * @default 0
+             */
+            entries_total: number;
+            /**
              * Items
              * @default []
              */
-            items: components["schemas"]["OpenalexOnlyWork"][];
+            items: (components["schemas"]["OpenalexOnlySingle"] | components["schemas"]["OpenalexOnlyGroup"])[];
             /**
              * Available
              * @default true
@@ -2849,6 +2968,89 @@ export interface components {
             name?: string | null;
             /** Orcid */
             orcid?: string | null;
+        };
+        /**
+         * OpenalexOnlyGroup
+         * @description One main work with its missing parts. A group exists when any part
+         *     of the work is missing from Pure; parts hold only those missing works
+         *     (registered parts never enter the gap set) and the parent itself may
+         *     well be registered (pure_registered true).
+         */
+        OpenalexOnlyGroup: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "group";
+            parent: components["schemas"]["GapGroupParent"];
+            /**
+             * Parts
+             * @default []
+             */
+            parts: components["schemas"]["OpenalexOnlyWork"][];
+            /**
+             * Parts Total
+             * @default 0
+             */
+            parts_total: number;
+        };
+        /**
+         * OpenalexOnlySingle
+         * @description One standalone gap work (no parent works): all work-row fields at
+         *     the top level.
+         */
+        OpenalexOnlySingle: {
+            /** Title */
+            title?: string | null;
+            /** Year */
+            year?: number | null;
+            /** Doi */
+            doi?: string | null;
+            /** Oa Status */
+            oa_status?: string | null;
+            /** Work Type */
+            work_type?: string | null;
+            /** Venue */
+            venue?: string | null;
+            /** Openalex Id */
+            openalex_id?: string | null;
+            /** Openalex Url */
+            openalex_url?: string | null;
+            /**
+             * Authors
+             * @default []
+             */
+            authors: components["schemas"]["OpenalexOnlyAuthor"][];
+            /**
+             * Ut Authors
+             * @default []
+             */
+            ut_authors: components["schemas"]["UtAuthorAttribution"][];
+            /** Journal Issn L */
+            journal_issn_l?: string | null;
+            /** Journal Title */
+            journal_title?: string | null;
+            /** Publisher Name */
+            publisher_name?: string | null;
+            /**
+             * Parent Works
+             * @default []
+             */
+            parent_works: components["schemas"]["WorkParent"][];
+            /**
+             * Is Part
+             * @default false
+             */
+            is_part: boolean;
+            /** Pure Match */
+            pure_match?: ("doi_in_pure" | "parent_book_in_pure" | "same_title_in_pure") | null;
+            /** Pure Match Url */
+            pure_match_url?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "single";
         };
         /** OpenalexOnlyWork */
         OpenalexOnlyWork: {

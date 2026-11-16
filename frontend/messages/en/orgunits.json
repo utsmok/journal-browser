@@ -134,7 +134,7 @@
     "crisGaps": {
       "title": "Not registered in Pure",
       "description": "OpenAlex attributes {count, plural, one {# work} other {# works}} to this unit's members that match no Pure record. These works are likely missing from the research information system.",
-      "showing": "Showing {count} most recent.",
+      "showing": "Showing the {count, plural, one {# most recent entry} other {# most recent entries}}.",
       "empty": "None found. Every OpenAlex work in this list has a Pure record.",
       "untitled": "Untitled"
     },

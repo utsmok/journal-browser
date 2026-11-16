@@ -122,7 +122,7 @@
   "gap": {
     "found": "OpenAlex attributes {count, plural, one {# work} other {# works}} to this author without a link in Pure.",
     "missing": "{count, plural, one {# of them is likely missing.} other {# of them are likely missing.}}",
-    "showing": "Showing the {count} most recent.",
+    "showing": "Showing the {count, plural, one {# most recent entry} other {# most recent entries}}.",
     "none": "None found. Every OpenAlex work attributed to this author has a record in Pure."
   }
 }

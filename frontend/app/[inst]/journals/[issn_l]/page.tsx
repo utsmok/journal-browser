@@ -15,19 +15,13 @@ import Link from "next/link";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
-import {
-  DealBadge,
-  OaStatusChip,
-  OaTypeBadge,
-  PureMatchBadge,
-  QuartileBadge,
-} from "@/components/badges";
+import { DealBadge, OaStatusChip, OaTypeBadge, QuartileBadge } from "@/components/badges";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { CardPager } from "@/components/card-pager";
 import { DealCapUsage } from "@/components/deal-cap-usage";
+import { GapEntryList } from "@/components/gap-entries";
 import { GapCsvButton } from "@/components/gap-csv-button";
 import { OaTrend } from "@/components/oa-trend";
-import { UtAuthorLine } from "@/components/ut-author-line";
 import { SourceNote } from "@/components/source-note";
 import { ErrorPanel, JournalDetailSkeleton } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
@@ -59,8 +53,8 @@ import {
 import { capReached, latestYearUsage } from "@/lib/deal-caps";
 import { dealLinkLabel, orderedDealLinks } from "@/lib/deal-links";
 import { useFunderPrefs, type FunderPrefs } from "@/lib/funder-prefs";
+import { entriesTotal, toGapEntries } from "@/lib/gap-entries";
 import { cleanProse, cn } from "@/lib/utils";
-import { workTypeLabel } from "@/lib/work-type";
 
 type NamedTopic = { display_name?: string };
 
@@ -656,9 +650,10 @@ function CrisGapsCard({
   issnL: string;
 }) {
   const t = useTranslations("journals");
-  const tc = useTranslations("common");
   const { year_from, year_to } = useYearRange();
-  const { total, items } = openalexOnly;
+  const { total } = openalexOnly;
+  const entries = toGapEntries(openalexOnly.items);
+  const shownTotal = entriesTotal(openalexOnly);
   return (
     <CollapsibleCard
       id="cris-gaps"
@@ -667,7 +662,9 @@ function CrisGapsCard({
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <p className="text-sm text-[var(--muted-foreground)]">
             {t("crisGaps.description", { count: total })} {t("crisGaps.matchNote")}
-            {total > items.length ? ` ${t("crisGaps.showingRecent", { count: items.length })}` : ""}
+            {shownTotal > entries.length
+              ? ` ${t("crisGaps.showingRecent", { count: entries.length })}`
+              : ""}
           </p>
           {total > 0 && (
             <GapCsvButton
@@ -681,40 +678,12 @@ function CrisGapsCard({
       {total === 0 ? (
         <p className="text-[var(--muted-foreground)]">{t("crisGaps.empty")}</p>
       ) : (
-        <ul className="divide-y divide-[var(--border)]">
-          {items.map((w, i) => {
-            const href = w.doi ? `https://doi.org/${w.doi}` : null;
-            return (
-              <li
-                key={i}
-                className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 py-2 first:pt-0 last:pb-0"
-              >
-                {href ? (
-                  <External
-                    href={href}
-                    className="min-w-0 w-full min-[480px]:w-auto min-[480px]:flex-1 font-medium"
-                  >
-                    {w.title ?? w.doi}
-                  </External>
-                ) : (
-                  <span className="min-w-0 w-full min-[480px]:w-auto min-[480px]:flex-1 font-medium">
-                    {w.title ?? t("publications.untitled")}
-                  </span>
-                )}
-                {w.year != null && (
-                  <span className="tabular-nums text-[var(--muted-foreground)]">{w.year}</span>
-                )}
-                {w.venue && (
-                  <span className="min-w-0 text-xs text-[var(--muted-foreground)]">{w.venue}</span>
-                )}
-                {w.work_type && <span className="text-xs">{workTypeLabel(tc, w.work_type)}</span>}
-                <PureMatchBadge match={w.pure_match} url={w.pure_match_url} />
-                <OaStatusChip status={w.oa_status} />
-                <UtAuthorLine authors={w.ut_authors} />
-              </li>
-            );
-          })}
-        </ul>
+        <GapEntryList
+          entries={entries}
+          inst={inst}
+          untitledLabel={t("publications.untitled")}
+          showUtAuthors
+        />
       )}
     </CollapsibleCard>
   );

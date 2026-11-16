@@ -1,24 +1,24 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
-import {
-  DealBadge,
-  OaStatusChip,
-  OaTypeBadge,
-  PartChip,
-  PureMatchBadge,
-} from "@/components/badges";
+import { DealBadge, OaStatusChip, OaTypeBadge } from "@/components/badges";
 import { CardPager } from "@/components/card-pager";
 import { CollapsibleCard } from "@/components/collapsible-card";
+import {
+  doiHref,
+  External,
+  GapEntryTableRows,
+  WorkLinks,
+  WorkTypeCell,
+} from "@/components/gap-entries";
 import { GapCsvButton } from "@/components/gap-csv-button";
 import { OaTrend } from "@/components/oa-trend";
-import { UtAuthorLine } from "@/components/ut-author-line";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -33,88 +33,13 @@ import { useInstitution } from "@/hooks/use-institution";
 import { useYearRange, yearQuery } from "@/hooks/use-year-filter";
 import {
   errorMessage,
-  encodeNamePath,
   fetchAuthor,
   type AuthorProfile,
   type AuthorSimilarJournal,
   type StatsYear,
 } from "@/lib/api";
+import { entriesTotal, toGapEntries } from "@/lib/gap-entries";
 import { cn } from "@/lib/utils";
-import { workTypeLabel } from "@/lib/work-type";
-
-function External({
-  href,
-  children,
-  className,
-}: {
-  href: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={cn(
-        "inline-flex items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline",
-        className,
-      )}
-    >
-      {children} <ExternalLink aria-hidden className="size-3.5 shrink-0" />
-    </a>
-  );
-}
-
-function doiHref(doi: string | null): string | null {
-  if (!doi) return null;
-  return /^https?:\/\//.test(doi) ? doi : `https://doi.org/${doi}`;
-}
-
-/** Small per-row verification links: DOI, OpenAlex, Pure — whichever
- * exist; an empty row (no DOI, no portal record) shows a dash. */
-function WorkLinks({
-  doi,
-  openalexUrl,
-  pureUrl,
-}: {
-  doi: string | null;
-  openalexUrl?: string | null;
-  pureUrl?: string | null;
-}) {
-  const links = [
-    doi ? { label: "DOI", href: doiHref(doi) ?? "" } : null,
-    openalexUrl ? { label: "OpenAlex", href: openalexUrl } : null,
-    pureUrl ? { label: "Pure", href: pureUrl } : null,
-  ].filter((l): l is { label: string; href: string } => l !== null);
-  if (links.length === 0) return <span className="text-[var(--muted-foreground)]">—</span>;
-  return (
-    <span className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs">
-      {links.map((l) => (
-        <a
-          key={l.label}
-          href={l.href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[var(--primary-text)] underline-offset-2 hover:underline"
-        >
-          {l.label}
-        </a>
-      ))}
-    </span>
-  );
-}
-
-/** Neutral small type badge; null renders a dash so columns stay aligned. */
-function WorkTypeCell({ workType }: { workType?: string | null }) {
-  const tc = useTranslations("common");
-  if (!workType) return <span className="text-[var(--muted-foreground)]">—</span>;
-  return (
-    <Badge variant="outline" className="font-normal text-[11px] text-[var(--muted-foreground)]">
-      {workTypeLabel(tc, workType)}
-    </Badge>
-  );
-}
 
 /** href for "Back to search": the last search this tab ran, else this
  * university's search home (never the global landing). */
@@ -287,6 +212,8 @@ export default function AuthorPage() {
       (year_from === undefined || s.year >= year_from) &&
       (year_to === undefined || s.year <= year_to),
   );
+  const gapEntries = toGapEntries(data.openalex_only.items);
+  const gapShownTotal = entriesTotal(data.openalex_only);
   const hasSimilar =
     similar.all.length > 0 || similar.deals.length > 0 || similar.diamond.length > 0;
 
@@ -628,8 +555,8 @@ export default function AuthorPage() {
                   <p className="text-sm text-[var(--muted-foreground)]">
                     {t("gap.found", { count: data.openalex_only.total })}{" "}
                     {t("gap.missing", { count: data.openalex_only.likely_missing })}
-                    {data.openalex_only.total > data.openalex_only.items.length &&
-                      ` ${t("gap.showing", { count: data.openalex_only.items.length })}`}
+                    {gapShownTotal > gapEntries.length &&
+                      ` ${t("gap.showing", { count: gapEntries.length })}`}
                   </p>
                   {data.openalex_only.total > 0 && (
                     <GapCsvButton
@@ -657,66 +584,7 @@ export default function AuthorPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {data.openalex_only.items.map((w, idx) => {
-                      const href = doiHref(w.doi ?? null) ?? w.openalex_url ?? null;
-                      return (
-                        <TableRow key={`${w.openalex_id ?? w.title ?? "work"}-${idx}`}>
-                          <TableCell className="whitespace-nowrap tabular-nums">{w.year}</TableCell>
-                          <TableCell className="min-w-0 font-medium">
-                            {href ? (
-                              <External href={href}>{w.title ?? w.doi ?? w.openalex_id}</External>
-                            ) : (
-                              (w.title ?? t("detail.untitled"))
-                            )}
-                            <Badge
-                              variant="outline"
-                              className="ml-2 font-normal text-[11px] text-[var(--muted-foreground)]"
-                              title={t("detail.oaOnlyTitle")}
-                            >
-                              {t("detail.oaOnlyBadge")}
-                            </Badge>
-                            <PureMatchBadge match={w.pure_match} url={w.pure_match_url} />
-                            <UtAuthorLine authors={w.ut_authors} />
-                          </TableCell>
-                          <TableCell>
-                            {w.journal_issn_l ? (
-                              <Link
-                                href={`/${inst}/journals/${w.journal_issn_l}`}
-                                className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-                              >
-                                {w.journal_title || w.journal_issn_l}
-                              </Link>
-                            ) : w.journal_title ? (
-                              <span>{w.journal_title}</span>
-                            ) : (
-                              <span className="text-[var(--muted-foreground)]">—</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {w.publisher_name ? (
-                              <Link
-                                href={`/${inst}/publisher/${encodeNamePath(w.publisher_name)}`}
-                                className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-                              >
-                                {w.publisher_name}
-                              </Link>
-                            ) : (
-                              <span className="text-[var(--muted-foreground)]">—</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <WorkTypeCell workType={w.work_type} />
-                            <PartChip isPart={w.is_part} parents={w.parent_works} />
-                          </TableCell>
-                          <TableCell>
-                            <OaStatusChip status={w.oa_status} />
-                          </TableCell>
-                          <TableCell>
-                            <WorkLinks doi={w.doi ?? null} openalexUrl={w.openalex_url} />
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                    <GapEntryTableRows entries={gapEntries} inst={inst} />
                   </TableBody>
                 </Table>
               )}

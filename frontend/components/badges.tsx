@@ -436,6 +436,56 @@ export function PureMatchBadge({ match, url }: { match?: string | null; url?: st
   );
 }
 
+/** Pure-registration state of a grouped gap entry's parent work: green
+ * check when the main work is registered in Pure, red cross when it is
+ * missing, gray question mark while the backfill has not fetched it.
+ * Colors follow the FunderFit tiers; labels live under
+ * common.workParts.groupBadge. */
+const PURE_REGISTERED_SPEC = {
+  yes: {
+    Icon: CircleCheck,
+    color: "text-emerald-700 dark:text-emerald-400",
+    labelKey: "workParts.groupBadge.inPure",
+  },
+  no: {
+    Icon: CircleX,
+    color: "text-red-700 dark:text-red-400",
+    labelKey: "workParts.groupBadge.notInPure",
+  },
+  unchecked: {
+    Icon: CircleHelp,
+    color: "text-[var(--muted-foreground)]",
+    labelKey: "workParts.groupBadge.notChecked",
+  },
+} as const;
+
+export function PureRegisteredBadge({
+  registered,
+  className,
+}: {
+  registered: boolean | null;
+  className?: string;
+}) {
+  const t = useTranslations("common");
+  const spec =
+    registered == null
+      ? PURE_REGISTERED_SPEC.unchecked
+      : registered
+        ? PURE_REGISTERED_SPEC.yes
+        : PURE_REGISTERED_SPEC.no;
+  const label = t(spec.labelKey);
+  const { Icon, color } = spec;
+  return (
+    <span
+      className={`jb-badge inline-flex shrink-0 items-center gap-0.5 text-xs font-normal ${color}${className ? ` ${className}` : ""}`}
+      title={label}
+    >
+      <Icon aria-hidden className="size-3.5" />
+      {label}
+    </span>
+  );
+}
+
 /** "Chapter of <book>" / "Part of <work>" chip for OpenAlex-side work
  * rows: a rel=volume parent names the row a chapter, any other parent a
  * part. The parent's name is shown; without any usable name the chip

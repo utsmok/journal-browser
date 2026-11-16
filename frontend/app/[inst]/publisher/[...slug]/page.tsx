@@ -6,20 +6,13 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
-import {
-  DealBadge,
-  OaStatusChip,
-  OaTypeBadge,
-  PartChip,
-  PureMatchBadge,
-  QuartileBadge,
-} from "@/components/badges";
+import { DealBadge, OaTypeBadge, QuartileBadge } from "@/components/badges";
 import { CardPager } from "@/components/card-pager";
 import { CollapsibleCard } from "@/components/collapsible-card";
+import { GapEntryList } from "@/components/gap-entries";
 import { GapCsvButton } from "@/components/gap-csv-button";
 import { OaCompositionBar, OaCompositionLegend } from "@/components/oa-composition";
 import { OaTrend } from "@/components/oa-trend";
-import { UtAuthorLine } from "@/components/ut-author-line";
 import { BackLink } from "@/components/back-link";
 import { DetailSkeleton, ErrorPanel } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
@@ -46,7 +39,7 @@ import {
 import { capReached, latestYearUsage } from "@/lib/deal-caps";
 import { formatEur, journalApcText } from "@/lib/format";
 import { dealLinkLabel, displayPublisherName, orderedDealLinks } from "@/lib/deal-links";
-import { workTypeLabel } from "@/lib/work-type";
+import { entriesTotal, toGapEntries } from "@/lib/gap-entries";
 
 /** First curated link for a deal ("conditions" / contract document). */
 function dealConditionsUrl(deal: DealOut): string | null {
@@ -290,9 +283,10 @@ function CrisGapsCard({
   onPartsChange: (parts: PublisherPartsFilter | undefined) => void;
 }) {
   const { year_from, year_to } = useYearRange();
-  const { total, items } = openalexOnly;
+  const { total } = openalexOnly;
+  const entries = toGapEntries(openalexOnly.items);
+  const shownTotal = entriesTotal(openalexOnly);
   const t = useTranslations("publishers");
-  const tc = useTranslations("common");
   const yearQs = yearQuery("?", year_from, year_to);
   const csvHref = `/api/v1/${inst}/publishers/${encodeNamePath(name)}/openalex-only.csv${yearQs}${parts ? `${yearQs ? "&" : "?"}parts=${parts}` : ""}`;
   return (
@@ -303,7 +297,7 @@ function CrisGapsCard({
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <p className="text-sm text-[var(--muted-foreground)]">
             {t("detail.crisGapsIntro", { count: total })}
-            {total > items.length && t("detail.crisGapsShowing", { count: items.length })}
+            {shownTotal > entries.length && t("detail.crisGapsShowing", { count: entries.length })}
           </p>
           {total > 0 && (
             <div className="flex flex-wrap items-center gap-2">
@@ -345,51 +339,13 @@ function CrisGapsCard({
       {total === 0 ? (
         <p className="text-[var(--muted-foreground)]">{t("detail.crisGapsEmpty")}</p>
       ) : (
-        <ul className="divide-y divide-[var(--border)]">
-          {items.map((w, i) => {
-            const href = w.doi ? `https://doi.org/${w.doi}` : null;
-            return (
-              <li
-                key={i}
-                className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 py-2 first:pt-0 last:pb-0"
-              >
-                {href ? (
-                  <a
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex min-w-0 w-full min-[480px]:w-auto min-[480px]:flex-1 items-center gap-1 font-medium text-[var(--primary-text)] underline-offset-2 hover:underline"
-                  >
-                    {w.title ?? w.doi} <ExternalLink aria-hidden className="size-3.5 shrink-0" />
-                  </a>
-                ) : (
-                  <span className="min-w-0 w-full min-[480px]:w-auto min-[480px]:flex-1 font-medium">
-                    {w.title ?? t("detail.untitled")}
-                  </span>
-                )}
-                {w.year != null && (
-                  <span className="tabular-nums text-[var(--muted-foreground)]">{w.year}</span>
-                )}
-                {w.venue && (
-                  <span className="min-w-0 text-xs text-[var(--muted-foreground)]">{w.venue}</span>
-                )}
-                {w.journal_issn_l && (
-                  <Link
-                    href={`/${inst}/journals/${w.journal_issn_l}`}
-                    className="text-xs underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-                  >
-                    {w.journal_title ?? w.journal_issn_l}
-                  </Link>
-                )}
-                {w.work_type && <span className="text-xs">{workTypeLabel(tc, w.work_type)}</span>}
-                <PartChip isPart={w.is_part} parents={w.parent_works} />
-                <PureMatchBadge match={w.pure_match} url={w.pure_match_url} />
-                <OaStatusChip status={w.oa_status} />
-                <UtAuthorLine authors={w.ut_authors} />
-              </li>
-            );
-          })}
-        </ul>
+        <GapEntryList
+          entries={entries}
+          inst={inst}
+          untitledLabel={t("detail.untitled")}
+          showJournalLinks
+          showUtAuthors
+        />
       )}
     </CollapsibleCard>
   );

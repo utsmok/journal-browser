@@ -278,7 +278,13 @@
   "workParts": {
     "chapterOf": "Chapter of {name}",
     "partOf": "Part of {name}",
-    "part": "Part"
+    "part": "Part",
+    "partsCount": "{count, plural, one {# part} other {# parts}}",
+    "groupBadge": {
+      "inPure": "In Pure",
+      "notInPure": "Not in Pure",
+      "notChecked": "Not checked yet"
+    }
   },
 
   "dealLinks": {
