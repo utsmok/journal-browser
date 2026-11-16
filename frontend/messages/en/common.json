@@ -275,6 +275,12 @@
     "thesis": "Thesis"
   },
 
+  "workParts": {
+    "chapterOf": "Chapter of {name}",
+    "partOf": "Part of {name}",
+    "part": "Part"
+  },
+
   "dealLinks": {
     "contact": "Contact",
     "contract": "Contract",

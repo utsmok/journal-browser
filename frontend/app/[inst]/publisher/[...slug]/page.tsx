@@ -10,6 +10,7 @@ import {
   DealBadge,
   OaStatusChip,
   OaTypeBadge,
+  PartChip,
   PureMatchBadge,
   QuartileBadge,
 } from "@/components/badges";
@@ -22,6 +23,7 @@ import { UtAuthorLine } from "@/components/ut-author-line";
 import { BackLink } from "@/components/back-link";
 import { DetailSkeleton, ErrorPanel } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -39,6 +41,7 @@ import {
   type DealOut,
   type PublisherDetailResponse,
   type PublisherListItem,
+  type PublisherPartsFilter,
 } from "@/lib/api";
 import { capReached, latestYearUsage } from "@/lib/deal-caps";
 import { formatEur, journalApcText } from "@/lib/format";
@@ -271,20 +274,27 @@ function UtAuthorshipCard({ authorship, inst }: { authorship: UtAuthorship; inst
 }
 
 /** OpenAlex works attributed to this publisher's journals that match no
- * Pure record: candidates missing from the research information system. */
+ * Pure record: candidates missing from the research information system.
+ * `parts` filters the underlying fetch by work-part kind. */
 function CrisGapsCard({
   openalexOnly,
   inst,
   name,
+  parts,
+  onPartsChange,
 }: {
   openalexOnly: OpenalexOnly;
   inst: string;
   name: string;
+  parts: PublisherPartsFilter | undefined;
+  onPartsChange: (parts: PublisherPartsFilter | undefined) => void;
 }) {
   const { year_from, year_to } = useYearRange();
   const { total, items } = openalexOnly;
   const t = useTranslations("publishers");
   const tc = useTranslations("common");
+  const yearQs = yearQuery("?", year_from, year_to);
+  const csvHref = `/api/v1/${inst}/publishers/${encodeNamePath(name)}/openalex-only.csv${yearQs}${parts ? `${yearQs ? "&" : "?"}parts=${parts}` : ""}`;
   return (
     <CollapsibleCard
       id="cris-gaps"
@@ -296,9 +306,37 @@ function CrisGapsCard({
             {total > items.length && t("detail.crisGapsShowing", { count: items.length })}
           </p>
           {total > 0 && (
-            <GapCsvButton
-              href={`/api/v1/${inst}/publishers/${encodeNamePath(name)}/openalex-only.csv${yearQuery("?", year_from, year_to)}`}
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <div
+                role="group"
+                aria-label={t("detail.partsFilter.label")}
+                className="flex overflow-hidden rounded-[var(--radius)] border border-[var(--input)]"
+              >
+                {(
+                  [
+                    { value: undefined, label: t("detail.partsFilter.all") },
+                    { value: "chapter", label: t("detail.partsFilter.chapters") },
+                    { value: "part", label: t("detail.partsFilter.parts") },
+                    { value: "standalone", label: t("detail.partsFilter.standalone") },
+                  ] as { value: PublisherPartsFilter | undefined; label: string }[]
+                ).map((opt) => {
+                  const selected = parts === opt.value;
+                  return (
+                    <Button
+                      key={opt.value ?? "all"}
+                      variant={selected ? "secondary" : "ghost"}
+                      size="sm"
+                      className="rounded-none"
+                      aria-pressed={selected}
+                      onClick={() => onPartsChange(opt.value)}
+                    >
+                      {opt.label}
+                    </Button>
+                  );
+                })}
+              </div>
+              <GapCsvButton href={csvHref} />
+            </div>
           )}
         </div>
       }
@@ -344,6 +382,7 @@ function CrisGapsCard({
                   </Link>
                 )}
                 {w.work_type && <span className="text-xs">{workTypeLabel(tc, w.work_type)}</span>}
+                <PartChip isPart={w.is_part} parents={w.parent_works} />
                 <PureMatchBadge match={w.pure_match} url={w.pure_match_url} />
                 <OaStatusChip status={w.oa_status} />
                 <UtAuthorLine authors={w.ut_authors} />
@@ -351,6 +390,54 @@ function CrisGapsCard({
             );
           })}
         </ul>
+      )}
+    </CollapsibleCard>
+  );
+}
+
+/** Chapter/book rollup over the gap population: how many of the works
+ * OpenAlex attributes to this publisher's journals are book chapters,
+ * and which books hold the most of them. Hidden when there are none. */
+function ChapterRollupCard({ rollup }: { rollup: PublisherDetailResponse["chapter_rollup"] }) {
+  const t = useTranslations("publishers");
+  if (rollup.chapters_total <= 0) return null;
+  return (
+    <CollapsibleCard
+      id="book-chapters"
+      title={t("detail.bookChapters")}
+      description={
+        <p className="text-sm text-[var(--muted-foreground)]">
+          {t("detail.bookChaptersIntro", {
+            chapters: rollup.chapters_total,
+            books: rollup.books_total,
+          })}
+        </p>
+      }
+      contentClassName="text-sm"
+    >
+      <ul className="divide-y divide-[var(--border)]">
+        {rollup.books.map((b) => (
+          <li key={b.parent_id ?? b.name} className="py-2 first:pt-0 last:pb-0">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-2.5 gap-y-1">
+              <span className="font-medium">{b.name}</span>
+              <span className="tabular-nums text-[var(--muted-foreground)]">
+                {t("detail.chapterCount", { count: b.chapters })}
+              </span>
+            </div>
+            {b.sample.length > 0 && (
+              <ul className="mt-1 space-y-0.5 text-xs text-[var(--muted-foreground)]">
+                {b.sample.map((title, i) => (
+                  <li key={i}>{title}</li>
+                ))}
+              </ul>
+            )}
+          </li>
+        ))}
+      </ul>
+      {rollup.books_total > rollup.books.length && (
+        <p className="mt-3 border-t border-[var(--border)] pt-3 text-xs text-[var(--muted-foreground)]">
+          {t("detail.bookChaptersMore", { count: rollup.books.length })}
+        </p>
       )}
     </CollapsibleCard>
   );
@@ -364,16 +451,19 @@ export default function PublisherPage() {
   const backHref = `/${inst}/publisher`;
   const name = params?.slug?.map(decodeURIComponent).join("/") ?? "";
   const { year_from, year_to } = useYearRange();
-  const { data, isPending, isError, error } = usePublisher(name || undefined, {
-    year_from,
-    year_to,
-  });
+  const [parts, setParts] = React.useState<PublisherPartsFilter | undefined>(undefined);
+  const { data, isPending, isError, error } = usePublisher(
+    name || undefined,
+    { year_from, year_to },
+    parts,
+  );
 
   // Per-card pagination, author-detail style (the list is capped at 200).
   const PAGE_SIZE = 20;
   const [journalPage, setJournalPage] = React.useState(1);
   React.useEffect(() => {
     setJournalPage(1);
+    setParts(undefined);
   }, [name]);
 
   if (isPending) return <DetailSkeleton />;
@@ -584,8 +674,16 @@ export default function PublisherPage() {
 
         <UtAuthorshipCard authorship={data.ut_authorship} inst={inst} />
 
+        <ChapterRollupCard rollup={data.chapter_rollup} />
+
         {data.openalex_only.available && (
-          <CrisGapsCard openalexOnly={data.openalex_only} inst={inst} name={name} />
+          <CrisGapsCard
+            openalexOnly={data.openalex_only}
+            inst={inst}
+            name={name}
+            parts={parts}
+            onPartsChange={setParts}
+          />
         )}
       </div>
     </div>

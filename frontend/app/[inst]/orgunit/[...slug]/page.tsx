@@ -10,6 +10,7 @@ import {
   DealBadge,
   OaStatusChip,
   OaTypeBadge,
+  PartChip,
   PureMatchBadge,
   QuartileBadge,
 } from "@/components/badges";
@@ -97,12 +98,61 @@ function CrisGapsCard({ openalexOnly }: { openalexOnly: OpenalexOnly }) {
                   <span className="min-w-0 text-xs text-[var(--muted-foreground)]">{w.venue}</span>
                 )}
                 {w.work_type && <span className="text-xs">{workTypeLabel(tc, w.work_type)}</span>}
+                <PartChip isPart={w.is_part} parents={w.parent_works} />
                 <PureMatchBadge match={w.pure_match} url={w.pure_match_url} />
                 <OaStatusChip status={w.oa_status} />
               </li>
             );
           })}
         </ul>
+      )}
+    </CollapsibleCard>
+  );
+}
+
+/** Chapter/book rollup over the gap population: how many of the works
+ * OpenAlex attributes to this unit's members are book chapters, and
+ * which books hold the most of them. Hidden when there are none. */
+function ChapterRollupCard({ rollup }: { rollup: OrgUnitDetailResponse["chapter_rollup"] }) {
+  const t = useTranslations("orgunits");
+  if (rollup.chapters_total <= 0) return null;
+  return (
+    <CollapsibleCard
+      id="book-chapters"
+      title={t("detail.bookChapters")}
+      description={
+        <p className="text-sm text-[var(--muted-foreground)]">
+          {t("detail.bookChaptersIntro", {
+            chapters: rollup.chapters_total,
+            books: rollup.books_total,
+          })}
+        </p>
+      }
+      contentClassName="text-sm"
+    >
+      <ul className="divide-y divide-[var(--border)]">
+        {rollup.books.map((b) => (
+          <li key={b.parent_id ?? b.name} className="py-2 first:pt-0 last:pb-0">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-2.5 gap-y-1">
+              <span className="font-medium">{b.name}</span>
+              <span className="tabular-nums text-[var(--muted-foreground)]">
+                {t("detail.chapterCount", { count: b.chapters })}
+              </span>
+            </div>
+            {b.sample.length > 0 && (
+              <ul className="mt-1 space-y-0.5 text-xs text-[var(--muted-foreground)]">
+                {b.sample.map((title, i) => (
+                  <li key={i}>{title}</li>
+                ))}
+              </ul>
+            )}
+          </li>
+        ))}
+      </ul>
+      {rollup.books_total > rollup.books.length && (
+        <p className="mt-3 border-t border-[var(--border)] pt-3 text-xs text-[var(--muted-foreground)]">
+          {t("detail.bookChaptersMore", { count: rollup.books.length })}
+        </p>
       )}
     </CollapsibleCard>
   );
@@ -409,6 +459,8 @@ function OrgUnitDetail({
             )}
           </CollapsibleCard>
         )}
+
+        <ChapterRollupCard rollup={data.chapter_rollup} />
 
         {data.openalex_only.available && <CrisGapsCard openalexOnly={data.openalex_only} />}
 

@@ -22,6 +22,7 @@ import {
   type OrgUnitAuthorSort,
   type OrgUnitLevel,
   type OrgUnitSearchParams,
+  type PublisherPartsFilter,
   type PublisherSearchParams,
   type SimilarJournalsBundle,
   type WorksPage,
@@ -266,17 +267,23 @@ export function usePublishers(params: PublisherSearchParams) {
 
 /**
  * Publisher detail bundle. The year lens, when set, scopes the works
- * numbers (header sum + journal table) and joins the cache key.
+ * numbers (header sum + journal table) and joins the cache key; the
+ * gap-card parts filter joins it too.
  */
-export function usePublisher(name: string | undefined, years?: YearParams) {
+export function usePublisher(
+  name: string | undefined,
+  years?: YearParams,
+  parts?: PublisherPartsFilter,
+) {
   const inst = useInstitution();
   return useQuery({
     queryKey: [
       ...qk.publisher(inst, name ?? ""),
       years?.year_from ?? null,
       years?.year_to ?? null,
+      parts ?? null,
     ] as const,
-    queryFn: () => fetchPublisher(inst, name ?? "", years),
+    queryFn: () => fetchPublisher(inst, name ?? "", years, parts),
     enabled: Boolean(name),
   });
 }

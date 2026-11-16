@@ -3,6 +3,8 @@
 import { CircleCheck, CircleHelp, CircleX } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import type { WorkParent } from "@/lib/api";
+
 /**
  * Access lockups: single-family SVG badges that replace generic pills.
  *
@@ -431,6 +433,25 @@ export function PureMatchBadge({ match, url }: { match?: string | null; url?: st
     >
       {badge}
     </a>
+  );
+}
+
+/** "Chapter of <book>" / "Part of <work>" chip for OpenAlex-side work
+ * rows: a rel=volume parent names the row a chapter, any other parent a
+ * part. The parent's name is shown; without any usable name the chip
+ * degrades to a bare "Part". Nothing renders for standalone rows. */
+export function PartChip({ isPart, parents }: { isPart: boolean; parents: WorkParent[] }) {
+  const t = useTranslations("common");
+  if (!isPart) return null;
+  const volume = parents.find((p) => p.rel === "volume");
+  const named = volume?.name ? volume : parents.find((p) => p.name);
+  const label = named?.name
+    ? t(volume ? "workParts.chapterOf" : "workParts.partOf", { name: named.name })
+    : t("workParts.part");
+  return (
+    <span className="inline-flex shrink-0 items-center rounded-[var(--radius)] border border-[var(--border)] px-2 py-0.5 text-xs font-normal text-[var(--muted-foreground)]">
+      {label}
+    </span>
   );
 }
 

@@ -131,6 +131,17 @@
     "crisGapsIntro": "OpenAlex attributes {count, plural, one {# work} other {# works}} to the journals of this publisher that match no Pure record. The works are likely missing from the research information system. Each item lists the UT authors that OpenAlex matched to the university roster.",
     "crisGapsShowing": " Showing {count, number} most recent.",
     "crisGapsEmpty": "None found. Every OpenAlex work here has a Pure record.",
-    "untitled": "Untitled"
+    "untitled": "Untitled",
+    "partsFilter": {
+      "label": "Filter by part kind",
+      "all": "All",
+      "chapters": "Chapters",
+      "parts": "Parts",
+      "standalone": "Standalone"
+    },
+    "bookChapters": "Book chapters",
+    "bookChaptersIntro": "{chapters, plural, one {# chapter} other {# chapters}} across {books, plural, one {# book} other {# books}}.",
+    "chapterCount": "{count, plural, one {# chapter} other {# chapters}}",
+    "bookChaptersMore": "Showing the {count} books with the most chapters."
   }
 }

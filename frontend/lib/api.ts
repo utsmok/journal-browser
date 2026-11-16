@@ -76,6 +76,9 @@ export type AuthorSimilarJournal = Schemas["AuthorSimilarJournal"];
 /** Roster author matched on a gap work's OpenAlex authorships. */
 export type UtAuthorAttribution = Schemas["UtAuthorAttribution"];
 
+/** Compact parent-work reference of an OpenAlex-side row ({id, name, rel}). */
+export type WorkParent = Schemas["WorkParent"];
+
 export type AuthorProfile = Schemas["AuthorProfileResponse"];
 
 export type SortKey =
@@ -238,6 +241,10 @@ export type PublisherDetailResponse = Schemas["PublisherDetailResponse"];
 
 export type PublisherSearchSort = "relevance" | "name" | "journals" | "works" | "deals" | "apc";
 
+/** Part-kind filter on the publisher detail and gap-CSV endpoints; matches
+ * the backend ?parts= values. */
+export type PublisherPartsFilter = "chapter" | "part" | "standalone";
+
 /** List params for the publisher surface; arrays are pipe-joined in the query. */
 export type PublisherSearchParams = {
   q?: string;
@@ -339,10 +346,12 @@ export async function fetchPublisher(
   inst: string,
   name: string,
   years?: YearParams,
+  parts?: PublisherPartsFilter,
 ): Promise<PublisherDetailResponse> {
   return apiGet<PublisherDetailResponse>(`/${inst}/publishers/${encodeNamePath(name)}`, {
     year_from: years?.year_from,
     year_to: years?.year_to,
+    parts,
   });
 }
 

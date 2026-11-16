@@ -7,7 +7,13 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
-import { DealBadge, OaStatusChip, OaTypeBadge, PureMatchBadge } from "@/components/badges";
+import {
+  DealBadge,
+  OaStatusChip,
+  OaTypeBadge,
+  PartChip,
+  PureMatchBadge,
+} from "@/components/badges";
 import { CardPager } from "@/components/card-pager";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { GapCsvButton } from "@/components/gap-csv-button";
@@ -700,6 +706,7 @@ export default function AuthorPage() {
                           </TableCell>
                           <TableCell>
                             <WorkTypeCell workType={w.work_type} />
+                            <PartChip isPart={w.is_part} parents={w.parent_works} />
                           </TableCell>
                           <TableCell>
                             <OaStatusChip status={w.oa_status} />
