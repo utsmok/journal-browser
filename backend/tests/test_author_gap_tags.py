@@ -187,10 +187,10 @@ async def test_profile_pure_match_tags_and_books(client):
     assert section["total"] == 4
     assert section["likely_missing"] == 1
     rows = [(w["title"], w["pure_match"], w["pure_match_url"]) for w in section["items"]]
-    # Untagged first, then year-desc within the tagged group.
+    # Most recent first (year desc, then name); tags stay on the rows.
     assert rows == [
-        ("Truly Missing", None, None),
         ("Eco Anxiety Chapter Four", "parent_book_in_pure", _portal("book1")),
+        ("Truly Missing", None, None),
         ("Held Copy", "doi_in_pure", _portal("held")),
         ("Innovation: Ethics!", "same_title_in_pure", _portal("dup1")),
     ]
@@ -227,8 +227,9 @@ async def test_unit_gap_cards_tagged(db, gap_db):
     payload = await authorship.author_ids_openalex_only(db, ut, [["a-alice"]])
     assert payload["total"] == 3
     rows = [(w["title"], w["pure_match"], w["pure_match_url"]) for w in payload["items"]]
+    # Most recent first (year desc, then name); tags stay on the rows.
     assert rows == [
-        ("Truly Missing", None, None),
         ("Eco Anxiety Chapter Four", "parent_book_in_pure", _portal("book1")),
+        ("Truly Missing", None, None),
         ("Innovation: Ethics!", "same_title_in_pure", _portal("dup1")),
     ]

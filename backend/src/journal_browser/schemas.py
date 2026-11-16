@@ -1,7 +1,7 @@
 """Pydantic response schemas for the API (openapi-typescript feeds on these)."""
 
 from datetime import date, datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -394,6 +394,22 @@ class WorkParent(BaseModel):
     rel: str | None = None
 
 
+class GapGroupParent(BaseModel):
+    """The main work a group entry's missing parts belong to: the parts'
+    primary parent (the first rel=volume parent among a part's
+    parent_works, else the first listed parent). name comes from the
+    parts' parent_works (registry title when the registry row has one);
+    work_type/doi/pure_registered are null without an openalex_work_parents
+    row (parts backfill pending). pure_registered is derived live from the
+    works table and false includes no-DOI parents."""
+
+    w_id: str | None = None
+    name: str | None = None
+    work_type: str | None = None
+    doi: str | None = None
+    pure_registered: bool | None = None
+
+
 class OpenalexOnlyWork(BaseModel):
     title: str | None = None
     year: int | None = None
@@ -419,14 +435,40 @@ class OpenalexOnlyWork(BaseModel):
     pure_match_url: str | None = None
 
 
+class OpenalexOnlySingle(OpenalexOnlyWork):
+    """One standalone gap work (no parent works): all work-row fields at
+    the top level."""
+
+    kind: Literal["single"] = "single"
+
+
+class OpenalexOnlyGroup(BaseModel):
+    """One main work with its missing parts. A group exists when any part
+    of the work is missing from Pure; parts hold only those missing works
+    (registered parts never enter the gap set) and the parent itself may
+    well be registered (pure_registered true)."""
+
+    kind: Literal["group"] = "group"
+    parent: GapGroupParent
+    parts: list[OpenalexOnlyWork] = []
+    parts_total: int = 0
+
+
+OpenalexOnlyEntry = Annotated[OpenalexOnlySingle | OpenalexOnlyGroup, Field(discriminator="kind")]
+
+
 class OpenalexOnly(BaseModel):
     """OpenAlex store works attributed to the venue or to the unit's
     member authors whose DOI matches no Pure work — candidates missing
-    from the CRIS. items is capped; total is exact. available=False when
-    the openalex_works projection never ran (frontend hides the card)."""
+    from the CRIS. items holds the grouped entries (missing parts
+    collected under their main work), capped; total counts works and
+    entries_total counts entries (before the cap), both exact.
+    available=False when the openalex_works projection never ran
+    (frontend hides the card)."""
 
     total: int = 0
-    items: list[OpenalexOnlyWork] = []
+    entries_total: int = 0
+    items: list[OpenalexOnlyEntry] = []
     available: bool = True
 
 
@@ -786,12 +828,37 @@ class AuthorOpenalexOnlyWork(BaseModel):
     pure_match_url: str | None = None
 
 
+class AuthorOpenalexOnlySingle(AuthorOpenalexOnlyWork):
+    """One standalone gap work (no parent works): all work-row fields at
+    the top level."""
+
+    kind: Literal["single"] = "single"
+
+
+class AuthorOpenalexOnlyGroup(BaseModel):
+    """One main work with its missing parts (only missing works are
+    listed); the parent itself may well be registered."""
+
+    kind: Literal["group"] = "group"
+    parent: GapGroupParent
+    parts: list[AuthorOpenalexOnlyWork] = []
+    parts_total: int = 0
+
+
+AuthorOpenalexOnlyEntry = Annotated[
+    AuthorOpenalexOnlySingle | AuthorOpenalexOnlyGroup, Field(discriminator="kind")
+]
+
+
 class AuthorOpenalexOnly(BaseModel):
     """The author's OpenAlex-only works as their own section: total is
-    exact, items carry the gated missed works (safety-capped)."""
+    exact, items hold the grouped entries (missing parts under their main
+    work), safety-capped at the entry level; entries_total counts entries
+    before the cap."""
 
     total: int = 0
-    items: list[AuthorOpenalexOnlyWork] = []
+    entries_total: int = 0
+    items: list[AuthorOpenalexOnlyEntry] = []
     available: bool = True
     # Gated rows with no pure_match: the ones likely missing for real.
     likely_missing: int = 0

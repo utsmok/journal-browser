@@ -44,7 +44,8 @@ from ..models import (
 from .works_query import work_type_not_excluded, work_year_window, year_end
 
 TOP_AUTHORS = 10
-#: Items served per OpenalexOnly payload; total stays exact beyond it.
+#: Entries served per OpenalexOnly payload (after grouping); total and
+#: entries_total stay exact beyond the cap.
 GAP_ITEM_CAP = 50
 #: Canonical OpenAlex work url prefix (openalex.org/W...).
 OPENALEX_URL = "https://openalex.org"
@@ -80,6 +81,18 @@ def parts_predicate(parts: list[str] | None) -> Any | None:
     return or_(*(PART_KIND_PREDICATES[kind] for kind in sorted(set(parts))))
 
 
+def primary_parent(parents: list[Any] | None) -> dict[str, Any] | None:
+    """A part's primary parent: the first rel=volume parent (the book a
+    chapter belongs to), else the first listed parent; None = standalone
+    (no parents). Parts join exactly one group — their primary parent's —
+    so multi-parent parts never split a main work's missing set."""
+    rows = [p for p in parents or [] if isinstance(p, dict)]
+    for p in rows:
+        if p.get("rel") == "volume":
+            return p
+    return rows[0] if rows else None
+
+
 async def local_store_ready(session: AsyncSession, institution: Institution) -> bool:
     """True when the openalex_works projection has run for this
     institution at least once (store-backed cards may answer)."""
@@ -91,7 +104,7 @@ async def local_store_ready(session: AsyncSession, institution: Institution) -> 
 
 
 def _unavailable() -> dict[str, Any]:
-    return {"total": 0, "items": [], "available": False}
+    return {"total": 0, "entries_total": 0, "items": [], "available": False}
 
 
 def not_repository() -> Any:
@@ -239,6 +252,113 @@ async def tag_pure_matches(
 PureMatch = Literal["doi_in_pure", "parent_book_in_pure", "same_title_in_pure"]
 
 
+async def _parent_registry(
+    session: AsyncSession, institution: Institution, parent_ids: set[str]
+) -> dict[str, Any]:
+    """openalex_work_parents rows for the given parent W-ids, keyed by
+    parent_w_id, with pure_registered derived live from the works table
+    (EXISTS on the parent's normalized DOI; a no-DOI parent can never
+    match, so it counts as not registered). No row = backfill pending =
+    the caller serves null registry fields."""
+    if not parent_ids:
+        return {}
+    # The model ships with the parts backfill job (that changeset owns
+    # the migration); imported here so serving code loads on trees the
+    # migration has not reached yet.
+    from ..models import OpenalexWorkParent
+
+    registered = exists(
+        select(1).where(
+            Work.institution_id == institution.id,
+            Work.doi_normalized == OpenalexWorkParent.doi_normalized,
+        )
+    )
+    rows = (
+        await session.execute(
+            select(
+                OpenalexWorkParent.parent_w_id,
+                OpenalexWorkParent.doi_normalized,
+                OpenalexWorkParent.title,
+                OpenalexWorkParent.work_type,
+                registered.label("pure_registered"),
+            ).where(
+                OpenalexWorkParent.institution_id == institution.id,
+                OpenalexWorkParent.parent_w_id.in_(sorted(parent_ids)),
+            )
+        )
+    ).all()
+    return {r.parent_w_id: r for r in rows}
+
+
+async def group_gap_entries(
+    session: AsyncSession, institution: Institution, items: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], int]:
+    """Group gap work rows under their main work (the shared contract's
+    entry shape): a part joins exactly one group — its primary parent —
+    and a group holds only the missing rows fed in (registered parts
+    never reach a gap payload). Standalone rows (no parent works) pass
+    through as single entries; a group's parts keep the incoming order
+    (most recent first).
+
+    Returns (entries, entries_total); entries_total counts entries before
+    any cap. Entries order most recent first — a standalone's own year, a
+    group's newest part year (the entry's rendered recency) — ties by
+    name (standalone title, group parent name). Parent registry fields
+    come from _parent_registry; the group's name prefers the registry
+    title (None coalesces to the parts' parent_works name)."""
+    groups: dict[str, dict[str, Any]] = {}
+    entries: list[dict[str, Any]] = []
+    for it in items:
+        primary = primary_parent(it.get("parent_works"))
+        if primary is None:
+            entries.append(
+                {
+                    "kind": "single",
+                    **it,
+                    "_year": it.get("year"),
+                    "_name": (it.get("title") or "").lower(),
+                }
+            )
+            continue
+        # Parents without an id still group (by name): the registry
+        # lookup needs the id, so their registry fields stay null.
+        key = str(primary.get("id") or f"name:{(primary.get('name') or '').lower()}")
+        group = groups.setdefault(key, {"primary": primary, "parts": [], "year": None})
+        parts: list[dict[str, Any]] = group["parts"]
+        parts.append(it)
+        year = it.get("year")
+        if year is not None and (group["year"] is None or year > group["year"]):
+            group["year"] = year
+    # One registry probe per distinct parent id; parents without an id
+    # group by name but never hit the registry.
+    parent_ids = {str(g["primary"]["id"]) for g in groups.values() if g["primary"].get("id")}
+    registry = await _parent_registry(session, institution, parent_ids)
+    for group in groups.values():
+        primary = group["primary"]
+        w_id = primary.get("id")
+        reg = registry.get(str(w_id)) if w_id else None
+        entries.append(
+            {
+                "kind": "group",
+                "parent": {
+                    "w_id": w_id,
+                    "name": (reg.title if reg is not None else None) or primary.get("name"),
+                    "work_type": reg.work_type if reg is not None else None,
+                    "doi": reg.doi_normalized if reg is not None else None,
+                    "pure_registered": bool(reg.pure_registered) if reg is not None else None,
+                },
+                "parts": group["parts"],
+                "parts_total": len(group["parts"]),
+                "_year": group["year"],
+                "_name": str(primary.get("name") or "").lower(),
+            }
+        )
+    entries.sort(key=lambda e: (e["_year"] is None, -(e["_year"] or 0), e["_name"]))
+    for e in entries:
+        del e["_year"], e["_name"]
+    return entries, len(entries)
+
+
 def attributed_to_any(aids: list[str]) -> Any:
     """True when the store row names any of the given bare OpenAlex
     author ids, case-insensitively.
@@ -365,13 +485,15 @@ async def _store_gap_payload(
     predicate: list[Any],
     parts: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Shared shape: exact total + capped items over one store predicate
-    (gates + attribution + anti-join), most recent first. Items carry the
-    work identity (openalex id/url), the compact authorships, roster
-    attribution for the institution's own authors, venue context
-    (journal + publisher) and the work-parts fields (compact parent_works,
-    is_part). The parts filter (pipe-joined standalone|chapter|part) ORs
-    its kinds over the same population."""
+    """Shared shape: exact work total + capped grouped entries over one
+    store predicate (gates + attribution + anti-join). Rows fetch
+    uncapped (grouping needs every row: a group's recency is its newest
+    part's year), most recent first. Work rows carry the work identity
+    (openalex id/url), the compact authorships, roster attribution for
+    the institution's own authors, venue context (journal + publisher)
+    and the work-parts fields (compact parent_works, is_part). The parts
+    filter (pipe-joined standalone|chapter|part) ORs its kinds over the
+    same population, then the survivors group."""
     if not await local_store_ready(session, institution):
         return _unavailable()
     where = [OpenalexWork.institution_id == institution.id, *predicate]
@@ -395,7 +517,6 @@ async def _store_gap_payload(
             )
             .where(*where)
             .order_by(OpenalexWork.year.desc().nulls_last(), func.lower(OpenalexWork.title))
-            .limit(GAP_ITEM_CAP)
         )
     ).all()
     publishers = await journal_publisher_map(session, [r.venue_issn_l for r in rows])
@@ -447,9 +568,15 @@ async def _store_gap_payload(
         ],
         check_own_doi=False,
     )
-    # Likely misses first (stable: year/title order kept within groups).
-    items.sort(key=lambda it: it.get("pure_match") is not None)
-    return {"total": int(total or 0), "items": items, "available": True}
+    # Missing parts group under their main work; the rendered cap applies
+    # to entries, not works (total/entries_total stay exact).
+    entries, entries_total = await group_gap_entries(session, institution, items)
+    return {
+        "total": int(total or 0),
+        "entries_total": entries_total,
+        "items": entries[:GAP_ITEM_CAP],
+        "available": True,
+    }
 
 
 def venue_gap_predicate(
@@ -579,7 +706,8 @@ async def venue_openalex_only(
     One issn for the journal view, the publisher group's issn set for the
     publisher view. Attribution key is venue_issn_l — the same key the
     OpenAlex-side institution metrics use. parts (pipe-joined
-    standalone|chapter|part) filters the served rows and totals.
+    standalone|chapter|part) filters the served rows and totals; the
+    survivors group under their main works.
 
     Restricted to the institution-filter corpus (source != author-sweep):
     those rows were harvested under OpenAlex's institutions.id filter, so
@@ -589,7 +717,7 @@ async def venue_openalex_only(
     venue's global output as a CRIS gap."""
     venue_issns = [issn_l] if issn_l is not None else sorted(set(issns or []))
     if not venue_issns:
-        return {"total": 0, "items": [], "available": True}
+        return {"total": 0, "entries_total": 0, "items": [], "available": True}
     return await _store_gap_payload(
         session,
         institution,
@@ -612,9 +740,15 @@ async def author_ids_openalex_only(
     case-insensitively: authors.openalex_ids stores lowercase ids while
     the store's authorships carry OpenAlex's canonical uppercase form, so
     a work counts once however many of the unit's authors it names.
-    parts (pipe-joined standalone|chapter|part) filters rows and total."""
+    parts (pipe-joined standalone|chapter|part) filters rows and total;
+    the survivors group under their main works."""
     if not _flat_aids(aids):
-        return {"total": 0, "items": [], "available": await local_store_ready(session, institution)}
+        return {
+            "total": 0,
+            "entries_total": 0,
+            "items": [],
+            "available": await local_store_ready(session, institution),
+        }
     return await _store_gap_payload(
         session,
         institution,

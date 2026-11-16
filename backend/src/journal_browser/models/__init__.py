@@ -31,7 +31,13 @@ from .jisc import (
 )
 from .journals import Journal, JournalFlags, ScimagojrMetric
 from .openaire import OpenaireFunder, OpenaireFunderStream
-from .openalex import AuthorIdentity, OpenalexFunder, OpenalexWork, OpenalexWorkAuthor
+from .openalex import (
+    AuthorIdentity,
+    OpenalexFunder,
+    OpenalexWork,
+    OpenalexWorkAuthor,
+    OpenalexWorkParent,
+)
 from .people import PeopleUtwentePerson, PeopleUtwentePersonOrg
 from .pure import PureOrg, PureOrgParent, PurePerson, PurePersonOrg, WorkPureAuthor
 from .reference import Institution, IssnMap, OpenalexPublisher, Publisher
@@ -75,6 +81,7 @@ __all__ = [
     "OpenalexPublisher",
     "OpenalexWork",
     "OpenalexWorkAuthor",
+    "OpenalexWorkParent",
     "PeopleUtwentePerson",
     "PeopleUtwentePersonOrg",
     "Publisher",

@@ -28,6 +28,7 @@ from ..models import (
 )
 from .authorship import (
     OPENALEX_URL,
+    group_gap_entries,
     journal_publisher_map,
     tag_pure_matches,
     ut_authors_for_authorships,
@@ -480,12 +481,20 @@ async def _openalex_only_section(
     publication-year window applies (an explicit clamped range replaces
     the bounds), excluded work types (preprints/books)
     drop out, and a DOI that matches a local work is skipped (same
-    publication; the Pure copy stays the display record)."""
+    publication; the Pure copy stays the display record). Survivors group
+    under their main works (the shared entry shape) and the cap applies
+    to entries; total/likely_missing stay work counts."""
     rows = await openalex_only_works_for_author(session, institution, author)
     if rows is None:
-        return {"total": 0, "likely_missing": 0, "items": [], "available": False}, None
+        return (
+            {"total": 0, "likely_missing": 0, "entries_total": 0, "items": [], "available": False},
+            None,
+        )
     if not rows:
-        return {"total": 0, "likely_missing": 0, "items": [], "available": True}, 0
+        return (
+            {"total": 0, "likely_missing": 0, "entries_total": 0, "items": [], "available": True},
+            0,
+        )
     if year_range is not None:
         year_start, year_end_bound = year_range
     else:
@@ -531,8 +540,8 @@ async def _openalex_only_section(
     # them), a chapter whose parent book is in Pure, or a same-title Pure
     # record sharing the author. Tagged over the WHOLE gated list so the
     # counts stay exact beyond the shown slice; untagged rows — the likely
-    # misses — sort first (stable: year/title order kept within groups).
-    # Every tag must share an author: this author themself.
+    # misses — carry pure_match=None. Every tag must share an author:
+    # this author themself.
     await tag_pure_matches(
         session,
         institution,
@@ -541,45 +550,43 @@ async def _openalex_only_section(
         check_own_doi=True,
     )
     likely_missing = sum(1 for g in gated if g.get("pure_match") is None)
-    gated.sort(key=lambda g: g.get("pure_match") is not None)
-    # total is the exact gated count; authorships, publisher and roster
-    # enrichment only cover the slice that ships to the client.
+    # total is the exact gated count; missing parts group under their main
+    # work and only the shown entries' parts get the authorships,
+    # publisher and roster enrichment (the bulk fetch stays scalar).
     total = len(gated)
-    gated = gated[:OPENALEX_ONLY_CAP]
-    need_ash = [g["openalex_id"] for g in gated if g.get("authorships") is None]
-    if need_ash:
-        ash_map = await authorships_by_wid(session, institution, need_ash)
-        for g in gated:
-            g["authorships"] = ash_map.get(g["openalex_id"]) or []
-    publishers = await journal_publisher_map(session, [g["journal_issn_l"] for g in gated])
+    entries, entries_total = await group_gap_entries(session, institution, gated)
+    shown = entries[:OPENALEX_ONLY_CAP]
+    to_serve = [e for e in shown if e["kind"] == "single"]
+    to_serve += [p for e in shown if e["kind"] == "group" for p in e["parts"]]
+    need_ash = [d["openalex_id"] for d in to_serve if d.get("authorships") is None]
+    ash_map = await authorships_by_wid(session, institution, need_ash) if need_ash else {}
+    for d in to_serve:
+        if d.get("authorships") is None:
+            d["authorships"] = ash_map.get(d["openalex_id"]) or []
+    publishers = await journal_publisher_map(session, [d["journal_issn_l"] for d in to_serve])
     roster = await ut_roster_by_aids(
         session,
         institution,
         {
             aid.lower()
-            for g in gated
-            for entry in g["authorships"]
+            for d in to_serve
+            for entry in d.get("authorships") or []
             if (aid := str((entry or {}).get("a") or ""))
         },
     )
-    items = []
-    for g in gated:
-        authorships = g.pop("authorships")
-        w_id = g["openalex_id"]
-        items.append(
-            {
-                "pure_uuid": None,
-                **g,
-                "openalex_url": f"{OPENALEX_URL}/{w_id}" if w_id else None,
-                "publisher_name": publishers.get(g["journal_issn_l"]),
-                "in_pure": False,
-                "ut_authors": ut_authors_for_authorships(authorships, roster),
-            }
-        )
+    for d in to_serve:
+        authorships = d.pop("authorships")
+        w_id = d["openalex_id"]
+        d["pure_uuid"] = None
+        d["openalex_url"] = f"{OPENALEX_URL}/{w_id}" if w_id else None
+        d["publisher_name"] = publishers.get(d["journal_issn_l"])
+        d["in_pure"] = False
+        d["ut_authors"] = ut_authors_for_authorships(authorships, roster)
     return {
         "total": total,
         "likely_missing": likely_missing,
-        "items": items,
+        "entries_total": entries_total,
+        "items": shown,
         "available": True,
     }, total
 

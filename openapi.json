@@ -5879,9 +5879,28 @@
             "title": "Total",
             "default": 0
           },
+          "entries_total": {
+            "type": "integer",
+            "title": "Entries Total",
+            "default": 0
+          },
           "items": {
             "items": {
-              "$ref": "#/components/schemas/AuthorOpenalexOnlyWork"
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/AuthorOpenalexOnlySingle"
+                },
+                {
+                  "$ref": "#/components/schemas/AuthorOpenalexOnlyGroup"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "kind",
+                "mapping": {
+                  "group": "#/components/schemas/AuthorOpenalexOnlyGroup",
+                  "single": "#/components/schemas/AuthorOpenalexOnlySingle"
+                }
+              }
             },
             "type": "array",
             "title": "Items",
@@ -5900,7 +5919,226 @@
         },
         "type": "object",
         "title": "AuthorOpenalexOnly",
-        "description": "The author's OpenAlex-only works as their own section: total is\nexact, items carry the gated missed works (safety-capped)."
+        "description": "The author's OpenAlex-only works as their own section: total is\nexact, items hold the grouped entries (missing parts under their main\nwork), safety-capped at the entry level; entries_total counts entries\nbefore the cap."
+      },
+      "AuthorOpenalexOnlyGroup": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "group",
+            "title": "Kind",
+            "default": "group"
+          },
+          "parent": {
+            "$ref": "#/components/schemas/GapGroupParent"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/AuthorOpenalexOnlyWork"
+            },
+            "type": "array",
+            "title": "Parts",
+            "default": []
+          },
+          "parts_total": {
+            "type": "integer",
+            "title": "Parts Total",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "parent"
+        ],
+        "title": "AuthorOpenalexOnlyGroup",
+        "description": "One main work with its missing parts (only missing works are\nlisted); the parent itself may well be registered."
+      },
+      "AuthorOpenalexOnlySingle": {
+        "properties": {
+          "pure_uuid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Uuid"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "oa_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Status"
+          },
+          "work_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Type"
+          },
+          "journal_issn_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Issn L"
+          },
+          "journal_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Title"
+          },
+          "publisher_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Name"
+          },
+          "openalex_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Id"
+          },
+          "openalex_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Url"
+          },
+          "in_pure": {
+            "type": "boolean",
+            "title": "In Pure",
+            "default": false
+          },
+          "ut_authors": {
+            "items": {
+              "$ref": "#/components/schemas/UtAuthorAttribution"
+            },
+            "type": "array",
+            "title": "Ut Authors",
+            "default": []
+          },
+          "parent_works": {
+            "items": {
+              "$ref": "#/components/schemas/WorkParent"
+            },
+            "type": "array",
+            "title": "Parent Works",
+            "default": []
+          },
+          "is_part": {
+            "type": "boolean",
+            "title": "Is Part",
+            "default": false
+          },
+          "pure_match": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "doi_in_pure",
+                  "parent_book_in_pure",
+                  "same_title_in_pure"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Match"
+          },
+          "pure_match_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Match Url"
+          },
+          "kind": {
+            "type": "string",
+            "const": "single",
+            "title": "Kind",
+            "default": "single"
+          }
+        },
+        "type": "object",
+        "title": "AuthorOpenalexOnlySingle",
+        "description": "One standalone gap work (no parent works): all work-row fields at\nthe top level."
       },
       "AuthorOpenalexOnlyWork": {
         "properties": {
@@ -6334,6 +6572,7 @@
             "$ref": "#/components/schemas/AuthorOpenalexOnly",
             "default": {
               "total": 0,
+              "entries_total": 0,
               "items": [],
               "available": true,
               "likely_missing": 0
@@ -8744,6 +8983,68 @@
         ],
         "title": "FunderTopJournal"
       },
+      "GapGroupParent": {
+        "properties": {
+          "w_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "W Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "work_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Type"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "pure_registered": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Registered"
+          }
+        },
+        "type": "object",
+        "title": "GapGroupParent",
+        "description": "The main work a group entry's missing parts belong to: the parts'\nprimary parent (the first rel=volume parent among a part's\nparent_works, else the first listed parent). name comes from the\nparts' parent_works (registry title when the registry row has one);\nwork_type/doi/pure_registered are null without an openalex_work_parents\nrow (parts backfill pending). pure_registered is derived live from the\nworks table and false includes no-DOI parents."
+      },
       "GreenOa": {
         "type": "string",
         "enum": [
@@ -10248,9 +10549,28 @@
             "title": "Total",
             "default": 0
           },
+          "entries_total": {
+            "type": "integer",
+            "title": "Entries Total",
+            "default": 0
+          },
           "items": {
             "items": {
-              "$ref": "#/components/schemas/OpenalexOnlyWork"
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/OpenalexOnlySingle"
+                },
+                {
+                  "$ref": "#/components/schemas/OpenalexOnlyGroup"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "kind",
+                "mapping": {
+                  "group": "#/components/schemas/OpenalexOnlyGroup",
+                  "single": "#/components/schemas/OpenalexOnlySingle"
+                }
+              }
             },
             "type": "array",
             "title": "Items",
@@ -10264,7 +10584,7 @@
         },
         "type": "object",
         "title": "OpenalexOnly",
-        "description": "OpenAlex store works attributed to the venue or to the unit's\nmember authors whose DOI matches no Pure work \u2014 candidates missing\nfrom the CRIS. items is capped; total is exact. available=False when\nthe openalex_works projection never ran (frontend hides the card)."
+        "description": "OpenAlex store works attributed to the venue or to the unit's\nmember authors whose DOI matches no Pure work \u2014 candidates missing\nfrom the CRIS. items holds the grouped entries (missing parts\ncollected under their main work), capped; total counts works and\nentries_total counts entries (before the cap), both exact.\navailable=False when the openalex_works projection never ran\n(frontend hides the card)."
       },
       "OpenalexOnlyAuthor": {
         "properties": {
@@ -10301,6 +10621,228 @@
         ],
         "title": "OpenalexOnlyAuthor",
         "description": "One compact OpenAlex authorship of a gap work ({a, n, o})."
+      },
+      "OpenalexOnlyGroup": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "group",
+            "title": "Kind",
+            "default": "group"
+          },
+          "parent": {
+            "$ref": "#/components/schemas/GapGroupParent"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/OpenalexOnlyWork"
+            },
+            "type": "array",
+            "title": "Parts",
+            "default": []
+          },
+          "parts_total": {
+            "type": "integer",
+            "title": "Parts Total",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "parent"
+        ],
+        "title": "OpenalexOnlyGroup",
+        "description": "One main work with its missing parts. A group exists when any part\nof the work is missing from Pure; parts hold only those missing works\n(registered parts never enter the gap set) and the parent itself may\nwell be registered (pure_registered true)."
+      },
+      "OpenalexOnlySingle": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "oa_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Status"
+          },
+          "work_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Type"
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue"
+          },
+          "openalex_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Id"
+          },
+          "openalex_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Url"
+          },
+          "authors": {
+            "items": {
+              "$ref": "#/components/schemas/OpenalexOnlyAuthor"
+            },
+            "type": "array",
+            "title": "Authors",
+            "default": []
+          },
+          "ut_authors": {
+            "items": {
+              "$ref": "#/components/schemas/UtAuthorAttribution"
+            },
+            "type": "array",
+            "title": "Ut Authors",
+            "default": []
+          },
+          "journal_issn_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Issn L"
+          },
+          "journal_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Title"
+          },
+          "publisher_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Name"
+          },
+          "parent_works": {
+            "items": {
+              "$ref": "#/components/schemas/WorkParent"
+            },
+            "type": "array",
+            "title": "Parent Works",
+            "default": []
+          },
+          "is_part": {
+            "type": "boolean",
+            "title": "Is Part",
+            "default": false
+          },
+          "pure_match": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "doi_in_pure",
+                  "parent_book_in_pure",
+                  "same_title_in_pure"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Match"
+          },
+          "pure_match_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Match Url"
+          },
+          "kind": {
+            "type": "string",
+            "const": "single",
+            "title": "Kind",
+            "default": "single"
+          }
+        },
+        "type": "object",
+        "title": "OpenalexOnlySingle",
+        "description": "One standalone gap work (no parent works): all work-row fields at\nthe top level."
       },
       "OpenalexOnlyWork": {
         "properties": {

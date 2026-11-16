@@ -133,6 +133,28 @@ class OpenalexWorkAuthor(Base):
     w_id: Mapped[str] = mapped_column(Text, primary_key=True)
 
 
+class OpenalexWorkParent(Base):
+    """One parent work (OpenAlex part-of) named by the institution's store
+    rows: jobs/backfill_parts.py registers every distinct parent_works
+    W-id and fills title/doi/work_type with one free single-entity GET.
+    The fetched row is authoritative (the children's parent_works `name`
+    is the pre-fetch fallback). Pure registration is derived at query
+    time (EXISTS on doi_normalized against the works table) — a parent
+    without a DOI cannot match and counts as unregistered.
+    """
+
+    __tablename__ = "openalex_work_parents"
+
+    institution_id: Mapped[int] = mapped_column(
+        ForeignKey("institutions.id", ondelete="CASCADE"), primary_key=True
+    )
+    parent_w_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    doi_normalized: Mapped[str | None] = mapped_column(Text, nullable=True)
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    work_type: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = _tstamp()
+
+
 class AuthorIdentity(Base):
     """One external identity proposal/decision for a local author.
 
