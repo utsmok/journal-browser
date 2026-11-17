@@ -421,29 +421,44 @@ async def refresh_existing_journals(
         return stats
     ingest = IngestSession(session)
     await ingest.start_run(SOURCE, ENTITY_TYPE, "refresh", {"route": "refresh", "per_id": True})
-    payloads, failed = await paced_single_gets(
-        client.sources.get, [f"https://openalex.org/{pk}" for pk in todo]
-    )
-    stats["failed"] = len(failed)
-    if failed:
-        logger.warning(
-            "journals refresh: %d lookups failed, e.g. %s", len(failed), sorted(failed)[:5]
+    # Fetch in chunks and commit per chunk: one paced_single_gets over all
+    # ids would hold every payload in memory for the whole run — a kill
+    # wave then loses the entire run, and on this 14 GB host it competes
+    # with rebuilds and other sweeps. A kill now loses only the current
+    # chunk; reruns re-fetch everything anyway.
+    chunk_size = 2_000
+    for start in range(0, len(todo), chunk_size):
+        chunk = todo[start : start + chunk_size]
+        payloads, failed = await paced_single_gets(
+            client.sources.get, [f"https://openalex.org/{pk}" for pk in chunk]
         )
-    page: list[tuple[str, dict[str, Any]]] = []
-    for pk in todo:
-        entity = payloads.get(f"https://openalex.org/{pk}")
-        payload = _payload_dict(entity)
-        if payload is None:
-            stats["missing"] += 1
-            continue
-        page.append((pk, payload))
-        if len(page) >= PER_PAGE:
-            await ingest.ingest_records(page)
-            stats["ingested"] += await _upsert_journal_page(session, [p for _, p in page])
-            page = []
-    await ingest.ingest_records(page)
-    stats["ingested"] += await _upsert_journal_page(session, [p for _, p in page])
-    await ingest.commit()
+        stats["failed"] += len(failed)
+        if failed:
+            logger.warning(
+                "journals refresh: %d lookups failed, e.g. %s",
+                len(failed),
+                sorted(failed)[:5],
+            )
+        page: list[tuple[str, dict[str, Any]]] = []
+        for pk in chunk:
+            entity = payloads.get(f"https://openalex.org/{pk}")
+            payload = _payload_dict(entity)
+            if payload is None:
+                stats["missing"] += 1
+                continue
+            page.append((pk, payload))
+            if len(page) >= PER_PAGE:
+                await ingest.ingest_records(page)
+                stats["ingested"] += await _upsert_journal_page(session, [p for _, p in page])
+                page = []
+        await ingest.ingest_records(page)
+        stats["ingested"] += await _upsert_journal_page(session, [p for _, p in page])
+        await ingest.commit()
+        logger.info(
+            "journals refresh: %d/%d ids done",
+            min(start + chunk_size, len(todo)),
+            len(todo),
+        )
     pruned = await prune_orphan_issn_map(session)
     stats["issn_map_pruned"] = pruned
     final = await ingest.finish_run("completed", stats)
