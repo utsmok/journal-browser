@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
 from journal_browser.harvest.openalex_journals import harvest_journals, refresh_publisher_links
+from journal_browser.logging_setup import configure_logging
 from journal_browser.models import Journal
 from journal_browser.services.search import WORKS_CUTOFF
 
@@ -30,6 +31,8 @@ async def corpus_counts(session) -> dict[str, int]:
 
 async def main() -> None:
     import sys
+
+    configure_logging()
 
     seed_only = "--seed-deals-only" in sys.argv
     sweep_all = "--sweep-all" in sys.argv

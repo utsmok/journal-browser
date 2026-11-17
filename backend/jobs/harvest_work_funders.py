@@ -10,9 +10,11 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
 from journal_browser.harvest.work_funders import harvest_work_funders
+from journal_browser.logging_setup import configure_logging
 
 
 async def main() -> None:
+    configure_logging()
     engine = create_async_engine(get_settings().database_url)
     maker = async_sessionmaker(engine, expire_on_commit=False)
     async with maker() as session:
