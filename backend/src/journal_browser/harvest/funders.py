@@ -110,6 +110,42 @@ def _openalex_row(f: Any) -> dict[str, Any]:
     }
 
 
+async def refresh_openalex_funders(session: AsyncSession) -> dict[str, int]:
+    """Re-fetch every stored funder's full payload (free singleton GETs),
+    refreshing works_count / cited_by_count / grant_count that upstream
+    recomputes. Complements harvest_openalex_funders, which only fills
+    gaps: this route exists for upstream corrections such as the
+    2026-11 citation re-matcher."""
+    ids = sorted(r for (r,) in (await session.execute(select(OpenalexFunder.openalex_id))).all())
+    stats: dict[str, int] = {
+        "selected": len(ids),
+        "fetched": 0,
+        "failed": 0,
+    }
+    if not ids:
+        return stats
+    client_kwargs: dict[str, Any] = {}
+    if api_key := get_settings().openalex_api_key:
+        client_kwargs["api_key"] = api_key
+    async with AlethecaClient(**client_kwargs) as client:
+        payloads, failed = await paced_single_gets(
+            client.funders.get, [f"https://openalex.org/{i}" for i in ids]
+        )
+    stats["failed"] = len(failed)
+    if failed:
+        logger.warning(
+            "openalex funder refresh: %d lookups failed, e.g. %s",
+            len(failed),
+            sorted(failed)[:5],
+        )
+    fetched = [_openalex_row(payload) for payload in payloads.values() if payload is not None]
+    stats["fetched"] = len(fetched)
+    if fetched:
+        await _upsert(session, OpenalexFunder, "openalex_id", fetched)
+    logger.info("refresh_openalex_funders: %s", stats)
+    return stats
+
+
 async def harvest_openalex_funders(session: AsyncSession) -> dict[str, int]:
     """Backfill openalex_funders from works-linked funder ids.
 

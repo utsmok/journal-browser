@@ -214,6 +214,11 @@ async def rebuild_openalex_works(session: AsyncSession, institution: Institution
             row["parts_checked_at"] = checked_now
         elif prior := prior_parts.get(row["w_id"]):
             row["parent_works"], row["is_part"], row["parts_checked_at"] = prior
+        else:
+            # New row, silent payload: unchecked. The key must exist on
+            # every row — chunked executemany compiles the INSERT from
+            # the first dict, so heterogeneous keys crash mid-chunk.
+            row["parts_checked_at"] = None
     await session.execute(delete(OpenalexWork).where(OpenalexWork.institution_id == institution.id))
     await session.execute(
         delete(OpenalexWorkAuthor).where(OpenalexWorkAuthor.institution_id == institution.id)

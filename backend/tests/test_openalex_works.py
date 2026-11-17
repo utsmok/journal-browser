@@ -330,3 +330,52 @@ async def test_rebuild_syncs_work_oa_status(db, institution_factory):
         "w-orphan": "closed",
         "w-dup": "green",
     }
+
+
+@requires_db
+async def test_rebuild_carries_parts_facts(db, institution_factory):
+    inst = await institution_factory(code="ut")
+    db.add(journal_factory("1234-5678", openalex_id="S123"))
+    await db.flush()
+    # Prior row from before this sweep: silent payload today, but parts
+    # facts exist from the per-DOI backfill — a rebuild must inherit
+    # them, not reset them.
+    prior = OpenalexWork(
+        institution_id=inst.id,
+        w_id="W2",
+        title="Prior",
+        parent_works=[{"id": "Wbook", "name": "Book", "rel": "volume"}],
+        is_part=True,
+        parts_checked_at=datetime.now(UTC) - timedelta(days=1),
+    )
+    db.add(prior)
+    await db.flush()
+    # Seed order matters: W1 (payload names parents) is seen first, so
+    # its row carries the parts_checked_at key into the compiled INSERT;
+    # the old code then crashed when W3's dict lacked the key.
+    chapter = _payload(w_id="W1", title="Chapter")
+    chapter["parent_works"] = [{"id": "Wbook", "name": "Book", "rel": "volume"}]
+    await _seed_sweep(
+        db,
+        inst,
+        [
+            ("W1", chapter),
+            ("W2", _payload(w_id="W2", title="Prior")),
+            ("W3", _payload(w_id="W3", title="Standalone New")),
+        ],
+        filter_set="institutions.id=I1",
+    )
+    stats = await rebuild_openalex_works(db, inst)
+    assert stats["works"] == 3
+    rows = {r.w_id: r for r in (await db.execute(select(OpenalexWork))).scalars()}
+    # Payload names parents: checked now, is a part.
+    assert rows["W1"].is_part is True
+    assert rows["W1"].parts_checked_at is not None
+    # Silent payload with prior facts: inherited untouched.
+    assert rows["W2"].is_part is True
+    assert rows["W2"].parent_works == [{"id": "Wbook", "name": "Book", "rel": "volume"}]
+    assert rows["W2"].parts_checked_at == prior.parts_checked_at
+    # Silent payload, no prior row: unchecked — and the chunked insert
+    # survives the heterogeneous key sets.
+    assert rows["W3"].is_part is False
+    assert rows["W3"].parts_checked_at is None
