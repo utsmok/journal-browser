@@ -127,21 +127,33 @@ async def refresh_openalex_funders(session: AsyncSession) -> dict[str, int]:
     client_kwargs: dict[str, Any] = {}
     if api_key := get_settings().openalex_api_key:
         client_kwargs["api_key"] = api_key
-    async with AlethecaClient(**client_kwargs) as client:
-        payloads, failed = await paced_single_gets(
-            client.funders.get, [f"https://openalex.org/{i}" for i in ids]
+    # Chunked fetch + per-chunk commit with a fresh client each chunk:
+    # long-lived keepalive sockets die during ingest gaps and the next
+    # burst hangs on them (see refresh_existing_journals).
+    chunk_size = 2_000
+    for start in range(0, len(ids), chunk_size):
+        chunk = ids[start : start + chunk_size]
+        async with AlethecaClient(**client_kwargs) as client:
+            payloads, failed = await paced_single_gets(
+                client.funders.get, [f"https://openalex.org/{i}" for i in chunk]
+            )
+        stats["failed"] += len(failed)
+        if failed:
+            logger.warning(
+                "openalex funder refresh: %d lookups failed, e.g. %s",
+                len(failed),
+                sorted(failed)[:5],
+            )
+        fetched = [_openalex_row(payload) for payload in payloads.values() if payload is not None]
+        stats["fetched"] += len(fetched)
+        if fetched:
+            await _upsert(session, OpenalexFunder, "openalex_id", fetched)
+        await session.commit()
+        logger.info(
+            "openalex funder refresh: %d/%d ids done",
+            min(start + chunk_size, len(ids)),
+            len(ids),
         )
-    stats["failed"] = len(failed)
-    if failed:
-        logger.warning(
-            "openalex funder refresh: %d lookups failed, e.g. %s",
-            len(failed),
-            sorted(failed)[:5],
-        )
-    fetched = [_openalex_row(payload) for payload in payloads.values() if payload is not None]
-    stats["fetched"] = len(fetched)
-    if fetched:
-        await _upsert(session, OpenalexFunder, "openalex_id", fetched)
     logger.info("refresh_openalex_funders: %s", stats)
     return stats
 

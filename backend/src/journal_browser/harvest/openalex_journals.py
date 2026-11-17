@@ -392,9 +392,7 @@ async def harvest_journals_delta(
     return final
 
 
-async def refresh_existing_journals(
-    client: AlethecaClient, session: AsyncSession, limit: int | None = None
-) -> dict:
+async def refresh_existing_journals(session: AsyncSession, limit: int | None = None) -> dict:
     """Re-fetch every stored journal's full source payload (free singleton
     GETs), refreshing counts fields (cited_by_count, counts_by_year,
     summary_stats) that upstream recompute. Lands raws in source_records
@@ -429,9 +427,18 @@ async def refresh_existing_journals(
     chunk_size = 2_000
     for start in range(0, len(todo), chunk_size):
         chunk = todo[start : start + chunk_size]
-        payloads, failed = await paced_single_gets(
-            client.sources.get, [f"https://openalex.org/{pk}" for pk in chunk]
-        )
+        # A fresh client per chunk: one long-lived client's keepalive
+        # sockets die during the between-chunk ingest gap (Cloudflare
+        # closes idle connections), and the next burst then hangs on
+        # dead sockets before its retry chain reconnects — chunk wall
+        # time ballooned from minutes to an hour that way.
+        client_kwargs: dict[str, Any] = {}
+        if api_key := get_settings().openalex_api_key:
+            client_kwargs["api_key"] = api_key
+        async with AlethecaClient(**client_kwargs) as chunk_client:
+            payloads, failed = await paced_single_gets(
+                chunk_client.sources.get, [f"https://openalex.org/{pk}" for pk in chunk]
+            )
         stats["failed"] += len(failed)
         if failed:
             logger.warning(
@@ -493,7 +500,7 @@ async def harvest_journals(
         main_stats: dict = {}
         if not seed_only:
             if refresh_existing:
-                main_stats = await refresh_existing_journals(client, session, limit)
+                main_stats = await refresh_existing_journals(session, limit)
             elif sweep_all:
                 main_stats = await sweep_all_sources(client, session, limit)
             else:
