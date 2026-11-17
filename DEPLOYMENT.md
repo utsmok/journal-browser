@@ -107,7 +107,7 @@ Useful variants (run inside the backend image, e.g.
 
 | Job | Source | Produces |
 |---|---|---|
-| `harvest_journals` | OpenAlex | The journal universe (~177k rows), ISSNs, topics, OA status |
+| `harvest_journals` | OpenAlex | The journal universe (~177k rows), ISSNs, topics, OA status. Default route is credit-free (deal seed + singleton delta for missing journals); `--refresh` re-fetches every stored journal via free singleton GETs to pick up upstream corrections (counts fields), `--sweep-all` costs credits and is a rare manual operation |
 | `harvest_publishers` | OpenAlex | Publisher lineage: `journals.publisher_canonical` groups sub-brands (e.g. IEEE Communications Society) under their root publisher |
 | `scrape_openaccess_nl` | openaccess.nl | Deal pages: narrative, conditions, participation text |
 | `ingest_jct` | cOAlition S JCT public dump | ESAC agreements + journal lists |
