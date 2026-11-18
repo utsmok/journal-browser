@@ -126,7 +126,12 @@ async def refresh_openalex_funders(session: AsyncSession) -> dict[str, int]:
     recomputes. Complements harvest_openalex_funders, which only fills
     gaps: this route exists for upstream corrections such as the
     2026-11 citation re-matcher."""
-    ids = sorted(r for (r,) in (await session.execute(select(OpenalexFunder.openalex_id))).all())
+    ids = sorted(
+        {
+            openalex_id_to_pk(r)
+            for (r,) in (await session.execute(select(OpenalexFunder.openalex_id))).all()
+        }
+    )
     stats: dict[str, int] = {
         "selected": len(ids),
         "fetched": 0,
