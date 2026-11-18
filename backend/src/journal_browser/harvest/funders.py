@@ -65,7 +65,17 @@ def normalize_fundref(*values: Any) -> str | None:
 
 async def _upsert(session: AsyncSession, model: Any, pk: str, rows: list[dict[str, Any]]) -> int:
     """Chunked INSERT ... ON CONFLICT (pk) DO UPDATE; updated_at re-stamps
-    to now() on every rerun."""
+    to now() on every rerun.
+
+    Upstream can canonicalize two ids into one payload, so fetched rows
+    may repeat a pk. A batch containing the same pk twice makes Postgres
+    reject the whole statement ("cannot affect row a second time"), so
+    repeats collapse to the last row before chunking.
+    """
+    seen: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        seen[row[pk]] = row
+    rows = list(seen.values())
     for at in range(0, len(rows), UPSERT_CHUNK):
         chunk = rows[at : at + UPSERT_CHUNK]
         stmt = pg_insert(model.__table__).values(chunk)
