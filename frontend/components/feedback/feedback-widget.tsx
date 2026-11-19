@@ -57,6 +57,7 @@ export function FeedbackWidget() {
   const queryClient = useQueryClient();
   const pathname = usePathname();
   const [open, setOpen] = React.useState(false);
+  const titleRef = React.useRef<HTMLInputElement>(null);
   const [title, setTitle] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [category, setCategory] = React.useState("");
@@ -73,6 +74,11 @@ export function FeedbackWidget() {
     }, 2000);
     return () => clearTimeout(t);
   }, [phase]);
+
+  // Dialog semantics: keyboard users land in the first field; Escape closes.
+  React.useEffect(() => {
+    if (open) titleRef.current?.focus();
+  }, [open]);
 
   // Admin operators report data issues through the admin panel itself; the
   // public feedback button would only overlap their tables.
@@ -127,7 +133,11 @@ export function FeedbackWidget() {
       {open && (
         <div
           role="dialog"
+          aria-modal="true"
           aria-label={t("feedback.reportIssue")}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setOpen(false);
+          }}
           className="fixed inset-x-4 bottom-20 z-50 max-h-[75dvh] overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 sm:inset-x-auto sm:right-6 sm:bottom-24 sm:w-96"
         >
           <div className="mb-3 flex items-center justify-between">
@@ -147,6 +157,7 @@ export function FeedbackWidget() {
           ) : (
             <form onSubmit={submit} className="space-y-3">
               <Input
+                ref={titleRef}
                 placeholder={t("feedback.titlePlaceholder")}
                 value={title}
                 maxLength={255}
