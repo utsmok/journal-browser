@@ -44,9 +44,9 @@ async def collect_work_ids(
     async for item in client.works.iterate(
         page_size=PER_PAGE,
         filters={"primary_location.source.id": source_id},
-        select="id",
+        select=["id"],
     ):
-        work_id = item.get("id") if isinstance(item, dict) else getattr(item, "id", None)
+        work_id = getattr(item, "id", None)
         if work_id:
             work_ids.append(str(work_id).rsplit("/", 1)[-1])
         if len(work_ids) >= max_works:

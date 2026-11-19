@@ -1,7 +1,7 @@
 """Harvest OpenAIRE research products for UT via aireloom (phase 9).
 
 Full sweep of the Graph's research products linked to the home institution
-(relOrganizationId filter), stored verbatim in source_records; DOI matches
+(affiliations.organization_id filter), stored verbatim in source_records; DOI matches
 against works become confirmed work_identity rows.
 """
 
@@ -23,8 +23,7 @@ PAGE_SIZE = 100  # OpenAIRE Graph v3 pageSize maximum
 
 try:
     from aireloom import AireloomClient
-    from aireloom.endpoints import ResearchProductsFilters
-    from aireloom.models import ResearchProduct
+    from aireloom.filters import ResearchProductsFilters
 except ImportError:  # pragma: no cover
     AireloomClient = None
 
@@ -88,7 +87,7 @@ async def harvest_openaire_products(
     org_id = _org_id(institution)
     if org_id is None:
         return {"skipped": f"institution {institution.code!r} has no openaire_org_id"}
-    filter_set = f"relOrganizationId={org_id}"
+    filter_set = f"affiliations.organization_id={org_id}"
     ingest = IngestSession(session)
     config = {"filter_set": filter_set, "page_size": PAGE_SIZE}
     await ingest.start_run(SOURCE, "work", filter_set, config, institution_id=institution.id)
@@ -107,16 +106,13 @@ async def harvest_openaire_products(
 
     stats: dict[str, Any] = {"matched_doi": 0, "no_doi": 0}
     async with AireloomClient() as client:
+        failures: list[tuple[dict[str, Any], Exception]] = []
         async for item in client.research_products.iterate(
-            filters=ResearchProductsFilters(relOrganizationId=org_id),
+            filters=ResearchProductsFilters(affiliations_organization_id=org_id),
             page_size=PAGE_SIZE,
+            on_error="skip",
+            failures=failures,
         ):
-            if not isinstance(item, ResearchProduct):
-                pk = item.get("id") if isinstance(item, dict) else None
-                await ingest.record_parse_failure(
-                    {"source_pk": pk, "reason": "ResearchProduct model parse failure"}
-                )
-                continue
             payload = _strip_nuls(item.model_dump(mode="json"))
             _kind, _ = await ingest.ingest_record(item.id, payload)
             doi = _extract_doi(item)
@@ -132,6 +128,8 @@ async def harvest_openaire_products(
                 stats["no_doi"] += 1
             if limit is not None and ingest.records_seen >= limit:
                 break
+        for raw, exc in failures:
+            await ingest.record_parse_failure({"source_pk": raw.get("id"), "reason": str(exc)})
     final = await ingest.finish_run("completed", stats)
     await ingest.commit()
     return final

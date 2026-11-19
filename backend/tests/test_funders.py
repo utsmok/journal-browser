@@ -175,7 +175,7 @@ async def test_refresh_funder_links_dedupes_twin_matched_via_both_keys(db):
 
 
 async def test_openaire_row_from_funding_funder():
-    from aireloom.models.project import FundingFunder, FundingJurisdiction
+    from aireloom.models import FundingFunder, FundingJurisdiction
 
     from journal_browser.harvest.funders import _openaire_row
 
@@ -224,8 +224,10 @@ class _FakeFunderEntity:
     """Shaped after an aletheca Funder entity for _openalex_row."""
 
     def __init__(self, pk: str):
+        from aletheca.models import FunderIds
+
         self.id = f"https://openalex.org/{pk}"
-        self.ids = {"ror": "https://ror.org/04ad7pn51", "doi": "10.13039/100009795"}
+        self.ids = FunderIds(ror="https://ror.org/04ad7pn51", doi="10.13039/100009795")
         self.display_name = "NWO"
         self.country_code = "nl"
         self.description = None

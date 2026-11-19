@@ -20,6 +20,13 @@ import os
 from collections.abc import Sequence
 from typing import Any
 
+from bibliofabric.exceptions import (
+    APIError,
+    NetworkError,
+    NotFoundError,
+    RateLimitError,
+    TimeoutError,
+)
 from sqlalchemy import exists, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,8 +46,8 @@ GET_CONCURRENCY = 10
 #: Seconds between singleton GET starts. Rate-limit tiers differ (keyed
 #: free ~10 rps vs premium higher); JB_OPENALEX_MIN_INTERVAL_S=0.13 keeps
 #: a solo consumer under the free 10 rps cap, avoiding the 429 retry
-#: freeze (bibliofabric sleeps rate_limit_retry_after_default=60s per 429
-#: while holding its semaphore slot).
+#: freeze (bibliofabric sleeps its max retry wait per 429 while holding
+#: its semaphore slot).
 GET_MIN_INTERVAL_S = float(os.environ.get("JB_OPENALEX_MIN_INTERVAL_S", "0.08"))
 FETCH_CHUNK = 500
 CHUNK_PAUSE_S = 0.3
@@ -82,10 +89,9 @@ async def fetch_works_by_doi(
                 await asyncio.sleep(start - now)
             try:
                 return doi, await client.works.get(f"https://doi.org/{doi}"), False, None
+            except NotFoundError:
+                return doi, None, False, None
             except Exception as exc:
-                status = getattr(getattr(exc, "response", None), "status_code", None)
-                if status == 404:
-                    return doi, None, False, None
                 return doi, None, True, exc
 
     out: dict[str, Any | None] = {}
@@ -120,17 +126,16 @@ async def _batch_by_doi_resilient(fetch: Any, chunk: list[str], stats: dict[str,
     reject the whole request with a 400, which used to fail the entire
     enrichment run. Bisect client-error batches until the bad DOI stands
     alone, then skip + count it. Transient/systemic failures (5xx, 429,
-    network) re-raise: retry logic lives upstream. Crossref-only: the
-    OpenAlex rungs fetch per entity via fetch_works_by_doi."""
-    from bibliofabric.exceptions import APIError, RateLimitError
-
+    network, route-level 404) re-raise: retry logic lives upstream.
+    Crossref-only: the OpenAlex rungs fetch per entity via
+    fetch_works_by_doi."""
     try:
         return await fetch(chunk)
-    except RateLimitError:
+    except (NetworkError, NotFoundError, RateLimitError, TimeoutError):
         raise
     except APIError as exc:
-        status = getattr(getattr(exc, "response", None), "status_code", None)
-        if status is not None and (status < 400 or status >= 500 or status == 429):
+        status = exc.response.status_code if exc.response is not None else None
+        if status is None or status >= 500:
             raise
         if len(chunk) == 1:
             logger.warning("enrichment: API rejected doi %s; skipped (%s)", chunk[0], exc)
@@ -141,11 +146,6 @@ async def _batch_by_doi_resilient(fetch: Any, chunk: list[str], stats: dict[str,
         for half in (chunk[:mid], chunk[mid:]):
             found.update(await _batch_by_doi_resilient(fetch, half, stats))
         return found
-
-
-def _norm_doi_key(key: Any) -> str:
-    """Client result keys may be bare DOIs or https://doi.org/ URLs."""
-    return str(key).lower().removeprefix("https://doi.org/")
 
 
 async def _journal_exists(session: AsyncSession, issn_l: str) -> bool:
@@ -199,10 +199,8 @@ def _openalex_work_fields(work: Any) -> dict[str, Any]:
     if oa_status:
         fields["oa_status"] = oa_status
     location = getattr(work, "primary_location", None)
-    source = (
-        location.get("source") if isinstance(location, dict) else getattr(location, "source", None)
-    )
-    issn_l = source.get("issn_l") if isinstance(source, dict) else getattr(source, "issn_l", None)
+    source = getattr(location, "source", None)
+    issn_l = getattr(source, "issn_l", None)
     if issn_l:
         fields["journal_issn_l"] = issn_l
     return fields
@@ -248,9 +246,7 @@ def _location_issns(work: Any) -> list[str]:
         src = getattr(loc, "source", None) if loc is not None else None
         if src is None:
             continue
-        # aletheca parses Location.source as a raw dict (DehydratedSource).
-        getter = src.get if isinstance(src, dict) else lambda k, _s=src: getattr(_s, k, None)
-        candidates = [getter("issn_l"), *(getter("issn") or [])]
+        candidates = [src.issn_l, *src.issn]
         for value in candidates:
             if value and str(value) not in out:
                 out.append(str(value))
@@ -467,12 +463,10 @@ async def enrich_crossref(
         for chunk in _chunk(list(by_doi), BATCH_SIZE):
             found = await _batch_by_doi_resilient(client.works.batch_get_by_doi, chunk, stats)
             for key, work in found.items():
-                ut = by_doi.get(_norm_doi_key(key))
+                ut = by_doi.get(key)
                 if ut is None:
                     continue
-                payload = (
-                    work.model_dump(mode="json") if hasattr(work, "model_dump") else dict(work)
-                )
+                payload = work.model_dump(mode="json")
                 await ingest.ingest_record(f"doi:{ut.doi_normalized}", payload)
                 await _confirm_identity(
                     session,

@@ -10,6 +10,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
+from bibliofabric.exceptions import NotFoundError
 from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -417,10 +418,9 @@ async def paced_single_gets(
                 await asyncio.sleep(start - now)
             try:
                 return iid, await get(iid), None
+            except NotFoundError:
+                return iid, None, None
             except Exception as exc:
-                status = getattr(getattr(exc, "response", None), "status_code", None)
-                if status == 404:
-                    return iid, None, None
                 return iid, None, exc
 
     out: dict[str, Any | None] = {}

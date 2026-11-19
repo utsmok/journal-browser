@@ -4,7 +4,7 @@ every lookup fails fails the run loudly instead of silently no-oping."""
 
 import httpx
 import pytest
-from bibliofabric.exceptions import APIError, RateLimitError
+from bibliofabric.exceptions import APIError, NotFoundError, RateLimitError
 from sqlalchemy import select
 
 from conftest import requires_db
@@ -12,7 +12,8 @@ from journal_browser.harvest.enrich import enrich_openalex, fetch_works_by_doi
 
 
 def _api_error(status: int) -> APIError:
-    return APIError(
+    cls = NotFoundError if status == 404 else APIError
+    return cls(
         f"API request failed with status {status}",
         response=httpx.Response(status_code=status, request=httpx.Request("GET", "https://x.test")),
     )
