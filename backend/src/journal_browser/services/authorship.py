@@ -24,10 +24,11 @@ import warnings
 from collections.abc import Iterable
 from typing import Any, Literal
 
-from sqlalchemy import and_, column, exists, false, func, or_, select
+from sqlalchemy import and_, bindparam, column, exists, false, func, or_, select
 from sqlalchemy import exc as sa_exc
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.types import Text
 
 from ..harvest.common import normalize_doi
 from ..harvest.openalex_works import AUTHOR_SWEEP_PREFIX
@@ -364,12 +365,17 @@ def attributed_to_any(aids: list[str]) -> Any:
     author ids, case-insensitively.
 
     One EXISTS probe over the openalex_work_authors edge table (author-
-    first PK): the unit's ids become one indexed probe set and the
-    planner decorrelates into a semi-join. Earlier forms degenerated on
-    faculty-sized units (~1,200 ids for EEMCS): ~2,400 OR'd jsonb
+    first PK): the unit's ids ride in as one text[] bind param compared
+    with = ANY, so the bind count stays at one however large the id set
+    grows (asyncpg rejects statements above 32,767 bound arguments, and
+    faculty-sized id sets cleared that limit with the IN-list form).
+    Measured on UT (Engineering Technology, ~1,100 ids): the gap count
+    runs in ~0.45 s, against ~5 s for an unnest-subquery form and ~11 s
+    for the pre-edge-table OR'd jsonb probes. Earlier forms degenerated
+    on faculty-sized units (~1,200 ids for EEMCS): ~2,400 OR'd jsonb
     containment probes seq-scanned (~11 s), and the one-array-overlap
-    replacement was worse — the overlap matched most of the store so
-    the planner skipped the GIN and evaluated && per row (~45 s)."""
+    replacement was worse — the overlap matched most of the store so the
+    planner skipped the GIN and evaluated && per row (~45 s)."""
     lowered = sorted({aid.lower() for aid in aids if aid})
     if not lowered:
         return false()
@@ -377,7 +383,11 @@ def attributed_to_any(aids: list[str]) -> Any:
         select(OpenalexWorkAuthor.author_id).where(
             OpenalexWorkAuthor.institution_id == OpenalexWork.institution_id,
             OpenalexWorkAuthor.w_id == OpenalexWork.w_id,
-            OpenalexWorkAuthor.author_id.in_(lowered),
+            # op("="), not ==: the generic eq commutes function calls,
+            # which puts any() on the operator's left — a syntax error.
+            OpenalexWorkAuthor.author_id.op("=")(
+                func.any(bindparam("gap_aids", value=lowered, type_=ARRAY(Text)))
+            ),
         )
     )
 
@@ -408,7 +418,17 @@ async def ut_roster_by_aids(
                 Author.openalex_ids,
             ).where(
                 Author.institution_id == institution.id,
-                exists(select(1).select_from(ids).where(func.lower(ids.c.value).in_(wanted))),
+                exists(
+                    select(1)
+                    .select_from(ids)
+                    .where(
+                        # op("="), not ==: the generic eq commutes function
+                        # calls, which puts any() on the operator's left.
+                        func.lower(ids.c.value).op("=")(
+                            func.any(bindparam("roster_aids", value=wanted, type_=ARRAY(Text)))
+                        )
+                    )
+                ),
             )
         )
     ).all()

@@ -342,6 +342,22 @@ async def test_author_ids_openalex_only_counts_work_once(authorship_db, db):
 
 
 @requires_db
+async def test_author_ids_openalex_only_beats_bind_limit(authorship_db, db):
+    """Faculty-sized id sets (UT's largest unit clears asyncpg's 32,767
+    bound-argument ceiling) still serve: the unit's ids ride in as one
+    text[] param, so the gap card answers instead of 500-ing."""
+    ut = authorship_db
+    async with async_sessionmaker(db.bind, expire_on_commit=False)() as session:
+        inst = await session.get(type(ut), ut.id)
+        aids = ["a-alice"] + [f"a-filler-{i}" for i in range(40_000)]
+        out = await authorship.author_ids_openalex_only(session, inst, aids)
+    # Same population as the small-set test: the 40,000 filler ids match
+    # nothing, Alice's four gap works stay.
+    assert out["available"] is True
+    assert out["total"] == 4
+
+
+@requires_db
 async def test_gaps_unavailable_without_store(db, institution_factory):
     """No store rows for the institution -> available False, not a zero."""
     ut = await institution_factory(code="ut", data_window_start=WINDOW_START)
