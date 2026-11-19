@@ -406,6 +406,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/ops/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ops Status */
+        get: operations["ops_status_api_v1_admin_ops_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/usage/summary": {
         parameters: {
             query?: never;
@@ -1100,6 +1117,8 @@ export interface components {
             active: boolean;
             /** Require Confirmed Affiliation */
             require_confirmed_affiliation: boolean;
+            /** Rematerialized Journals */
+            rematerialized_journals?: number | null;
         };
         /** AdminLastRunOut */
         AdminLastRunOut: {
@@ -1118,6 +1137,27 @@ export interface components {
             started_at: string | null;
             /** Finished At */
             finished_at: string | null;
+        };
+        /**
+         * AdminOpsStatusOut
+         * @description Ops dashboard payload (GET /admin/ops/status).
+         */
+        AdminOpsStatusOut: {
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            last_wave: components["schemas"]["OpsLastWaveOut"] | null;
+            /** Schedules */
+            schedules: components["schemas"]["OpsScheduleOut"][];
+            backup: components["schemas"]["OpsBackupOut"];
+            /** Freshness */
+            freshness: components["schemas"]["OpsFreshnessEntryOut"][];
+            /** Tables */
+            tables: {
+                [key: string]: string | null;
+            };
         };
         /** AdminRunOut */
         AdminRunOut: {
@@ -1158,6 +1198,8 @@ export interface components {
             author_identity_candidates: number;
             /** Work Identity Candidates */
             work_identity_candidates: number;
+            /** Work Identity Missing */
+            work_identity_missing: number;
             last_run: components["schemas"]["AdminLastRunOut"] | null;
         };
         /** ApcAggregateOut */
@@ -3129,6 +3171,84 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /**
+         * OpsBackupOut
+         * @description The newest backup archive, or why none is visible to the backend.
+         */
+        OpsBackupOut: {
+            /** Available */
+            available: boolean;
+            /** Detail */
+            detail?: string | null;
+            /** File */
+            file?: string | null;
+            /** Size Bytes */
+            size_bytes?: number | null;
+            /** Modified At */
+            modified_at?: string | null;
+        };
+        /**
+         * OpsFreshnessEntryOut
+         * @description Latest harvest state per (source, entity_type).
+         */
+        OpsFreshnessEntryOut: {
+            /** Source */
+            source: string;
+            /** Entity Type */
+            entity_type: string;
+            /** Status */
+            status: string;
+            /** Finished At */
+            finished_at: string | null;
+        };
+        /**
+         * OpsLastWaveOut
+         * @description The most recent burst of global harvest runs (the nightly wave).
+         */
+        OpsLastWaveOut: {
+            /** Window Start */
+            window_start: string | null;
+            /** Window End */
+            window_end: string | null;
+            /** Stages */
+            stages: components["schemas"]["OpsLastWaveStageOut"][];
+            /** Failed */
+            failed: number;
+            /** Running */
+            running: number;
+        };
+        /**
+         * OpsLastWaveStageOut
+         * @description One wave stage (a global harvest run) inside the latest wave cluster.
+         */
+        OpsLastWaveStageOut: {
+            /** Source */
+            source: string;
+            /** Entity Type */
+            entity_type: string;
+            /** Status */
+            status: string;
+            /** Started At */
+            started_at: string | null;
+            /** Finished At */
+            finished_at: string | null;
+        };
+        /**
+         * OpsScheduleOut
+         * @description A scheduled job's cron expression and its next fire time (UTC).
+         */
+        OpsScheduleOut: {
+            /** Name */
+            name: string;
+            /** Cron */
+            cron: string;
+            /** From Env */
+            from_env: boolean;
+            /** Next Run Utc */
+            next_run_utc: string | null;
+            /** Error */
+            error?: string | null;
+        };
         /** OrgUnitAuthorRow */
         OrgUnitAuthorRow: {
             /** Pure Uuid */
@@ -4827,6 +4947,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ops_status_api_v1_admin_ops_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminOpsStatusOut"];
                 };
             };
         };

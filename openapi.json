@@ -1324,6 +1324,27 @@
         }
       }
     },
+    "/api/v1/admin/ops/status": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Ops Status",
+        "operationId": "ops_status_api_v1_admin_ops_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminOpsStatusOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/usage/summary": {
       "get": {
         "tags": [
@@ -5172,6 +5193,17 @@
           "require_confirmed_affiliation": {
             "type": "boolean",
             "title": "Require Confirmed Affiliation"
+          },
+          "rematerialized_journals": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rematerialized Journals"
           }
         },
         "type": "object",
@@ -5271,6 +5303,68 @@
           "finished_at"
         ],
         "title": "AdminLastRunOut"
+      },
+      "AdminOpsStatusOut": {
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "last_wave": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpsLastWaveOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "schedules": {
+            "items": {
+              "$ref": "#/components/schemas/OpsScheduleOut"
+            },
+            "type": "array",
+            "title": "Schedules"
+          },
+          "backup": {
+            "$ref": "#/components/schemas/OpsBackupOut"
+          },
+          "freshness": {
+            "items": {
+              "$ref": "#/components/schemas/OpsFreshnessEntryOut"
+            },
+            "type": "array",
+            "title": "Freshness"
+          },
+          "tables": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": "object",
+            "title": "Tables"
+          }
+        },
+        "type": "object",
+        "required": [
+          "generated_at",
+          "last_wave",
+          "schedules",
+          "backup",
+          "freshness",
+          "tables"
+        ],
+        "title": "AdminOpsStatusOut",
+        "description": "Ops dashboard payload (GET /admin/ops/status)."
       },
       "AdminRunOut": {
         "properties": {
@@ -5381,6 +5475,10 @@
             "type": "integer",
             "title": "Work Identity Candidates"
           },
+          "work_identity_missing": {
+            "type": "integer",
+            "title": "Work Identity Missing"
+          },
           "last_run": {
             "anyOf": [
               {
@@ -5400,6 +5498,7 @@
           "open_feedback",
           "author_identity_candidates",
           "work_identity_candidates",
+          "work_identity_missing",
           "last_run"
         ],
         "title": "AdminSummaryOut",
@@ -11144,6 +11243,253 @@
         "type": "object",
         "title": "OpenalexTopicOut",
         "description": "Topic entry of an OpenAlex source object (sorted count desc)."
+      },
+      "OpsBackupOut": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "modified_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modified At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "available"
+        ],
+        "title": "OpsBackupOut",
+        "description": "The newest backup archive, or why none is visible to the backend."
+      },
+      "OpsFreshnessEntryOut": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "entity_type": {
+            "type": "string",
+            "title": "Entity Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "entity_type",
+          "status",
+          "finished_at"
+        ],
+        "title": "OpsFreshnessEntryOut",
+        "description": "Latest harvest state per (source, entity_type)."
+      },
+      "OpsLastWaveOut": {
+        "properties": {
+          "window_start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Start"
+          },
+          "window_end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window End"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/OpsLastWaveStageOut"
+            },
+            "type": "array",
+            "title": "Stages"
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed"
+          },
+          "running": {
+            "type": "integer",
+            "title": "Running"
+          }
+        },
+        "type": "object",
+        "required": [
+          "window_start",
+          "window_end",
+          "stages",
+          "failed",
+          "running"
+        ],
+        "title": "OpsLastWaveOut",
+        "description": "The most recent burst of global harvest runs (the nightly wave)."
+      },
+      "OpsLastWaveStageOut": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "entity_type": {
+            "type": "string",
+            "title": "Entity Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "entity_type",
+          "status",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "OpsLastWaveStageOut",
+        "description": "One wave stage (a global harvest run) inside the latest wave cluster."
+      },
+      "OpsScheduleOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "cron": {
+            "type": "string",
+            "title": "Cron"
+          },
+          "from_env": {
+            "type": "boolean",
+            "title": "From Env"
+          },
+          "next_run_utc": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Run Utc"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "cron",
+          "from_env",
+          "next_run_utc"
+        ],
+        "title": "OpsScheduleOut",
+        "description": "A scheduled job's cron expression and its next fire time (UTC)."
       },
       "OrgUnitAuthorRow": {
         "properties": {
