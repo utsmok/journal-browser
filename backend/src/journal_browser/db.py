@@ -11,7 +11,14 @@ _sessionmaker = None
 def get_engine():
     global _engine, _sessionmaker
     if _engine is None:
-        _engine = create_async_engine(get_settings().database_url, pool_pre_ping=True)
+        settings = get_settings()
+        _engine = create_async_engine(
+            settings.database_url,
+            pool_pre_ping=True,
+            connect_args={
+                "server_settings": {"statement_timeout": str(settings.statement_timeout_ms)}
+            },
+        )
         _sessionmaker = async_sessionmaker(_engine, expire_on_commit=False)
     return _engine
 

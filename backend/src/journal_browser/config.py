@@ -69,6 +69,13 @@ class Settings(BaseSettings):
     )
 
     database_url: str = "postgresql+asyncpg://journal:journal@localhost:5433/journalbrowser"
+    # Statement timeout for the API engine (ms), applied via asyncpg
+    # server_settings; harvest/job engines set their own. A pathological
+    # query (publisher deals 2026-11-19: 5-10 minute nested loops piling
+    # up connections) fails one request instead of wedging the pool.
+    # Default sits above the measured cold publisher-snapshot build
+    # (~59 s under harvest load); lower via env for stricter cuts.
+    statement_timeout_ms: int = 60_000
 
     # ut-metadata Postgres (canonical Twente publications). Empty = the
     # feature is off: every endpoint keeps its works_stats-only behavior.
