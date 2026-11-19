@@ -44,7 +44,7 @@ Run `git diff` (against the merge base for PRs, or `git diff HEAD~1` on demand) 
 
 - `frontend/**` -> the `web` app
 - `backend/**`, `openapi.json`, `docker-compose.yml`, `compose.test.yml`, `db/**` -> the `backend` app
-- Files matching NO pattern (`.factory/**`, `docs/**`, `droid-wiki/**`, `.github/**`, `plans/**`, `context_notes/**`, `data/**`, `dev/**`) belong to no app. Do NOT run app flows for them.
+- Files matching NO pattern (`.factory/**`, `docs/**`, `.github/**`, `plans/**`, `context_notes/**`, `data/**`, `dev/**`) belong to no app. Do NOT run app flows for them.
 
 For each affected app: run only that app's flows from its sub-skill, plus additional targeted tests derived from the specific diff.
 

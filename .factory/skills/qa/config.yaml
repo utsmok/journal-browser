@@ -17,7 +17,9 @@ environments:
       - never stop, restart, or write to the live compose project journal-browser
     seed:
       database: journalbrowser_qa # on the existing cluster at 127.0.0.1:5433
-      full_dump: backups/live-pre-author-path-2026-10-31.dump
+      # Seed from fixtures (idempotent; run `alembic upgrade head` first):
+      #   cd backend && JB_DATABASE_URL=postgresql+asyncpg://journal:journal@127.0.0.1:5433/journalbrowser_qa \
+      #     uv run python scripts/seed_fixtures.py
       fixtures: backend/scripts/seed_fixtures.py
   live-readonly:
     url: http://127.0.0.1:3001

@@ -48,6 +48,9 @@ compose.override.yml
 # modules, and intermediate renders. Regenerable.
 .factory/video/
 
+# QA skill install questionnaire state; regenerates per machine
+.factory/skills/qa/.install-progress.yaml
+
 # Impeccable design-review artifacts
 .impeccable/
 
