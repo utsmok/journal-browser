@@ -2019,6 +2019,8 @@ export interface components {
             slug: string;
             /** Title */
             title: string;
+            /** Summary */
+            summary: string;
             /** Group */
             group: string;
             /** Order */
@@ -2450,7 +2452,7 @@ export interface components {
          * @description harvest_runs.status (ck_harvest_runs_status).
          * @enum {string}
          */
-        HarvestStatus: "running" | "completed" | "failed";
+        HarvestStatus: "running" | "completed" | "failed" | "superseded";
         /**
          * IdentityStatus
          * @description author_identities.status (ck_author_identities_status).
@@ -2783,8 +2785,8 @@ export interface components {
         };
         /**
          * OaType
-         * @description Journal-level OA classification (journals.oa_type; services/search.py
-         *     SQL case + Python mirror, search filter vocabulary).
+         * @description Journal-level OA classification (journals.oa_type; the services/search/
+         *     package SQL case + Python mirror, search filter vocabulary).
          *
          *     Member order is the facet display order (most open first); every
          *     oa_type facet/composition dict iterates OA_TYPES, so do not reorder
