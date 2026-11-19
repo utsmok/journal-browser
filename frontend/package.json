@@ -41,5 +41,19 @@
     "tailwindcss": "^4",
     "typescript": "^5.7",
     "vitest": "^4.1.12"
+  },
+  "depcheck": {
+    "ignores": [
+      "react-dom",
+      "@biomejs/biome",
+      "eslint",
+      "eslint-config-next",
+      "jsdom",
+      "openapi-typescript",
+      "typescript",
+      "@types/react-dom",
+      "tailwindcss",
+      "@tailwindcss/postcss"
+    ]
   }
 }
