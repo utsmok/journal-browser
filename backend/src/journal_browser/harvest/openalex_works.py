@@ -92,6 +92,29 @@ def _parent_works(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+def raw_export_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    """CSV-export cells carried by openalex_works columns: publication
+    date, OA urls and distinct institution RORs from the raw works_stats
+    payload; None/empty without the values (mirrors the payload shape the
+    CSV export used to read per row)."""
+    best = payload.get("best_oa_location") or {}
+    primary = payload.get("primary_location") or {}
+    rors = sorted(
+        {
+            ror
+            for entry in payload.get("authorships") or []
+            for inst in entry.get("institutions") or []
+            if (ror := inst.get("ror"))
+        }
+    )
+    return {
+        "publication_date": payload.get("publication_date"),
+        "pdf_url": best.get("pdf_url") or primary.get("pdf_url"),
+        "landing_page_url": primary.get("landing_page_url") or best.get("landing_page_url"),
+        "institution_rors": ";".join(rors),
+    }
+
+
 def work_row(payload: dict[str, Any], issn_by_source: dict[str, str]) -> dict[str, Any] | None:
     """One openalex_works row from a stored works payload; None when the
     record has no usable W-id or is of an excluded type (never app
@@ -123,6 +146,7 @@ def work_row(payload: dict[str, Any], issn_by_source: dict[str, str]) -> dict[st
         "fwci": float(fwci) if isinstance(fwci, (int, float)) else None,
         "is_retracted": bool(payload.get("is_retracted")),
         "source": "works_stats",
+        **raw_export_fields(payload),
     }
 
 

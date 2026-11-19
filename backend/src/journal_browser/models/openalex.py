@@ -79,6 +79,16 @@ class OpenalexWork(Base):
     parts_checked_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
+    # CSV-export fields projected from the latest works_stats payload
+    # (publication date, OA urls, distinct institution RORs exactly as
+    # raw_export_fields renders them). Columns instead of a per-row
+    # source_records payload read: the export query used to drag tens of
+    # KB of TOASTed jsonb per row for these four cells. Rebuilt with the
+    # store (full-replace per institution); 0068 backfilled existing rows.
+    publication_date: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pdf_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    landing_page_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    institution_rors: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = _tstamp()
 
     __table_args__ = (

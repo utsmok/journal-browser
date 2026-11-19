@@ -3,11 +3,10 @@
 Uncapped downloads mirroring the on-screen lists' gates: the journal and
 publisher gap cards (venue-attributed OpenAlex store works whose DOI
 matches no Pure work, author-sweep rows excluded) and the author page's
-missed/canon works split. Store rows enrich once through a lateral pick
-of the latest works_stats source_record per W-id — publication date, OA
-urls and institution RORs ride along without per-row queries — and the
-roster attribution plus journal/publisher joins batch over the whole
-result before streaming.
+missed/canon works split. Store rows carry their payload-derived CSV
+fields as openalex_works columns (0068), so the row query touches no
+source_records payloads; the roster attribution plus journal/publisher
+joins batch over the whole result before streaming.
 """
 
 import csv
@@ -18,7 +17,7 @@ from typing import Any
 
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy import column, func, literal, select, true
+from sqlalchemy import column, func, select, true
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,7 +29,6 @@ from ..models import (
     JiscPublisher,
     Journal,
     OpenalexWork,
-    SourceRecord,
     Work,
 )
 from .authorship import (
@@ -132,27 +130,34 @@ def _ut_affiliations(ut: list[dict[str, Any]]) -> str:
     return ";".join(out)
 
 
-def _raw_fields(payload: dict[str, Any] | None) -> dict[str, Any]:
-    """publication_date, OA urls and distinct institution RORs from the
-    raw works_stats payload; empty without a stored raw row."""
-    if not isinstance(payload, dict):
-        return {}
-    best = payload.get("best_oa_location") or {}
-    primary = payload.get("primary_location") or {}
-    rors = sorted(
-        {
-            ror
-            for entry in payload.get("authorships") or []
-            for inst in entry.get("institutions") or []
-            if (ror := inst.get("ror"))
-        }
+def _export_stmt(institution: Institution, predicate: list[Any]) -> Any:
+    """Store columns over one gap predicate, most recent first. The four
+    payload-derived CSV fields ride as openalex_works columns (0068), so
+    the export never reads source_records payloads per row."""
+    return (
+        select(
+            OpenalexWork.w_id,
+            OpenalexWork.title,
+            OpenalexWork.year,
+            OpenalexWork.doi_normalized,
+            OpenalexWork.oa_status,
+            OpenalexWork.work_type,
+            OpenalexWork.venue_issn_l,
+            OpenalexWork.venue_name,
+            OpenalexWork.language,
+            OpenalexWork.authorships,
+            OpenalexWork.cited_by_count,
+            OpenalexWork.fwci,
+            OpenalexWork.is_retracted,
+            OpenalexWork.parent_works,
+            OpenalexWork.publication_date,
+            OpenalexWork.pdf_url,
+            OpenalexWork.landing_page_url,
+            OpenalexWork.institution_rors,
+        )
+        .where(OpenalexWork.institution_id == institution.id, *predicate)
+        .order_by(OpenalexWork.year.desc().nulls_last(), func.lower(OpenalexWork.title))
     )
-    return {
-        "publication_date": payload.get("publication_date"),
-        "pdf_url": best.get("pdf_url") or primary.get("pdf_url"),
-        "landing_page_url": primary.get("landing_page_url") or best.get("landing_page_url"),
-        "institution_rors": ";".join(rors),
-    }
 
 
 async def _publisher_rors(session: AsyncSession, names: Iterable[str]) -> dict[str, str]:
@@ -175,54 +180,8 @@ async def _publisher_rors(session: AsyncSession, names: Iterable[str]) -> dict[s
     return out
 
 
-def _raw_payload_lateral() -> Any:
-    """Latest works_stats source_record per W-id, picked inside the one
-    export query (lateral ORDER BY harvested_at DESC LIMIT 1; the lookup
-    index ix_source_records_lookup makes each probe a single index scan)."""
-    return (
-        select(SourceRecord.payload.label("payload"))
-        .where(
-            SourceRecord.source == "openalex",
-            SourceRecord.entity_type == "works_stats",
-            SourceRecord.source_pk == OpenalexWork.w_id,
-        )
-        .order_by(SourceRecord.harvested_at.desc(), SourceRecord.id.desc())
-        .limit(1)
-        .lateral("raw_payload")
-    )
-
-
-def _export_stmt(institution: Institution, predicate: list[Any]) -> Any:
-    """Store columns + the lateral raw payload over one gap predicate,
-    most recent first."""
-    raw = _raw_payload_lateral()
-    return (
-        select(
-            OpenalexWork.w_id,
-            OpenalexWork.title,
-            OpenalexWork.year,
-            OpenalexWork.doi_normalized,
-            OpenalexWork.oa_status,
-            OpenalexWork.work_type,
-            OpenalexWork.venue_issn_l,
-            OpenalexWork.venue_name,
-            OpenalexWork.language,
-            OpenalexWork.authorships,
-            OpenalexWork.cited_by_count,
-            OpenalexWork.fwci,
-            OpenalexWork.is_retracted,
-            OpenalexWork.parent_works,
-            raw.c.payload,
-        )
-        .outerjoin(raw, literal(True))
-        .where(OpenalexWork.institution_id == institution.id, *predicate)
-        .order_by(OpenalexWork.year.desc().nulls_last(), func.lower(OpenalexWork.title))
-    )
-
-
 def _store_csv_row(
     r: Any,
-    raw: dict[str, Any],
     roster: dict[str, dict[str, Any]],
     publishers: dict[str, str],
     rors: dict[str, str],
@@ -237,15 +196,15 @@ def _store_csv_row(
         f"{OPENALEX_URL}/{r.w_id}",
         _t(r.title),
         _t(r.year),
-        _t(raw.get("publication_date")),
+        _t(r.publication_date),
         _t(doi),
         _t(f"https://doi.org/{doi}" if doi else None),
-        _t(raw.get("pdf_url")),
-        _t(raw.get("landing_page_url")),
+        _t(r.pdf_url),
+        _t(r.landing_page_url),
         _csv_safe(";".join(a["name"] for a in authors if a["name"])),
         _csv_safe(";".join(a["openalex_id"] for a in authors)),
         _csv_safe(";".join(a["orcid"] for a in authors if a["orcid"])),
-        _t(raw.get("institution_rors")),
+        _t(r.institution_rors),
         _csv_safe(";".join(a["name"] for a in ut)),
         _csv_safe(";".join(a["orcid"] for a in ut if a["orcid"])),
         _csv_safe(_ut_affiliations(ut)),
@@ -357,7 +316,7 @@ async def _store_csv_response(
     async def rows() -> AsyncIterator[list[str]]:
         async for partition in result.partitions(FLUSH_EVERY):
             for r in partition:
-                yield _store_csv_row(r, _raw_fields(r.payload), roster, publishers, rors)
+                yield _store_csv_row(r, roster, publishers, rors)
 
     return _csv_response(filename, rows())
 
