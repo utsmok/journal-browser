@@ -23,6 +23,7 @@ from ..services import exports
 from ..services import publishers as publishers_service
 from ..services.works_query import clamped_year_range
 from ..vocab import OaType
+from .params import DealFilter
 
 router = APIRouter(prefix="/publishers", tags=["publishers"])
 
@@ -64,7 +65,7 @@ async def search_publishers(
     institution: InstitutionDep,
     q: Annotated[str | None, Query(max_length=200)] = None,
     oa_type: OaTypeFilter = None,
-    deal: Annotated[str | None, Query(pattern="^(covered|none)$")] = None,
+    deal: DealFilter = None,
     quartile: QuartileFilter = None,
     topic: Annotated[str | None, Query(max_length=100)] = None,
     size: Annotated[str | None, Query(max_length=20)] = None,

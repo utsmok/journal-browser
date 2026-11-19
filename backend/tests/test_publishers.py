@@ -262,7 +262,7 @@ async def test_publisher_facets_drop_own_dimension(publishers_api):
     body = (await client.get("/api/v1/ut/publishers")).json()
     assert body["facets"] == {
         "oa_type": {"gold": 0, "diamond": 1, "generic": 0, "hybrid": 2, "subscription": 3},
-        "deal": {"covered": 2, "none": 2},
+        "deal": {"covered": 2, "not_covered": 2},
         "quartile": {"Q1": 2, "Q2": 1, "Q3": 1, "Q4": 0},
         "has_apc": {"yes": 2, "no": 2},
         "has_works": {"true": 3, "false": 1},
@@ -285,7 +285,7 @@ async def test_publisher_facets_drop_own_dimension(publishers_api):
     # A non-empty own filter: deal facet keeps its unfiltered distribution.
     body = (await client.get("/api/v1/ut/publishers", params={"deal": "covered"})).json()
     assert body["total"] == 2
-    assert body["facets"]["deal"] == {"covered": 2, "none": 2}
+    assert body["facets"]["deal"] == {"covered": 2, "not_covered": 2}
     assert body["facets"]["quartile"] == {"Q1": 2, "Q2": 1, "Q3": 0, "Q4": 0}
 
     # Same convention for has_works: the facet keeps counting the whole set.

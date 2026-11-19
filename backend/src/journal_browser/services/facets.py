@@ -99,7 +99,7 @@ def publisher_predicates(
         preds["oa_type"] = lambda p: any(p.oa_counts[t] > 0 for t in oa_types)
     if deal == "covered":
         preds["deal"] = lambda p: p.deal_journals > 0
-    elif deal == "none":
+    elif deal in ("none", "not_covered"):
         preds["deal"] = lambda p: p.deal_journals == 0
     if quartiles:
         preds["quartile"] = lambda p: any(p.quartile_counts[q.lower()] > 0 for q in quartiles)
@@ -140,7 +140,7 @@ def publisher_facets(
     counts = _count("oa_type", *[lambda p, t=t: p.oa_counts[t] > 0 for t in oa_types])
     out["oa_type"] = dict(zip(oa_types, counts, strict=True))
     covered, none = _count("deal", lambda p: p.deal_journals > 0, lambda p: p.deal_journals == 0)
-    out["deal"] = {"covered": covered, "none": none}
+    out["deal"] = {"covered": covered, "not_covered": none}
     counts = _count(
         "quartile", *[lambda p, q=q: p.quartile_counts[q.lower()] > 0 for q in quartiles]
     )
