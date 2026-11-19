@@ -53,10 +53,10 @@ don't need it.
 ## Layout
 
 ```
-backend/    FastAPI app, harvest jobs, alembic migrations
-frontend/   Next.js app (App Router)
-data/       Scimago seed CSVs (backend/data/scimagojr)
-landing/    Raw harvest files (gitignored) + curation reports
+backend/          FastAPI app, harvest jobs, alembic migrations
+frontend/         Next.js app (App Router)
+backend/data/     Scimago seed CSVs (backend/data/scimagojr)
+backend/landing/  Raw harvest files (gitignored) + curation reports
 ```
 
 ## Development
@@ -64,8 +64,10 @@ landing/    Raw harvest files (gitignored) + curation reports
 Prerequisites: `uv`, Node 22+, Docker (for Postgres), or just use compose.
 
 ```bash
-# backend tests: need the compose Postgres on localhost:5433
-# (docker compose up -d db), or set JB_SKIP_DB_TESTS=1
+# backend tests: need Postgres on localhost:5433, or set JB_SKIP_DB_TESTS=1
+# fresh machine: docker compose up -d db
+# live host: docker start jb-test-pg (never compose up -d db here —
+# that is the production database). See AGENTS.md.
 cd backend && uv run pytest
 
 # frontend

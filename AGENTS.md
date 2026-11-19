@@ -12,9 +12,14 @@ DEPLOYMENT.md (configuration reference, harvest internals, operations).
   `lib/api-types.ts` is generated from `openapi.json` — never hand-edit.
 - `openapi.json` — committed API schema (repo root); CI verifies it has not
   drifted from the routes.
-- `docs/` — mostly a gitignored content volume (two files are tracked).
-  `docs/data-pipeline/OVERVIEW.md` documents the harvest architecture;
-  `docs/multi-institute.md` covers the shared-core multi-institution design.
+- `docs/` — a gitignored content volume; two files are tracked:
+  `docs/multi-institute.md` (the shipped multi-institution design) and
+  `docs/data-pipeline/jisc-opf.md` (JISC Open Policy Finder notes). The
+  harvest architecture is documented in DEPLOYMENT.md ("What the harvests
+  build").
+- `db/` — the pgvector Postgres image (`db/Dockerfile`) that compose and
+  the `jb-test-pg` test container both build from.
+- `dev/` — pre-commit hook scripts (`dev/hooks/`).
 
 ## Commands
 
@@ -34,7 +39,7 @@ All commands run from the repo root unless noted.
 | Frontend format check (CI) | `cd frontend && npm run format:check` |
 | Frontend build | `cd frontend && npm run build` |
 | Refresh API types | `cd backend && uv run python scripts/dump_openapi.py && cd ../frontend && npm run generate` |
-| Setup git hooks | `pre-commit install` (ruff + format + eslint/biome + file-length gate on staged files) |
+| Setup git hooks | `pre-commit install` plus `pre-commit install --hook-type commit-msg` (ruff + format + eslint/biome + file-length gate on staged files; commit-msg gate on conventional subjects) |
 
 ## Test setup
 
