@@ -34,6 +34,7 @@ x-backend-env: &backend-env
   # boot (see backend/settings.yaml.example and DEPLOYMENT.md).
   JB_SETTINGS_YAML: /app/state/settings.yaml
   # Scheduler schedules, UTC (see backend/scripts/crontab).
+  JB_SOURCE_WAVE_CRON: ${JB_SOURCE_WAVE_CRON:-0 22 * * 0}
   JB_REFRESH_WAVE_CRON: ${JB_REFRESH_WAVE_CRON:-30 1 * * *}
   JB_BACKUP_CRON: ${JB_BACKUP_CRON:-0 4 * * *}
   JB_BACKUP_KEEP: ${JB_BACKUP_KEEP:-7}
@@ -92,6 +93,10 @@ services:
       retries: 10
 
   backend:
+    # One image serves backend, scheduler, and bootstrap: build lives here,
+    # the other two reference the same tag, so a single `docker compose
+    # build backend` updates all three.
+    image: journal-browser-backend:latest
     build: ./backend
     restart: unless-stopped
     mem_limit: 2g
@@ -132,9 +137,10 @@ services:
   # (backend/scripts/crontab). Runs the same image as the backend; the
   # wave script self-skips its credit-priced stages at a spent OpenAlex
   # budget, so an unexpected daytime start is safe. Schedules are UTC and
-  # overridable via JB_REFRESH_WAVE_CRON / JB_BACKUP_CRON in .env.
+  # overridable via JB_SOURCE_WAVE_CRON / JB_REFRESH_WAVE_CRON /
+  # JB_BACKUP_CRON in .env.
   scheduler:
-    build: ./backend
+    image: journal-browser-backend:latest
     restart: unless-stopped
     mem_limit: 2g
     logging: *default-logging
@@ -155,7 +161,7 @@ services:
   # mode exits in seconds once journals exist, so every `up` re-runs it
   # harmlessly; a failure keeps the backend down where the logs point at it.
   bootstrap:
-    build: ./backend
+    image: journal-browser-backend:latest
     restart: "no"
     mem_limit: 2g
     logging: *default-logging
