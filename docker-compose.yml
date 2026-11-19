@@ -1,9 +1,61 @@
+# Shared env for backend and scheduler (same code image). Everything
+# .env.example documents flows through here, so a new institute only edits
+# .env and re-runs docker compose up.
+x-backend-env: &backend-env
+  JB_DATABASE_URL: postgresql+asyncpg://journal:journal@db:5432/journalbrowser
+  # Canonical publications from a ut-metadata Postgres (read-only).
+  # Empty/unset = feature off; wrong/unreachable DSN degrades the same
+  # way at runtime. Inside compose, localhost is the container — point
+  # this at a container-reachable address (e.g. host.docker.internal:5434).
+  JB_UT_METADATA_DSN: ${JB_UT_METADATA_DSN:-}
+  # Deployment levers (see .env.example); defaults fit a Twente instance.
+  JB_INSTITUTION_NAME: ${JB_INSTITUTION_NAME:-University of Twente}
+  JB_INSTITUTION_SHORT: ${JB_INSTITUTION_SHORT:-Twente}
+  JB_INSTITUTION_ROR: ${JB_INSTITUTION_ROR:-https://ror.org/006hf6230}
+  JB_LIBRARY_URL: ${JB_LIBRARY_URL:-https://www.utwente.nl/library}
+  JB_OA_GUIDE_URL: ${JB_OA_GUIDE_URL:-https://www.utwente.nl/en/service-portal/university-library/publication-archiving/open-access}
+  JB_SUPPORT_EMAIL: ${JB_SUPPORT_EMAIL:-open-access@utwente.nl}
+  JB_ADMIN_CONTACT: ${JB_ADMIN_CONTACT:-s.mok@utwente.nl}
+  JB_RESEARCH_PORTAL_URL: ${JB_RESEARCH_PORTAL_URL:-https://research.utwente.nl}
+  JB_PURE_OAI_BASE_URL: ${JB_PURE_OAI_BASE_URL:-https://ris.utwente.nl/ws/oai}
+  JB_OPENAIRE_ORG_ID: ${JB_OPENAIRE_ORG_ID:-}
+  JB_CONTACT_EMAIL: ${JB_CONTACT_EMAIL:-}
+  JB_DATA_WINDOW_START: ${JB_DATA_WINDOW_START:-2020}
+  JB_DATA_WINDOW_END: ${JB_DATA_WINDOW_END:-0}
+  JB_ENABLE_JOURNAL_CITATIONS: ${JB_ENABLE_JOURNAL_CITATIONS:-false}
+  JB_JISC_API_KEY: ${JB_JISC_API_KEY:-}
+  JB_ADMIN_PASSWORD: ${JB_ADMIN_PASSWORD:-}
+  OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
+  # Usage tracking and the ISSN ignore list (README documents both).
+  JB_ENABLE_USAGE_TRACKING: ${JB_ENABLE_USAGE_TRACKING:-}
+  JB_USAGE_RETENTION_DAYS: ${JB_USAGE_RETENTION_DAYS:-}
+  JB_IGNORED_ISSNS: ${JB_IGNORED_ISSNS:-}
+  # Admin-editable settings overlay, seeded by the entrypoint on first
+  # boot (see backend/settings.yaml.example and DEPLOYMENT.md).
+  JB_SETTINGS_YAML: /app/state/settings.yaml
+  # Scheduler schedules, UTC (see backend/scripts/crontab).
+  JB_REFRESH_WAVE_CRON: ${JB_REFRESH_WAVE_CRON:-30 1 * * *}
+  JB_BACKUP_CRON: ${JB_BACKUP_CRON:-0 4 * * *}
+  JB_BACKUP_KEEP: ${JB_BACKUP_KEEP:-7}
+  TZ: ${TZ:-UTC}
+  JB_DOCS_DIR: /app/docs
+
+# Unbounded container logs grow the host disk fast (harvest JSON on stdout);
+# keep five 50 MB files per service.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
 services:
   db:
     # postgres:17-alpine + pgvector (see db/Dockerfile). Same PG major as
     # before, so the pgdata volume carries over unchanged.
     build: ./db
     restart: unless-stopped
+    mem_limit: 2g
+    logging: *default-logging
     environment:
       POSTGRES_USER: journal
       POSTGRES_PASSWORD: journal
@@ -24,39 +76,14 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
-    environment:
-      JB_DATABASE_URL: postgresql+asyncpg://journal:journal@db:5432/journalbrowser
-      # Canonical publications from a ut-metadata Postgres (read-only).
-      # Empty/unset = feature off; wrong/unreachable DSN degrades the same
-      # way at runtime. Inside compose, localhost is the container — point
-      # this at a container-reachable address (e.g. host.docker.internal:5434).
-      JB_UT_METADATA_DSN: ${JB_UT_METADATA_DSN:-}
-      # Deployment levers (see .env.example); defaults fit a Twente instance.
-      # Everything .env.example documents flows through here, so a new
-      # institute only edits .env and re-runs docker compose up.
-      JB_INSTITUTION_NAME: ${JB_INSTITUTION_NAME:-University of Twente}
-      JB_INSTITUTION_SHORT: ${JB_INSTITUTION_SHORT:-Twente}
-      JB_INSTITUTION_ROR: ${JB_INSTITUTION_ROR:-https://ror.org/006hf6230}
-      JB_LIBRARY_URL: ${JB_LIBRARY_URL:-https://www.utwente.nl/library}
-      JB_OA_GUIDE_URL: ${JB_OA_GUIDE_URL:-https://www.utwente.nl/en/service-portal/university-library/publication-archiving/open-access}
-      JB_SUPPORT_EMAIL: ${JB_SUPPORT_EMAIL:-open-access@utwente.nl}
-      JB_ADMIN_CONTACT: ${JB_ADMIN_CONTACT:-s.mok@utwente.nl}
-      JB_RESEARCH_PORTAL_URL: ${JB_RESEARCH_PORTAL_URL:-https://research.utwente.nl}
-      JB_PURE_OAI_BASE_URL: ${JB_PURE_OAI_BASE_URL:-https://ris.utwente.nl/ws/oai}
-      JB_OPENAIRE_ORG_ID: ${JB_OPENAIRE_ORG_ID:-}
-      JB_CONTACT_EMAIL: ${JB_CONTACT_EMAIL:-}
-      JB_DATA_WINDOW_START: ${JB_DATA_WINDOW_START:-2020}
-      JB_DATA_WINDOW_END: ${JB_DATA_WINDOW_END:-0}
-      JB_ENABLE_JOURNAL_CITATIONS: ${JB_ENABLE_JOURNAL_CITATIONS:-false}
-      JB_JISC_API_KEY: ${JB_JISC_API_KEY:-}
-      JB_ADMIN_PASSWORD: ${JB_ADMIN_PASSWORD:-}
-      OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
-      JB_DOCS_DIR: /app/docs
+    mem_limit: 2g
+    logging: *default-logging
+    environment: *backend-env
     volumes:
       # Raw landing copies and job logs must survive container rebuilds.
       - ./backend/landing:/app/landing
       # Admin-editable settings overlay (see backend/settings.yaml.example).
-      - ./backend/settings.yaml:/app/settings.yaml
+      - ./backend/state:/app/state
       # Markdown docs served via /api/v1/docs (read-only; edits live in DB).
       - ./docs:/app/docs:ro
     ports:
@@ -83,16 +110,41 @@ services:
       bootstrap:
         condition: service_completed_successfully
 
+  # Nightly harvest wave + database backup via supercronic
+  # (backend/scripts/crontab). Runs the same image as the backend; the
+  # wave script self-skips its credit-priced stages at a spent OpenAlex
+  # budget, so an unexpected daytime start is safe. Schedules are UTC and
+  # overridable via JB_REFRESH_WAVE_CRON / JB_BACKUP_CRON in .env.
+  scheduler:
+    build: ./backend
+    restart: unless-stopped
+    mem_limit: 2g
+    logging: *default-logging
+    environment: *backend-env
+    volumes:
+      - ./backend/landing:/app/landing
+      - ./backend/state:/app/state
+      # Nightly pg_dump archives (see backend/scripts/backup.sh).
+      - ./backups:/backups
+    command: ["/bin/sh", "/app/scripts/run_scheduler.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+      bootstrap:
+        condition: service_completed_successfully
+
   # One-shot initial harvest on a fresh database (jobs/bootstrap.py). Auto
   # mode exits in seconds once journals exist, so every `up` re-runs it
   # harmlessly; a failure keeps the backend down where the logs point at it.
   bootstrap:
     build: ./backend
     restart: "no"
+    mem_limit: 2g
+    logging: *default-logging
     # Root only for the entrypoint's chown: docker creates the bind-mounted
-    # landing dir root-owned on fresh hosts; docker-entrypoint.sh hands it to
+    # dirs root-owned on fresh hosts; docker-entrypoint.sh hands them to
     # uid 1000 and drops privileges, so even `compose run` one-offs never
-    # write root-owned files into the host mount.
+    # write root-owned files into the host mounts.
     user: root
     environment:
       JB_DATABASE_URL: postgresql+asyncpg://journal:journal@db:5432/journalbrowser
@@ -116,7 +168,8 @@ services:
       OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
     volumes:
       - ./backend/landing:/app/landing
-      - ./backend/settings.yaml:/app/settings.yaml
+      - ./backend/state:/app/state
+      - ./backups:/backups
     command: >
       sh -c "uv run --no-dev alembic upgrade head &&
              uv run --no-dev python jobs/bootstrap.py"
@@ -130,6 +183,8 @@ services:
       args:
         NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://journalbrowser.samuelmok.cc}
     restart: unless-stopped
+    mem_limit: 512m
+    logging: *default-logging
     environment:
       API_PROXY_URL: http://backend:8000
       # Same institution env as the backend: the root layout seeds the

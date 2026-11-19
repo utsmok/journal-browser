@@ -8,6 +8,31 @@ ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 # volume stays writable when the container runs non-root.
 RUN useradd --create-home --uid 1000 app
 
+# Runtime tooling outside Python, installed before the dependency layers so
+# rebuilds of the deps below never redo it:
+# - tzdata: the scheduler's cron schedules follow the container TZ.
+# - postgresql-client-17 (PGDG): nightly pg_dump/pg_restore must match the
+#   db service's Postgres major; Debian bookworm's own client stops at 15.
+# - supercronic: runs the scheduler crontab; release binary, checksum-verified.
+ARG SUPERCRONIC_VERSION=v0.2.51
+ARG SUPERCRONIC_SHA256=cc232108374e8e2b537045f2d5eaa1229f619db314c3ba6a14d38b35dc0aa123
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg tzdata \
+    && install -d /usr/share/postgresql-common/pgdg \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+        -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client-17 \
+    && curl -fsSL "https://github.com/aptible/supercronic/releases/download/${SUPERCRONIC_VERSION}/supercronic-linux-amd64" \
+        -o /usr/local/bin/supercronic \
+    && echo "${SUPERCRONIC_SHA256}  /usr/local/bin/supercronic" | sha256sum -c - \
+    && chmod 0755 /usr/local/bin/supercronic \
+    && apt-get purge -y gnupg \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project --no-dev
 

@@ -14,6 +14,8 @@ services:
   bootstrap:
     volumes: !override
       - ./backend/landing-test:/app/landing
+      - ./backend/state:/app/state
+      - test-backups:/backups
     environment:
       JB_DATABASE_URL: postgresql+asyncpg://journal:journal@db:5432/journalbrowser
       JB_DATA_WINDOW_START: "2025"
@@ -30,12 +32,31 @@ services:
       - "127.0.0.1:8201:8000"
     volumes: !override
       - ./backend/landing-test:/app/landing
+      - ./backend/state:/app/state
     environment:
       JB_DATABASE_URL: postgresql+asyncpg://journal:journal@db:5432/journalbrowser
       JB_UT_METADATA_DSN: ""
       JB_DATA_WINDOW_START: "2025"
       JB_DATA_WINDOW_END: "2025"
 
+  # Same nightly jobs against the test stack's own landing dir; the backup
+  # goes to a project-scoped volume, not the host's ./backups.
+  scheduler:
+    volumes: !override
+      - ./backend/landing-test:/app/landing
+      - ./backend/state:/app/state
+      - test-backups:/backups
+    environment:
+      JB_DATABASE_URL: postgresql+asyncpg://journal:journal@db:5432/journalbrowser
+      JB_SETTINGS_YAML: /app/state/settings.yaml
+      JB_UT_METADATA_DSN: ""
+      JB_DATA_WINDOW_START: "2025"
+      JB_DATA_WINDOW_END: "2025"
+      OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
+
   frontend:
     ports: !override
       - "127.0.0.1:3201:3000"
+
+volumes:
+  test-backups:
