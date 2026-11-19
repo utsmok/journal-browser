@@ -59,7 +59,8 @@ in citation links on journal pages. Set it in `.env` before the first
 |---|---|---|
 | `JB_PURE_OAI_BASE_URL` | Your repository's anonymous OAI-PMH endpoint (works data) | `https://ris.utwente.nl/ws/oai` |
 | `JB_OPENAIRE_ORG_ID` | OpenAIRE organization id (`openorgs____::...`). **Required**; unset = the OpenAIRE harvest is off. Not derivable from the ROR — look it up at `api.openaire.eu/graph/v1/organizations?legalName=<name>` | unset |
-| `OPENALEX_API_KEY` | Free OpenAlex key; needed for cursor-paged harvests only | unset |
+| `OPENALEX_API_KEY` | Free OpenAlex key. Listing/cursor sweeps (institution stats, the author sweep, `--sweep-all`) refuse to start without it — keyless requests serve only the first cursor page | unset |
+| `JB_JISC_API_KEY` | Jisc Open Policy Finder API key; without it the JISC sweep skips cleanly | unset |
 | `JB_CONTACT_EMAIL` | Polite-pool identification sent to OpenAlex. Set it in `.env`; an empty value sends anonymous requests | empty (the live deployment sets `s.f.abma@utwente.nl`) |
 | `JB_DATA_WINDOW_START` / `JB_DATA_WINDOW_END` | Inclusive publication-year window for the default institution's harvests. `END=0` = open (to now). A smaller window makes a deployment lighter (Groningen runs 2025/2025; additional institutions carry their window on their row) | `2020` / `0` |
 
@@ -74,6 +75,7 @@ in citation links on journal pages. Set it in `.env` before the first
 | `JB_UT_METADATA_DSN` | Twente-only: read-only ut-metadata Postgres for canonical works + the author roster (`authors` bootstrap step; skips cleanly when empty). Leave empty elsewhere; the works endpoints degrade to stats-only and `/authors` reports `enabled: false`. Currently off on the live demo — the works-merge features run on stats data only | empty |
 | `JB_ENABLE_USAGE_TRACKING` | Anonymous usage events (page paths, searches, coarse audience info; no cookies). `false` accepts and drops event batches instead of storing | `true` |
 | `JB_USAGE_RETENTION_DAYS` | Days usage events are kept before being nulled; `0` disables expiry | `90` |
+| Country lookups | `jobs/enrich_usage_geo.py` resolves visitor IPs locally against DB-IP's free Country Lite database (downloaded monthly into `landing/dbip/`). Country data by DB-IP.com, CC BY 4.0 (https://db-ip.com) | — |
 | `JB_IGNORED_ISSNS` | JSON list of ISSNs the browser treats as nonexistent on every journal surface | empty |
 | `JB_REFRESH_WAVE_CRON` | Cron schedule (UTC) for the nightly harvest wave, run by the `scheduler` service | `30 1 * * *` |
 | `JB_BACKUP_CRON` | Cron schedule (UTC) for the nightly database backup | `0 4 * * *` |
@@ -127,26 +129,59 @@ Useful variants (run inside the backend image, e.g.
 
 ## What the harvests build
 
+The table follows the bootstrap order (`jobs/bootstrap.py` GLOBAL_STEPS,
+then INST_STEPS, then the shared funder chain and embeddings); the daily
+wave (see "Daily refresh wave" below) repeats a subset of these stages.
+
 | Job | Source | Produces |
 |---|---|---|
-| `harvest_journals` | OpenAlex | The journal universe (~177k rows), ISSNs, topics, OA status. Default route is credit-free (deal seed + singleton delta for missing journals); `--refresh` re-fetches every stored journal via free singleton GETs to pick up upstream corrections (counts fields), `--sweep-all` costs credits and is a rare manual operation |
-| `harvest_publishers` | OpenAlex | Publisher lineage: `journals.publisher_canonical` groups sub-brands (e.g. IEEE Communications Society) under their root publisher |
+| `harvest_journals` | OpenAlex | The journal universe (~177k rows), ISSNs, topics, OA status. Default route is credit-free (deal seed + singleton delta for missing journals); `--refresh` re-fetches every stored journal via free singleton GETs to pick up upstream corrections (counts fields), `--sweep-all` costs credits and is a rare manual operation that requires an API key |
+| `harvest_publishers` | OpenAlex | Publisher lineage: `journals.publisher_canonical` groups sub-brands (e.g. IEEE Communications Society) under their root publisher. Ids absent from a response cache as NULL-lineage rows and are retried after a week. Credit-priced only on a fresh install |
 | `scrape_openaccess_nl` | openaccess.nl | Deal pages: narrative, conditions, participation text |
 | `ingest_jct` | cOAlition S JCT public dump | ESAC agreements + journal lists |
 | `reconcile` | the two above | The deal register; participation per hosted institution (non-participation = no `deal_institutions` row; shared deals are never deleted) |
 | `backfill_issn_l` | issn_map | Links deal journal ISSNs to the canonical ISSN-L |
 | `ingest_openapc` | OpenAPC dataset | APC evidence and per-journal aggregates |
 | `ingest_scimagojr` | tracked seed CSVs, materialized into landing on first use | Quartiles (scimagojr.com is Cloudflare-hard; to update, drop `export_<year>.csv` into `backend/landing/scimagojr/` and rerun the job — `backend/data/` holds the tracked first-boot seeds only) |
-| `harvest_pure` | your repository OAI-PMH | The works corpus |
-| `enrich_works` | OpenAlex + Crossref | DOIs, types, citation counts per work |
-| `harvest_openaire` | OpenAIRE Graph | Institution works matched by DOI |
-| `harvest_stats` | all of the above | Per-journal, per-year statistics |
 | `backfill_flags` | register + stats | Curation flags, browse visibility |
+| `harvest_oa_colors` | locally stored OpenAlex works | Observed OA status on journals. Fills NULLs only — it never refreshes a color already set, so rerunning is safe but never corrects old values |
+| `harvest_doaj` | DOAJ bulk CSV | DOAJ canon: `doaj_in_doaj`, APC flags per journal |
+| `harvest_jisc` + `normalize_jisc` | Jisc Open Policy Finder | Green-OA policies per journal (`jisc_*` columns). Skips cleanly when `JB_JISC_API_KEY` is unset; run `normalize_jisc` after the sweep to stamp the journal columns |
+| `harvest_pure` | your repository OAI-PMH | The works corpus |
+| `harvest_pure_entities` | your repository OAI-PMH (CERIF sets) | Orgunits, persons, publication author lists (`pure_orgs`, `pure_persons`, `work_pure_authors` inputs) |
+| `enrich_works` | OpenAlex + Crossref | DOIs, types, citation counts per work; the Crossref rung lands the payloads the author ORCID corroboration reads |
+| `harvest_openaire` | OpenAIRE Graph | Institution works matched by DOI |
+| `derive_openaire_facts` | stored OpenAIRE products | Per-work facts row: diamond flag, usage, FOS, projects |
+| `harvest_stats` | all of the above | Per-journal, per-year statistics. Credit-priced works filter; self-skips at a zero budget |
+| `build_openalex_works` | stored works-stats payloads | The normalized OpenAlex works store behind the works tab and the standalone author path |
+| `backfill_parts` | OpenAlex (free single-entity GETs) | Part-of chips for Graph v12 payloads; resumable and idempotent |
 | `backfill_pure_authors` | stored CERIF publication records | The `pure-authors` step: full-replaces each work's pure authorship edges (`work_pure_authors`) from the latest stored record; runs after `openalex-works`, before author-id resolution, so it also covers works whose CERIF record predated author extraction |
-| `import_pure_export` | Pure backend export file (`--file PATH`) | Manual ops import: stores the export's records verbatim as `work_cerif_full`. The OAI stream truncates author identity; run this before/with the `pure-authors` backfill so author lists are full (backfill and entity mining prefer `work_cerif_full` per uuid) |
-| `ingest_authors` | external canonical-works DB (`JB_UT_METADATA_DSN` / `external_works_dsn`) | Per-institution author roster: identity, faculty/research group/org derivation, work edges (skips cleanly without a DSN) |
+| `resolve_author_ids` | OpenAlex works listings + free singleton GETs | Author identity resolution (the cascade); budget-capped, self-skips at a zero budget, needs an API key for the cursor sweep |
+| `ingest_authors` | local stores by default (`author_source=local`; the `JB_UT_METADATA_DSN` canonical-works DB is an opt-in accelerator) | Per-institution author roster: identity, faculty/research group/org derivation, work edges; also fills `crossref_orcid` from the stored Crossref payloads — run `enrich_works` first for maximum coverage |
+| `harvest_work_funders` | OpenAlex (free single-entity GETs per DOI) | `work_funders`: grant lines per work |
+| `harvest_openalex_funders` | OpenAlex (free singleton GETs) | `openalex_funders` gap-filled from works-linked funder ids |
+| `harvest_openaire_funders` | OpenAIRE Graph | Curated funder canon pull |
 | `harvest_people_utwente` | people.utwente.nl directory (its own JSON-RPC search endpoint) | Per-author people profile: portrait, canonical name, email, org list, org edges resolved onto `pure_orgs` (`people_utwente_person_orgs`, gap-fill evidence like `pure_person_orgs`), and the profile's research.utwente.nl portal link as the match oracle. Runs 20 author pipelines in flight (`--concurrency`), so the confirmed roster takes roughly 30-45 minutes; external — keep it out of the daily wave. Outcomes are stamped in batches of 50, so re-runs only see new authors (`--retry-missed` / `--refresh` re-open old ones) |
 | `embed_journals` | stats-built text | Journal embeddings for similar-journals |
+
+### Manual and repair jobs
+
+Not in bootstrap or the daily wave. All run from `backend/` as
+`uv run python jobs/...`:
+
+| Job | When to use it |
+|---|---|
+| `import_pure_export.py` | Manual ops import (`--file PATH`): stores a Pure backend export verbatim as `work_cerif_full`. The OAI stream truncates author identity; run this before/with the `pure-authors` backfill so author lists are full |
+| `jobs/oneoff/import_utmetadata_works.py` | Twente only: copies the ut-metadata canonical works into `works` (full year range without a re-harvest); needs `JB_UT_METADATA_DSN` |
+| `jobs/oneoff/import_utmetadata_raw.py` | Twente only: copies the verbatim OpenAlex/OpenAIRE/Pure/Crossref records behind that corpus into `source_records` and rebuilds the OA stats window |
+| `jobs/oneoff/verify_utmetadata.py` | Dev-only gate comparing the local works table against ut-metadata (needs a reachable DSN) |
+| `jobs/oneoff/bulk_work_identity.py` | Deploy-time curation: bulk-confirm/bulk-miss work identities from a decisions file |
+| `jobs/oneoff/ingest_emerald_contract.py <contract.xlsx>` | Repair while JCT serves the wrong UKB sheet upstream: rebuilds the Emerald deal journal list from the signed contract's title list (pass the xlsx path as the argument) |
+| `jobs/funder_link_matrix.py` | Prints the funder-to-institution link matrix (report) |
+| `jobs/enrich_usage_geo.py` | Backfills `usage_events.country` from the local DB-IP Lite database (downloads the monthly file on first use) |
+| `jobs/backfill_parts.py` | Also safe standalone: re-runs until no works lack a part-of check |
+| `jobs/harvest_portal_persons.py` | research.utwente.nl portal persons + the ORCID disambiguation file |
+| `jobs/harvest_pure_portal.py` | research.utwente.nl organisation tree scrape |
 
 ### The deal register
 
@@ -392,12 +427,12 @@ archive off-machine; an off-host target is a known open decision.
   `jobs/ingest_scimagojr.py`. `backend/data/` holds the tracked first-boot
   seeds only; a CSV dropped there is never read.
 - **Importing the ut-metadata corpus (Twente):** with `JB_UT_METADATA_DSN`
-  set, `jobs/import_utmetadata_works.py` copies every canonical work that
+  set, `jobs/oneoff/import_utmetadata_works.py` copies every canonical work that
   maps to a Pure uuid into `works` — the full year range without a
   re-harvest — refreshes the stats and journal flags, and widens the
   institution's data window to the oldest stored work. Idempotent; canonical
   works without a Pure uuid stay out (they still surface on journal pages
-  through the live merge). `jobs/import_utmetadata_raw.py` then copies the
+  through the live merge). `jobs/oneoff/import_utmetadata_raw.py` then copies the
   verbatim OpenAlex / OpenAIRE / Pure / Crossref work records behind that
   corpus into `source_records`, reconfirms OpenAIRE DOI identities, and
   rebuilds the OpenAlex per-journal/year OA stats window-bounded — so
