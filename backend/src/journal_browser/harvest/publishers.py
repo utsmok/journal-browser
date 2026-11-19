@@ -118,20 +118,13 @@ async def _store(session: AsyncSession, rows: list[dict[str, Any]]) -> None:
         )
 
 
-def _entity_pk(entity: Any) -> str:
-    """batch_get key: host pk of a response entity. A malformed payload maps
-    to "" so the id simply never matches a requested one."""
-    payload = _payload_dict(entity)
-    return host_pk(payload["id"]) if payload is not None else ""
-
-
 async def _fetch(client: AlethecaClient, ids: list[str]) -> dict[str, dict[str, Any] | None]:
     """Batched pipe-filter lookups; ids absent from the response map to
     None (404s are normal for some publisher entities)."""
     out: dict[str, dict[str, Any] | None] = {}
     for i in range(0, len(ids), BATCH):
         batch = ids[i : i + BATCH]
-        found = await client.publishers.batch_get(batch, field="openalex_id", key_fn=_entity_pk)
+        found = await client.publishers.batch_get(batch, field="openalex_id")
         for pid in batch:
             entity = found.get(pid)
             out[pid] = _payload_dict(entity) if entity is not None else None

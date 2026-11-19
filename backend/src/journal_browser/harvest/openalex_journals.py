@@ -44,7 +44,7 @@ async def resolve_institution_openalex_id(
     if not ror:
         raise RuntimeError(f"institution {institution.code!r} has no ROR to resolve")
     response = await client.institutions.search(filters={"ror": ror}, page_size=1)
-    results = getattr(response, "results", None) or response.get("results", [])
+    results = response.results
     if not results:
         raise RuntimeError(f"no OpenAlex institution for ROR {ror}")
     i_id = openalex_id_to_pk(results[0].id)
@@ -55,15 +55,13 @@ async def resolve_institution_openalex_id(
 
 
 def _payload_dict(item: Any) -> dict[str, Any] | None:
-    """Verbatim JSON payload for a parsed model or raw dict."""
-    if isinstance(item, dict):
-        return item
+    """Verbatim JSON payload for a parsed source entity."""
     dump = getattr(item, "model_dump", None)
-    if dump is not None:
-        data = dump(mode="json")
-        data["id"] = openalex_id_to_pk(data.get("id"))
-        return data
-    return None
+    if dump is None:
+        return None
+    data = dump(mode="json")
+    data["id"] = openalex_id_to_pk(data.get("id"))
+    return data
 
 
 def journal_values(payload: dict[str, Any]) -> dict[str, Any] | None:
@@ -290,7 +288,13 @@ async def sweep_all_sources(
     seen = 0
     page: list[tuple[str, dict[str, Any]]] = []
 
-    async for item in client.sources.iterate(page_size=PER_PAGE, on_page=commit_page):
+    parse_failures: list[tuple[dict[str, Any], Exception]] = []
+    async for item in client.sources.iterate(
+        page_size=PER_PAGE,
+        on_page=commit_page,
+        on_error="skip",
+        failures=parse_failures,
+    ):
         payload = _payload_dict(item)
         pk = payload.get("id") if payload else None
         if not pk:
@@ -312,6 +316,8 @@ async def sweep_all_sources(
         if limit is not None and seen >= limit:
             logger.info("Reached --limit %s", limit)
             break
+    for raw, exc in parse_failures:
+        await ingest.record_parse_failure({"source_pk": raw.get("id"), "reason": str(exc)})
     await ingest.ingest_records(page)
     pruned = await prune_orphan_issn_map(session)
     stats = await ingest.finish_run(

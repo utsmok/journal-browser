@@ -96,9 +96,7 @@ def _openalex_row(f: Any) -> dict[str, Any]:
     ids = getattr(f, "ids", None)
 
     def _id(key: str) -> Any:
-        if isinstance(ids, dict):
-            return ids.get(key)
-        return getattr(ids, key, None)
+        return getattr(ids, key, None) if ids is not None else None
 
     openalex_id = getattr(f, "id", None)
     if not openalex_id:
@@ -232,13 +230,14 @@ async def harvest_openalex_funders(session: AsyncSession) -> dict[str, int]:
     return stats
 
 
-#: Curated OpenAIRE funder codes for the canon pull. OpenAIRE Graph v3 has
+#: Curated OpenAIRE funder codes for the canon pull. OpenAIRE Graph has
 #: no funder enumeration endpoint (verified 2026-11-02 against v1/v2/v3 +
-#: SKG-IF api-docs), but the projects endpoint accepts fundingShortName and
-#: every hit carries the funder canon in funding[].funder. Codes verified
-#: live 2026-11-02 (projects numFound): NWO 48170, EC 130457, WT 21507,
-#: NSF 601434. ERC/EU returned 0 (ERC projects ride under EC streams).
-#: Extend this list only after live-verifying a code, never blind.
+#: SKG-IF api-docs), but the projects endpoint accepts funder_short_name
+#: (V3 fundingShortName) and every hit carries the funder canon in
+#: funding.funder. Codes verified live 2026-11-02 (projects numFound):
+#: NWO 48170, EC 130457, WT 21507, NSF 601434. ERC/EU returned 0 (ERC
+#: projects ride under EC streams). Extend this list only after
+#: live-verifying a code, never blind.
 OPENAIRE_FUNDER_CODES = ("NWO", "EC", "WT", "NSF")
 
 
@@ -262,9 +261,9 @@ def _openaire_row(funder: Any) -> dict[str, Any]:
 async def harvest_openaire_funders(session: AsyncSession) -> dict[str, int]:
     """Curated OpenAIRE funder canon pull -> openaire_funders upsert.
 
-    OpenAIRE Graph v3 exposes no funder enumeration (see
+    OpenAIRE Graph exposes no funder enumeration (see
     OPENAIRE_FUNDER_CODES), so we sample one page of projects per verified
-    fundingShortName and collect the funder canon from funding[].funder.
+    funder_short_name and collect the funder canon from funding.funder.
     Idempotent: reruns refresh every row.
     """
     if AireloomClient is None:  # pragma: no cover
@@ -274,7 +273,7 @@ async def harvest_openaire_funders(session: AsyncSession) -> dict[str, int]:
     async with AireloomClient() as client:
         for code in OPENAIRE_FUNDER_CODES:
             resp = await client.projects.search(
-                filters={"fundingShortName": code}, page_size=OPENAIRE_PAGE_SIZE, page=1
+                filters={"funder_short_name": code}, page_size=OPENAIRE_PAGE_SIZE, page=1
             )
             stats["codes"] += 1
             results = resp.results or []

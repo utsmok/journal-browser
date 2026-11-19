@@ -61,7 +61,7 @@ def load_contract_titles(path: Path) -> list[str]:
 async def fetch_emerald_sources() -> list[dict]:
     """All OpenAlex sources under the Emerald host organization."""
     from aletheca import AlethecaClient
-    from aletheca.endpoints import SourcesFilters
+    from aletheca.filters import SourcesFilters
 
     out = []
     client_kwargs: dict = {}
@@ -136,41 +136,33 @@ def match_titles(contract: list[str], sources: list[dict]) -> tuple[dict[str, di
 async def resolve_unmatched(unmatched: list[str]) -> dict[str, dict]:
     """Search OpenAlex sources by title for contract titles the host-org
     filter missed (renamed or differently-attributed Emerald journals).
-
-    Raw API call: aletheca's sources.search maps the query to the `page`
-    parameter (bibliofabric bug).
     """
-    import httpx
+    from aletheca import AlethecaClient
 
     resolved: dict[str, dict] = {}
     if not unmatched:
         return resolved
-    params_base: dict[str, Any] = {"per_page": 5}
+    client_kwargs: dict[str, Any] = {}
     if api_key := get_settings().openalex_api_key:
-        params_base["api_key"] = api_key
-    async with httpx.AsyncClient(timeout=60) as client:
+        client_kwargs["api_key"] = api_key
+    async with AlethecaClient(**client_kwargs) as client:
         for title in unmatched:
             try:
-                resp = await client.get(
-                    "https://api.openalex.org/sources",
-                    params={**params_base, "search": title},
-                )
-                resp.raise_for_status()
-                results = resp.json().get("results", [])
+                page = await client.sources.search(query=title, page_size=5)
             except Exception as exc:  # background job; log and stop
                 print(f"  search failed for {title!r}: {exc}")
                 continue
             norm_query = _norm(title)
-            for s in results[:3]:
-                host = (s.get("host_organization_name") or "").casefold()
-                same_name = _norm(s.get("display_name") or "") == norm_query
+            for s in page.results[:3]:
+                host = (getattr(s, "host_organization_name", "") or "").casefold()
+                same_name = _norm(getattr(s, "display_name", "") or "") == norm_query
                 if "emerald" not in host and not same_name:
                     continue
                 resolved[title] = {
-                    "id": s.get("id"),
-                    "display_name": s.get("display_name"),
-                    "issn": list(s.get("issn") or []),
-                    "issn_l": s.get("issn_l"),
+                    "id": s.id,
+                    "display_name": s.display_name,
+                    "issn": list(s.issn or []),
+                    "issn_l": s.issn_l,
                 }
                 break
     return resolved

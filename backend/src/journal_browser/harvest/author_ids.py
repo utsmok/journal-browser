@@ -186,11 +186,7 @@ async def gather_openalex_authors(
     if failed:
         logger.warning("author gather: %d lookups failed, e.g. %s", len(failed), sorted(failed)[:5])
     for url, entity in payloads.items():
-        payload = (
-            entity
-            if isinstance(entity, dict)
-            else (entity.model_dump(mode="json") if hasattr(entity, "model_dump") else None)
-        )
+        payload = entity.model_dump(mode="json") if entity is not None else None
         if payload and payload.get("id"):
             await ingest.ingest_record(openalex_id_to_pk(payload.get("id")), payload)
             stats["fetched"] += 1
@@ -279,21 +275,24 @@ async def sweep_author_works(
                 else {}
             ),
         }
+        parse_failures: list[tuple[dict[str, Any], Exception]] = []
         async for item in client.works.iterate(
-            page_size=PER_PAGE, filters=filters, on_page=commit_page
+            page_size=PER_PAGE,
+            filters=filters,
+            on_page=commit_page,
+            on_error="skip",
+            failures=parse_failures,
         ):
-            payload = (
-                item
-                if isinstance(item, dict)
-                else (item.model_dump(mode="json") if hasattr(item, "model_dump") else None)
-            )
-            if not payload or not payload.get("id"):
+            payload = item.model_dump(mode="json")
+            if not payload.get("id"):
                 await ingest.record_parse_failure(
                     {"source_pk": None, "reason": "work parse failure"}
                 )
                 continue
             await ingest.ingest_record(openalex_id_to_pk(payload.get("id")), payload)
             stats["works_seen"] += 1
+        for raw, exc in parse_failures:
+            await ingest.record_parse_failure({"source_pk": raw.get("id"), "reason": str(exc)})
         await ingest.finish_run("completed", {})
         await session.commit()
     return stats

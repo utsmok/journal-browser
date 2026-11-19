@@ -10,6 +10,13 @@ def _ingest_record_into_batches(work_id: str) -> dict:
     return {"id": f"https://openalex.org/{work_id}"}
 
 
+class _WorkRef:
+    """Minimal stand-in for an aletheca Work model (id only)."""
+
+    def __init__(self, work_id: str):
+        self.id = work_id
+
+
 class FakeWorks:
     """Minimal stand-in for aletheca's works client."""
 
@@ -17,9 +24,9 @@ class FakeWorks:
         self._work_ids = work_ids
         self._counts = counts
 
-    async def iterate(self, page_size: int, filters: dict, select: str):
+    async def iterate(self, page_size: int, filters: dict, select: list[str]):
         for work_id in self._work_ids:
-            yield _ingest_record_into_batches(work_id)
+            yield _WorkRef(_ingest_record_into_batches(work_id)["id"])
 
     async def count(self, filters: dict) -> int:
         return self._counts.get(filters.get("cites", ""), 0)

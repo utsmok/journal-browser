@@ -88,6 +88,7 @@ async def harvest_institution_stats(
         # work payload lands verbatim in source_records (shared verbatim
         # store: an identical payload re-harvested for another institution
         # dedupes here).
+        parse_failures: list[tuple[dict[str, Any], Exception]] = []
         async for item in client.works.iterate(
             page_size=PER_PAGE,
             filters={
@@ -100,13 +101,11 @@ async def harvest_institution_stats(
                 ),
             },
             on_page=commit_page,
+            on_error="skip",
+            failures=parse_failures,
         ):
-            payload = (
-                item
-                if isinstance(item, dict)
-                else (item.model_dump(mode="json") if hasattr(item, "model_dump") else None)
-            )
-            if not payload or not payload.get("id"):
+            payload = item.model_dump(mode="json")
+            if not payload.get("id"):
                 await ingest.record_parse_failure(
                     {"source_pk": None, "reason": "work parse failure"}
                 )
@@ -138,6 +137,8 @@ async def harvest_institution_stats(
                 logger.info("Reached --limit %s", limit)
                 break
 
+        for raw, exc in parse_failures:
+            await ingest.record_parse_failure({"source_pk": raw.get("id"), "reason": str(exc)})
         stats = await ingest.finish_run("completed", {"works_unlinked_to_journal": unlinked})
 
         await _write_journal_stats(session, institution.id, per_journal_year)
