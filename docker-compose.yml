@@ -15,7 +15,7 @@ x-backend-env: &backend-env
   JB_LIBRARY_URL: ${JB_LIBRARY_URL:-https://www.utwente.nl/library}
   JB_OA_GUIDE_URL: ${JB_OA_GUIDE_URL:-https://www.utwente.nl/en/service-portal/university-library/publication-archiving/open-access}
   JB_SUPPORT_EMAIL: ${JB_SUPPORT_EMAIL:-open-access@utwente.nl}
-  JB_ADMIN_CONTACT: ${JB_ADMIN_CONTACT:-s.mok@utwente.nl}
+  JB_ADMIN_CONTACT: ${JB_ADMIN_CONTACT:-}
   JB_RESEARCH_PORTAL_URL: ${JB_RESEARCH_PORTAL_URL:-https://research.utwente.nl}
   JB_PURE_OAI_BASE_URL: ${JB_PURE_OAI_BASE_URL:-https://ris.utwente.nl/ws/oai}
   JB_OPENAIRE_ORG_ID: ${JB_OPENAIRE_ORG_ID:-}
@@ -175,7 +175,7 @@ services:
       JB_LIBRARY_URL: ${JB_LIBRARY_URL:-https://www.utwente.nl/library}
       JB_OA_GUIDE_URL: ${JB_OA_GUIDE_URL:-https://www.utwente.nl/en/service-portal/university-library/publication-archiving/open-access}
       JB_SUPPORT_EMAIL: ${JB_SUPPORT_EMAIL:-open-access@utwente.nl}
-      JB_ADMIN_CONTACT: ${JB_ADMIN_CONTACT:-s.mok@utwente.nl}
+      JB_ADMIN_CONTACT: ${JB_ADMIN_CONTACT:-}
       JB_RESEARCH_PORTAL_URL: ${JB_RESEARCH_PORTAL_URL:-https://research.utwente.nl}
       JB_PURE_OAI_BASE_URL: ${JB_PURE_OAI_BASE_URL:-https://ris.utwente.nl/ws/oai}
       JB_OPENAIRE_ORG_ID: ${JB_OPENAIRE_ORG_ID:-}
@@ -213,7 +213,7 @@ services:
       JB_LIBRARY_URL: ${JB_LIBRARY_URL:-https://www.utwente.nl/library}
       JB_OA_GUIDE_URL: ${JB_OA_GUIDE_URL:-https://www.utwente.nl/en/service-portal/university-library/publication-archiving/open-access}
       JB_SUPPORT_EMAIL: ${JB_SUPPORT_EMAIL:-open-access@utwente.nl}
-      JB_ADMIN_CONTACT: ${JB_ADMIN_CONTACT:-s.mok@utwente.nl}
+      JB_ADMIN_CONTACT: ${JB_ADMIN_CONTACT:-}
       JB_RESEARCH_PORTAL_URL: ${JB_RESEARCH_PORTAL_URL:-https://research.utwente.nl}
     ports:
       # 0.0.0.0 on purpose: the frontend is the public surface, published

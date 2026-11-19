@@ -77,5 +77,5 @@ library_url: https://www.utwente.nl/library
 oa_guide_url: https://www.utwente.nl/en/service-portal/university-library/publication-archiving/open-access
 support_email: open-access@utwente.nl
 # Personal contact shown in the footer; empty = row hidden.
-admin_contact: s.mok@utwente.nl
+admin_contact: ""
 research_portal_url: https://research.utwente.nl

@@ -41,7 +41,7 @@ live (see "Admin panel").
 | `JB_LIBRARY_URL` | Library homepage shown in footer and About | UT library | your library site |
 | `JB_OA_GUIDE_URL` | Open access publishing guide link | UT service-portal page | your library's OA page |
 | `JB_SUPPORT_EMAIL` | Support email shown in footer and About | `open-access@utwente.nl` | your OA support address |
-| `JB_ADMIN_CONTACT` | Personal admin contact in footer/About; empty hides the row | `s.mok@utwente.nl` | your choice |
+| `JB_ADMIN_CONTACT` | Personal admin contact in footer/About; empty hides the row | empty | your choice |
 | `JB_RESEARCH_PORTAL_URL` | Research portal (Pure) link in data-source attributions | `https://research.utwente.nl` | your portal |
 
 The backend serves these from `GET /api/v1/meta/freshness`, and the frontend

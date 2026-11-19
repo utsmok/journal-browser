@@ -101,7 +101,7 @@ class Settings(BaseSettings):
     )
     support_email: str = "open-access@utwente.nl"
     # Personal contact shown in the footer; empty = row hidden.
-    admin_contact: str | None = "s.mok@utwente.nl"
+    admin_contact: str | None = None
     research_portal_url: str = "https://research.utwente.nl"
     # Resolved OpenAlex institution id (I...). Empty = resolved from the ROR
     # on first harvest and stored in the institutions table.
