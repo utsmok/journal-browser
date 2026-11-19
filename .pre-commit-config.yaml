@@ -1,4 +1,5 @@
-# Local quality gates, run by `pre-commit install` (see AGENTS.md). CI runs
+# Local quality gates, run by `pre-commit install` and
+# `pre-commit install --hook-type commit-msg` (see AGENTS.md). CI runs
 # the same checks, so a red hook here never surprises anyone at push time.
 # Migrations are excluded everywhere: alembic/versions is historical record
 # and is never reformatted (repo convention).
@@ -36,3 +37,10 @@ repos:
         entry: python3 dev/hooks/check_file_length.py
         language: system
         files: .*
+
+      - id: check-commit-msg
+        name: commit-msg conventional subject
+        entry: python3 dev/hooks/check_commit_msg.py
+        language: system
+        stages: [commit-msg]
+        always_run: true
