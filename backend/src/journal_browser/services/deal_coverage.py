@@ -6,7 +6,7 @@ results on one fixture. Change them together or not at all."""
 
 from typing import Any
 
-from sqlalchemy import case, func, select
+from sqlalchemy import and_, func, or_, select
 
 from ..models import ApcEvidence, Deal, DealInstitution, DealJournal, Work
 from ..schemas import DealOut
@@ -22,9 +22,15 @@ DEAL_FIELDS = [k for k in DealOut.model_fields if k not in _DEAL_OUT_EXTRAS]
 def dj_scope(institution_id: int) -> Any:
     """This institution's effective deal_journals rows: the shared sheet
     (institution_id NULL) unless the participation row opts into a scoped
-    override list."""
-    return DealJournal.institution_id.is_not_distinct_from(
-        case((DealInstitution.journal_override.is_(True), institution_id), else_=None)
+    override list. Sargable OR-of-ANDs: the IS NOT DISTINCT FROM form this
+    replaced gave the planner a 1-row estimate over the 264k-row
+    deal_journals sheet, and the publisher-detail pairs join collapsed
+    into a nested loop that re-ran the attribution aggregate per outer
+    row (queries ran 5-10 minutes, 2026-11-19)."""
+    override = DealInstitution.journal_override.is_(True)
+    return or_(
+        and_(override, DealJournal.institution_id == institution_id),
+        and_(override.isnot(True), DealJournal.institution_id.is_(None)),
     )
 
 

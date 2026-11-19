@@ -570,33 +570,17 @@ async def publisher_detail(
     # One construct instance: two calls would render two distinct bind
     # params and Postgres could not match the GROUP BY expression.
     grp_key = grouping_key()
-    attribution = (
-        select(
-            DealJournal.deal_id.label("deal_id"),
-            grp_key.label("grp"),
-            func.row_number()
-            .over(
-                partition_by=DealJournal.deal_id,
-                order_by=func.count().desc(),
-            )
-            .label("rn"),
-        )
-        .select_from(DealJournal)
-        .join(Journal, Journal.issn_l == DealJournal.issn_l)
-        .where(DealJournal.institution_id.is_(None), DealJournal.excluded.is_not(True))
-        .group_by(DealJournal.deal_id, grp_key)
-        .subquery()
-    )
-    # rn == 1 keeps the dominant publisher per deal (a handful of rows, so
-    # the outer join below stays a hash join).
-    top_attr = (
-        select(attribution.c.deal_id, attribution.c.grp).where(attribution.c.rn == 1).subquery()
-    )
     # Every (group journal, covering deal) pair for this institution's
     # current deals; the deals section and the discrepancy flags split on
     # attribution. No SQL-side group filter: the coverage of a handful of
     # deals is small, and filtering here avoids a multi-thousand-element
-    # IN list that forces a nested-loop plan.
+    # IN list that forces a nested-loop plan. The dominant-publisher
+    # attribution runs as a separate statement over only the deals this
+    # page matched: joined into this query (formerly as a window-agg
+    # subquery), a 1-row estimate from the old IS NOT DISTINCT FROM scope
+    # put it on the nested loop's inner side and the whole window
+    # aggregate re-ran per outer row — 5-10 minute queries on the 264k-row
+    # deal_journals sheet (2026-11-19).
     pairs = (
         await session.execute(
             select(
@@ -605,23 +589,47 @@ async def publisher_detail(
                 Journal.publisher_name,
                 DealJournal.deal_id.label("deal_id"),
                 Publisher.name.label("deal_publisher"),
-                top_attr.c.grp,
             )
             .select_from(DealJournal)
             .join(Deal, Deal.id == DealJournal.deal_id)
             .join(DealInstitution, deal_institution_join(iid))
             .join(Journal, Journal.issn_l == DealJournal.issn_l)
             .outerjoin(Publisher, Publisher.id == Deal.publisher_id)
-            .outerjoin(top_attr, top_attr.c.deal_id == Deal.id)
             .where(Deal.status == "current", dj_scope(iid))
         )
     ).all()
     issn_set = set(issns)
     pairs = [p for p in pairs if p.issn_l in issn_set]
+    # Dominant coverage-list publisher per matched deal (rn == 1 of the
+    # count-desc window; ties arbitrary, as before).
+    deal_grp: dict[int, str] = {}
+    deal_n: dict[int, int] = {}
+    matched_deal_ids = sorted({p.deal_id for p in pairs})
+    if matched_deal_ids:
+        attr_rows = (
+            await session.execute(
+                select(
+                    DealJournal.deal_id.label("deal_id"),
+                    grp_key.label("grp"),
+                    func.count().label("n"),
+                )
+                .join(Journal, Journal.issn_l == DealJournal.issn_l)
+                .where(
+                    DealJournal.institution_id.is_(None),
+                    DealJournal.excluded.is_not(True),
+                    DealJournal.deal_id.in_(matched_deal_ids),
+                )
+                .group_by(DealJournal.deal_id, grp_key)
+            )
+        ).all()
+        for r in attr_rows:
+            if r.deal_id not in deal_n or r.n > deal_n[r.deal_id]:
+                deal_n[r.deal_id] = r.n
+                deal_grp[r.deal_id] = r.grp
     matched: dict[int, dict[str, Any]] = {}
     mismatches: list[Any] = []
     for pair in pairs:
-        if pair.grp == name:
+        if deal_grp.get(pair.deal_id) == name:
             entry = matched.setdefault(
                 pair.deal_id, {"deal_id": pair.deal_id, "n": 0, "publisher": pair.deal_publisher}
             )
