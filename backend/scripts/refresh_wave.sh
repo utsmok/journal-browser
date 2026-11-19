@@ -25,9 +25,15 @@ STAGES=(
   # Credit-priced sweeps, while the daily budget is fresh (see header).
   harvest_stats
   resolve_author_ids
+  # Local projection right after identity resolution: publishes confirmed
+  # author identities to the served roster; no API calls.
+  ingest_authors
   # Local derivation from stored data, no API calls.
   harvest_oa_colors
   build_openalex_works
+  # Part-of backfill for OpenAlex Graph v12 payloads; free single-entity
+  # GETs, resumable, idempotent.
+  backfill_parts
   backfill_pure_authors
   # Funder backfills: free single-entity GETs, then OpenAIRE.
   harvest_work_funders
@@ -70,7 +76,7 @@ fi
 start="${start:-0}"
 
 echo "== 0. OpenAlex daily credit budget"
-budget="$(uv run python -c '
+budget="$(uv run --no-dev python -c '
 import asyncio
 
 from journal_browser.harvest.common import openalex_credits_remaining
@@ -89,7 +95,7 @@ for i in "${!STAGES[@]}"; do
   (( i < start )) && continue
   stage="${STAGES[i]}"
   echo "== $(( i + 1 )). $stage"
-  uv run python "jobs/$stage.py" || { echo "wave: $stage failed"; exit 1; }
+  uv run --no-dev python "jobs/$stage.py" || { echo "wave: $stage failed"; exit 1; }
 done
 
 echo "wave: complete"
