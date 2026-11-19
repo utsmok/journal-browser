@@ -5015,7 +5015,8 @@ export interface operations {
         parameters: {
             query?: {
                 q?: string | null;
-                search_in?: string;
+                /** @description Field the free-text query matches against */
+                search_in?: "all" | "title" | "publisher" | "topic";
                 deal?: string;
                 oa?: boolean | null;
                 doaj?: boolean | null;
@@ -5029,7 +5030,8 @@ export interface operations {
                 pub_type?: string | null;
                 /** @description Comma-separated ISO 639-1 codes; unknown values match nothing */
                 language?: string | null;
-                sort?: string;
+                /** @description Result sort key */
+                sort?: "relevance" | "title" | "publisher" | "institution_works" | "quartile" | "topic" | "apc" | "2yr_mean_citedness";
                 dir?: string | null;
                 cursor?: string | null;
                 limit?: number;
@@ -5487,7 +5489,8 @@ export interface operations {
             query?: {
                 q?: string | null;
                 oa_type?: components["schemas"]["OaType"][] | null;
-                deal?: string | null;
+                /** @description Deal coverage filter (legacy value none = not_covered) */
+                deal?: ("any" | "covered" | "not_covered") | null;
                 quartile?: ("Q1" | "Q2" | "Q3" | "Q4")[] | null;
                 topic?: string | null;
                 size?: string | null;

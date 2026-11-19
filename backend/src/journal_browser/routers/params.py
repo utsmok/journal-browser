@@ -51,6 +51,24 @@ DealFilter = Annotated[
 ]
 
 OaTypeFilter = Annotated[list[OaType] | None, BeforeValidator(split_multi), Query(max_length=60)]
+
+SearchIn = Annotated[
+    Literal["all", "title", "publisher", "topic"],
+    Query(description="Field the free-text query matches against"),
+]
+JournalSort = Annotated[
+    Literal[
+        "relevance",
+        "title",
+        "publisher",
+        "institution_works",
+        "quartile",
+        "topic",
+        "apc",
+        "2yr_mean_citedness",
+    ],
+    Query(description="Result sort key"),
+]
 QuartileFilter = Annotated[
     list[Literal["Q1", "Q2", "Q3", "Q4"]] | None,
     BeforeValidator(split_multi),

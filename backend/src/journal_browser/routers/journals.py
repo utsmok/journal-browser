@@ -52,6 +52,7 @@ from ..services.deal_coverage import DEAL_FIELDS, deal_institution_join, dj_scop
 from ..services.funder_fit import JournalFacts, compute_funder_fit
 from ..services.works_query import YEAR_BUCKETS, clamped_year_range
 from ..vocab import GreenOa, OaType
+from .params import JournalSort, SearchIn
 
 router = APIRouter(prefix="/journals", tags=["journals"])
 
@@ -157,7 +158,7 @@ async def search_journals(
     session: SessionDep,
     institution: InstitutionDep,
     q: Annotated[str | None, Query(max_length=200)] = None,
-    search_in: Annotated[str, Query(pattern="^(all|title|publisher|topic)$")] = "all",
+    search_in: SearchIn = "all",
     deal: Annotated[str, Query(pattern="^(any|covered|not_covered)$")] = "any",
     oa: bool | None = None,
     doaj: bool | None = None,
@@ -176,12 +177,7 @@ async def search_journals(
             description="Comma-separated ISO 639-1 codes; unknown values match nothing",
         ),
     ] = None,
-    sort: Annotated[
-        str,
-        Query(
-            pattern="^(relevance|title|publisher|institution_works|quartile|topic|apc|2yr_mean_citedness)$"
-        ),
-    ] = "relevance",
+    sort: JournalSort = "relevance",
     dir: Annotated[str | None, Query(pattern="^(asc|desc)$")] = None,
     cursor: Annotated[str | None, Query(max_length=512, pattern=r"^[A-Za-z0-9_-]*={0,2}$")] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,

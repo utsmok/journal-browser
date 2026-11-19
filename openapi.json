@@ -1635,11 +1635,18 @@
             "in": "query",
             "required": false,
             "schema": {
+              "enum": [
+                "all",
+                "title",
+                "publisher",
+                "topic"
+              ],
               "type": "string",
-              "pattern": "^(all|title|publisher|topic)$",
+              "description": "Field the free-text query matches against",
               "default": "all",
               "title": "Search In"
-            }
+            },
+            "description": "Field the free-text query matches against"
           },
           {
             "name": "deal",
@@ -1844,11 +1851,22 @@
             "in": "query",
             "required": false,
             "schema": {
+              "enum": [
+                "relevance",
+                "title",
+                "publisher",
+                "institution_works",
+                "quartile",
+                "topic",
+                "apc",
+                "2yr_mean_citedness"
+              ],
               "type": "string",
-              "pattern": "^(relevance|title|publisher|institution_works|quartile|topic|apc|2yr_mean_citedness)$",
+              "description": "Result sort key",
               "default": "relevance",
               "title": "Sort"
-            }
+            },
+            "description": "Result sort key"
           },
           {
             "name": "dir",
@@ -3215,15 +3233,21 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "pattern": "^(covered|none)$"
+                  "enum": [
+                    "any",
+                    "covered",
+                    "not_covered"
+                  ],
+                  "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ],
+              "description": "Deal coverage filter (legacy value none = not_covered)",
               "title": "Deal"
-            }
+            },
+            "description": "Deal coverage filter (legacy value none = not_covered)"
           },
           {
             "name": "quartile",
