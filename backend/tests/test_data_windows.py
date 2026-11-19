@@ -249,7 +249,13 @@ async def _seed_ut_journal(db, window_start: int):
     """Institution 'ut' + journal 0000-0000 + a completed pure run."""
     from journal_browser.models import HarvestRun
 
-    inst = Institution(code="ut", name="UT", data_window_start=window_start, data_window_end=None)
+    inst = Institution(
+        code="ut",
+        name="UT",
+        active=True,
+        data_window_start=window_start,
+        data_window_end=None,
+    )
     db.add_all([inst, journal_factory("0000-0000")])
     await db.flush()
     run = HarvestRun(
