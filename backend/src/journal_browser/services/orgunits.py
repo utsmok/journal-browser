@@ -533,6 +533,24 @@ async def orgunit_detail(
     unit = (await _snapshot(session, institution)).get(level, {}).get(name)
     if unit is None:
         return None
+    # The full bundle is read-mostly (unit roster, gap card, deal usage)
+    # and costs several edge aggregates per request (~7 s live for a
+    # faculty). The harvest epoch in the key invalidates on every
+    # harvest; the TTL only bounds memory (units per institution are
+    # few). An active year range, level, name and sort fully identify
+    # the response.
+    detail_key = (
+        "unit_detail",
+        iid,
+        await cache_epoch(session),
+        level,
+        name,
+        year_range,
+        sort,
+    )
+    hit = cache_get(SNAPSHOT_CACHE, detail_key, SNAPSHOT_TTL)
+    if hit is not None:
+        return hit
     if year_range is not None:
         # Works-derived header counts recomputed inside the range (the
         # list's merge, applied to the one unit); attribute columns and
@@ -809,7 +827,7 @@ async def orgunit_detail(
     aid_rows = (await session.execute(select(Author.openalex_ids).where(*membership))).all()
     member_aids = [aid for (ids,) in aid_rows for aid in (ids or [])]
 
-    return {
+    bundle = {
         "unit": _item(unit, level, topics),
         "groups": groups,
         "journals": [
@@ -847,3 +865,5 @@ async def orgunit_detail(
             {"label": r.label, "n_works": int(r.n_works), "euro": float(r.euro)} for r in usage_rows
         ],
     }
+    cache_put(SNAPSHOT_CACHE, detail_key, bundle)
+    return bundle
