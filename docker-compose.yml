@@ -109,6 +109,8 @@ services:
       - ./backend/state:/app/state
       # Markdown docs served via /api/v1/docs (read-only; edits live in DB).
       - ./docs:/app/docs:ro
+      # Backup listing for the admin ops card (GET /admin/ops/status).
+      - ./backups:/backups:ro
     ports:
       - "127.0.0.1:8000:8000"
     healthcheck:
