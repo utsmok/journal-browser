@@ -54,7 +54,8 @@ services:
     # before, so the pgdata volume carries over unchanged.
     build: ./db
     restart: unless-stopped
-    mem_limit: 2g
+    # Headroom for HNSW builds and large sorts; the page cache counts too.
+    mem_limit: 4g
     logging: *default-logging
     environment:
       POSTGRES_USER: journal
