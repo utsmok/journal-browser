@@ -2,11 +2,11 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import case, delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...models import Work
+from ...models import OpenalexWork, Work
 from .cerif import ref_uuid
 from .doi import extract_doi
 from .transport import PureOaiError
@@ -57,38 +57,50 @@ async def upsert_work(
             )
             doi = None
     oa_status = canonical_access(_dc_first(cerif.get("oa_status")) or _dc_first(dc.get("rights")))
-    stmt = (
-        pg_insert(Work)
-        .values(
-            institution_id=institution_id,
-            pure_uuid=uuid,
-            doi_normalized=doi,
-            title=title,
-            norm_title=_norm_title(title),
-            year=year,
-            work_type=_dc_first(dc.get("type")),
-            publisher=_dc_first(dc.get("publisher")),
-            cerif_issn=_dc_first(cerif.get("issn")),
-            oa_status=oa_status,
-            first_seen_run=run_id,
-            last_seen_run=run_id,
+    stmt = pg_insert(Work).values(
+        institution_id=institution_id,
+        pure_uuid=uuid,
+        doi_normalized=doi,
+        title=title,
+        norm_title=_norm_title(title),
+        year=year,
+        work_type=_dc_first(dc.get("type")),
+        publisher=_dc_first(dc.get("publisher")),
+        cerif_issn=_dc_first(cerif.get("issn")),
+        oa_status=oa_status,
+        first_seen_run=run_id,
+        last_seen_run=run_id,
+    )
+    # The OpenAlex canon sync (build_openalex_works) is the authoritative
+    # writer of oa_status for DOI-matched works: most-open color across all
+    # W-ids of the DOI. A Pure re-harvest must not downgrade it, so on
+    # conflict keep the stored value whenever an OpenAlex row carries a
+    # color for this DOI; Pure rights only fill works OpenAlex does not
+    # know (owner decision 2026-11-19).
+    canon_keep = (
+        select(OpenalexWork.w_id)
+        .where(
+            OpenalexWork.institution_id == institution_id,
+            OpenalexWork.doi_normalized == stmt.excluded.doi_normalized,
+            OpenalexWork.oa_status.is_not(None),
         )
-        .on_conflict_do_update(
-            index_elements=[Work.institution_id, Work.pure_uuid],
-            set_={
-                "doi_normalized": doi,
-                "title": title,
-                "norm_title": _norm_title(title),
-                "year": year,
-                "work_type": _dc_first(dc.get("type")),
-                "publisher": _dc_first(dc.get("publisher")),
-                "cerif_issn": _dc_first(cerif.get("issn")),
-                "oa_status": oa_status,
-                "last_seen_run": run_id,
-                "retired_at": None,
-                "updated_at": datetime.now(UTC),
-            },
-        )
+        .exists()
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[Work.institution_id, Work.pure_uuid],
+        set_={
+            "doi_normalized": doi,
+            "title": title,
+            "norm_title": _norm_title(title),
+            "year": year,
+            "work_type": _dc_first(dc.get("type")),
+            "publisher": _dc_first(dc.get("publisher")),
+            "cerif_issn": _dc_first(cerif.get("issn")),
+            "oa_status": case((canon_keep, Work.oa_status), else_=oa_status),
+            "last_seen_run": run_id,
+            "retired_at": None,
+            "updated_at": datetime.now(UTC),
+        },
     )
     await session.execute(stmt)
 
