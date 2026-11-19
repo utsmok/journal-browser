@@ -1282,6 +1282,7 @@ class DocEditOut(BaseModel):
 class DocMetaOut(BaseModel):
     slug: str
     title: str
+    summary: str
     group: str
     order: int
     edits: int

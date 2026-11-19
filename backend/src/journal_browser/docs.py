@@ -38,14 +38,28 @@ def _docs_in(root: Path, subdir: str) -> list[Path]:
     return sorted((root / subdir).glob("*.md"))
 
 
-def list_docs() -> list[dict]:
+def _summary(md: str) -> str:
+    """First non-heading, non-blank line: the list card's one-line
+    description, so the frontend list needs no per-doc fetch."""
+    for line in md.splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and not line.startswith("```"):
+            return line[:200]
+    return ""
+
+
+def list_docs(*, internal: bool = False) -> list[dict]:
     """Metadata for every served doc, in list order (OVERVIEW, then the
-    pipeline traces alphabetically, then pitch docs)."""
+    pipeline traces alphabetically, then pitch docs). Pitch docs carry
+    negotiation content for library staff: they stay off the public list
+    (internal=True is the admin route)."""
     root = docs_root()
     if root is None:
         return []
     out: list[dict] = []
-    for order, path in enumerate(_docs_in(root, "data-pipeline") + _docs_in(root, "pitch")):
+    for order, path in enumerate(
+        _docs_in(root, "data-pipeline") + (_docs_in(root, "pitch") if internal else [])
+    ):
         stem = path.stem
         if path.parent.name == "data-pipeline" and stem == "OVERVIEW":
             group, order = "overview", 0
@@ -54,10 +68,18 @@ def list_docs() -> list[dict]:
         else:
             group = "pitch"
         try:
-            title = _title(path.read_text(encoding="utf-8"), stem)
+            md = path.read_text(encoding="utf-8")
         except OSError:
             continue
-        out.append({"slug": stem.lower(), "title": title, "group": group, "order": order})
+        out.append(
+            {
+                "slug": stem.lower(),
+                "title": _title(md, stem),
+                "summary": _summary(md),
+                "group": group,
+                "order": order,
+            }
+        )
     return out
 
 
@@ -66,7 +88,7 @@ def read_doc(slug: str) -> dict | None:
     Slugs are lower-cased file stems; lookup is case-insensitive so
     /docs/overview resolves even though the file is OVERVIEW.md."""
     slug = slug.lower()
-    for meta in list_docs():
+    for meta in list_docs(internal=True):
         if meta["slug"] != slug:
             continue
         root = docs_root()

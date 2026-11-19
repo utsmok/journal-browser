@@ -7987,6 +7987,10 @@
             "type": "string",
             "title": "Title"
           },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
           "group": {
             "type": "string",
             "title": "Group"
@@ -8004,6 +8008,7 @@
         "required": [
           "slug",
           "title",
+          "summary",
           "group",
           "order",
           "edits"
@@ -10215,7 +10220,7 @@
           "subscription"
         ],
         "title": "OaType",
-        "description": "Journal-level OA classification (journals.oa_type; services/search.py\nSQL case + Python mirror, search filter vocabulary).\n\nMember order is the facet display order (most open first); every\noa_type facet/composition dict iterates OA_TYPES, so do not reorder\nalphabetically."
+        "description": "Journal-level OA classification (journals.oa_type; the services/search/\npackage SQL case + Python mirror, search filter vocabulary).\n\nMember order is the facet display order (most open first); every\noa_type facet/composition dict iterates OA_TYPES, so do not reorder\nalphabetically."
       },
       "OpenaireFactsOut": {
         "properties": {
