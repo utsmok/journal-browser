@@ -29,7 +29,7 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 async def search_authors(
     session: SessionDep,
     institution: InstitutionDep,
-    q: str | None = None,
+    q: Annotated[str | None, Query(max_length=200)] = None,
     limit: int = Query(authors_service.DEFAULT_LIMIT, ge=1, le=authors_service.MAX_LIMIT),
     faculty: Annotated[str | None, Query(max_length=200)] = None,
     org: Annotated[str | None, Query(max_length=200)] = None,

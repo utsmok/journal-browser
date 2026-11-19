@@ -34,7 +34,7 @@ class PageViewIn(BaseModel):
     type: Literal["page_view"]
     session_id: str = Field(max_length=64)
     path: str = Field(max_length=512)
-    duration_ms: int | None = None
+    duration_ms: int | None = Field(default=None, ge=0, le=86_400_000)
     referrer: str | None = Field(default=None, max_length=512)
     ref_type: Literal["journal", "funder", "author", "orgunit", "publisher"] | None = None
     ref_id: str | None = Field(default=None, max_length=256)
@@ -54,7 +54,7 @@ class SearchIn(BaseModel):
     # True when the client means a default browse load; the server forces
     # this on (and nulls the query) whenever the query is missing/blank.
     is_browse: bool = False
-    results_count: int | None = None
+    results_count: int | None = Field(default=None, ge=0, le=10_000_000)
     search_scope: Literal["journals", "funders", "authors", "publishers", "orgunits"] | None = None
     filters: dict[str, Any] | None = None
 

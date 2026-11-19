@@ -2694,7 +2694,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -11425,7 +11426,9 @@
           "duration_ms": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "maximum": 86400000.0,
+                "minimum": 0.0
               },
               {
                 "type": "null"
@@ -11812,7 +11815,9 @@
           "results_count": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "maximum": 10000000.0,
+                "minimum": 0.0
               },
               {
                 "type": "null"

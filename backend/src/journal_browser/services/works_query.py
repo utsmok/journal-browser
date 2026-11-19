@@ -39,7 +39,10 @@ def clamped_year_range(
     Both bounds come back concrete so callers can replace the window gates
     wholesale when a range is active. An open window end fills to
     WINDOW_OPEN_END like year_end; from > to raises ValueError (the
-    app-level handler answers 400)."""
+    app-level handler answers 400). A range entirely outside the data
+    window also raises: clamping each bound independently would return an
+    inverted (lo > hi) range that callers serve as an empty page without
+    telling the user the filter did not apply."""
     if year_from is None and year_to is None:
         return None
     if year_from is not None and year_to is not None and year_from > year_to:
@@ -48,6 +51,10 @@ def clamped_year_range(
     end = year_end(institution)
     lo = start if year_from is None else max(year_from, start)
     hi = end if year_to is None else min(year_to, end)
+    if lo > hi:
+        raise ValueError(
+            f"year range {year_from}-{year_to} lies outside the data window ({start}-{end})"
+        )
     return (lo, hi)
 
 

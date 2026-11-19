@@ -17,6 +17,11 @@ SIMILAR_ALL_LIMIT = 10
 #: totals in the hundreds-to-thousands band across five probe queries,
 #: measured 2026-11-13 on the live corpus (~177k vectors).
 SEMANTIC_MAX_DISTANCE = 0.32
+#: Paging-depth ceiling for the semantic-search cursor. ef_search scales
+#: with the offset, so a client-chosen seven-figure offset would drive a
+#: full iterative HNSW scan per request on an unauthenticated endpoint;
+#: the frontend pages a few dozen rows deep at most.
+SEMANTIC_MAX_OFFSET = 10_000
 
 
 async def similar_journals(
@@ -144,6 +149,8 @@ async def semantic_search(
         if not cursor.isdigit():
             raise ValueError("invalid cursor")
         offset = int(cursor)
+        if offset > SEMANTIC_MAX_OFFSET:
+            raise ValueError(f"cursor offset beyond {SEMANTIC_MAX_OFFSET}")
 
     # ONNX inference (and the lazy ~130 MB model load) would stall the event
     # loop for every other request; run it in a worker thread.
