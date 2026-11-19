@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 
 import { GithubIcon } from "@/components/github-icon";
+import { instFromSegment } from "@/lib/global-segments";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 
 /** Footer with institution links from settings when scoped to an
@@ -12,7 +13,7 @@ export function SiteFooter() {
   const t = useTranslations("common");
   const site = useSiteMeta();
   const seg = (usePathname() ?? "/").split("/")[1] ?? "";
-  const scoped = Boolean(seg) && seg !== "admin";
+  const scoped = Boolean(instFromSegment(seg));
   const links: { href: string; label: string; icon?: "github" }[] = [
     ...(scoped
       ? [

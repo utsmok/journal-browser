@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useInstitution } from "./use-institution";
 import { useFreshness, useInstitutionsDirectory } from "./use-api";
 import { useSiteFallback } from "../app/providers";
+import { instFromSegment } from "@/lib/global-segments";
 
 /**
  * Institution display values: the scoped /meta/freshness is authoritative
@@ -16,7 +17,7 @@ export function useSiteMeta() {
   // fall back to the URL segment; the provider wins where it exists.
   const ctxInst = useInstitution();
   const seg = (usePathname() ?? "/").split("/")[1] ?? "";
-  const inst = ctxInst || (seg && seg !== "admin" ? seg : "");
+  const inst = ctxInst || instFromSegment(seg);
   const { data } = useFreshness(inst);
   const dir = useInstitutionsDirectory().data?.find((i) => i.code === inst);
   const seed = useSiteFallback();

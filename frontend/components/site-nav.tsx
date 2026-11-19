@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 
 import { OjbWordmark } from "@/components/logo";
 import { NavLink } from "@/components/nav-link";
+import { instFromSegment } from "@/lib/global-segments";
 
 /** Nav links scoped to the current institution segment; the "All
  * universities" link reaches the global landing chooser from any uni page. */
@@ -13,7 +14,8 @@ export function SiteNav() {
   const t = useTranslations("common");
   const pathname = usePathname() ?? "/";
   const seg = pathname.split("/")[1] ?? "";
-  const prefix = seg && seg !== "admin" ? `/${seg}` : "";
+  const inst = instFromSegment(seg);
+  const prefix = inst && `/${inst}`;
   if (!prefix) return null;
   return (
     <nav
@@ -39,7 +41,7 @@ export function BrandLink() {
   const t = useTranslations("common");
   const pathname = usePathname() ?? "/";
   const seg = pathname.split("/")[1] ?? "";
-  const prefix = seg && seg !== "admin" ? `/${seg}` : "";
+  const prefix = instFromSegment(seg) && `/${instFromSegment(seg)}`;
   return (
     <Link
       href={`${prefix}/`}

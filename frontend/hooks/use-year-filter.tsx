@@ -6,6 +6,7 @@ import * as React from "react";
 import { useInstitutionsDirectory } from "./use-api";
 import { useInstitution } from "./use-institution";
 import { useSiteMeta } from "./use-site-meta";
+import { instFromSegment } from "@/lib/global-segments";
 
 /**
  * Global publication-year lens. One selected {from, to} span per
@@ -33,7 +34,7 @@ const YearRangeContext = React.createContext<{
 function useYearInst(): string {
   const ctxInst = useInstitution();
   const seg = (usePathname() ?? "/").split("/")[1] ?? "";
-  return ctxInst || (seg && seg !== "admin" ? seg : "");
+  return ctxInst || instFromSegment(seg);
 }
 
 export function YearFilterProvider({ children }: { children: React.ReactNode }) {
