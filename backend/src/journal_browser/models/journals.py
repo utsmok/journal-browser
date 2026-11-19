@@ -98,7 +98,6 @@ class Journal(Base):
     jisc_harvested_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
-    crossref_meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     openaire_meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     harvested_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     search_text: Mapped[str | None] = mapped_column(Text, nullable=True)
