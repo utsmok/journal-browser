@@ -108,8 +108,9 @@ class IngestSession:
         # or killed process leaves its row running forever; a new start of
         # the same job is the one moment that state is provably dead.
         # Superseding also makes an accidental overlap visible: the older
-        # row reads 'failed' with the marker instead of pretending both
-        # completed.
+        # row reads 'superseded' instead of pretending it failed or
+        # completed, so the admin dashboard does not show red after a
+        # normal overlapping re-run.
         #
         # The runs table carries no filter_set, so the key here is
         # (source, entity_type, institution). Every current job finishes
@@ -130,7 +131,7 @@ class IngestSession:
                 HarvestRun.status == "running",
             )
             .values(
-                status="failed",
+                status="superseded",
                 finished_at=datetime.now(UTC),
                 stats={"error": "stale: superseded by a newer run of the same job"},
             )
@@ -261,7 +262,7 @@ class IngestSession:
             .where(SourceRecord.harvest_run_id == self.run_id)
         )
         # Close only a run still marked running: a newer start_run of the
-        # same job key may have superseded this one to failed while this
+        # same job key may have superseded this one while this
         # process was still working (production rows 47/50, 2026-10-26).
         # A zombie finish must not flip that row back to completed nor
         # rewrite harvest_state under a dead run id.
@@ -274,7 +275,7 @@ class IngestSession:
         if closed is None:
             logger.warning(
                 "Run %s finished as %r after a newer run superseded it; "
-                "discarding close (row stays failed, harvest_state untouched)",
+                "discarding close (row stays superseded, harvest_state untouched)",
                 self.run_id,
                 status,
             )

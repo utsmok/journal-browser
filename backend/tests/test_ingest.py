@@ -79,7 +79,7 @@ async def test_start_run_supersedes_stale_running_rows(db):
     await db.commit()
 
     old = await db.get(HarvestRun, stale_id)
-    assert old.status == "failed"
+    assert old.status == "superseded"
     assert old.finished_at is not None
     assert old.stats == {"error": "stale: superseded by a newer run of the same job"}
     new = await db.get(HarvestRun, fresh_id)
@@ -111,7 +111,7 @@ async def test_start_run_supersede_respects_institution_scope(db, institution_fa
     again = IngestSession(db)
     await again.start_run("src", "ent", "f1", {}, institution_id=inst.id)
     await db.commit()
-    assert (await db.get(HarvestRun, scoped_id)).status == "failed"
+    assert (await db.get(HarvestRun, scoped_id)).status == "superseded"
 
 
 @requires_db

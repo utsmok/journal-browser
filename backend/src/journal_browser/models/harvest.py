@@ -36,7 +36,7 @@ class HarvestRun(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('running', 'completed', 'failed')",
+            "status IN ('running', 'completed', 'failed', 'superseded')",
             name="ck_harvest_runs_status",
         ),
         Index("ix_harvest_runs_institution", "institution_id", "id"),
@@ -61,7 +61,7 @@ class HarvestState(Base):
     __table_args__ = (
         # Same vocabulary as ck_harvest_runs_status; NULL = never run.
         CheckConstraint(
-            "status IN ('running', 'completed', 'failed')",
+            "status IN ('running', 'completed', 'failed', 'superseded')",
             name="ck_harvest_state_status",
         ),
         # Partial uniques keep one state row per key for global (NULL) and

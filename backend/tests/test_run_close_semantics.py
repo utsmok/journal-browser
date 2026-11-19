@@ -46,14 +46,14 @@ async def test_superseded_run_cannot_close_itself(db):
     await db.commit()
 
     zombie_row = await db.get(HarvestRun, zombie.run_id)
-    assert zombie_row.status == "failed"
+    assert zombie_row.status == "superseded"
     assert zombie_row.stats["error"].startswith("stale: superseded")
 
     await zombie.finish_run("completed", {"works": 3})
     await db.commit()
 
     await db.refresh(zombie_row)
-    assert zombie_row.status == "failed", "zombie finish resurrected a superseded run"
+    assert zombie_row.status == "superseded", "zombie finish resurrected a superseded run"
     assert zombie_row.stats["error"].startswith("stale: superseded")
     assert await _state_row(db, "sweep-a") is None, "zombie finish wrote harvest_state"
 

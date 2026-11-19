@@ -102,6 +102,8 @@ class HarvestStatus(StrEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+    # A newer start_run of the same job key closed this row; not a failure.
+    SUPERSEDED = "superseded"
 
 
 class IdentityStatus(StrEnum):
