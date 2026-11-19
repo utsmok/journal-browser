@@ -33,7 +33,15 @@ async def canon_links(session: AsyncSession) -> FunderCanon:
     """One join over funder_links (migration 0050) -> all canon data.
 
     funder_links may not exist yet (fresh DB before 0050): degrade to
-    empty so the funders endpoints still serve names and policies."""
+    empty so the funders endpoints still serve names and policies.
+    EXTRA_ALIASES covers official names the linked rows never carry: the
+    NWO row (jisc 459) stores only the Dutch name, while its English
+    name ("Dutch Research Council") and acronym never appear in any
+    linked source, so searching them misses the Netherlands' main
+    funder."""
+    extra_aliases: dict[int, list[str]] = {
+        459: ["Dutch Research Council", "NWO"],
+    }
     exists = bool(
         await session.scalar(text("select to_regclass('public.funder_links') is not null"))
     )
@@ -114,6 +122,10 @@ async def canon_links(session: AsyncSession) -> FunderCanon:
             if short_name and (fid, short_name) not in seen_alias:
                 seen_alias.add((fid, short_name))
                 canon.aliases.setdefault(fid, []).append(short_name)
+    for fid, names in extra_aliases.items():
+        for name in names:
+            if name not in canon.aliases.setdefault(fid, []):
+                canon.aliases[fid].append(name)
     return canon
 
 
