@@ -15,6 +15,7 @@ import { formatDateTime } from "@/lib/format";
 import type { AdminRun, InstitutionDirectoryEntry } from "@/lib/admin";
 
 export function StatusBadge({ status }: { status: string }) {
+  const t = useTranslations("admin");
   const variant =
     status === "completed"
       ? "secondary"
@@ -23,7 +24,14 @@ export function StatusBadge({ status }: { status: string }) {
         : status === "running"
           ? "default"
           : "muted";
-  return <Badge variant={variant}>{status}</Badge>;
+  return (
+    <Badge
+      variant={variant}
+      title={status === "superseded" ? t("runs.supersededTitle") : undefined}
+    >
+      {status}
+    </Badge>
+  );
 }
 
 /** Top stat pairs as compact copy ("3,875 policies · 282 funders"); the

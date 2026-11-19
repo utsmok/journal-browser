@@ -229,6 +229,7 @@ function SettingsForm({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [rebuilt, setRebuilt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchDoc = useCallback(async (): Promise<Doc> => {
@@ -241,7 +242,11 @@ function SettingsForm({
         fields: INST_FIELDS.map((f) => ({
           ...f,
           label: t(f.labelKey),
-          help: f.helpKey ? t(f.helpKey) : null,
+          help: f.helpKey
+            ? t(f.helpKey)
+            : f.key === "data_window_end"
+              ? t("settings.dataWindowEndHelp")
+              : null,
         })),
         values: inst,
       };
@@ -307,7 +312,32 @@ function SettingsForm({
     for (const f of fields) {
       if (!isChanged(f, draft[f.key], initial[f.key])) continue;
       const value = toBodyValue(f, draft[f.key]);
-      if (value !== undefined) body[f.key] = value;
+      if (value !== undefined) {
+        body[f.key] = value;
+        continue;
+      }
+      // Institution numbers are nullable except data_window_start: an
+      // emptied field must reach the API as explicit null, or the stored
+      // value survives (sweep finding 6).
+      if (variant === "institution" && f.type === "number" && String(draft[f.key]).trim() === "") {
+        if (initial[f.key] == null) continue;
+        if (f.key === "data_window_start") {
+          setError(t("settings.windowStartRequired"));
+          return;
+        }
+        body[f.key] = null;
+      }
+    }
+    if (variant === "institution") {
+      // Merged (body ∪ stored) window ends, matching the server-side 400.
+      const merged = (key: string): number | null | undefined =>
+        key in body ? ((body[key] as number | null) ?? null) : (initial[key] as number | null);
+      const start = merged("data_window_start");
+      const end = merged("data_window_end");
+      if (typeof start === "number" && typeof end === "number" && start > end) {
+        setError(t("settings.windowOrder", { start, end }));
+        return;
+      }
     }
     if (Object.keys(body).length === 0) {
       setError(t("settings.noChanges"));
@@ -316,9 +346,12 @@ function SettingsForm({
     setSaving(true);
     setError(null);
     try {
-      await put(body);
+      const res = (await put(body)) as { rematerialized_journals?: number | null };
       await reload();
       setSaved(true);
+      if (typeof res?.rematerialized_journals === "number") {
+        setRebuilt(res.rematerialized_journals);
+      }
     } catch (err) {
       if (err instanceof AdminError && err.status === 401) onUnauthorized(null);
       else
@@ -346,7 +379,19 @@ function SettingsForm({
                 : undefined
             }
             onChange={(value) => {
+              // Deactivating removes the institution's journal_flags rows
+              // and stops serving it; confirm first (sweep finding 2).
+              if (
+                variant === "institution" &&
+                f.key === "active" &&
+                value === false &&
+                draft[f.key] === true &&
+                !window.confirm(t("settings.deactivateConfirm", { code: code ?? "" }))
+              ) {
+                return;
+              }
               setSaved(false);
+              setRebuilt(null);
               setDraft((d) => ({ ...d, [f.key]: value }));
             }}
           />
@@ -357,6 +402,11 @@ function SettingsForm({
           {saving ? t("settings.saving") : t("settings.save")}
         </Button>
         {saved && <span className="text-sm text-muted-foreground">{t("settings.saved")}</span>}
+        {rebuilt !== null && (
+          <span className="text-sm text-muted-foreground">
+            {t("settings.rematerialized", { count: rebuilt })}
+          </span>
+        )}
         {error && <span className="text-sm text-destructive">{error}</span>}
       </div>
     </div>

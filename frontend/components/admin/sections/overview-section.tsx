@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { PageHeader } from "@/components/admin/admin-shell";
+import { OpsCard } from "@/components/admin/ops-card";
 import { RunDrawer } from "@/components/admin/run-drawer";
 import { RunsTable } from "@/components/admin/runs-table";
 import {
@@ -80,7 +81,7 @@ export function OverviewSection({ inst, basePath }: { inst?: string; basePath: s
 
       {summary.error && <p className="text-sm text-destructive">{summary.error}</p>}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-7">
         <StatCard
           href={`${basePath}/runs`}
           label={t("overview.statFailedRuns")}
@@ -114,6 +115,12 @@ export function OverviewSection({ inst, basePath }: { inst?: string; basePath: s
           href={`${basePath}/work-identities`}
           label={t("overview.statWorkCandidates")}
           value={s?.work_identity_candidates ?? null}
+        />
+        <StatCard
+          href={`${basePath}/work-identities`}
+          label={t("overview.statWorkMissing")}
+          value={s?.work_identity_missing ?? null}
+          warn
         />
       </div>
 
@@ -197,6 +204,8 @@ export function OverviewSection({ inst, basePath }: { inst?: string; basePath: s
           <p className="text-sm text-muted-foreground">{t("overview.noFlagged")}</p>
         )}
       </section>
+
+      <OpsCard basePath={basePath} />
 
       {selectedRun && <RunDrawer run={selectedRun} onClose={() => setSelectedRun(null)} />}
     </div>
