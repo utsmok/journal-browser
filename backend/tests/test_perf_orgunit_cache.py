@@ -4,7 +4,6 @@ level + name + year range + sort with the snapshot TTL. Pins: hit served
 from the cache store, miss rebuilds identically, and an active year
 range gets its own key."""
 
-
 from conftest import requires_db
 from journal_browser.models import Author
 from journal_browser.services.cache import SNAPSHOT_CACHE

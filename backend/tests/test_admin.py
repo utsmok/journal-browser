@@ -1,74 +1,100 @@
-"""Admin panel API: password gate, run listing, flagged deals, settings."""
+"""Admin surface outcomes: the auth gate and login rate limit, the
+settings overlay round trip (including stale overlay keys and a window
+edit that must serve downstream immediately), the docs API, feedback
+intake + triage, and the admin summary counters.
 
-from datetime import UTC, datetime, timedelta
+Replaces test_admin.py, test_admin_login_ratelimit.py,
+test_settings_overlay.py, test_docs.py and test_feedback.py (scenario map:
+.audit/2026-11-19-sweep/p2-tests-plan.md).
+"""
+
+import hashlib
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from conftest import pair_rows, requires_db
+from conftest import journal_factory, requires_db
 from journal_browser.config import get_settings, reset_settings_cache
+from journal_browser.harvest.denorm import refresh_institution_stats
+from journal_browser.harvest.institution_stats import write_pure_canon_stats
 from journal_browser.models import (
-    Author,
     AuthorIdentity,
     Deal,
     DealJournal,
     Feedback,
     HarvestRun,
     Institution,
-    Journal,
-    OpenalexWork,
+    JournalFlags,
     Publisher,
-    SourceRecord,
     StatusChangeLog,
     Work,
     WorkIdentity,
 )
+from journal_browser.routers.admin.auth import (
+    FAIL_WINDOW_SECONDS,
+    MAX_FAILURES_GLOBAL,
+    MAX_FAILURES_PER_KEY,
+    LoginRateLimiter,
+    reset_login_limiter,
+)
+from journal_browser.services.detail_enrichment import list_works
 
 PASSWORD = "test-admin-pw"
 
+DUMP = {
+    "url": "/ut/journals?q=water",
+    "queries": [{"key": ["journals", "ut", {"q": "water"}], "data": {"items": []}}],
+}
+
 
 @pytest.fixture
-async def admin_api(client, db_engine, monkeypatch, tmp_path):
+async def admin_api(client, db, monkeypatch, tmp_path):
+    """Admin password env, a hermetic settings overlay yaml and docs tree,
+    plus the fixed backdrop every admin read expects: one hosted
+    institution, one flagged deal, one completed harvest run."""
     monkeypatch.setenv("JB_ADMIN_PASSWORD", PASSWORD)
     monkeypatch.setenv("JB_SETTINGS_YAML", str(tmp_path / "settings.yaml"))
+    docs_dir = tmp_path / "docs" / "data-pipeline"
+    docs_dir.mkdir(parents=True)
+    (docs_dir / "OVERVIEW.md").write_text(
+        "# Overview\n\nIntro paragraph.\n\n```python\nx = 1\n\ny = 2\n```\n", encoding="utf-8"
+    )
+    (docs_dir / "aaa-source.md").write_text("# A Source\n\nSource text.\n", encoding="utf-8")
+    monkeypatch.setenv("JB_DOCS_DIR", str(tmp_path / "docs"))
     reset_settings_cache()
-    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    reset_login_limiter()
 
-    async with maker() as session:
-        home = Institution(name="University of Twente", code="ut", active=True)
-        session.add(home)
-        await session.flush()
-        pub = Publisher(name="Emerald Publishing group")
-        session.add(pub)
-        await session.flush()
-        deal = Deal(
-            publisher_id=pub.id,
-            status="current",
-            corresponding_authors_only=False,
-            provenance=[],
-            needs_curation=True,
-            needs_curation_reason="duplicate sheet",
+    pub = Publisher(name="Emerald Publishing group")
+    db.add(Institution(name="University of Twente", code="ut", active=True))
+    db.add(pub)
+    db.add(journal_factory("0000-0000", publisher_name="Emerald"))
+    await db.flush()
+    deal = Deal(
+        publisher_id=pub.id,
+        status="current",
+        corresponding_authors_only=False,
+        provenance=[],
+        needs_curation=True,
+        needs_curation_reason="duplicate sheet",
+    )
+    db.add(deal)
+    await db.flush()
+    db.add(DealJournal(deal_id=deal.id, issn="0000-0000", source="jct"))
+    db.add(
+        HarvestRun(
+            source="reconcile",
+            entity_type="deal",
+            status="completed",
+            config_fingerprint="x",
+            stats={"matched": 1},
         )
-        session.add(deal)
-        await session.flush()
-        journal = Journal(issn_l="0000-0000", title="J", publisher_name="Emerald")
-        session.add(journal)
-        await session.flush()
-        session.add(DealJournal(deal_id=deal.id, issn="0000-0000", source="jct"))
-        session.add(
-            HarvestRun(
-                source="reconcile",
-                entity_type="deal",
-                status="completed",
-                config_fingerprint="x",
-                stats={"matched": 1},
-            )
-        )
-        await session.commit()
+    )
+    await db.commit()
     yield client
     reset_settings_cache()
+    reset_login_limiter()
 
 
 async def _login(client: AsyncClient) -> dict[str, str]:
@@ -78,48 +104,85 @@ async def _login(client: AsyncClient) -> dict[str, str]:
 
 
 @requires_db
-async def test_gate_rejects_without_password(admin_api):
-    r = await admin_api.get("/api/v1/admin/runs")
-    assert r.status_code == 401
+async def test_admin_auth_gate(admin_api, monkeypatch):
+    # Without JB_ADMIN_PASSWORD the panel is disabled: every admin route
+    # answers 403, login included.
+    monkeypatch.delenv("JB_ADMIN_PASSWORD")
+    reset_settings_cache()
+    assert (await admin_api.get("/api/v1/admin/runs")).status_code == 403
+    assert (
+        await admin_api.post("/api/v1/admin/login", json={"password": PASSWORD})
+    ).status_code == 403
+
+    # With the password set, admin routes demand a bearer token from /login.
+    monkeypatch.setenv("JB_ADMIN_PASSWORD", PASSWORD)
+    reset_settings_cache()
+    assert (await admin_api.get("/api/v1/admin/runs")).status_code == 401
+    bogus = {"Authorization": "Bearer not-a-token"}
+    assert (await admin_api.get("/api/v1/admin/runs", headers=bogus)).status_code == 401
     r = await admin_api.post("/api/v1/admin/login", json={"password": "wrong"})
     assert r.status_code == 403
 
 
 @requires_db
-async def test_login_and_runs(admin_api):
+async def test_login_lockout_retry_after_and_per_key(admin_api):
+    for _ in range(MAX_FAILURES_PER_KEY):
+        r = await admin_api.post("/api/v1/admin/login", json={"password": "wrong"})
+        assert r.status_code == 403
+    # Locked out: even the correct password is refused without a check, and
+    # the wait is bounded by the failure window.
     r = await admin_api.post("/api/v1/admin/login", json={"password": PASSWORD})
-    assert r.status_code == 200
-    token = r.json()["token"]
-    r = await admin_api.get("/api/v1/admin/runs", headers={"Authorization": f"Bearer {token}"})
-    assert r.status_code == 200
-    runs = r.json()
-    sources = {run["source"]: run for run in runs}
-    assert sources["reconcile"]["stats"]["matched"] == 1
-
-
-@requires_db
-async def test_flagged_and_settings(admin_api):
-    token = (await admin_api.post("/api/v1/admin/login", json={"password": PASSWORD})).json()[
-        "token"
-    ]
-    headers = {"Authorization": f"Bearer {token}"}
-    flagged = (await admin_api.get("/api/v1/admin/flagged", headers=headers)).json()
-    assert len(flagged) == 1
-    assert flagged[0]["journals"] == 1
-    assert flagged[0]["reason"] == "duplicate sheet"
-    settings = (await admin_api.get("/api/v1/admin/settings", headers=headers)).json()
-    assert settings["values"]["bootstrap"] in {"auto", "always", "off"}
-    assert settings["values"]["admin_password"] == "********"
-    assert "institution_name" not in settings["values"]
-    assert any(
-        f["key"] == "institution_name" and f["section"] == "institution" for f in settings["schema"]
+    assert r.status_code == 429
+    assert 1 <= int(r.headers["Retry-After"]) <= FAIL_WINDOW_SECONDS
+    # A different forwarded client still reaches the password check.
+    r = await admin_api.post(
+        "/api/v1/admin/login", json={"password": "wrong"}, headers={"X-Forwarded-For": "10.1.1.2"}
     )
+    assert r.status_code == 403
 
 
 @requires_db
-async def test_settings_put_roundtrip_and_masking(admin_api, tmp_path):
+async def test_login_success_does_not_count(admin_api):
+    for _ in range(MAX_FAILURES_PER_KEY - 1):
+        assert (
+            await admin_api.post("/api/v1/admin/login", json={"password": "wrong"})
+        ).status_code == 403
+    ok = await admin_api.post("/api/v1/admin/login", json={"password": PASSWORD})
+    assert ok.status_code == 200
+    # The success consumed nothing: one more failure is still allowed, and
+    # only the failure after that trips the lockout.
+    assert (
+        await admin_api.post("/api/v1/admin/login", json={"password": "wrong"})
+    ).status_code == 403
+    assert (
+        await admin_api.post("/api/v1/admin/login", json={"password": PASSWORD})
+    ).status_code == 429
+
+
+def test_login_rate_limiter_windows():
+    t = 0.0
+    lim = LoginRateLimiter(clock=lambda: t)
+    for _ in range(MAX_FAILURES_PER_KEY):
+        lim.record_failure("k")
+    assert lim.retry_after("k") == FAIL_WINDOW_SECONDS
+    # The wait is ceil-rounded: half a second before expiry costs a full one.
+    t = FAIL_WINDOW_SECONDS - 0.5
+    assert lim.retry_after("k") == 1
+    # Sliding window: aged-out failures unblock the key itself ...
+    t = FAIL_WINDOW_SECONDS + 0.5
+    assert lim.retry_after("k") is None
+    # ... while the global cap blocks keys with no failures of their own,
+    # until the global failures age out too.
+    for i in range(MAX_FAILURES_GLOBAL):
+        lim.record_failure(f"key{i}")
+    assert lim.retry_after("fresh") == FAIL_WINDOW_SECONDS
+    t += FAIL_WINDOW_SECONDS + 1
+    assert lim.retry_after("fresh") is None
+
+
+@requires_db
+async def test_settings_put_round_trip(admin_api, tmp_path):
     headers = await _login(admin_api)
-    yaml_path = tmp_path / "settings.yaml"
     r = await admin_api.put(
         "/api/v1/admin/settings",
         headers=headers,
@@ -133,25 +196,31 @@ async def test_settings_put_roundtrip_and_masking(admin_api, tmp_path):
     )
     assert r.status_code == 200
     assert r.json()["values"]["bootstrap"] == "always"
-    # Written atomically to the YAML overlay and live for get_settings().
-    text = yaml_path.read_text()
+
+    # GET serves the same edit, the overlay file holds it, and
+    # get_settings() sees it live.
+    r = await admin_api.get("/api/v1/admin/settings", headers=headers)
+    assert r.json()["values"]["bootstrap"] == "always"
+    text = (tmp_path / "settings.yaml").read_text()
     assert "bootstrap: always" in text
     assert "1234-5678" in text
     assert get_settings().bootstrap == "always"
     assert get_settings().ignored_issns == ["1234-5678"]
-    # Masked secret keeps the existing value and never lands in the file.
+
+    # The masked secret keeps the current value and never lands in the file.
     r = await admin_api.put(
         "/api/v1/admin/settings", headers=headers, json={"values": {"admin_password": "********"}}
     )
     assert r.status_code == 200
-    assert "admin_password" not in yaml_path.read_text()
+    assert "admin_password" not in (tmp_path / "settings.yaml").read_text()
     assert get_settings().admin_password == PASSWORD
-    # Validation: unknown key, wrong type, institution-section key.
+
+    # Unknown key, wrong type, institution-section key: 400 each.
     for bad in ({"nope": 1}, {"bootstrap": True}, {"institution_name": "X"}):
         r = await admin_api.put("/api/v1/admin/settings", headers=headers, json={"values": bad})
         assert r.status_code == 400
-    # A newly written secret takes effect immediately (the token MAC derives
-    # from the live settings).
+
+    # A newly written secret is live immediately (login derives from it).
     r = await admin_api.put(
         "/api/v1/admin/settings", headers=headers, json={"values": {"admin_password": "pw2"}}
     )
@@ -160,94 +229,72 @@ async def test_settings_put_roundtrip_and_masking(admin_api, tmp_path):
     assert r.status_code == 200
 
 
-@requires_db
-async def test_institutions_get_put(admin_api):
-    headers = await _login(admin_api)
-    r = await admin_api.get("/api/v1/admin/institutions/ut", headers=headers)
-    assert r.status_code == 200
-    body = r.json()
-    assert body["code"] == "ut"
-    assert body["name"] == "University of Twente"
-    r = await admin_api.get("/api/v1/admin/institutions/zz", headers=headers)
-    assert r.status_code == 404
-    # Unknown/immutable key rejected before anything is applied.
-    r = await admin_api.put(
-        "/api/v1/admin/institutions/ut",
-        headers=headers,
-        json={"data_window_start": 2019, "code": "rug"},
-    )
-    assert r.status_code == 422
-    r = await admin_api.get("/api/v1/admin/institutions/ut", headers=headers)
-    assert r.json()["data_window_start"] == 2020
-    r = await admin_api.put(
-        "/api/v1/admin/institutions/ut",
-        headers=headers,
-        json={"data_window_start": 2019, "active": True},
-    )
-    assert r.status_code == 200
-    body = r.json()
-    assert body["data_window_start"] == 2019
-    assert body["active"] is True
-    # Author-search confirmation flag round-trips (default on).
-    assert body["require_confirmed_affiliation"] is True
-    r = await admin_api.put(
-        "/api/v1/admin/institutions/ut",
-        headers=headers,
-        json={"require_confirmed_affiliation": False},
-    )
-    assert r.status_code == 200
-    assert r.json()["require_confirmed_affiliation"] is False
-    for bad in (
-        {"data_window_start": "x"},
-        {"active": "yes"},
-        {"require_confirmed_affiliation": 1},
-    ):
-        r = await admin_api.put("/api/v1/admin/institutions/ut", headers=headers, json=bad)
-        assert r.status_code == 422
-
-
-def test_get_settings_live_yaml_merge(tmp_path, monkeypatch):
-    yaml_path = tmp_path / "settings.yaml"
-    monkeypatch.setenv("JB_SETTINGS_YAML", str(yaml_path))
+def test_stale_overlay_key_is_ignored(monkeypatch, tmp_path):
+    """A settings.yaml key that left Settings must not break get_settings();
+    overlays reload live on mtime, so an unknown key is ignored, never
+    raised on."""
+    overlay = tmp_path / "settings.yaml"
+    overlay.write_text("enable_jisc: false\ncontact_email: overlay@example.com\n", encoding="utf-8")
+    monkeypatch.setenv("JB_SETTINGS_YAML", str(overlay))
+    monkeypatch.setenv("JB_CONTACT_EMAIL", "env@example.com")
     reset_settings_cache()
     try:
-        fallback = get_settings().bootstrap
-        # Bare `off` would parse as boolean False (YAML 1.1) and fail
-        # validation loudly — hand edits must quote such scalars.
-        yaml_path.write_text("bootstrap: 'off'\nignored_issns: ['1111-2222']\n")
-        assert get_settings().bootstrap == "off"
-        assert get_settings().ignored_issns == ["1111-2222"]
-        assert get_settings().database_url  # env fallback untouched
-        yaml_path.unlink()
-        assert get_settings().bootstrap == fallback
+        s = get_settings()
+        assert s.contact_email == "overlay@example.com"  # overlay wins over env
+        assert "enable_jisc" not in type(s).model_fields
     finally:
         reset_settings_cache()
 
 
 @requires_db
-async def test_feedback_limit_rejects_nonpositive(admin_api):
-    headers = await _login(admin_api)
-    res = await admin_api.get("/api/v1/admin/feedback", params={"limit": -1}, headers=headers)
-    assert res.status_code == 422
-
-
-@requires_db
-async def test_institution_put_rejects_null_nonnullable(admin_api):
-    headers = await _login(admin_api)
-    for key in ("name", "data_window_start", "active"):
-        r = await admin_api.put("/api/v1/admin/institutions/ut", headers=headers, json={key: None})
-        assert r.status_code == 422, key
-    # A nullable field still clears on explicit null.
-    r = await admin_api.put(
-        "/api/v1/admin/institutions/ut", headers=headers, json={"admin_contact": None}
+async def test_window_edit_stores_open_null_and_serves_downstream(admin_api, db):
+    """data_window_end 0 (the compose/.env default) stores NULL, and a
+    window edit rebuilds the window-bounded card counts in the same request
+    (2026-11-08: the PUT used to leave the card stale until the stats job)."""
+    inst = (await db.execute(select(Institution).where(Institution.code == "ut"))).scalar_one()
+    inst.data_window_start = 2021
+    run = HarvestRun(
+        source="pure",
+        entity_type="works",
+        status="completed",
+        institution_id=inst.id,
+        config_fingerprint="t",
     )
-    assert r.status_code == 200
-    assert r.json()["admin_contact"] is None
+    db.add(run)
+    await db.flush()
+    db.add_all(
+        [
+            Work(
+                institution_id=inst.id,
+                pure_uuid="ut-pre",
+                title="Pre window",
+                norm_title="pre window",
+                year=2020,
+                work_type="article",
+                journal_issn_l="0000-0000",
+                first_seen_run=run.id,
+                last_seen_run=run.id,
+            ),
+            Work(
+                institution_id=inst.id,
+                pure_uuid="ut-in",
+                title="In window",
+                norm_title="in window",
+                year=2021,
+                work_type="article",
+                journal_issn_l="0000-0000",
+                first_seen_run=run.id,
+                last_seen_run=run.id,
+            ),
+        ]
+    )
+    await write_pure_canon_stats(db, inst)
+    await refresh_institution_stats(db, inst)
+    await db.commit()
+    # The card starts on the old window: the 2020 work is excluded.
+    flags = await db.get(JournalFlags, {"institution_id": inst.id, "issn_l": "0000-0000"})
+    assert flags is not None and flags.works_count == 1
 
-
-@requires_db
-async def test_institution_put_window_end_zero_and_null_mean_open(admin_api, db_engine):
-    """0 (the compose/.env default) and explicit null both store NULL."""
     headers = await _login(admin_api)
     r = await admin_api.put(
         "/api/v1/admin/institutions/ut", headers=headers, json={"data_window_end": 0}
@@ -255,564 +302,225 @@ async def test_institution_put_window_end_zero_and_null_mean_open(admin_api, db_
     assert r.status_code == 200
     assert r.json()["data_window_end"] is None
     r = await admin_api.put(
-        "/api/v1/admin/institutions/ut",
-        headers=headers,
-        json={"data_window_start": 2024, "data_window_end": 2025},
-    )
-    assert r.json()["data_window_end"] == 2025
-    # Absent key leaves the stored value untouched.
-    r = await admin_api.put(
-        "/api/v1/admin/institutions/ut", headers=headers, json={"name": "University of Twente"}
+        "/api/v1/admin/institutions/ut", headers=headers, json={"data_window_start": 2020}
     )
     assert r.status_code == 200
-    assert r.json()["data_window_end"] == 2025
-    # Explicit null clears the column again — really NULL in the DB.
-    r = await admin_api.put(
-        "/api/v1/admin/institutions/ut", headers=headers, json={"data_window_end": None}
-    )
-    assert r.status_code == 200
-    assert r.json()["data_window_end"] is None
-    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+
+    maker = async_sessionmaker(db.bind, expire_on_commit=False)
     async with maker() as session:
-        inst = (
+        fresh = (
             await session.execute(select(Institution).where(Institution.code == "ut"))
         ).scalar_one()
-        assert inst.data_window_end is None
+        page = await list_works(session, "0000-0000", fresh, page=1, page_size=50)
+        flags = await session.get(JournalFlags, {"institution_id": fresh.id, "issn_l": "0000-0000"})
+    assert flags is not None and flags.works_count == 2
+    assert page["total"] == 2
 
 
 @requires_db
-async def test_author_identities_list_and_flip(admin_api, db_engine):
-    maker = async_sessionmaker(db_engine, expire_on_commit=False)
-    async with maker() as session:
-        inst_id = (await session.execute(select(Institution.id).limit(1))).scalar_one()
-        session.add(
-            Author(
-                institution_id=inst_id,
-                pure_uuid="p-review",
-                name="Review Me",
-                n_works=1,
-                confirmed=True,
-            )
-        )
-        session.add(
-            AuthorIdentity(
-                institution_id=inst_id,
-                author_pure_uuid="p-review",
-                source="openalex",
-                external_id="a-1",
-                status="candidate",
-                method="initials",
-                n_works=2,
-                evidence={"conflicts": 1},
-            )
-        )
-        await session.commit()
-
-    headers = await _login(admin_api)
-    r = await admin_api.get(
-        "/api/v1/admin/author-identities", params={"status": "candidate"}, headers=headers
-    )
+async def test_docs_list_detail_edit(admin_api):
+    r = await admin_api.get("/api/v1/docs")
     assert r.status_code == 200
-    rows = r.json()["items"]
-    row = next(row for row in rows if row["author_pure_uuid"] == "p-review")
-    assert row["author_name"] == "Review Me"
-    assert row["institution_code"] == "ut"
+    docs = r.json()
+    assert [d["slug"] for d in docs] == ["overview", "aaa-source"]
+    assert docs[0]["group"] == "overview" and docs[0]["order"] == 0
+    assert all(d["edits"] == 0 for d in docs)
 
-    # flip to confirmed
-    r = await admin_api.put(
-        "/api/v1/admin/author-identities",
-        headers=headers,
-        json={
-            "institution_id": row["institution_id"],
-            "author_pure_uuid": "p-review",
-            "source": "openalex",
-            "external_id": "a-1",
-            "status": "confirmed",
-        },
-    )
+    r = await admin_api.get("/api/v1/docs/OVERVIEW")
     assert r.status_code == 200
-    assert r.json()["status"] == "confirmed"
-
-    # invalid status 422; unknown row 404
-    r = await admin_api.put(
-        "/api/v1/admin/author-identities",
-        headers=headers,
-        json={
-            "institution_id": row["institution_id"],
-            "author_pure_uuid": "p-review",
-            "source": "openalex",
-            "external_id": "a-1",
-            "status": "maybe",
-        },
-    )
-    assert r.status_code == 422
-    r = await admin_api.put(
-        "/api/v1/admin/author-identities",
-        headers=headers,
-        json={
-            "institution_id": row["institution_id"],
-            "author_pure_uuid": "p-missing",
-            "source": "openalex",
-            "external_id": "a-1",
-            "status": "confirmed",
-        },
-    )
-    assert r.status_code == 404
-
-
-@requires_db
-async def test_author_identity_flip_audits_and_skips_noops(admin_api, db_engine):
-    """Every actual flip appends one status_changes row; no-ops write none."""
-    maker = async_sessionmaker(db_engine, expire_on_commit=False)
-    async with maker() as session:
-        inst_id = (await session.execute(select(Institution.id).limit(1))).scalar_one()
-        session.add(
-            AuthorIdentity(
-                institution_id=inst_id,
-                author_pure_uuid="p-audit",
-                source="openalex",
-                external_id="a-9",
-                status="candidate",
-                evidence={},
-            )
-        )
-        await session.commit()
-
-    headers = await _login(admin_api)
-    body = {
-        "institution_id": inst_id,
-        "author_pure_uuid": "p-audit",
-        "source": "openalex",
-        "external_id": "a-9",
-        "status": "rejected",
-        "changed_by": "sam",
-        "note": "namesake, not the same person",
-    }
-    r = await admin_api.put("/api/v1/admin/author-identities", headers=headers, json=body)
-    assert r.status_code == 200
-    assert r.json()["status"] == "rejected"
-
-    # Idempotent repeat: 200, same payload, no extra audit row.
-    r = await admin_api.put("/api/v1/admin/author-identities", headers=headers, json=body)
-    assert r.status_code == 200
-
-    async with maker() as session:
-        changes = (
-            (
-                await session.execute(
-                    select(StatusChangeLog).where(StatusChangeLog.table_name == "author_identities")
-                )
-            )
-            .scalars()
-            .all()
-        )
-        assert len(changes) == 1
-        assert changes[0].old_value == "candidate"
-        assert changes[0].new_value == "rejected"
-        assert changes[0].changed_by == "sam"
-        assert changes[0].row_key["external_id"] == "a-9"
-
-    listing = (
-        await admin_api.get(
-            "/api/v1/admin/status-changes",
-            params={"table_name": "author_identities"},
-            headers=headers,
-        )
-    ).json()
-    assert len(listing) == 1
-    assert listing[0]["old_value"] == "candidate" and listing[0]["new_value"] == "rejected"
-
-
-@requires_db
-async def test_work_identities_list_flip_and_audit(admin_api, db_engine):
-    maker = async_sessionmaker(db_engine, expire_on_commit=False)
-    async with maker() as session:
-        inst_id = (await session.execute(select(Institution.id).limit(1))).scalar_one()
-        run_id = (await session.execute(select(HarvestRun.id).limit(1))).scalar_one()
-        session.add(
-            Work(
-                institution_id=inst_id,
-                pure_uuid="w-local",
-                title="A local work",
-                norm_title="a local work",
-                year=2025,
-                first_seen_run=run_id,
-                last_seen_run=run_id,
-            )
-        )
-        session.add(
-            WorkIdentity(
-                institution_id=inst_id,
-                source="openalex",
-                source_pk="doi:10.1/xyz",
-                work_id="w-local",
-                matched_by="doi",
-                status="missing",
-            )
-        )
-        await session.commit()
-
-    headers = await _login(admin_api)
-    rows = (await admin_api.get("/api/v1/admin/work-identities", headers=headers)).json()["items"]
-    assert len(rows) == 1
-    assert rows[0]["work_title"] == "A local work"
-    assert rows[0]["institution_code"] == "ut"
-
-    body = {
-        "institution_id": inst_id,
-        "source": "openalex",
-        "source_pk": "doi:10.1/xyz",
-        "status": "candidate",
-    }
-    r = await admin_api.put("/api/v1/admin/work-identities", headers=headers, json=body)
-    assert r.status_code == 200
-    assert r.json()["status"] == "candidate"
-
-    # No-op: no audit row.
-    r = await admin_api.put("/api/v1/admin/work-identities", headers=headers, json=body)
-    assert r.status_code == 200
-
-    # Validation + unknown row.
-    r = await admin_api.put(
-        "/api/v1/admin/work-identities",
-        headers=headers,
-        json={**body, "status": "maybe"},
-    )
-    assert r.status_code == 422
-    r = await admin_api.put(
-        "/api/v1/admin/work-identities",
-        headers=headers,
-        json={**body, "source_pk": "doi:10.1/none"},
-    )
-    assert r.status_code == 404
-
-    async with maker() as session:
-        changes = (
-            (
-                await session.execute(
-                    select(StatusChangeLog).where(StatusChangeLog.table_name == "work_identity")
-                )
-            )
-            .scalars()
-            .all()
-        )
-        assert len(changes) == 1
-        assert changes[0].old_value == "missing"
-        assert changes[0].new_value == "candidate"
-
-
-@requires_db
-async def test_work_identities_bulk_decisions(admin_api, db_engine):
-    maker = async_sessionmaker(db_engine, expire_on_commit=False)
-    async with maker() as session:
-        inst_id = (await session.execute(select(Institution.id).limit(1))).scalar_one()
-        run_id = (await session.execute(select(HarvestRun.id).limit(1))).scalar_one()
-        session.add(
-            Work(
-                institution_id=inst_id,
-                pure_uuid="w-bulk",
-                title="A bulk work",
-                norm_title="a bulk work",
-                year=2025,
-                first_seen_run=run_id,
-                last_seen_run=run_id,
-            )
-        )
-        for pk in ("doi:10.1/a", "doi:10.1/b", "doi:10.1/c"):
-            session.add(
-                WorkIdentity(
-                    institution_id=inst_id,
-                    source="openalex",
-                    source_pk=pk,
-                    work_id="w-bulk",
-                    matched_by="trgm:0.82",
-                    confidence=0.9,
-                    status="candidate",
-                )
-            )
-        await session.commit()
-
-    headers = await _login(admin_api)
-    body = {
-        "institution_id": inst_id,
-        "source": "openalex",
-        "reviewer": "bulk-sam",
-        "updates": [
-            {"source_pk": "doi:10.1/a", "status": "confirmed", "note": "safe band"},
-            {"source_pk": "doi:10.1/b", "status": "confirmed"},
-            {"source_pk": "doi:10.1/c", "status": "missing"},
-            # Unknown row: reported in errors, batch still applies.
-            {"source_pk": "doi:10.1/none", "status": "confirmed"},
-        ],
-    }
-    r = await admin_api.post("/api/v1/admin/work-identities/bulk", headers=headers, json=body)
-    assert r.status_code == 200
-    assert r.json()["confirmed"] == 2
-    assert r.json()["missing"] == 1
-    assert r.json()["errors"] == [
-        {
-            "source_pk": "doi:10.1/none",
-            "error": "work identity row not found: doi:10.1/none",
-        }
+    detail = r.json()
+    assert [b["key"] for b in detail["blocks"]] == [
+        f"b{i:03d}" for i in range(len(detail["blocks"]))
     ]
-    assert r.json()["reopened"] == 0 and r.json()["unchanged"] == 0
+    block = next(b for b in detail["blocks"] if b["type"] == "paragraph")
+    assert (await admin_api.get("/api/v1/docs/no-such-doc")).status_code == 404
 
-    async with maker() as session:
-        statuses = dict(
-            (
-                await session.execute(
-                    select(WorkIdentity.source_pk, WorkIdentity.status).where(
-                        WorkIdentity.source == "openalex"
-                    )
-                )
-            ).all()
-        )
-        assert statuses == {
-            "doi:10.1/a": "confirmed",
-            "doi:10.1/b": "confirmed",
-            "doi:10.1/c": "missing",
-        }
-        changes = (
-            (
-                await session.execute(
-                    select(StatusChangeLog)
-                    .where(StatusChangeLog.table_name == "work_identity")
-                    .order_by(StatusChangeLog.id)
-                )
-            )
-            .scalars()
-            .all()
-        )
-        assert len(changes) == 3
-        assert [(c.old_value, c.new_value) for c in changes] == [
-            ("candidate", "confirmed"),
-            ("candidate", "confirmed"),
-            ("candidate", "missing"),
-        ]
-        assert {c.changed_by for c in changes} == {"bulk-sam"}
-        assert changes[0].note == "safe band"
+    headers = await _login(admin_api)
+    edit = {
+        "block_key": block["key"],
+        "original_hash": hashlib.sha256(block["text"].encode()).hexdigest(),
+        "replacement": "A replacement paragraph.",
+    }
+    r = await admin_api.put("/api/v1/admin/docs/overview/edits", headers=headers, json=edit)
+    assert r.status_code == 200
+    assert r.json() == {"slug": "overview", "block_key": block["key"], "edited": True}
 
-    # Invalid status words fail validation before anything is applied.
-    r = await admin_api.post(
-        "/api/v1/admin/work-identities/bulk",
-        headers=headers,
-        json={**body, "updates": [{"source_pk": "doi:10.1/a", "status": "maybe"}]},
+    # The edit is served at read time; the listing counts it.
+    edited = (await admin_api.get("/api/v1/docs/OVERVIEW")).json()
+    now = next(b for b in edited["blocks"] if b["key"] == block["key"])
+    assert now["text"] == "A replacement paragraph."
+    assert now["edited"] is True
+    listing = (await admin_api.get("/api/v1/docs")).json()
+    assert next(d for d in listing if d["slug"] == "overview")["edits"] == 1
+
+    # Empty replacement and unknown slugs are rejected before any write.
+    r = await admin_api.put(
+        "/api/v1/admin/docs/overview/edits", headers=headers, json={**edit, "replacement": "   "}
     )
     assert r.status_code == 422
+    r = await admin_api.put("/api/v1/admin/docs/no-such-doc/edits", headers=headers, json=edit)
+    assert r.status_code == 404
+
+    # Deleting the override restores the source text.
+    r = await admin_api.delete(f"/api/v1/admin/docs/overview/edits/{block['key']}", headers=headers)
+    assert r.status_code == 204
+    restored = (await admin_api.get("/api/v1/docs/OVERVIEW")).json()
+    back = next(b for b in restored["blocks"] if b["key"] == block["key"])
+    assert back["text"] == block["text"]
+    assert back["edited"] is False
 
 
 @requires_db
-async def test_author_identities_paging_envelope(admin_api, db_engine):
-    """total reflects all filtered rows; offset pages through without overlap."""
-    maker = async_sessionmaker(db_engine, expire_on_commit=False)
-    async with maker() as session:
-        inst_id = (await session.execute(select(Institution.id).limit(1))).scalar_one()
-        base = datetime(2026, 1, 1, tzinfo=UTC)
-        for i in range(5):
-            session.add(
-                AuthorIdentity(
-                    institution_id=inst_id,
-                    author_pure_uuid=f"p-page-{i}",
-                    source="openalex",
-                    external_id=f"a-{i}",
-                    # Even rows confirmed, odd rows candidate: filter below.
-                    status="candidate" if i % 2 else "confirmed",
-                    method="initials",
-                    n_works=1,
-                    evidence={},
-                    # Distinct stamps pin the newest-first order.
-                    updated_at=base + timedelta(minutes=i),
-                )
-            )
-        await session.commit()
+async def test_feedback_intake_and_triage(admin_api, db):
+    r = await admin_api.post(
+        "/api/v1/feedback",
+        json={
+            "title": "Wrong APC price",
+            "description": "The list price for ISSN 1234-5678 looks wrong.",
+            "category": "bug",
+            "page_url": "/ut/journals/1234-5678",
+            "page_data": DUMP,
+        },
+    )
+    assert r.status_code == 201
+    assert r.json()["status"] == "todo"
+
+    # Intake is public, triage is not; bad category and an oversized page
+    # dump are rejected before storage.
+    assert (await admin_api.get("/api/v1/admin/feedback")).status_code == 401
+    r = await admin_api.post(
+        "/api/v1/feedback", json={"title": "x", "description": "y", "category": "not-a-thing"}
+    )
+    assert r.status_code == 422
+    r = await admin_api.post(
+        "/api/v1/feedback",
+        json={"title": "x", "description": "y", "page_data": {"blob": "a" * 1_100_000}},
+    )
+    assert r.status_code == 413
 
     headers = await _login(admin_api)
+    items = (await admin_api.get("/api/v1/admin/feedback", headers=headers)).json()
+    assert len(items) == 1
+    assert items[0]["page_data"] == DUMP
+    assert items[0]["page_url"] == "/ut/journals/1234-5678"
+    fid = items[0]["id"]
 
-    async def page(**params):
-        r = await admin_api.get("/api/v1/admin/author-identities", params=params, headers=headers)
-        assert r.status_code == 200
-        return r.json()
-
-    first = await page(limit=2)
-    assert (first["total"], first["offset"]) == (5, 0)
-    assert len(first["items"]) == 2
-
-    second = await page(limit=2, offset=2)
-    assert (second["total"], second["offset"]) == (5, 2)
-    tail = await page(limit=2, offset=4)
-    assert len(tail["items"]) == 1
-    everything = {it["author_pure_uuid"] for it in first["items"] + second["items"] + tail["items"]}
-    assert len(everything) == 5
-
-    # Filters apply to the total, not just the items.
-    filtered = await page(status="candidate", limit=1)
-    assert filtered["total"] == 2
-    assert {it["status"] for it in filtered["items"]} == {"candidate"}
+    # A status flip is audited once; a notes-only patch writes no audit row.
+    r = await admin_api.patch(
+        f"/api/v1/admin/feedback/{fid}",
+        headers=headers,
+        json={
+            "status": "in_progress",
+            "priority": "high",
+            "resolution_notes": "looking",
+            "changed_by": "sam",
+        },
+    )
+    assert r.status_code == 200
+    assert r.json()["status"] == "in_progress"
+    r = await admin_api.patch(
+        f"/api/v1/admin/feedback/{fid}", headers=headers, json={"resolution_notes": "still looking"}
+    )
+    assert r.status_code == 200
+    changes = (
+        (
+            await db.execute(
+                select(StatusChangeLog).where(StatusChangeLog.table_name == "feedback_items")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    # The priority flip and the status flip each land one audit row, in
+    # that order; the notes-only patch writes none.
+    assert [(c.old_value, c.new_value) for c in changes] == [
+        ("normal", "high"),
+        ("todo", "in_progress"),
+    ]
+    assert changes[0].changed_by == "sam"
 
     r = await admin_api.get(
-        "/api/v1/admin/author-identities", params={"offset": -1}, headers=headers
+        "/api/v1/admin/feedback", headers=headers, params={"status": "in_progress"}
+    )
+    assert [i["id"] for i in r.json()] == [fid]
+    r = await admin_api.patch(
+        f"/api/v1/admin/feedback/{fid}", headers=headers, json={"status": "nope"}
     )
     assert r.status_code == 422
+    r = await admin_api.get("/api/v1/admin/feedback", headers=headers, params={"limit": -1})
+    assert r.status_code == 422
+
+    r = await admin_api.delete(f"/api/v1/admin/feedback/{fid}", headers=headers)
+    assert r.status_code == 204
+    assert (await admin_api.get("/api/v1/admin/feedback", headers=headers)).json() == []
 
 
 @requires_db
-async def test_work_identities_paging_envelope(admin_api, db_engine):
-    maker = async_sessionmaker(db_engine, expire_on_commit=False)
-    async with maker() as session:
-        inst_id = (await session.execute(select(Institution.id).limit(1))).scalar_one()
-        run_id = (await session.execute(select(HarvestRun.id).limit(1))).scalar_one()
-        for i in range(4):
-            session.add(
-                Work(
-                    institution_id=inst_id,
-                    pure_uuid=f"w-{i}",
-                    title=f"Work {i}",
-                    norm_title=f"work {i}",
-                    year=2025,
-                    first_seen_run=run_id,
-                    last_seen_run=run_id,
-                )
-            )
-            session.add(
-                WorkIdentity(
-                    institution_id=inst_id,
-                    # Two openalex rows, two pure rows: filter below.
-                    source="openalex" if i < 2 else "pure",
-                    source_pk=f"doi:10.9/{i}",
-                    work_id=f"w-{i}",
-                    matched_by="doi",
-                    status="missing",
-                )
-            )
-        await session.commit()
-
-    headers = await _login(admin_api)
-
-    async def page(**params):
-        r = await admin_api.get("/api/v1/admin/work-identities", params=params, headers=headers)
-        assert r.status_code == 200
-        return r.json()
-
-    first = await page(limit=3)
-    assert (first["total"], first["offset"]) == (4, 0)
-    assert len(first["items"]) == 3
-    rest = await page(limit=3, offset=3)
-    assert (rest["total"], rest["offset"]) == (4, 3)
-    assert len(rest["items"]) == 1
-    seen = {it["source_pk"] for it in first["items"] + rest["items"]}
-    assert len(seen) == 4
-
-    filtered = await page(source="openalex", limit=1)
-    assert filtered["total"] == 2
-    assert {it["source"] for it in filtered["items"]} == {"openalex"}
-
-
-@requires_db
-async def test_feedback_status_change_is_audited(admin_api, db_engine):
-    maker = async_sessionmaker(db_engine, expire_on_commit=False)
-    async with maker() as session:
-        session.add(Feedback(title="t", description="d", category="bug"))
-        await session.commit()
-
-    headers = await _login(admin_api)
-    fb_id = (await admin_api.get("/api/v1/admin/feedback", headers=headers)).json()[0]["id"]
-
-    # Status flip -> audited. Notes-only patch -> not audited.
-    r = await admin_api.patch(
-        f"/api/v1/admin/feedback/{fb_id}",
-        headers=headers,
-        json={"status": "in_progress", "changed_by": "sam"},
-    )
-    assert r.status_code == 200
-    r = await admin_api.patch(
-        f"/api/v1/admin/feedback/{fb_id}",
-        headers=headers,
-        json={"resolution_notes": "looking"},
-    )
-    assert r.status_code == 200
-
-    async with maker() as session:
-        changes = (
-            (
-                await session.execute(
-                    select(StatusChangeLog).where(StatusChangeLog.table_name == "feedback_items")
-                )
-            )
-            .scalars()
-            .all()
-        )
-        assert len(changes) == 1
-        assert changes[0].old_value == "todo"
-        assert changes[0].new_value == "in_progress"
-        assert changes[0].changed_by == "sam"
-
-
-@requires_db
-async def test_admin_summary_counts(admin_api, db_engine):
-    maker = async_sessionmaker(db_engine, expire_on_commit=False)
-    async with maker() as session:
-        inst_id = (await session.execute(select(Institution.id).limit(1))).scalar_one()
-        run_id = (
-            await session.execute(
-                select(HarvestRun.id).where(HarvestRun.source == "reconcile").limit(1)
-            )
-        ).scalar_one()
-        session.add(
+async def test_admin_summary_counts(admin_api, db):
+    ut = (await db.execute(select(Institution).where(Institution.code == "ut"))).scalar_one()
+    db.add_all(
+        [
+            # Global failure inside the 24h window ...
             HarvestRun(
                 source="openaccess_nl",
                 entity_type="deal",
                 status="failed",
                 config_fingerprint="x",
                 stats={"error": "boom"},
-            )
-        )
-        session.add(
+            ),
+            # ... an institution-scoped failure ...
             HarvestRun(
-                source="openalex",
-                entity_type="work",
-                status="running",
+                source="pure",
+                entity_type="works",
+                status="failed",
+                institution_id=ut.id,
                 config_fingerprint="x",
-                stats={},
-            )
-        )
-        session.add(Feedback(title="t", description="d", category="bug"))
-        session.add(
+            ),
+            Feedback(title="t", description="d", category="bug"),
             AuthorIdentity(
-                institution_id=inst_id,
+                institution_id=ut.id,
                 author_pure_uuid="p-sum",
                 source="openalex",
                 external_id="a-sum",
                 status="candidate",
-            )
+            ),
+        ]
+    )
+    await db.flush()
+    run_id = (
+        await db.execute(select(HarvestRun.id).where(HarvestRun.source == "reconcile").limit(1))
+    ).scalar_one()
+    db.add(
+        Work(
+            institution_id=ut.id,
+            pure_uuid="w-sum",
+            title="Summary work",
+            norm_title="summary work",
+            year=2025,
+            first_seen_run=run_id,
+            last_seen_run=run_id,
         )
-        session.add(
-            Work(
-                institution_id=inst_id,
-                pure_uuid="w-sum",
-                title="Summary work",
-                norm_title="summary work",
-                year=2025,
-                first_seen_run=run_id,
-                last_seen_run=run_id,
-            )
+    )
+    db.add(
+        WorkIdentity(
+            institution_id=ut.id,
+            source="openalex",
+            source_pk="doi:10.1/sum",
+            work_id="w-sum",
+            matched_by="doi",
+            status="candidate",
         )
-        session.add(
-            WorkIdentity(
-                institution_id=inst_id,
-                source="openalex",
-                source_pk="doi:10.1/sum",
-                work_id="w-sum",
-                matched_by="doi",
-                status="candidate",
-            )
-        )
-        await session.commit()
+    )
+    await db.flush()
+    # Inserted last: becomes last_run globally.
+    db.add(
+        HarvestRun(source="openalex", entity_type="work", status="running", config_fingerprint="x")
+    )
+    await db.commit()
 
     headers = await _login(admin_api)
-    r = await admin_api.get("/api/v1/admin/summary", headers=headers)
-    assert r.status_code == 200
-    body = r.json()
-    assert body["failed_runs_24h"] == 1
+    body = (await admin_api.get("/api/v1/admin/summary", headers=headers)).json()
+    assert body["failed_runs_24h"] == 2
     assert body["running_runs"] == 1
     assert body["flagged_deals"] == 1
     assert body["open_feedback"] == 1
@@ -821,128 +529,17 @@ async def test_admin_summary_counts(admin_api, db_engine):
     assert body["last_run"]["source"] == "openalex"
     assert body["last_run"]["status"] == "running"
 
-
-@requires_db
-async def test_admin_summary_institution_scope(admin_api, db_engine):
-    maker = async_sessionmaker(db_engine, expire_on_commit=False)
-    async with maker() as session:
-        ut_id = (
-            await session.execute(select(Institution.id).where(Institution.code == "ut"))
-        ).scalar_one()
-        session.add(Institution(name="Other University", code="rug", active=True))
-        session.add(
-            HarvestRun(
-                source="openalex",
-                entity_type="work",
-                status="failed",
-                institution_id=ut_id,
-                config_fingerprint="x",
-            )
-        )
-        session.add(
-            HarvestRun(
-                source="reconcile", entity_type="deal", status="completed", config_fingerprint="x"
-            )
-        )
-        session.add(
-            AuthorIdentity(
-                institution_id=ut_id,
-                author_pure_uuid="p-scope",
-                source="openalex",
-                external_id="a-scope",
-                status="candidate",
-            )
-        )
-        await session.commit()
-
-    headers = await _login(admin_api)
-    body = (await admin_api.get("/api/v1/admin/summary", headers=headers)).json()
-    assert body["failed_runs_24h"] == 1
-    assert body["author_identity_candidates"] == 1
-    # Global last run is the unscoped rug run (inserted last).
-    assert body["last_run"]["institution_code"] is None
-    assert body["last_run"]["status"] == "completed"
-    # Flagged deals and feedback stay instance-global.
-    assert body["flagged_deals"] == 1
-    assert body["open_feedback"] == 0
-
-    scoped = (await admin_api.get("/api/v1/admin/summary?institution=ut", headers=headers)).json()
+    scoped = (
+        await admin_api.get("/api/v1/admin/summary", params={"institution": "ut"}, headers=headers)
+    ).json()
     assert scoped["failed_runs_24h"] == 1
     assert scoped["running_runs"] == 0
-    assert scoped["author_identity_candidates"] == 1
-    assert scoped["work_identity_candidates"] == 0
     assert scoped["last_run"]["institution_code"] == "ut"
     assert scoped["last_run"]["status"] == "failed"
+    # Flagged deals stay instance-global under a scope.
     assert scoped["flagged_deals"] == 1
 
-    rug = (await admin_api.get("/api/v1/admin/summary?institution=rug", headers=headers)).json()
-    assert rug["failed_runs_24h"] == 0
-    assert rug["author_identity_candidates"] == 0
-    assert rug["last_run"] is None
-    assert rug["flagged_deals"] == 1
-
-    r = await admin_api.get("/api/v1/admin/summary?institution=nope", headers=headers)
-    assert r.status_code == 404
-
-
-@requires_db
-async def test_external_author_served_from_source_records(admin_api, db_engine):
-    maker = async_sessionmaker(db_engine, expire_on_commit=False)
-    async with maker() as session:
-        ut_id = (
-            await session.execute(select(Institution.id).where(Institution.code == "ut"))
-        ).scalar_one()
-        run_id = (await session.execute(select(HarvestRun.id).limit(1))).scalar_one()
-        session.add(
-            SourceRecord(
-                source="openalex",
-                entity_type="authors",
-                source_pk="A123",
-                payload={
-                    "id": "https://openalex.org/A123",
-                    "display_name": "Jane Doe",
-                    "works_count": 7,
-                    "orcid": "https://orcid.org/0000-0000-0000-0001",
-                },
-                content_hash="h1",
-                harvest_run_id=run_id,
-            )
-        )
-        admin_works = [
-            OpenalexWork(
-                institution_id=ut_id,
-                w_id="W1",
-                title="One",
-                year=2024,
-                doi_normalized="10.1/one",
-                authorships=[{"a": "A123", "n": "Jane Doe", "o": None}],
-            ),
-            OpenalexWork(
-                institution_id=ut_id,
-                w_id="W2",
-                title="Two",
-                year=2023,
-                doi_normalized=None,
-                authorships=[{"a": "A999", "n": "Other", "o": None}],
-            ),
-        ]
-        session.add_all(admin_works)
-        session.add_all(pair_rows(*admin_works))
-        await session.commit()
-
-    headers = await _login(admin_api)
-    r = await admin_api.get("/api/v1/admin/external-author/A123", headers=headers)
-    assert r.status_code == 200
-    body = r.json()
-    assert body["source_pk"] == "A123"
-    assert body["author"]["display_name"] == "Jane Doe"
-    assert [work["w_id"] for work in body["works"]] == ["W1"]
-    assert body["works"][0]["doi"] == "10.1/one"
-
-    scoped = await admin_api.get(
-        "/api/v1/admin/external-author/A123?institution=ut", headers=headers
+    r = await admin_api.get(
+        "/api/v1/admin/summary", params={"institution": "nope"}, headers=headers
     )
-    assert scoped.status_code == 200
-
-    r = await admin_api.get("/api/v1/admin/external-author/A404", headers=headers)
     assert r.status_code == 404

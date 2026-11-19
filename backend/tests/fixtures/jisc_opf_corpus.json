@@ -1,0 +1,413 @@
+{
+ "pub_101": {
+  "id": 101,
+  "type": "journal",
+  "title": [
+   {
+    "title": "Journal One",
+    "language": "en"
+   },
+   {
+    "title": "Tijdschrift Een",
+    "language": "nl"
+   }
+  ],
+  "title_phrases": [
+   {
+    "value": "Journal"
+   }
+  ],
+  "url": "https://journalone.example",
+  "listed_in_doaj": "yes",
+  "issns": [
+   {
+    "type": "print",
+    "issn": "1111-1111",
+    "type_phrases": []
+   }
+  ],
+  "publishers": [
+   {
+    "relationship_type": "publisher",
+    "publisher": {
+     "id": 900,
+     "name": "Example Pub"
+    }
+   }
+  ],
+  "publisher_policy": [
+   {
+    "id": 500,
+    "open_access_prohibited": "no",
+    "internal_moniker": "Standard policy",
+    "urls": [
+     {
+      "url": "https://policies.example/500",
+      "description": "Policy",
+      "url_phrases": []
+     }
+    ],
+    "permitted_oa": [
+     {
+      "id": 1,
+      "article_version": [
+       "submitted"
+      ],
+      "license": [
+       {
+        "license": "cc_by"
+       }
+      ],
+      "additional_oa_fee": "no",
+      "conditions": [
+       "Deposit in any repository"
+      ],
+      "location": {
+       "location": [
+        "any_repository"
+       ],
+       "named_repository": [
+        "arXiv"
+       ],
+       "embargo": [
+        {
+         "amount_units": "12",
+         "units": "months"
+        }
+       ]
+      }
+     }
+    ]
+   }
+  ],
+  "system_metadata": {
+   "date_modified": "2026-01-02 03:04:05"
+  }
+ },
+ "pub_102": {
+  "id": 102,
+  "type": "journal",
+  "title": [
+   {
+    "title": "Journal One Online",
+    "language": "en"
+   }
+  ],
+  "issns": [
+   {
+    "type": "electronic",
+    "issn": "2222-2222"
+   }
+  ],
+  "publisher_policy": [
+   {
+    "id": 501,
+    "open_access_prohibited": "yes",
+    "internal_moniker": "Restricted",
+    "urls": [],
+    "permitted_oa": [
+     {
+      "id": 2,
+      "article_version": [
+       "accepted"
+      ],
+      "license": [
+       {
+        "license": "cc_by_nc",
+        "version": "4.0"
+       }
+      ],
+      "additional_oa_fee": "yes",
+      "conditions": [
+       "Publisher copyright notice"
+      ],
+      "location": {
+       "location": [
+        "institutional_repository"
+       ],
+       "named_repository": [
+        "arXiv"
+       ],
+       "embargo": [
+        {
+         "amount_units": "6",
+         "units": "months"
+        }
+       ]
+      }
+     },
+     {
+      "id": 3,
+      "article_version": [
+       "published"
+      ],
+      "license": [
+       {
+        "license": "cc_by"
+       }
+      ],
+      "additional_oa_fee": "no",
+      "conditions": [],
+      "location": {
+       "location": [
+        "this_journal"
+       ]
+      }
+     }
+    ]
+   }
+  ]
+ },
+ "pub_103": {
+  "id": 103,
+  "type": "journal",
+  "title": [
+   {
+    "title": "Journal Three",
+    "language": "en"
+   }
+  ],
+  "issns": [
+   {
+    "type": "print",
+    "issn": "3333-3333"
+   }
+  ]
+ },
+ "publisher_old": {
+  "id": 900,
+  "name": [
+   {
+    "name": "Old Name",
+    "language": "en"
+   }
+  ],
+  "name_phrases": []
+ },
+ "publisher_new": {
+  "id": 900,
+  "name": [
+   {
+    "name": "Example Publisher",
+    "language": "en",
+    "preferred": "name",
+    "name_phrases": []
+   }
+  ],
+  "url": "https://publisher.example",
+  "country": "nl",
+  "identifiers": [
+   {
+    "type": "ror",
+    "identifier": "https://ror.org/0example"
+   }
+  ],
+  "publication_count": 5
+ },
+ "policy_500": {
+  "id": 500,
+  "publisher": {
+   "id": 900,
+   "name": "Example Publisher"
+  },
+  "open_access_prohibited": "no",
+  "internal_moniker": "Standard policy",
+  "urls": [
+   {
+    "url": "https://policies.example/500",
+    "description": "Policy"
+   }
+  ],
+  "permitted_oa": [
+   {
+    "id": 1,
+    "article_version": [
+     "submitted"
+    ]
+   }
+  ],
+  "publication_count": 5,
+  "workflow_dates": {
+   "policy_last_reviewed": "2026-02-06"
+  }
+ },
+ "funder_700": {
+  "id": 700,
+  "funder_metadata": {
+   "name": [
+    {
+     "name": "NWO",
+     "language": "en"
+    }
+   ],
+   "url": [
+    {
+     "url": "https://nwo.example",
+     "language": "en"
+    }
+   ],
+   "country": "nl",
+   "identifiers": [
+    {
+     "type": "ror",
+     "identifier": "https://ror.org/0nwo"
+    }
+   ],
+   "name_phrases": []
+  },
+  "funder_metadata_phrases": [],
+  "open_access_data_archiving_policy": {
+   "requirement": "yes",
+   "notes": "must deposit",
+   "notes_phrases": []
+  },
+  "open_access_publications_policy": {
+   "archiving_policy": "can",
+   "urls": [],
+   "notes_phrases": [
+    "x"
+   ],
+   "policy_effective_date": "2020-01-01"
+  }
+ },
+ "funder_group_800": {
+  "id": 800,
+  "funder_group_metadata": {
+   "name": [
+    {
+     "name": "Coalition S",
+     "language": "en"
+    }
+   ]
+  },
+  "funders": [
+   {
+    "id": 700,
+    "name": "NWO",
+    "type": "funder",
+    "uri": "https://nwo.example",
+    "name_phrases": []
+   }
+  ]
+ },
+ "repository_421": {
+  "id": 421,
+  "repository_metadata": {
+   "name": [
+    {
+     "name": "UT Repository",
+     "language": "en"
+    }
+   ],
+   "type": "institutional",
+   "url": "https://repo.example",
+   "oai_url": "https://repo.example/oai",
+   "software": {
+    "name": "dspace",
+    "name_phrases": []
+   },
+   "content_subjects": [
+    "multidisciplinary"
+   ],
+   "content_types": [
+    "journal_articles"
+   ],
+   "full_text_record_count": 100,
+   "metadata_record_count": 200
+  }
+ },
+ "funder_with_ids": {
+  "id": 701,
+  "funder_metadata": {
+   "name": [
+    {
+     "name": "NWO",
+     "language": "en"
+    }
+   ],
+   "url": [
+    {
+     "url": "https://nwo.example",
+     "language": "en"
+    }
+   ],
+   "country": "nl",
+   "identifiers": [
+    {
+     "type": "ror",
+     "identifier": "https://ror.org/04ad7pn51"
+    },
+    {
+     "type": "fundref",
+     "identifier": "http://dx.doi.org/10.13039/100009795"
+    }
+   ],
+   "identifiers_phrases": [
+    {
+     "value": "ror"
+    }
+   ]
+  },
+  "funder_metadata_phrases": []
+ },
+ "expected_policy": {
+  "routes": {
+   "submitted": {
+    "locations": [
+     "any_repository"
+    ],
+    "repositories": [
+     "arXiv"
+    ],
+    "licenses": [
+     "cc_by"
+    ],
+    "embargo_months": 12,
+    "conditions": [
+     "Deposit in any repository"
+    ],
+    "additional_oa_fee": "no",
+    "fee_only": false
+   },
+   "accepted": {
+    "locations": [
+     "institutional_repository"
+    ],
+    "repositories": [
+     "arXiv"
+    ],
+    "licenses": [
+     "cc_by_nc"
+    ],
+    "embargo_months": 6,
+    "conditions": [
+     "Publisher copyright notice"
+    ],
+    "additional_oa_fee": "yes",
+    "fee_only": true
+   },
+   "published": {
+    "locations": [
+     "this_journal"
+    ],
+    "repositories": [],
+    "licenses": [
+     "cc_by"
+    ],
+    "embargo_months": null,
+    "conditions": [],
+    "additional_oa_fee": "no",
+    "fee_only": false
+   }
+  },
+  "open_access_prohibited": true,
+  "internal_moniker": "Standard policy",
+  "urls": [
+   {
+    "url": "https://policies.example/500",
+    "description": "Policy"
+   }
+  ],
+  "policy_uri": "https://openpolicyfinder.jisc.ac.uk/publication/101"
+ }
+}

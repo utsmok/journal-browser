@@ -4,8 +4,6 @@ UNION ALL over one materialized pairs CTE. Pins values, ordering and the
 missing-attribute rule (rows without faculty/group stay in the total but
 form no bucket)."""
 
-import pytest
-
 from conftest import journal_factory, requires_db
 from journal_browser.models import Author, HarvestRun, Work, WorkPureAuthor
 from journal_browser.services.authorship import venue_authorship
@@ -14,8 +12,11 @@ from journal_browser.services.authorship import venue_authorship
 async def _seed(db, institution_factory):
     inst = await institution_factory(code="ut")
     run = HarvestRun(
-        source="test", entity_type="works", institution_id=inst.id,
-        status="completed", config_fingerprint="t",
+        source="test",
+        entity_type="works",
+        institution_id=inst.id,
+        status="completed",
+        config_fingerprint="t",
     )
     db.add(run)
     await db.flush()  # run.id needed by the work rows
@@ -23,25 +24,40 @@ async def _seed(db, institution_factory):
     db.add(journal_factory("zzzz-9999", title="Empty venue", search_text="Empty"))
     authors = [
         Author(
-            institution_id=inst.id, pure_uuid="a1", name="Ann A",
-            faculty="Science", research_group="Group X",
+            institution_id=inst.id,
+            pure_uuid="a1",
+            name="Ann A",
+            faculty="Science",
+            research_group="Group X",
         ),
         Author(
-            institution_id=inst.id, pure_uuid="a2", name="Bob B",
-            faculty="Science", research_group=None,
+            institution_id=inst.id,
+            pure_uuid="a2",
+            name="Bob B",
+            faculty="Science",
+            research_group=None,
         ),
         Author(
-            institution_id=inst.id, pure_uuid="a3", name="Cara C",
-            faculty=None, research_group=None,
+            institution_id=inst.id,
+            pure_uuid="a3",
+            name="Cara C",
+            faculty=None,
+            research_group=None,
         ),
     ]
     db.add_all(authors)
 
     def work(uuid, wtype="article"):
         return Work(
-            institution_id=inst.id, pure_uuid=uuid, journal_issn_l="aaaa-0001",
-            title=f"Work {uuid}", norm_title=f"work {uuid}", year=2022,
-            work_type=wtype, first_seen_run=run.id, last_seen_run=run.id,
+            institution_id=inst.id,
+            pure_uuid=uuid,
+            journal_issn_l="aaaa-0001",
+            title=f"Work {uuid}",
+            norm_title=f"work {uuid}",
+            year=2022,
+            work_type=wtype,
+            first_seen_run=run.id,
+            last_seen_run=run.id,
         )
 
     db.add_all([work(f"w{i}") for i in (1, 2, 3)])
@@ -58,9 +74,15 @@ async def _seed(db, institution_factory):
             WorkPureAuthor(institution_id=inst.id, work_pure_uuid="w4", person_uuid="a1"),
             # Outside the venue set.
             Work(
-                institution_id=inst.id, pure_uuid="w5", journal_issn_l="zzzz-9999",
-                title="Work w5", norm_title="work w5", year=2022, work_type="article",
-                first_seen_run=run.id, last_seen_run=run.id,
+                institution_id=inst.id,
+                pure_uuid="w5",
+                journal_issn_l="zzzz-9999",
+                title="Work w5",
+                norm_title="work w5",
+                year=2022,
+                work_type="article",
+                first_seen_run=run.id,
+                last_seen_run=run.id,
             ),
         ]
     )
@@ -112,13 +134,14 @@ async def test_group_by_key_not_authors(db, institution_factory):
     inst = await _seed(db, institution_factory)
     db.add(
         Author(
-            institution_id=inst.id, pure_uuid="a4", name="Ann A",
-            faculty="Other", research_group=None,
+            institution_id=inst.id,
+            pure_uuid="a4",
+            name="Ann A",
+            faculty="Other",
+            research_group=None,
         )
     )
-    db.add(
-        WorkPureAuthor(institution_id=inst.id, work_pure_uuid="w5", person_uuid="a4")
-    )
+    db.add(WorkPureAuthor(institution_id=inst.id, work_pure_uuid="w5", person_uuid="a4"))
     await db.commit()
     out = await venue_authorship(db, inst, issn_l="aaaa-0001")
     names = [(t["pure_uuid"], t["name"]) for t in out["top_authors"]]

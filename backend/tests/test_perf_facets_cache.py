@@ -4,8 +4,6 @@ harvest epoch in the key), so a filter click no longer rebuilds the
 keys are stored and reused, different filter sets map to different keys,
 and the default landing view keeps its long-TTL key shape."""
 
-import pytest
-
 from conftest import journal_factory, requires_db
 from journal_browser.models import JournalFlags
 from journal_browser.services.cache import FACET_CACHE
@@ -27,8 +25,9 @@ async def _seed(db, institution_factory):
                 is_in_doaj=in_doaj,
             )
         )
-        rows.append(JournalFlags(institution_id=inst.id, issn_l=issn, works_count=10,
-                                 works_window_plus=10))
+        rows.append(
+            JournalFlags(institution_id=inst.id, issn_l=issn, works_count=10, works_window_plus=10)
+        )
     db.add_all(rows)
     await db.commit()
     return inst.id

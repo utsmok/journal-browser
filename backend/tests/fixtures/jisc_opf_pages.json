@@ -1,0 +1,53 @@
+{
+ "pages": [
+  {
+   "items": [
+    {
+     "system_metadata": {
+      "id": 1
+     }
+    },
+    {
+     "system_metadata": {
+      "id": 2
+     }
+    }
+   ],
+   "next_search_after": [
+    9
+   ]
+  },
+  {
+   "items": [
+    {
+     "system_metadata": {
+      "id": 3
+     }
+    }
+   ],
+   "next_search_after": null
+  }
+ ],
+ "cap_page": {
+  "items": [
+   {
+    "system_metadata": {
+     "id": 10
+    }
+   },
+   {
+    "system_metadata": {
+     "id": 11
+    }
+   },
+   {
+    "system_metadata": {
+     "id": 12
+    }
+   }
+  ],
+  "next_search_after": [
+   1
+  ]
+ }
+}

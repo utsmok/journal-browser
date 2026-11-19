@@ -1,0 +1,83 @@
+{
+ "id": "doajarticles::abc123",
+ "type": "publication",
+ "isInDiamondJournal": true,
+ "openAccessColor": "gold",
+ "license": "cc-by-4.0",
+ "open_access_url": "https://example.org/final.pdf",
+ "indicators": {
+  "usageCounts": {
+   "views": 12,
+   "downloads": 3
+  },
+  "citationImpact": {
+   "citationCount": 0
+  }
+ },
+ "subjects": [
+  {
+   "subject": {
+    "scheme": "FOS",
+    "value": "0101 mathematics"
+   },
+   "provenance": null
+  },
+  {
+   "subject": {
+    "scheme": "fos",
+    "value": "0102 computer and information sciences"
+   }
+  },
+  {
+   "subject": {
+    "scheme": "FOS",
+    "value": "0101 mathematics"
+   }
+  },
+  {
+   "subject": {
+    "scheme": "keyword",
+    "value": "chronic disease"
+   }
+  },
+  {
+   "subject": {
+    "scheme": "FOS",
+    "value": null
+   }
+  },
+  {
+   "subject": null
+  }
+ ],
+ "projects": [
+  {
+   "id": "nwo_________::a1",
+   "funder": "NWO",
+   "code": "13544",
+   "acronym": "COPD"
+  },
+  {
+   "id": "ec_________::a2",
+   "funder": "EC",
+   "code": null,
+   "acronym": null
+  },
+  "garbage",
+  null
+ ],
+ "instances": [
+  {
+   "embargoEndDate": null
+  },
+  {
+   "embargoEndDate": "2027-03-15T00:00:00Z"
+  },
+  {
+   "embargoEndDate": "not-a-date"
+  },
+  {
+   "embargoEndDate": "2026-01-01"
+  }
+ ]
+}

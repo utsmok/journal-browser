@@ -1,0 +1,5 @@
+{
+ "csv": "Journal title,Journal URL,Journal ISSN (print version),Journal EISSN (online version),Publisher,APC,APC amount\nInternational Journal of Applied Earth Observations and Geoinformation,https://www.sciencedirect.com/journal/jag,1569-8432,1872-826X,Elsevier,Yes,3610 USD\n",
+ "renamed_column": "Journal Title,Journal URL,Journal ISSN (print version),Journal EISSN (online version),Publisher,APC,APC amount\nT,u,,,...,,\n",
+ "no_issn": "Journal title,Journal URL,Journal ISSN (print version),Journal EISSN (online version),Publisher,APC,APC amount\nT,https://x,,,P,No,\n"
+}

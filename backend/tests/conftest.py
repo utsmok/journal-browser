@@ -31,6 +31,10 @@ TEST_DB = (
 )
 TEST_URL = f"postgresql+asyncpg://journal:journal@localhost:5433/{TEST_DB}"
 
+# Services that build their own engine from settings (flags_refresh) must
+# hit the throwaway DB too, never the shared dev DB.
+os.environ.setdefault("JB_DATABASE_URL", TEST_URL)
+
 
 def _db_reachable() -> bool:
     try:
@@ -55,33 +59,81 @@ else:
         return fn
 
 
-@pytest.fixture
-async def db_engine():
+@pytest.fixture(scope="session")
+def _test_db():
+    """Create the throwaway database and its schema once per process.
+
+    Sync on purpose: pytest-asyncio runs each test in its own event loop,
+    so neither the admin connection nor the schema engine may live in a
+    fixture that outlives one test. Per-test work (truncate) happens in
+    the function-scoped `db_engine` below.
+    """
     if os.environ.get("JB_SKIP_DB_TESTS") == "1":
         pytest.skip(SKIP_DB_REASON)
-    # Function-scoped: pytest-asyncio runs each test in its own event loop,
-    # and an asyncpg pool must not cross loops.
+
+    async def _create() -> None:
+        conn = await asyncpg.connect(ADMIN_URL)
+        await conn.execute(f'DROP DATABASE IF EXISTS "{TEST_DB}" WITH (FORCE)')
+        await conn.execute(f'CREATE DATABASE "{TEST_DB}"')
+        await conn.close()
+
+    asyncio.run(_create())
+
+    async def _build() -> None:
+        engine = create_async_engine(TEST_URL)
+        async with engine.begin() as conn:
+            # journals.embedding is a vector column; the pgvector type must
+            # exist before create_all issues the table DDL.
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            await conn.run_sync(Base.metadata.create_all)
+        await engine.dispose()
+
+    asyncio.run(_build())
+    yield
+
+    async def _drop() -> None:
+        conn = await asyncpg.connect(ADMIN_URL)
+        await conn.execute(f'DROP DATABASE IF EXISTS "{TEST_DB}" WITH (FORCE)')
+        await conn.close()
+
+    asyncio.run(_drop())
+
+
+@pytest.fixture
+async def db_engine(_test_db):
     from journal_browser.services import cache, repo_links, source_health
 
     cache.FACET_CACHE.clear()
     cache.SNAPSHOT_CACHE.clear()
     repo_links.reset_canon_cache()
     source_health.clear_all()
-    conn = await asyncpg.connect(ADMIN_URL)
-    await conn.execute(f'DROP DATABASE IF EXISTS "{TEST_DB}" WITH (FORCE)')
-    await conn.execute(f'CREATE DATABASE "{TEST_DB}"')
-    await conn.close()
+    # Fresh database per test at truncate cost instead of drop/create +
+    # create_all: the schema is identical every run, only the rows differ.
+    # A failed request can leak an app session that stays idle in
+    # transaction and would block the truncate, so drop those first —
+    # the old drop-database-with-FORCE teardown did this implicitly.
+    tables = ", ".join(f'"{t}"' for t in sorted(Base.metadata.tables))
     engine = create_async_engine(TEST_URL)
     async with engine.begin() as conn:
-        # journals.embedding is a vector column; the pgvector type must
-        # exist before create_all issues the table DDL.
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(
+            text(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity"
+                " WHERE datname = current_database() AND pid <> pg_backend_pid()"
+            )
+        )
+        await conn.exec_driver_sql(f"TRUNCATE {tables} RESTART IDENTITY CASCADE")
     yield engine
+    # Admin-write tests spawn background tasks (flags_refresh) whose pools
+    # die with the test's event loop; terminate their connections here so
+    # they cannot accumulate into a slow final database drop.
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity"
+                " WHERE datname = current_database() AND pid <> pg_backend_pid()"
+            )
+        )
     await engine.dispose()
-    conn = await asyncpg.connect(ADMIN_URL)
-    await conn.execute(f'DROP DATABASE IF EXISTS "{TEST_DB}" WITH (FORCE)')
-    await conn.close()
 
 
 @pytest.fixture

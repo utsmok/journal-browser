@@ -1,0 +1,43 @@
+{
+ "old_key": [
+  {
+   "id": "S1",
+   "issn_l": "0043-1354",
+   "issn": [
+    "1234-5679",
+    "0043-1354"
+   ],
+   "display_name": "Old key",
+   "type": "journal"
+  }
+ ],
+ "rekey_page": [
+  {
+   "id": "S1",
+   "issn_l": "2227-2437",
+   "display_name": "New key"
+  }
+ ],
+ "page": [
+  {
+   "id": "S1",
+   "issn_l": "0043-1354",
+   "issn": [
+    "1234-5679",
+    "0043-1354"
+   ],
+   "display_name": "First",
+   "type": "journal"
+  },
+  {
+   "id": "S2",
+   "issn_l": "0043-1354",
+   "issn": [
+    "1234-5679",
+    "0043-1354"
+   ],
+   "display_name": "Second",
+   "type": "journal"
+  }
+ ]
+}
