@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..config import get_settings
 from ..models import FunderLink, OpenaireFunder, OpenaireFunderStream, OpenalexFunder
 
 
@@ -169,14 +170,22 @@ async def top_journals(
     year_range keeps only works published inside the clamped window."""
     if not await _work_funders_ready(session) or openalex_funder_id is None:
         return []
+    # Admin ignore-list (e.g. arXiv): an ignored journal is treated as
+    # nonexistent everywhere else, so it must not top a funder's list.
+    ignored = [i.upper() for i in get_settings().ignored_issns]
+    params: dict[str, Any] = {"i": institution_id, "f": openalex_funder_id, "l": limit}
+    ignored_clause = (
+        " and (j.issn_l is null or upper(j.issn_l) != any(:ignored))" if ignored else ""
+    )
+    if ignored:
+        params["ignored"] = ignored
     sql = (
         "select j.title, j.issn_l, count(distinct wf.pure_uuid) as n"
         " from work_funders wf"
         " join works w on w.institution_id = wf.institution_id and w.pure_uuid = wf.pure_uuid"
         " join journals j on j.issn_l = w.journal_issn_l"
-        " where wf.institution_id = :i and wf.funder_openalex_id = :f"
+        " where wf.institution_id = :i and wf.funder_openalex_id = :f" + ignored_clause
     )
-    params: dict[str, Any] = {"i": institution_id, "f": openalex_funder_id, "l": limit}
     if year_range is not None:
         sql += " and w.year >= :lo and w.year <= :hi"
         params["lo"], params["hi"] = year_range
