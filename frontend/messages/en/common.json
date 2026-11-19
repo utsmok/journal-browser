@@ -9,6 +9,12 @@
     "intro": "This address does not exist.",
     "pathLine": "Journal pages live at <code>{path}</code>. Search for the journal by title, ISSN, or topic from your institution's search page."
   },
+  "errorPage": {
+    "title": "Something went wrong",
+    "intro": "The page hit an unexpected error while rendering. Retrying may help.",
+    "retry": "Try again",
+    "home": "Back to the start"
+  },
 
   "nav": {
     "mainLabel": "Main",

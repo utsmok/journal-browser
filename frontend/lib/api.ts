@@ -170,6 +170,8 @@ export async function apiGet<T>(
   try {
     const res = await fetch(`/api/v1${path}${qs ? `?${qs}` : ""}`, {
       cache: "no-store",
+      // A hung backend must surface as an error, not endless skeletons.
+      signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) {
       console.error(`API ${res.status} on ${path}`);

@@ -64,6 +64,23 @@ services:
     # HNSW index builds (pgvector) need shared memory beyond the 64 MB
     # container default; the graph for ~134k vectors peaks around 100 MB.
     shm_size: 512mb
+    # Tuned for the 4 GB limit on SSD-backed storage: the HNSW index (~350 MB)
+    # and hot journal rows fit in shared_buffers; JIT only adds planning time
+    # to this workload's short queries. Measurements: .audit perf report.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=1GB
+      - -c
+      - effective_cache_size=3GB
+      - -c
+      - work_mem=64MB
+      - -c
+      - maintenance_work_mem=512MB
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - jit=off
     ports:
       - "127.0.0.1:5433:5432" # host 5433: machines often run a local postgres on 5432
     volumes:
