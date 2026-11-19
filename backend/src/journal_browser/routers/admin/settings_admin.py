@@ -11,7 +11,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...config import (
@@ -26,6 +26,7 @@ from ...harvest.institution_stats import write_pure_canon_stats
 from ...models import Institution, JournalFlags
 from ...schemas import AdminInstitutionOut
 from ...settings_schema import SETTINGS_REGISTRY, value_for_response
+from .audit_rows import MASKED, audit_row
 from .auth import AdminDep, SessionDep
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -80,9 +81,10 @@ class SettingsUpdate(BaseModel):
 
 
 @router.put("/settings")
-async def update_settings(body: SettingsUpdate, _: AdminDep) -> dict[str, Any]:
+async def update_settings(body: SettingsUpdate, session: SessionDep, _: AdminDep) -> dict[str, Any]:
     fields = {f.key: f for f in SETTINGS_REGISTRY}
     doc = load_settings_yaml()
+    changes: list[tuple[str, Any, Any, bool]] = []  # (key, old, new, masked)
     for key, value in body.values.items():
         f = fields.get(key)
         if f is None:
@@ -102,8 +104,27 @@ async def update_settings(body: SettingsUpdate, _: AdminDep) -> dict[str, Any]:
             if len(normalized) != len(value):
                 raise HTTPException(400, "ignored_issns: entries must be valid ISSNs")
             value = normalized
+        old = doc.get(key)
+        unchanged = (
+            isinstance(value, list) and isinstance(old, list) and sorted(old) == sorted(value)
+        ) or old == value
+        if not unchanged:
+            changes.append((key, old, value, f.type == "secret"))
         doc[key] = value
     _write_settings_yaml(doc)
+    for key, old, new, masked in changes:
+        # Secret-valued settings are recorded as "(masked)" on both sides:
+        # the audit log must never hold a password (or an old one).
+        session.add(
+            audit_row(
+                table_name="settings",
+                row_key={"key": key},
+                field=key,
+                old=MASKED if masked and old is not None else old,
+                new=MASKED if masked else new,
+            )
+        )
+    await session.commit()
     reset_settings_cache()
     return _settings_payload()
 
@@ -148,7 +169,9 @@ class InstitutionUpdate(BaseModel):
         return data
 
 
-def _institution_payload(inst: Institution) -> dict[str, Any]:
+def _institution_payload(
+    inst: Institution, *, rematerialized_journals: int | None = None
+) -> dict[str, Any]:
     return {
         "code": inst.code,
         "name": inst.name,
@@ -166,6 +189,7 @@ def _institution_payload(inst: Institution) -> dict[str, Any]:
         "research_portal_url": inst.research_portal_url,
         "active": inst.active,
         "require_confirmed_affiliation": inst.require_confirmed_affiliation,
+        "rematerialized_journals": rematerialized_journals,
     }
 
 
@@ -190,21 +214,64 @@ async def update_institution(
     inst = await _get_institution_or_404(session, code)
     window_changed = bool(body.model_fields_set & {"data_window_start", "data_window_end"})
     was_active = inst.active
+    # Merged window check: a one-sided body must also be validated against
+    # the stored value, or {"data_window_end": 2010} on a 2020-start row
+    # would still store an inverted range.
+    start = (
+        body.data_window_start
+        if "data_window_start" in body.model_fields_set
+        else inst.data_window_start
+    )
+    end = (
+        body.data_window_end if "data_window_end" in body.model_fields_set else inst.data_window_end
+    )
+    if start is not None and end is not None and end < start:
+        raise HTTPException(
+            400,
+            f"data_window_end {end} is before data_window_start {start}; "
+            "set both ends consistently",
+        )
+    olds = {
+        key: getattr(inst, key)
+        for key in body.model_fields_set
+        if getattr(inst, key) != getattr(body, key)
+    }
     for key in body.model_fields_set:
         setattr(inst, key, getattr(body, key))
+    rematerialized_journals: int | None = None
     if was_active and not inst.active:
         # Inactive institutions are not served, so their per-journal flags
-        # rows (denorm search state) go with the flip. Reactivation is
-        # lazy: the stats/reconcile jobs re-materialize the rows on their
-        # next run.
+        # rows (denorm search state) go with the flip. Reactivation is NOT
+        # lazy anymore: the activate path below re-materializes the rows in
+        # the same request, so /{code}/journals never serves empty-with-200
+        # until the nightly wave (2026-11-19 sweep finding 2).
         await session.execute(delete(JournalFlags).where(JournalFlags.institution_id == inst.id))
-    elif window_changed and inst.active:
+    elif inst.active and (window_changed or not was_active):
         # works_count is window-bounded, so the card goes stale the moment
-        # the window moves. Rebuild the canon stats rows and flags in this
+        # the window moves; a freshly reactivated row has no flags rows at
+        # all. Both cases rebuild the canon stats rows and flags in this
         # request's transaction. The OpenAlex OA split keeps its old window
         # until the next stats job — that cross-check dimension is not the
         # card number.
         await write_pure_canon_stats(session, inst)
         await refresh_institution_stats(session, inst)
+        rematerialized_journals = int(
+            await session.scalar(
+                select(func.count())
+                .select_from(JournalFlags)
+                .where(JournalFlags.institution_id == inst.id)
+            )
+            or 0
+        )
+    for key, old in olds.items():
+        session.add(
+            audit_row(
+                table_name="institutions",
+                row_key={"code": code},
+                field=key,
+                old=old,
+                new=getattr(inst, key),
+            )
+        )
     await session.commit()
-    return _institution_payload(inst)
+    return _institution_payload(inst, rematerialized_journals=rematerialized_journals)

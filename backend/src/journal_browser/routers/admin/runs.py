@@ -133,6 +133,14 @@ async def admin_summary(
         .select_from(WorkIdentity)
         .where(WorkIdentity.status == "candidate", work_filter)
     )
+    # "Missing" rows are the other half of the work-identity queue (Pure
+    # work, no external match): the work-identities page filters on them,
+    # so the overview must show the queue is not empty.
+    work_missing = await session.scalar(
+        select(func.count())
+        .select_from(WorkIdentity)
+        .where(WorkIdentity.status == "missing", work_filter)
+    )
     last_query = (
         select(HarvestRun, Institution.code)
         .outerjoin(Institution, Institution.id == HarvestRun.institution_id)
@@ -162,5 +170,6 @@ async def admin_summary(
         "open_feedback": open_feedback or 0,
         "author_identity_candidates": author_candidates or 0,
         "work_identity_candidates": work_candidates or 0,
+        "work_identity_missing": work_missing or 0,
         "last_run": last_run,
     }

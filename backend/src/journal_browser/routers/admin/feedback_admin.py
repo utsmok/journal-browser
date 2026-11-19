@@ -8,6 +8,7 @@ from sqlalchemy import desc, select
 from ...models import Feedback, StatusChangeLog
 from ...schemas import FeedbackAdminOut, FeedbackPatchOut
 from ...vocab import FeedbackPriority, FeedbackStatus
+from .audit_rows import audit_row
 from .auth import AdminDep, SessionDep
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -87,6 +88,18 @@ async def update_feedback(
         )
         row.status = body.status
     if body.priority is not None:
+        if body.priority != row.priority:
+            session.add(
+                audit_row(
+                    table_name="feedback_items",
+                    row_key={"id": feedback_id},
+                    field="priority",
+                    old=row.priority,
+                    new=body.priority,
+                    note=body.note,
+                    changed_by=body.changed_by,
+                )
+            )
         row.priority = body.priority
     if body.resolution_notes is not None:
         row.resolution_notes = body.resolution_notes
@@ -102,5 +115,16 @@ async def delete_feedback(feedback_id: int, session: SessionDep, _: AdminDep) ->
     row = await session.get(Feedback, feedback_id)
     if row is None:
         raise HTTPException(404, "feedback not found")
+    # The row is hard-deleted, so the audit entry carries the title in the
+    # note: after the delete it is the only place the subject survives.
+    session.add(
+        audit_row(
+            table_name="feedback_items",
+            row_key={"id": feedback_id},
+            field="deleted",
+            new="deleted",
+            note=(row.title or "")[:200],
+        )
+    )
     await session.delete(row)
     await session.commit()

@@ -282,8 +282,9 @@ async def test_journals_add_remove_and_jct_survival(admin_api, db_engine):
     assert detail["journal_count"] == 1
     assert [(j["excluded"]) for j in detail["journals"] if j["issn"] == "0000-0000"] == [True]
 
-    # add: variant ISSN resolves via issn_map, unknown stays NULL; re-adding
-    # a removed ISSN clears the excluded flag
+    # add: variant ISSN resolves via issn_map, unknown ISSN is rejected
+    # (it could never match a work); re-adding a removed ISSN clears the
+    # excluded flag
     r = await admin_api.put(
         f"/api/v1/admin/deals/{deal_id}/journals",
         headers=headers,
@@ -296,10 +297,28 @@ async def test_journals_add_remove_and_jct_survival(admin_api, db_engine):
             "remove": ["1111-1111"],
         },
     )
+    assert r.status_code == 400
+    assert "8888-7777" in r.json()["detail"]
+    # The rejected ISSN landed nowhere; the rest of the batch was rolled back.
+    async with async_sessionmaker(db_engine)() as session:
+        assert (
+            await session.execute(
+                select(DealJournal).where(
+                    DealJournal.deal_id == deal_id, DealJournal.issn == "9999-8888"
+                )
+            )
+        ).scalars().first() is None
+    r = await admin_api.put(
+        f"/api/v1/admin/deals/{deal_id}/journals",
+        headers=headers,
+        json={
+            "add": [{"issn": "9999-8888", "journal_name": "J Zero"}, {"issn": "0000-0000"}],
+            "remove": ["1111-1111"],
+        },
+    )
     assert r.status_code == 200
     rows = {j["issn"]: j for j in r.json()["journals"]}
     assert rows["9999-8888"]["issn_l"] == "0000-0000"
-    assert rows["8888-7777"]["issn_l"] is None
     assert rows["0000-0000"]["excluded"] is False  # re-added
     assert rows["1111-1111"]["excluded"] is True
 

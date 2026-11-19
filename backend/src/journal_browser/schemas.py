@@ -1054,6 +1054,7 @@ class AdminSummaryOut(BaseModel):
     open_feedback: int
     author_identity_candidates: int
     work_identity_candidates: int
+    work_identity_missing: int
     last_run: AdminLastRunOut | None
 
 
@@ -1215,6 +1216,70 @@ class AdminInstitutionOut(BaseModel):
     research_portal_url: str | None
     active: bool
     require_confirmed_affiliation: bool
+    # Set when this PUT rebuilt the institution's journal_flags rows
+    # in-request (activation or a data-window change): the number of
+    # materialized flags rows. None = no rebuild happened.
+    rematerialized_journals: int | None = None
+
+
+class OpsLastWaveStageOut(BaseModel):
+    """One wave stage (a global harvest run) inside the latest wave cluster."""
+
+    source: str
+    entity_type: str
+    status: str
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
+class OpsLastWaveOut(BaseModel):
+    """The most recent burst of global harvest runs (the nightly wave)."""
+
+    window_start: datetime | None
+    window_end: datetime | None
+    stages: list[OpsLastWaveStageOut]
+    failed: int
+    running: int
+
+
+class OpsScheduleOut(BaseModel):
+    """A scheduled job's cron expression and its next fire time (UTC)."""
+
+    name: str
+    cron: str
+    from_env: bool
+    next_run_utc: datetime | None
+    error: str | None = None
+
+
+class OpsBackupOut(BaseModel):
+    """The newest backup archive, or why none is visible to the backend."""
+
+    available: bool
+    detail: str | None = None
+    file: str | None = None
+    size_bytes: int | None = None
+    modified_at: datetime | None = None
+
+
+class OpsFreshnessEntryOut(BaseModel):
+    """Latest harvest state per (source, entity_type)."""
+
+    source: str
+    entity_type: str
+    status: str
+    finished_at: datetime | None
+
+
+class AdminOpsStatusOut(BaseModel):
+    """Ops dashboard payload (GET /admin/ops/status)."""
+
+    generated_at: datetime
+    last_wave: OpsLastWaveOut | None
+    schedules: list[OpsScheduleOut]
+    backup: OpsBackupOut
+    freshness: list[OpsFreshnessEntryOut]
+    tables: dict[str, datetime | None]
 
 
 class AdminDealJournal(BaseModel):

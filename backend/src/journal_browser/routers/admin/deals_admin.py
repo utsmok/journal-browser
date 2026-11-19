@@ -321,6 +321,17 @@ async def update_deal_journals(
     for add in body.add:
         issn = _norm_issn_or_400(add.issn)
         issn_l = await _resolve_issn_l(session, issn)
+        if issn_l is None:
+            # Coverage matching joins Work.journal_issn_l against
+            # deal_journals.issn_l, so a row without an ISSN-L can never
+            # match a work — the librarian would see the journal count go
+            # up while coverage stays silently empty.
+            raise HTTPException(
+                400,
+                f"unknown ISSN {issn}: it resolves to no ISSN-L in the "
+                "issn map, so the journal would never match any works; "
+                "check the ISSN for typos",
+            )
         updates: dict[str, Any] = {"excluded": False, "issn_l": issn_l}
         if add.journal_name:
             updates["journal_name"] = add.journal_name

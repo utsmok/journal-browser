@@ -22,6 +22,7 @@ from . import (
     deals_admin,
     docs_admin,
     feedback_admin,
+    ops_admin,
     runs,
     settings_admin,
     usage_admin,
@@ -42,4 +43,5 @@ router.include_router(docs_admin.router)
 router.include_router(authors_admin.router)
 router.include_router(work_identity_admin.router)
 router.include_router(audit_admin.router)
+router.include_router(ops_admin.router)
 router.include_router(usage_admin.router)
