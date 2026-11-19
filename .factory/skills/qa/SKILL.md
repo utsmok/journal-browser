@@ -35,7 +35,7 @@ Environment rules for this project:
   `database` on the existing local cluster.
 - `live-readonly` is for explicit smoke requests only: GET flows against `localhost:3000`/`localhost:8000`. Never POST feedback on live. Never call admin endpoints on live. Never restart the live compose project.
 - The compose project `journal-browser` (ports 3000/8000, database `journalbrowser` on 5433) is the LIVE deployment. The QA database is a separate database on the same cluster; tests create throwaway databases there too, which is the established pattern in `backend/tests/conftest.py`.
-- The live container mounts `backend/settings.yaml`. The QA backend MUST run with `JB_SETTINGS_YAML` on an isolated path (`/tmp/qa-settings.yaml`) so admin-settings writes never touch the live overlay.
+- The live container mounts `backend/state/settings.yaml`. The QA backend MUST run with `JB_SETTINGS_YAML` on an isolated path (`/tmp/qa-settings.yaml`) so admin-settings writes never touch the live overlay.
 - This project has no Vercel/Netlify preview deployments. If you are ever handed a preview-style URL anyway, treat it as a dev-environment equivalent and use dev flows.
 
 ## Step 3: Analyze Git Diff

@@ -13,7 +13,7 @@ environments:
     restrictions:
       - QA writes land only in the journalbrowser_qa database
       - the QA backend must run with JB_SETTINGS_YAML on an isolated path,
-        never the repo's backend/settings.yaml (the live container mounts it)
+        never the repo's backend/state/settings.yaml (the live container mounts it)
       - never stop, restart, or write to the live compose project journal-browser
     seed:
       database: journalbrowser_qa # on the existing cluster at 127.0.0.1:5433
