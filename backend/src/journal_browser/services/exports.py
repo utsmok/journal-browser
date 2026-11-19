@@ -18,7 +18,7 @@ from typing import Any
 
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy import column, func, literal, select
+from sqlalchemy import column, func, literal, select, true
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -324,16 +324,18 @@ async def _store_keys(
         .scalars()
         .all()
     )
-    aid = func.jsonb_array_elements(OpenalexWork.authorships).table_valued(
-        column("value", JSONB), name="aid"
+    aid = (
+        func.jsonb_array_elements(OpenalexWork.authorships)
+        .table_valued(column("value", JSONB), name="aid")
+        .lateral()
     )
     aid_rows = await session.execute(
         select(func.lower(aid.c.value.op("->>")("a")))
         .distinct()
-        .select_from(OpenalexWork, aid)
+        .join_from(OpenalexWork, aid, true())
         .where(*where)
     )
-    return list(issns), {r[0] for r in aid_rows if r[0]}
+    return [i for i in issns if i], {r[0] for r in aid_rows if r[0]}
 
 
 async def _store_csv_response(
