@@ -10,7 +10,7 @@ The design goal: a second university costs one SQL `UPDATE` plus one
 harvest run. Everything a university shares with the others is stored once;
 everything specific to it is keyed by its institutions row. Onboarding is
 documented in "Adding a second institution" in
-[DEPLOYMENT.md](DEPLOYMENT.md).
+[DEPLOYMENT.md](../DEPLOYMENT.md).
 
 ## What is shared, what is per institution
 
