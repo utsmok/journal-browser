@@ -37,8 +37,10 @@ backend/logs/
 # Database dumps taken before deploys/repairs
 backups/
 
-# Live settings overlay (admin panel writes here; may hold secrets)
-backend/settings.yaml
+# Live settings overlay (admin panel writes settings.yaml into this
+# bind-mounted dir; it may hold secrets). Seeded from
+# backend/settings.yaml.example on first boot.
+backend/state/
 
 # Local operator override mirroring the live VM's ports (5434/8001/3001);
 # compose auto-merges this file, so it must not leak into other checkouts

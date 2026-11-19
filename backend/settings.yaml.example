@@ -28,8 +28,10 @@ jisc_api_key:
 # Empty = feature off; ut-works endpoints degrade to works_stats-only.
 ut_metadata_dsn:
 
-# Contact email sent to OpenAlex (polite-pool identification).
-contact_email: s.f.abma@utwente.nl
+# Contact email sent to OpenAlex (polite-pool identification). Empty sends
+# anonymous requests; set your institution's address here or via
+# JB_CONTACT_EMAIL (compose default: empty).
+contact_email:
 
 # Browser origins allowed to call the API. Applied at startup: needs a
 # `docker compose up -d` to take effect, unlike everything below.

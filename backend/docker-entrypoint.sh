@@ -7,14 +7,21 @@
 set -e
 
 if [ "$(id -u)" = "0" ]; then
-    chown -R 1000:1000 /app/landing
-    # First boot on a fresh host: compose bind-mounts ./backend/settings.yaml,
-    # and docker creates it as an empty DIRECTORY when the host file is
-    # missing. Replace that with a copy of the shipped example so the
-    # backend starts.
-    if [ -d /app/settings.yaml ] && rmdir /app/settings.yaml 2>/dev/null; then
-        cp /app/settings.yaml.example /app/settings.yaml
-        chown 1000:1000 /app/settings.yaml
+    # Bind-mounted dirs: docker creates them root-owned on fresh hosts;
+    # hand them to uid 1000 so jobs and `docker compose run` one-offs
+    # never write root-owned files into the host mounts.
+    if [ -d /app/landing ]; then chown -R 1000:1000 /app/landing; fi
+    if [ -d /app/state ]; then chown -R 1000:1000 /app/state; fi
+    if [ -d /backups ]; then chown -R 1000:1000 /backups; fi
+    # First boot: seed the settings overlay from the shipped example. The
+    # admin panel writes this file (secrets included), so it stays out of
+    # git and lives in the bind-mounted ./backend/state dir; compose sets
+    # JB_SETTINGS_YAML=/app/state/settings.yaml in every service that uses
+    # it. Deployments that predate the state dir move their existing file
+    # there once (see DEPLOYMENT.md, First boot).
+    if [ -f /app/settings.yaml.example ] && [ -d /app/state ] && [ ! -f /app/state/settings.yaml ]; then
+        cp /app/settings.yaml.example /app/state/settings.yaml
+        chown 1000:1000 /app/state/settings.yaml
     fi
     # HOME too: compose sets root's /root, which uid 1000 cannot write
     # (uv's cache lives under it).
