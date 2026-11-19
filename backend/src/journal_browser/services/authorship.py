@@ -24,7 +24,19 @@ import warnings
 from collections.abc import Iterable
 from typing import Any, Literal
 
-from sqlalchemy import and_, bindparam, column, exists, false, func, or_, select
+from sqlalchemy import (
+    and_,
+    bindparam,
+    cast,
+    column,
+    exists,
+    false,
+    func,
+    literal,
+    or_,
+    select,
+    union_all,
+)
 from sqlalchemy import exc as sa_exc
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -829,43 +841,72 @@ async def venue_authorship(
             & (Author.pure_uuid == WorkPureAuthor.person_uuid),
         )
         .where(*population)
-        .subquery()
+        .cte("pairs")
     )
-    n_ut_works = await session.scalar(select(func.count(func.distinct(pairs.c.work_uuid))))
-
-    async def _buckets(column: Any) -> list[dict[str, Any]]:
-        rows = (
-            await session.execute(
-                select(column, func.count(func.distinct(pairs.c.work_uuid)).label("works"))
-                .select_from(pairs)
-                .where(column.is_not(None), column != "")
-                .group_by(column)
-                .order_by(func.count(func.distinct(pairs.c.work_uuid)).desc(), column)
-            )
-        ).all()
-        return [{"name": name, "works": int(n)} for name, n in rows]
-
-    faculties = await _buckets(pairs.c.faculty)
-    research_groups = await _buckets(pairs.c.research_group)
-    author_rows = (
+    works = func.count(func.distinct(pairs.c.work_uuid)).label("works")
+    # One statement over the materialized pairs CTE (Postgres materializes
+    # a multiply-referenced CTE) instead of four statements that each
+    # re-derived the works x work_pure_authors x authors join: the
+    # publisher page rebuilt that population four times per request.
+    # kind 0 = the distinct-works total, 1/2 = faculty/research-group
+    # buckets, 3 = top authors; branch-internal ORDER BY/LIMITs match the
+    # per-statement queries this replaced, and UNION ALL keeps them.
+    rows = (
         await session.execute(
-            select(
-                pairs.c.author_uuid,
-                pairs.c.name,
-                pairs.c.faculty,
-                pairs.c.research_group,
-                func.count(func.distinct(pairs.c.work_uuid)).label("works"),
+            union_all(
+                select(
+                    literal(0).label("kind"),
+                    cast(literal(None), Text).label("name"),
+                    cast(literal(None), Text).label("faculty"),
+                    cast(literal(None), Text).label("research_group"),
+                    cast(literal(None), Text).label("author_uuid"),
+                    works,
+                ).select_from(pairs),
+                select(
+                    literal(1).label("kind"),
+                    pairs.c.faculty.label("name"),
+                    cast(literal(None), Text).label("faculty"),
+                    cast(literal(None), Text).label("research_group"),
+                    cast(literal(None), Text).label("author_uuid"),
+                    works,
+                )
+                .select_from(pairs)
+                .where(pairs.c.faculty.is_not(None), pairs.c.faculty != "")
+                .group_by(pairs.c.faculty)
+                .order_by(works.desc(), pairs.c.faculty),
+                select(
+                    literal(2).label("kind"),
+                    pairs.c.research_group.label("name"),
+                    cast(literal(None), Text).label("faculty"),
+                    cast(literal(None), Text).label("research_group"),
+                    cast(literal(None), Text).label("author_uuid"),
+                    works,
+                )
+                .select_from(pairs)
+                .where(pairs.c.research_group.is_not(None), pairs.c.research_group != "")
+                .group_by(pairs.c.research_group)
+                .order_by(works.desc(), pairs.c.research_group),
+                select(
+                    literal(3).label("kind"),
+                    pairs.c.name.label("name"),
+                    pairs.c.faculty.label("faculty"),
+                    pairs.c.research_group.label("research_group"),
+                    pairs.c.author_uuid.label("author_uuid"),
+                    works,
+                )
+                .select_from(pairs)
+                .group_by(
+                    pairs.c.author_uuid, pairs.c.name, pairs.c.faculty, pairs.c.research_group
+                )
+                .order_by(works.desc(), func.lower(pairs.c.name))
+                .limit(TOP_AUTHORS),
             )
-            .select_from(pairs)
-            .group_by(pairs.c.author_uuid, pairs.c.name, pairs.c.faculty, pairs.c.research_group)
-            .order_by(func.count(func.distinct(pairs.c.work_uuid)).desc(), func.lower(pairs.c.name))
-            .limit(TOP_AUTHORS)
         )
     ).all()
     return {
-        "n_ut_works": int(n_ut_works or 0),
-        "faculties": faculties,
-        "research_groups": research_groups,
+        "n_ut_works": next((int(r.works) for r in rows if r.kind == 0), 0),
+        "faculties": [{"name": r.name, "works": int(r.works)} for r in rows if r.kind == 1],
+        "research_groups": [{"name": r.name, "works": int(r.works)} for r in rows if r.kind == 2],
         "top_authors": [
             {
                 "pure_uuid": r.author_uuid,
@@ -874,6 +915,7 @@ async def venue_authorship(
                 "research_group": r.research_group,
                 "works": int(r.works),
             }
-            for r in author_rows
+            for r in rows
+            if r.kind == 3
         ],
     }
