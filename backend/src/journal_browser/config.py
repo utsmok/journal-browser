@@ -58,8 +58,14 @@ class Settings(BaseSettings):
 
     # populate_by_name: the admin API revalidates a model_dump() (field
     # names) through model_validate; alias-only lookup would reject those.
+    # env_ignore_empty: compose passes unset variables through as "", which
+    # must mean "use the default", not "parse an empty list/bool/int".
     model_config = SettingsConfigDict(
-        env_file=".env", env_prefix="JB_", extra="ignore", populate_by_name=True
+        env_file=".env",
+        env_prefix="JB_",
+        extra="ignore",
+        populate_by_name=True,
+        env_ignore_empty=True,
     )
 
     database_url: str = "postgresql+asyncpg://journal:journal@localhost:5433/journalbrowser"
