@@ -14,97 +14,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
 from ..deps import InstitutionDep
-from ..models import ApcEvidence, Deal, DealInstitution, DealJournal, Publisher, Work
+from ..models import Deal, DealJournal, Publisher
 from ..schemas import DealOut
-from ..services.deal_coverage import deal_institution_join, dj_scope
-from ..services.works_query import work_type_not_excluded
+from ..services.deal_coverage import DEAL_FIELDS, apc_agg, covered_join
 
 router = APIRouter(prefix="/deals", tags=["deals"])
 
-#: DealOut fields that map 1:1 onto Deal columns (the detail path getattrs
-#: them); excludes the computed register extras. Set-equal to the column
-#: list, verified against Deal.__table__.columns 2026-10-30.
-_DEAL_OUT_EXTRAS = {"publisher_name", "covers_in_group", "journal_count", "apc_euro_total", "apc_n"}
-DEAL_FIELDS = [k for k in DealOut.model_fields if k not in _DEAL_OUT_EXTRAS]
-
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
-
-
-def _covered_join(institution_id: int):
-    """JOIN clauses: participation row + effective (override-aware) list."""
-
-    def covered(q):
-        return (
-            q.join(DealInstitution, deal_institution_join(institution_id))
-            # LEFT JOIN: a participating deal shows even when its
-            # effective journal list is empty (count 0). Admin-excluded
-            # journals stay out of counts and membership everywhere.
-            .outerjoin(
-                DealJournal,
-                (DealJournal.deal_id == Deal.id)
-                & dj_scope(institution_id)
-                & DealJournal.excluded.is_not(True),
-            )
-        )
-
-    return covered
-
-
-def _apc_agg(institution_id: int):
-    """Per-deal APC spend subquery: the institution's works in the deal's
-    effective journal list, latest-period evidence per DOI (mirror of the
-    orgunit APC aggregation)."""
-    # djs needs this institution's participation row in scope: dj_scope
-    # reads its journal_override to pick shared vs scoped rows.
-    djs = (
-        select(DealJournal.deal_id, DealJournal.issn_l)
-        .select_from(DealJournal)
-        .join(
-            DealInstitution,
-            (DealInstitution.deal_id == DealJournal.deal_id)
-            & (DealInstitution.institution_id == institution_id),
-        )
-        .where(dj_scope(institution_id), DealJournal.excluded.is_not(True))
-        .subquery()
-    )
-    ranked = (
-        select(
-            djs.c.deal_id,
-            ApcEvidence.euro.label("euro"),
-            func.row_number()
-            .over(
-                partition_by=(djs.c.deal_id, ApcEvidence.doi),
-                order_by=(ApcEvidence.period.desc().nulls_last(), ApcEvidence.id.desc()),
-            )
-            .label("rn"),
-        )
-        .select_from(djs)
-        .join(
-            Work,
-            (Work.institution_id == institution_id)
-            & (Work.journal_issn_l == djs.c.issn_l)
-            & Work.doi_normalized.is_not(None)
-            # APC euros match works, so the matched set must describe the
-            # same population as every other works count.
-            & work_type_not_excluded(Work.work_type),
-        )
-        .join(
-            ApcEvidence,
-            (ApcEvidence.institution_id == institution_id)
-            & (ApcEvidence.doi == Work.doi_normalized),
-        )
-        .subquery()
-    )
-    return (
-        select(
-            ranked.c.deal_id,
-            func.coalesce(func.sum(ranked.c.euro), 0).label("apc_euro_total"),
-            func.count(ranked.c.euro).label("apc_n"),
-        )
-        .where(ranked.c.rn == 1)
-        .group_by(ranked.c.deal_id)
-        .subquery()
-    )
 
 
 def _deal_out(
@@ -125,8 +41,8 @@ async def list_deals(
     institution: InstitutionDep,
     status: Annotated[str, Query(pattern="^(current|archive|all)$")] = "current",
 ) -> list[DealOut]:
-    covered = _covered_join(institution.id)
-    apc = _apc_agg(institution.id)
+    covered = covered_join(institution.id)
+    apc = apc_agg(institution)
     query = covered(
         select(
             Deal,
@@ -147,8 +63,8 @@ async def list_deals(
 
 @router.get("/{deal_id}", response_model=DealOut)
 async def deal_detail(deal_id: int, session: SessionDep, institution: InstitutionDep) -> DealOut:
-    covered = _covered_join(institution.id)
-    apc = _apc_agg(institution.id)
+    covered = covered_join(institution.id)
+    apc = apc_agg(institution)
     row = (
         await session.execute(
             covered(

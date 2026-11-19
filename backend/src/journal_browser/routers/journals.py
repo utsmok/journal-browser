@@ -48,11 +48,10 @@ from ..schemas import (
 )
 from ..services import authorship, detail_enrichment, exports, repo_links
 from ..services import search as search_service
-from ..services.deal_coverage import deal_institution_join, dj_scope
+from ..services.deal_coverage import DEAL_FIELDS, deal_institution_join, dj_scope
 from ..services.funder_fit import JournalFacts, compute_funder_fit
 from ..services.works_query import clamped_year_range
 from ..vocab import GreenOa, OaType
-from .deals import DEAL_FIELDS
 
 router = APIRouter(prefix="/journals", tags=["journals"])
 

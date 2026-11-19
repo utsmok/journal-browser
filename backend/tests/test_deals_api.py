@@ -1,6 +1,7 @@
 """Deal register tests: the register is the home-linked deals only."""
 
 import pytest
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from conftest import requires_db
@@ -190,11 +191,42 @@ async def apc_deals_api(client, db_engine):
                 last_seen_run=run.id,
             )
         )
+        # Retired (dropped by the Pure sync) and out-of-window works with
+        # their own evidence: the gates must keep both out of the sums.
+        session.add_all(
+            [
+                Work(
+                    institution_id=home.id,
+                    pure_uuid="w-retired",
+                    doi_normalized="10.1234/retired",
+                    title="A retired work",
+                    norm_title="a retired work",
+                    year=2024,
+                    journal_issn_l=covered_journal.issn_l,
+                    first_seen_run=run.id,
+                    last_seen_run=run.id,
+                    retired_at=func.now(),
+                ),
+                Work(
+                    institution_id=home.id,
+                    pure_uuid="w-old",
+                    doi_normalized="10.1234/old",
+                    title="An out-of-window work",
+                    norm_title="an out-of-window work",
+                    year=1999,
+                    journal_issn_l=covered_journal.issn_l,
+                    first_seen_run=run.id,
+                    last_seen_run=run.id,
+                ),
+            ]
+        )
         # Two evidence rows for the one DOI: only the latest period counts.
         session.add_all(
             [
                 ApcEvidence(institution_id=home.id, doi="10.1234/apc", period=2023, euro=100.0),
                 ApcEvidence(institution_id=home.id, doi="10.1234/apc", period=2024, euro=250.0),
+                ApcEvidence(institution_id=home.id, doi="10.1234/retired", period=2024, euro=999.0),
+                ApcEvidence(institution_id=home.id, doi="10.1234/old", period=2024, euro=999.0),
             ]
         )
         await session.commit()
