@@ -65,8 +65,8 @@ services:
     # container default; the graph for ~134k vectors peaks around 100 MB.
     shm_size: 512mb
     # Tuned for the 4 GB limit on SSD-backed storage: the HNSW index (~350 MB)
-    # and hot journal rows fit in shared_buffers; JIT only adds planning time
-    # to this workload's short queries. Measurements: .audit perf report.
+    # and hot journal rows fit in shared_buffers; JIT only adds planning
+    # time to this workload's short queries.
     command:
       - postgres
       - -c
