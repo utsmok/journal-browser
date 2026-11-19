@@ -324,15 +324,22 @@ class CanonicalOa(BaseModel):
 
 
 class InstitutionMetrics(BaseModel):
-    """OpenAlex view of this institution's publications in this journal,
-    plus canonical-store totals when the external works store is reachable
-    (otherwise the canonical_* keys are None)."""
+    """Journal metrics over the canonical UT works population (the works
+    tab's stats rows, store-enriched per DOI): fwci_avg/fwci_n/retracted
+    are the "UT works" tiles. The venue-level OpenAlex numbers stay as
+    separately named cross-check fields (openalex_matched, venue_fwci_*,
+    venue_retracted, cited_total); the store mixes harvest populations, so
+    they are not UT-works numbers. canonical_* describe the same canonical
+    population when the works store is reachable (otherwise None)."""
 
     openalex_matched: int = 0
+    venue_fwci_avg: float | None = None
+    venue_fwci_n: int = 0
+    venue_retracted: int = 0
+    cited_total: int = 0
     fwci_avg: float | None = None
     fwci_n: int = 0
     retracted: int = 0
-    cited_total: int = 0
     canonical_total: int | None = None
     canonical_retracted: int | None = None
     canonical_oa: CanonicalOa | None = None

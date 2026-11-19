@@ -2523,9 +2523,13 @@ export interface components {
         };
         /**
          * InstitutionMetrics
-         * @description OpenAlex view of this institution's publications in this journal,
-         *     plus canonical-store totals when the external works store is reachable
-         *     (otherwise the canonical_* keys are None).
+         * @description Journal metrics over the canonical UT works population (the works
+         *     tab's stats rows, store-enriched per DOI): fwci_avg/fwci_n/retracted
+         *     are the "UT works" tiles. The venue-level OpenAlex numbers stay as
+         *     separately named cross-check fields (openalex_matched, venue_fwci_*,
+         *     venue_retracted, cited_total); the store mixes harvest populations, so
+         *     they are not UT-works numbers. canonical_* describe the same canonical
+         *     population when the works store is reachable (otherwise None).
          */
         InstitutionMetrics: {
             /**
@@ -2533,6 +2537,23 @@ export interface components {
              * @default 0
              */
             openalex_matched: number;
+            /** Venue Fwci Avg */
+            venue_fwci_avg?: number | null;
+            /**
+             * Venue Fwci N
+             * @default 0
+             */
+            venue_fwci_n: number;
+            /**
+             * Venue Retracted
+             * @default 0
+             */
+            venue_retracted: number;
+            /**
+             * Cited Total
+             * @default 0
+             */
+            cited_total: number;
             /** Fwci Avg */
             fwci_avg?: number | null;
             /**
@@ -2545,11 +2566,6 @@ export interface components {
              * @default 0
              */
             retracted: number;
-            /**
-             * Cited Total
-             * @default 0
-             */
-            cited_total: number;
             /** Canonical Total */
             canonical_total?: number | null;
             /** Canonical Retracted */

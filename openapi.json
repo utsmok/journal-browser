@@ -9430,6 +9430,32 @@
             "title": "Openalex Matched",
             "default": 0
           },
+          "venue_fwci_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue Fwci Avg"
+          },
+          "venue_fwci_n": {
+            "type": "integer",
+            "title": "Venue Fwci N",
+            "default": 0
+          },
+          "venue_retracted": {
+            "type": "integer",
+            "title": "Venue Retracted",
+            "default": 0
+          },
+          "cited_total": {
+            "type": "integer",
+            "title": "Cited Total",
+            "default": 0
+          },
           "fwci_avg": {
             "anyOf": [
               {
@@ -9449,11 +9475,6 @@
           "retracted": {
             "type": "integer",
             "title": "Retracted",
-            "default": 0
-          },
-          "cited_total": {
-            "type": "integer",
-            "title": "Cited Total",
             "default": 0
           },
           "canonical_total": {
@@ -9491,7 +9512,7 @@
         },
         "type": "object",
         "title": "InstitutionMetrics",
-        "description": "OpenAlex view of this institution's publications in this journal,\nplus canonical-store totals when the external works store is reachable\n(otherwise the canonical_* keys are None)."
+        "description": "Journal metrics over the canonical UT works population (the works\ntab's stats rows, store-enriched per DOI): fwci_avg/fwci_n/retracted\nare the \"UT works\" tiles. The venue-level OpenAlex numbers stay as\nseparately named cross-check fields (openalex_matched, venue_fwci_*,\nvenue_retracted, cited_total); the store mixes harvest populations, so\nthey are not UT-works numbers. canonical_* describe the same canonical\npopulation when the works store is reachable (otherwise None)."
       },
       "InstitutionOut": {
         "properties": {

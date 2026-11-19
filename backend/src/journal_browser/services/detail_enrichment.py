@@ -234,15 +234,18 @@ async def institution_metrics(
     year_range: tuple[int, int] | None = None,
 ) -> dict[str, Any]:
     """Aggregates over the journal's works (both sides bounded to the
-    institution's publication-year window): the OpenAlex-side metrics come
-    from the venue store rows (SQL, one pass); the canonical side describes
-    the same stats population the works list and the search card serve —
-    works-table rows, store-enriched per DOI for retraction/OA status.
+    institution's publication-year window): the fwci/retracted tiles ride
+    the canonical side — the same stats population the works list and the
+    search card serve — works-table rows, store-enriched per DOI for
+    FWCI/retraction/OA status (decision 22). The venue-level OpenAlex
+    numbers stay as separately named cross-check fields
+    (openalex_matched, venue_fwci_*, cited_total; the store mixes harvest
+    populations, so they are not UT-works numbers).
 
-    An explicit publication-year range narrows the canonical (UT works
-    derived) side via the same year-scoped works join the works tab uses;
-    the OpenAlex-side block stays the venue-level store cross-check at the
-    data window (OpenAlex citations/FWCI keep the registry convention)."""
+    An explicit publication-year range narrows the canonical side via the
+    same year-scoped works join the works tab uses; the venue-level
+    cross-check stays the data window (OpenAlex citations keep the
+    registry convention)."""
     year_start = institution.data_window_start
     year_end = institution.data_window_end if institution.data_window_end is not None else 9999
     total, fwci_avg, fwci_n, retracted, cited_total = (
@@ -261,11 +264,21 @@ async def institution_metrics(
         )
     ).one()
     metrics: dict[str, Any] = {
+        # Venue-level OpenAlex store numbers: a labeled cross-check
+        # (decision 22), not the tiles. The store mixes harvest
+        # populations (author sweep + works_stats), so these describe the
+        # venue's OpenAlex rows rather than the UT works.
         "openalex_matched": total,
-        "fwci_avg": float(fwci_avg) if fwci_avg is not None else None,
-        "fwci_n": fwci_n,
-        "retracted": retracted,
+        "venue_fwci_avg": float(fwci_avg) if fwci_avg is not None else None,
+        "venue_fwci_n": fwci_n,
+        "venue_retracted": retracted,
         "cited_total": cited_total,
+        # The "UT works" tiles (decision 22): computed over the canonical
+        # population below — the same works rows the works tab serves,
+        # store-enriched per DOI. Filled in after the store lookup.
+        "fwci_avg": None,
+        "fwci_n": 0,
+        "retracted": 0,
         "canonical_total": None,
         "canonical_retracted": None,
         "canonical_oa": None,
@@ -275,9 +288,18 @@ async def institution_metrics(
         session, institution.id, sorted({r.doi_normalized for r in base if r.doi_normalized})
     )
     metrics["canonical_total"] = len(base)
-    metrics["canonical_retracted"] = sum(
+    canonical_retracted = sum(
         1 for r in base if (s := store_by_doi.get(r.doi_normalized)) is not None and s.is_retracted
     )
+    metrics["canonical_retracted"] = canonical_retracted
+    metrics["retracted"] = canonical_retracted
+    fwci_vals = [
+        s.fwci
+        for r in base
+        if (s := store_by_doi.get(r.doi_normalized)) is not None and s.fwci is not None
+    ]
+    metrics["fwci_n"] = len(fwci_vals)
+    metrics["fwci_avg"] = sum(fwci_vals) / len(fwci_vals) if fwci_vals else None
     metrics["canonical_oa"] = ut_metadata.oa_buckets(
         [
             {
