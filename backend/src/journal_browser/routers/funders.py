@@ -34,11 +34,14 @@ def _to_item(
     urls: list[str],
     ids: set[str],
     counts: dict[str, int],
+    n_ut_works: int,
 ) -> FunderListItem:
     structured = bool((funder.publications_policy or {}).get("archiving_policy"))
-    # Display the twin the works actually cite; bare-id keys everywhere.
+    # Display the twin the works actually cite (per-id counts); bare-id
+    # keys everywhere. n_ut_works is the twin-set-deduped count from
+    # ut_funder_work_counts: one work crediting two stream twins of the
+    # same funder counts once.
     openalex_url = max(urls, key=lambda u: counts.get(str(u).rsplit("/", 1)[-1], 0), default=None)
-    n_ut_works = sum(counts.get(bare, 0) for bare in ids)
     return FunderListItem(
         id=funder.id,
         name=funder.name,
@@ -81,10 +84,12 @@ async def search_funders(
     # The canon is ~200 rows: link, count and filter in Python instead of a
     # raw-SQL order-by over a conditionally-existing table.
     funders = (await session.execute(select(JiscFunder).order_by(JiscFunder.name))).scalars().all()
-    counts = await funders_service.ut_work_counts(
-        session, institution.id, clamped_year_range(institution, year_from, year_to)
-    )
+    year_range = clamped_year_range(institution, year_from, year_to)
+    counts = await funders_service.ut_work_counts(session, institution, year_range)
     canon = await funders_service.canon_links(session)
+    union_counts = await funders_service.ut_funder_work_counts(
+        session, institution, canon.bare_ids, year_range
+    )
     needle = (q or "").strip().lower()
     items = []
     for funder in funders:
@@ -94,7 +99,11 @@ async def search_funders(
                 continue
         items.append(
             _to_item(
-                funder, canon.urls.get(funder.id, []), canon.bare_ids.get(funder.id, set()), counts
+                funder,
+                canon.urls.get(funder.id, []),
+                canon.bare_ids.get(funder.id, set()),
+                counts,
+                union_counts.get(funder.id, 0),
             )
         )
     # Order: n_ut_works desc nulls last (counts default 0), then name.
@@ -130,15 +139,18 @@ async def funder_detail(
     if funder is None:
         raise HTTPException(status_code=404, detail=f"funder {funder_id} not found")
     year_range = clamped_year_range(institution, year_from, year_to)
-    counts = await funders_service.ut_work_counts(session, institution.id, year_range)
+    counts = await funders_service.ut_work_counts(session, institution, year_range)
     canon = await funders_service.canon_links(session)
+    union_counts = await funders_service.ut_funder_work_counts(
+        session, institution, canon.bare_ids, year_range
+    )
     ids = canon.bare_ids.get(funder_id, set())
-    item = _to_item(funder, sorted(ids), ids, counts)
+    item = _to_item(funder, sorted(ids), ids, counts, union_counts.get(funder_id, 0))
     # Top journals across every twin the works may cite.
     top: list[dict[str, Any]] = []
     for bare in sorted(ids, key=lambda b: -counts.get(b, 0)):
         top.extend(
-            await funders_service.top_journals(session, institution.id, bare, year_range=year_range)
+            await funders_service.top_journals(session, institution, bare, year_range=year_range)
         )
     seen: set[str] = set()
     deduped = []

@@ -1,8 +1,9 @@
 """Funder list/detail support: UT-work attribution from work_funders.
 
-The work_funders table (migration 0049) may not exist yet; every read
-checks to_regclass first and degrades to zeros ("harvest pending") instead
-of 500ing. Raw SQL on purpose: no ORM model until the migration lands."""
+The work_funders tables may not exist yet; every read checks to_regclass
+first and degrades to zeros ("harvest pending") instead of 500ing. Raw
+SQL for the count paths: the gates are one shared fragment, and the
+canon-link reads predate the WorkFunder ORM model."""
 
 from dataclasses import dataclass
 from typing import Any
@@ -10,8 +11,8 @@ from typing import Any
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..config import get_settings
-from ..models import FunderLink, OpenaireFunder, OpenaireFunderStream, OpenalexFunder
+from ..config import EXCLUDED_WORK_TYPES, get_settings
+from ..models import FunderLink, Institution, OpenaireFunder, OpenaireFunderStream, OpenalexFunder
 
 
 @dataclass(slots=True)
@@ -133,59 +134,120 @@ async def _work_funders_ready(session: AsyncSession) -> bool:
     return bool(await session.scalar(text("select to_regclass('public.work_funders') is not null")))
 
 
+#: SQL twin of works_query.work_type_not_excluded for the raw work_funders
+#: queries: the normalized work type must not be one of the
+#: never-journal-output types, or the count leaves the works population
+#: every sibling count shares.
+_TYPE_NORM_SQL = (
+    "lower(replace(replace(coalesce(w.work_type, ''), 'info:eu-repo/semantics/', ''), '-', ''))"
+)
+
+#: Shared works gates for every funder work count: not retired,
+#: journal-output types, and inside the institution's data window (an
+#: explicit clamped year range replaces the bounds). Everything rides the
+#: works join so unscoped and scoped callers describe one population.
+_WORKS_JOIN_SQL = (
+    " join works w on w.institution_id = wf.institution_id and w.pure_uuid = wf.pure_uuid"
+    " and w.retired_at is null"
+    " and w.year >= :wlo and w.year <= :whi"
+    f" and {_TYPE_NORM_SQL} <> all(cast(:excluded_types as text[]))"
+)
+
+
+def _window_bounds(institution: Institution, year_range: tuple[int, int] | None) -> tuple[int, int]:
+    if year_range is not None:
+        return year_range
+    return (
+        institution.data_window_start,
+        institution.data_window_end if institution.data_window_end is not None else 9999,
+    )
+
+
+def _gate_params(institution_id: int, wlo: int, whi: int) -> dict[str, Any]:
+    return {
+        "i": institution_id,
+        "wlo": wlo,
+        "whi": whi,
+        "excluded_types": sorted(EXCLUDED_WORK_TYPES),
+    }
+
+
 async def ut_work_counts(
-    session: AsyncSession, institution_id: int, year_range: tuple[int, int] | None = None
+    session: AsyncSession, institution: Institution, year_range: tuple[int, int] | None = None
 ) -> dict[str, int]:
-    """UT works per funder_openalex_id for this institution. Keys are bare
-    OpenAlex ids (no https://openalex.org/ prefix); work_funders stores
-    whatever the grants payload carried, so normalize both sides. An
-    explicit year_range joins works and keeps only works published inside
-    the clamped window; None stays today's unscoped count."""
+    """Gated UT works per bare funder id. Every count joins works with the
+    shared gates (not retired, journal-output types, data window), so the
+    funder numbers describe the same population as every sibling works
+    count; year_range None keeps the institution's default window. Keys
+    are bare OpenAlex ids (no https://openalex.org/ prefix); work_funders
+    stores whatever the grants payload carried, so normalize both sides.
+    The counts stay per id for the display-twin pick only — the served
+    n_ut_works comes from ut_funder_work_counts, which dedupes works
+    across a funder's twin-id set."""
     if not await _work_funders_ready(session):
         return {}
-    if year_range is None:
-        rows = await session.execute(
-            text(
-                "select funder_openalex_id, count(distinct pure_uuid) as n"
-                " from work_funders where institution_id = :i group by 1"
-            ),
-            {"i": institution_id},
-        )
-    else:
-        lo, hi = year_range
-        rows = await session.execute(
-            text(
-                "select wf.funder_openalex_id, count(distinct wf.pure_uuid) as n"
-                " from work_funders wf"
-                " join works w on w.institution_id = wf.institution_id"
-                "  and w.pure_uuid = wf.pure_uuid"
-                " where wf.institution_id = :i and w.year >= :lo and w.year <= :hi"
-                " group by 1"
-            ),
-            {"i": institution_id, "lo": lo, "hi": hi},
-        )
-    counts: dict[str, int] = {}
-    for funder_id, n in rows:
-        bare = str(funder_id).rsplit("/", 1)[-1]
-        counts[bare] = counts.get(bare, 0) + int(n)
-    return counts
+    rows = await session.execute(
+        text(
+            "select wf.funder_openalex_id, count(distinct wf.pure_uuid) as n"
+            " from work_funders wf" + _WORKS_JOIN_SQL + " where wf.institution_id = :i group by 1"
+        ),
+        _gate_params(institution.id, *_window_bounds(institution, year_range)),
+    )
+    return {str(fid).rsplit("/", 1)[-1]: int(n) for fid, n in rows}
+
+
+async def ut_funder_work_counts(
+    session: AsyncSession,
+    institution: Institution,
+    bare_ids_by_funder: dict[int, set[str]],
+    year_range: tuple[int, int] | None = None,
+) -> dict[int, int]:
+    """Distinct gated UT works per canon funder across its twin-id set:
+    one work crediting two funding-stream twins of the same funder counts
+    once (the per-id sum would double it — NWO's twin ids differed by 75
+    works). Funders with no matching works stay out of the result;
+    callers default to 0."""
+    if not await _work_funders_ready(session):
+        return {}
+    pairs = [(fid, bare) for fid, ids in bare_ids_by_funder.items() for bare in sorted(ids)]
+    if not pairs:
+        return {}
+    params = _gate_params(institution.id, *_window_bounds(institution, year_range))
+    params["fids"] = [fid for fid, _ in pairs]
+    params["bares"] = [bare for _, bare in pairs]
+    rows = await session.execute(
+        text(
+            "select m.fid, count(distinct wf.pure_uuid) as n"
+            " from work_funders wf"
+            + _WORKS_JOIN_SQL
+            + " join unnest(cast(:fids as int[]), cast(:bares as text[])) as m(fid, bare)"
+            " on wf.funder_openalex_id = m.bare where wf.institution_id = :i group by m.fid"
+        ),
+        params,
+    )
+    return {int(fid): int(n) for fid, n in rows}
 
 
 async def top_journals(
     session: AsyncSession,
-    institution_id: int,
+    institution: Institution,
     openalex_funder_id: str | None,
     limit: int = 5,
     year_range: tuple[int, int] | None = None,
 ) -> list[dict[str, Any]]:
-    """Journals with the most works crediting this funder; an explicit
-    year_range keeps only works published inside the clamped window."""
+    """Journals with the most gated UT works crediting this funder (the
+    same works gates as ut_work_counts); an explicit year_range replaces
+    the default window."""
     if not await _work_funders_ready(session) or openalex_funder_id is None:
         return []
     # Admin ignore-list (e.g. arXiv): an ignored journal is treated as
     # nonexistent everywhere else, so it must not top a funder's list.
     ignored = [i.upper() for i in get_settings().ignored_issns]
-    params: dict[str, Any] = {"i": institution_id, "f": openalex_funder_id, "l": limit}
+    params = {
+        **_gate_params(institution.id, *_window_bounds(institution, year_range)),
+        "f": openalex_funder_id,
+        "l": limit,
+    }
     ignored_clause = (
         " and (j.issn_l is null or upper(j.issn_l) != any(:ignored))" if ignored else ""
     )
@@ -194,13 +256,11 @@ async def top_journals(
     sql = (
         "select j.title, j.issn_l, count(distinct wf.pure_uuid) as n"
         " from work_funders wf"
-        " join works w on w.institution_id = wf.institution_id and w.pure_uuid = wf.pure_uuid"
-        " join journals j on j.issn_l = w.journal_issn_l"
-        " where wf.institution_id = :i and wf.funder_openalex_id = :f" + ignored_clause
+        + _WORKS_JOIN_SQL
+        + " join journals j on j.issn_l = w.journal_issn_l"
+        " where wf.institution_id = :i and wf.funder_openalex_id = :f"
+        + ignored_clause
+        + " group by j.title, j.issn_l order by n desc limit :l"
     )
-    if year_range is not None:
-        sql += " and w.year >= :lo and w.year <= :hi"
-        params["lo"], params["hi"] = year_range
-    sql += " group by j.title, j.issn_l order by n desc limit :l"
     rows = await session.execute(text(sql), params)
     return [{"title": r[0], "issn_l": r[1], "n_works": int(r[2])} for r in rows]
