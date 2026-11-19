@@ -41,6 +41,12 @@ async def mig_db(monkeypatch):
     try:
         yield name, url
     finally:
+        # Alembic's engines die inside asyncio.run worker threads; without
+        # this the FORCE drop waits on their leaked connections.
+        await admin.execute(
+            f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity"
+            f" WHERE datname = '{name}' AND pid <> pg_backend_pid()"
+        )
         await admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
         await admin.close()
         reset_settings_cache()
