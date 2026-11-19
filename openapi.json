@@ -9222,7 +9222,8 @@
         "enum": [
           "running",
           "completed",
-          "failed"
+          "failed",
+          "superseded"
         ],
         "title": "HarvestStatus",
         "description": "harvest_runs.status (ck_harvest_runs_status)."
