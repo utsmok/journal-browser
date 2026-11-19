@@ -19,7 +19,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import get_settings
 from ..ingest import IngestSession
 from ..models import Institution, IssnMap, Journal, Publisher
-from .common import issn_checksum_ok, normalize_issn, paced_single_gets, upsert_issn_map
+from .common import (
+    issn_checksum_ok,
+    normalize_issn,
+    paced_single_gets,
+    require_openalex_key,
+    upsert_issn_map,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -277,6 +283,10 @@ async def sweep_all_sources(
     page instead of ~1.25M sequential ones.
     """
     ingest = IngestSession(session)
+    # Keyless requests serve only the first cursor page; the full sweep
+    # must fail with its name rather than complete with a fraction of
+    # the journal universe.
+    require_openalex_key("harvest_journals --sweep-all")
     filter_set = "all"
     config = {"per_page": PER_PAGE, "route": "sweep"}
     await ingest.start_run(SOURCE, ENTITY_TYPE, filter_set, config)

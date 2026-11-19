@@ -53,7 +53,7 @@ from .author_cascade import (
     openalex_entries,
 )
 from .author_names import bare_orcid, decompose_parts
-from .common import openalex_credits_remaining, paced_single_gets
+from .common import openalex_credits_remaining, paced_single_gets, require_openalex_key
 from .openalex_journals import openalex_id_to_pk, resolve_institution_openalex_id
 from .org_closure import load_org_tree
 
@@ -84,7 +84,7 @@ def openaire_author_orcid(author: dict[str, Any]) -> str | None:
 AUTHOR_ENTITY = "authors"
 SWEEP_FILTER_PREFIX = "author-sweep"
 BATCH_SIZE = 50  # OpenAlex pipe-OR ceiling (ut-metadata gap-fetch size)
-PER_PAGE = 200
+PER_PAGE = 100  # OpenAlex documented per_page maximum
 
 #: evidence quality per rung (review-list sort + display)
 CONFIDENCE = {
@@ -248,6 +248,9 @@ async def sweep_author_works(
         stats["skipped"] = "daily credit budget exhausted (resets 00:00 UTC)"
         logger.info("sweep_author_works skipped: %s", stats["skipped"])
         return stats
+    # Cursor sweeps paginate only with a key; keyless, the sweep would
+    # land one page and finish 'completed' with partial data.
+    require_openalex_key("sweep_author_works")
     ids = sorted({i for i in a_ids if i})[:budget]
     stats["queried_authors"] = len(ids)
     window_from = f"{institution.data_window_start}-01-01"

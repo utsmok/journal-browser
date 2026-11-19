@@ -21,7 +21,7 @@ from ..config import get_settings, work_type_excluded
 from ..ingest import IngestSession
 from ..models import Institution, InstitutionTrend, InstitutionWorksStats, Journal, Work
 from ..services.works_query import work_type_not_excluded
-from .common import OA_STATUSES, openalex_credits_remaining
+from .common import OA_STATUSES, openalex_credits_remaining, require_openalex_key
 from .openalex_journals import resolve_institution_openalex_id
 
 logger = logging.getLogger(__name__)
@@ -59,6 +59,10 @@ async def harvest_institution_stats(
         logger.info("institution stats skipped: daily credit budget exhausted")
         return {"skipped": "daily credit budget exhausted (resets 00:00 UTC)"}
     settings = get_settings()
+    # The institution works filter is a cursor-priced listing; without a
+    # key it would serve one page and finish 'completed' with partial
+    # stats, so fail with the step named instead.
+    require_openalex_key("institution_stats")
     client_kwargs: dict[str, Any] = {}
     if settings.openalex_api_key:
         client_kwargs["api_key"] = settings.openalex_api_key

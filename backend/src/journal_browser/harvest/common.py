@@ -365,6 +365,22 @@ async def run_harvest(
         raise
 
 
+def require_openalex_key(step: str) -> str:
+    """Return the OpenAlex API key, raising when it is unset.
+
+    Keyless requests serve only the first cursor page (and 10k results),
+    so a listing/cursor sweep without a key would harvest one page and
+    finish 'completed' with silently partial data. Sweeps call this
+    before starting a run and fail with a message naming the step."""
+    key = get_settings().openalex_api_key
+    if not key:
+        raise RuntimeError(
+            f"{step}: OPENALEX_API_KEY/JB_OPENALEX_API_KEY is not set; "
+            "a keyless listing sweep would harvest only the first page"
+        )
+    return key
+
+
 async def openalex_credits_remaining() -> float | None:
     """Remaining daily USD credit budget from OpenAlex's rate-limit
     endpoint; None when the check fails (gate stays open)."""

@@ -39,13 +39,15 @@ logger = logging.getLogger(__name__)
 
 # Single-entity GETs are free on OpenAlex; keep starts spaced so a job's
 # steady-state rate stays bounded (concurrency alone is latency-bound and
-# bursts past the shared 30 req/s free cap: 10 in-flight at ~150 ms
-# round-trip is ~60 req/s). 0.08 s spacing ≈ 12 req/s per job; two jobs
-# plus listing pages stay under the cap.
+# bursts past the tier caps: 10 in-flight at ~150 ms round-trip is
+# ~60 req/s). 0.08 s spacing ≈ 12 req/s per job, under the keyed free
+# tier's 30 req/s; without a key the anonymous cap is 10 req/s, so
+# keyless multi-job bursts can draw per-second 429s.
 GET_CONCURRENCY = 10
 #: Seconds between singleton GET starts. Rate-limit tiers differ (keyed
-#: free ~10 rps vs premium higher); JB_OPENALEX_MIN_INTERVAL_S=0.13 keeps
-#: a solo consumer under the free 10 rps cap, avoiding the 429 retry
+#: free 30 rps, anonymous 10 rps, premium higher); with a key the 0.08 s
+#: default stays well under the cap. JB_OPENALEX_MIN_INTERVAL_S=0.13
+#: keeps a solo keyless consumer under 10 rps, avoiding the 429 retry
 #: freeze (bibliofabric sleeps its max retry wait per 429 while holding
 #: its semaphore slot).
 GET_MIN_INTERVAL_S = float(os.environ.get("JB_OPENALEX_MIN_INTERVAL_S", "0.08"))
