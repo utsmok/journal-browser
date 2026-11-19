@@ -169,8 +169,7 @@ const TINTS = {
   slate:
     "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-500/40 dark:bg-slate-500/15 dark:text-slate-200",
   teal: "border-teal-300 bg-teal-100 text-teal-900 dark:border-teal-400/40 dark:bg-teal-400/15 dark:text-teal-200",
-  brand:
-    "border-[#f06e00]/50 bg-[#f06e00]/10 text-[var(--primary-text)] dark:border-[#f06e00]/40 dark:bg-[#f06e00]/15 dark:text-[#ffa25e]",
+  brand: "border-(--brand-tint-border) bg-(--brand-tint-bg) text-(--primary-text)",
 };
 
 /** Idle-state icon colors: same hues as the results-list lockups. */

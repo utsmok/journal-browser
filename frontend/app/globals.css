@@ -35,6 +35,18 @@
   --input: #dee2e6;
   --ring: #f06e00;
   --radius: 0.5rem;
+  /* Brand-tint composites for selected facet rows (filter-panel). */
+  --brand-tint: #f06e00;
+  --brand-tint-border: color-mix(in srgb, var(--brand-tint) 50%, transparent);
+  --brand-tint-bg: color-mix(in srgb, var(--brand-tint) 10%, transparent);
+  /* OA-access spectrum, shared by badges, facets, and chart bars.
+     Lightness climbs with openness: closed → hybrid → generic → gold →
+     diamond. */
+  --oa-closed: #64748b;
+  --oa-hybrid: #4d84c7;
+  --oa-generic: #8f7ae5;
+  --oa-gold: #f4aa2a;
+  --oa-diamond: #4fe4f8;
 }
 
 /* Dark palette: same tokens, hand-rolled (no next-themes). */
@@ -59,6 +71,13 @@
   --border: #2a313b;
   --input: #2a313b;
   --ring: #f06e00;
+  --brand-tint-border: color-mix(in srgb, var(--brand-tint) 40%, transparent);
+  --brand-tint-bg: color-mix(in srgb, var(--brand-tint) 15%, transparent);
+  --oa-closed: #94a3b8;
+  --oa-hybrid: #82b1e4;
+  --oa-generic: #a99af0;
+  --oa-gold: #fbbf24;
+  --oa-diamond: #67e8f9;
 }
 
 @theme inline {

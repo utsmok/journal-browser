@@ -5,12 +5,12 @@ selection filters, through the same audited apply_decision the admin API
 uses, and prints a JSON summary. Deploy-time use: auto-confirm the safe
 band (confidence >= 0.99 and a normalised title of 25+ chars):
 
-uv run python jobs/bulk_work_identity.py --decisions confirmed \
+uv run python jobs/oneoff/bulk_work_identity.py --decisions confirmed \
     --reviewer deploy --min-confidence 0.99 --min-title-len 25
 
 Preview counts without writing anything:
 
-uv run python jobs/bulk_work_identity.py --decisions missing \
+uv run python jobs/oneoff/bulk_work_identity.py --decisions missing \
     --reviewer deploy --max-confidence 0.9 --dry-run
 """
 

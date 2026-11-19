@@ -18,7 +18,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _load_job(name: str):
-    spec = importlib.util.spec_from_file_location(name, ROOT / "jobs" / f"{name}.py")
+    path = ROOT / "jobs" / f"{name}.py"
+    if not path.exists():
+        # Repair/one-off jobs live in jobs/oneoff/.
+        path = ROOT / "jobs" / "oneoff" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(name, path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

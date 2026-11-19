@@ -11,7 +11,7 @@ Per run it also refreshes pure_canon stats + journal_flags and widens the
 institution's data window down to the oldest stored work. Idempotent:
 re-running refreshes fields and bookkeeping, never duplicates.
 
-Usage: uv run --no-dev python jobs/import_utmetadata_works.py [--institution ut]
+Usage: uv run --no-dev python jobs/oneoff/import_utmetadata_works.py [--institution ut]
 """
 
 import argparse

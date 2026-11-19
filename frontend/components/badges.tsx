@@ -49,11 +49,11 @@ const SHACKLE_POSE: Record<LockState, { rot: string; ty: string; d: string }> = 
  * blue) → generic (muted violet) → gold (bright amber) → diamond (light,
  * saturated cyan). */
 export const ACCESS_TEXT = {
-  gold: "text-[#f4aa2a] dark:text-amber-400",
-  diamond: "text-[#4fe4f8] dark:text-cyan-300",
-  generic: "text-[#8f7ae5] dark:text-[#a99af0]",
-  hybrid: "text-[#4d84c7] dark:text-[#82b1e4]",
-  closed: "text-slate-500 dark:text-slate-400",
+  gold: "text-(--oa-gold)",
+  diamond: "text-(--oa-diamond)",
+  generic: "text-(--oa-generic)",
+  hybrid: "text-(--oa-hybrid)",
+  closed: "text-(--oa-closed)",
   deal: "text-emerald-700 dark:text-emerald-300",
   brand: "text-[var(--primary-text)]",
 } as const;
@@ -319,7 +319,7 @@ export const OA_STATUS_META: Record<string, { bar: string }> = {
   hybrid: { bar: "bg-blue-400 dark:bg-blue-500" },
   green: { bar: "bg-green-600 dark:bg-green-500" },
   bronze: { bar: "bg-orange-400 dark:bg-orange-500/80" },
-  diamond: { bar: "bg-[#4fe4f8] dark:bg-cyan-300" },
+  diamond: { bar: "bg-(--oa-diamond)" },
   closed: { bar: "bg-slate-300 dark:bg-slate-600" },
 };
 

@@ -8,11 +8,11 @@ import type { OaTypeCounts } from "@/lib/api";
  * OaTypeBadge lockups (ACCESS_TEXT), as fills. Display names live in the
  * messages (facets.oaType*). */
 export const OA_TYPE_BARS: Record<string, { bar: string }> = {
-  gold: { bar: "bg-[#f4aa2a] dark:bg-amber-400" },
-  diamond: { bar: "bg-[#4fe4f8] dark:bg-cyan-300" },
-  generic: { bar: "bg-[#8f7ae5] dark:bg-[#a99af0]" },
-  hybrid: { bar: "bg-[#4d84c7] dark:bg-[#82b1e4]" },
-  subscription: { bar: "bg-slate-500 dark:bg-slate-400" },
+  gold: { bar: "bg-(--oa-gold)" },
+  diamond: { bar: "bg-(--oa-diamond)" },
+  generic: { bar: "bg-(--oa-generic)" },
+  hybrid: { bar: "bg-(--oa-hybrid)" },
+  subscription: { bar: "bg-(--oa-closed)" },
 };
 
 const OA_TYPE_ORDER = ["gold", "diamond", "generic", "hybrid", "subscription"] as const;

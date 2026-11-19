@@ -19,7 +19,7 @@ store, keyed per stream in this app's conventions:
 Then refreshes pure_canon stats + journal_flags. Idempotent: content-hash
 dedupe skips records already stored; stats/identity steps recompute.
 
-Usage: uv run --no-dev python jobs/import_utmetadata_raw.py [--institution ut]
+Usage: uv run --no-dev python jobs/oneoff/import_utmetadata_raw.py [--institution ut]
 """
 
 import argparse

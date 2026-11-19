@@ -11,7 +11,7 @@ xlsx) at /mnt/c/users/sam/downloads. This job:
 4. upserts deal_journals (source='manual') + the home deal_institution,
 5. clears needs_curation with the provenance in the reason.
 
-Usage: uv run python jobs/ingest_emerald_contract.py [path-to-xlsx]
+Usage: uv run python jobs/oneoff/ingest_emerald_contract.py [path-to-xlsx]
 """
 
 import asyncio
@@ -31,9 +31,6 @@ from journal_browser.config import get_settings
 from journal_browser.harvest.common import ensure_home_institution
 from journal_browser.models import Deal, DealInstitution, DealJournal
 
-CONTRACT_DEFAULT = Path(
-    "/mnt/c/users/sam/downloads/Emerald Agreement 2025-2027_Geredigeerd-ocr copy.xlsx"
-)
 EMERALD_HOST_ORG = "P4310319811"
 ESAC_ID = "eme2025ukb"
 
@@ -252,7 +249,10 @@ async def main(session, contract_path: Path) -> None:
 
 
 if __name__ == "__main__":
-    path = Path(sys.argv[1]) if len(sys.argv) > 1 else CONTRACT_DEFAULT
+    if len(sys.argv) != 2:
+        print(f"usage: {sys.argv[0]} CONTRACT_XLSX", file=sys.stderr)
+        raise SystemExit(2)
+    path = Path(sys.argv[1])
 
     async def run() -> None:
         engine = create_async_engine(get_settings().database_url)

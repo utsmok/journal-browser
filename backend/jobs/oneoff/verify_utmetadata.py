@@ -10,7 +10,7 @@ ut-metadata's verbatim Pure harvest:
 Requires network access to the ut-metadata DB; gated by
 JB_UT_METADATA_DSN (dev machines set it in backend/.env, never tracked).
 
-Usage: uv run python jobs/verify_utmetadata.py
+Usage: uv run python jobs/oneoff/verify_utmetadata.py
 """
 
 import asyncio
