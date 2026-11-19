@@ -1,9 +1,10 @@
 "use client";
 
-import { ExternalLink, Github } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 
+import { GithubIcon } from "@/components/github-icon";
 import { SourceNote } from "@/components/source-note";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -360,7 +361,7 @@ export default function AboutPage() {
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline"
                 >
-                  <Github aria-hidden className="size-4" /> {chunk}
+                  <GithubIcon className="size-4" /> {chunk}
                 </a>
               ),
             })}
