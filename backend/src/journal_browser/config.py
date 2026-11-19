@@ -210,7 +210,13 @@ def get_settings() -> Settings:
     if _cache.get("mtime") != mtime or "settings" not in _cache:
         base = Settings()
         overlay = load_settings_yaml() if mtime is not None else {}
-        merged = {**base.model_dump(), **overlay}
+        # A YAML null (a bare `key:`) means "use the default": the seeded
+        # settings.yaml.example ships empty keys, and a null must neither
+        # crash validation nor shadow the JB_* env fallback.
+        merged = {
+            **base.model_dump(),
+            **{k: v for k, v in overlay.items() if v is not None},
+        }
         try:
             _cache["settings"] = Settings.model_validate(merged)
             # Only pin the mtime on success: a partial-file read retries.

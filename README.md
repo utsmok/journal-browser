@@ -18,22 +18,29 @@ label follows the configured institution.
 1. Install Docker (Compose v2.24+).
 2. `cp .env.example .env` and set the institution levers — at minimum:
    `JB_INSTITUTION_NAME`, `JB_INSTITUTION_ROR`, `JB_PURE_OAI_BASE_URL`,
-   `JB_OPENAIRE_ORG_ID`, and `OPENALEX_API_KEY`.
-3. `docker compose up -d --build`.
-4. `docker compose logs -f bootstrap` — the first boot takes 1.5–2 hours
-   (fully automatic; the backend stays down until every step succeeds).
+   `JB_OPENAIRE_ORG_ID`, and `OPENALEX_API_KEY`. Set `JB_ADMIN_PASSWORD`
+   too; it unlocks the admin panel at `/admin` (empty leaves it disabled).
+3. Build and run the database, then the one-shot first-boot pipeline:
+   `docker compose up -d --build db bootstrap`. Follow it with
+   `docker compose logs -f bootstrap` — the first boot takes 1.5–2 hours
+   and is done when the bootstrap container exits 0.
+4. `docker compose up -d` starts the backend, scheduler, and frontend.
 5. Verify: `curl localhost:8000/api/v1/healthz`, then open
    `http://localhost:3000` — with one institution configured it redirects
    to its site (`/ut`); the deal register lists your institution's current
    NL deals with journal counts.
+
+Runtime settings live in `backend/state/settings.yaml`, seeded from
+`backend/settings.yaml.example` on first boot; the admin panel edits it
+live. The full reference — configuration, harvest internals, admin panel,
+maintenance — is [DEPLOYMENT.md](DEPLOYMENT.md).
 
 One deployment can serve several universities at `/{code}` paths (for
 example `/ut` and `/rug`) with a landing chooser at `/`; the shared layers
 (journal universe, NL deal register, APC evidence, quartiles, embeddings)
 are stored once. Onboarding a second university is one SQL `UPDATE` plus
 one harvest run — see "Adding a second institution" in
-[DEPLOYMENT.md](DEPLOYMENT.md). The full guide — configuration reference,
-harvest internals, admin panel, maintenance — lives there too.
+[DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Stack
 
