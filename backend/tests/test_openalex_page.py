@@ -46,7 +46,12 @@ async def test_seed_deal_journals_lands_raw_payloads(db):
     source_records, same as the sweep route."""
     from types import SimpleNamespace
 
-    from journal_browser.harvest.openalex_journals import seed_deal_journals
+    from aletheca.models import Source
+
+    from journal_browser.harvest.openalex_journals import (
+        openalex_id_to_pk,
+        seed_deal_journals,
+    )
     from journal_browser.models import Deal, DealJournal, HarvestRun, SourceRecord
 
     payload = {
@@ -58,7 +63,8 @@ async def test_seed_deal_journals_lands_raw_payloads(db):
 
     class FakeSources:
         async def batch_get(self, issns, field=None):
-            return {issns[0]: dict(payload)}
+            # aletheca 0.4 parses batch_get responses into typed models.
+            return {issns[0]: Source(**payload)}
 
     deal = Deal(status="current")
     db.add(deal)
@@ -76,7 +82,8 @@ async def test_seed_deal_journals_lands_raw_payloads(db):
             select(SourceRecord).where(
                 SourceRecord.source == "openalex",
                 SourceRecord.entity_type == "sources",
-                SourceRecord.source_pk == payload["id"],
+                # _payload_dict normalizes model dumps to bare OpenAlex ids.
+                SourceRecord.source_pk == openalex_id_to_pk(payload["id"]),
             )
         )
     ).scalar_one()
