@@ -35,6 +35,12 @@ function DocLink({ href, children }: { href: string; children: ReactNode }) {
     );
   }
   const external = /^https?:\/\//i.test(href);
+  // Admin-editable text: anything with a non-http(s) scheme (e.g.
+  // javascript:, data:) renders as plain text, never an anchor. Relative
+  // and scheme-less targets keep the plain-anchor fallback.
+  if (!external && !/^\//.test(href) && /^[a-z][a-z0-9+.-]*:/i.test(href)) {
+    return <span className={LINK_CLASS}>{children}</span>;
+  }
   return (
     <a
       href={href}

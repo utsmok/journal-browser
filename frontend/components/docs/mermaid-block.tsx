@@ -25,7 +25,7 @@ export function MermaidBlock({ code }: { code: string }) {
         // dependency that must stay out of every other route's bundle; load
         // it lazily, only when a page actually contains a diagram.
         const mermaid = (await import("mermaid")).default;
-        mermaid.initialize({ startOnLoad: false, theme: "default" });
+        mermaid.initialize({ startOnLoad: false, theme: "default", securityLevel: "strict" });
         const { svg } = await mermaid.render(`mmd-${Math.random().toString(36).slice(2)}`, code);
         if (!cancelled && ref.current) {
           ref.current.innerHTML = svg;
