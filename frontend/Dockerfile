@@ -1,9 +1,9 @@
-FROM node:22-alpine AS deps
+FROM node:22.22.0-alpine3.22 AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
-FROM node:22-alpine AS build
+FROM node:22.22.0-alpine3.22 AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -16,7 +16,7 @@ ARG NEXT_PUBLIC_SITE_URL=https://journalbrowser.samuelmok.cc
 ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
 RUN npm run build
 
-FROM node:22-alpine AS runner
+FROM node:22.22.0-alpine3.22 AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 # Production node_modules only; the deps stage keeps devDependencies for the build.
@@ -24,6 +24,9 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build --chown=node:node /app/.next ./.next
 COPY --from=build /app/next.config.mjs ./
+# Brand marks (logo.tsx references /ojb-wordmark.svg, /obj-monogram.svg);
+# `next start` serves public/ from disk, so the runner stage needs the copy.
+COPY --from=build /app/public ./public
 # uid 1000 `node` ships with the base image; the app never writes to /app at runtime.
 USER node
 EXPOSE 3000
