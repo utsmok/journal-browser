@@ -455,7 +455,7 @@ function SearchView() {
           />
         ),
         cell: (info) => {
-          const row = info.row.original as JournalListItem;
+          const row = info.row.original;
           if (row.apc_source === "openalex" && row.apc_price != null) {
             return (
               <span className="tabular-nums" title={t("table.listPriceTitle")}>
@@ -524,8 +524,7 @@ function SearchView() {
     [site, instShort, inst, update, year_from, year_to, t, pubTypeLabel],
   );
 
-  // Backend fields the generated types trail (see lib/api.ts).
-  const rows = (data?.items ?? []) as JournalListItem[];
+  const rows = data?.items ?? [];
   const table = useReactTable({
     data: rows,
     columns,

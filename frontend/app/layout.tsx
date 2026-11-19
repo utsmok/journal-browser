@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Montserrat } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
-import { getTranslations } from "next-intl/server";
+import { getMessages, getTranslations } from "next-intl/server";
 import "./globals.css";
 
 import { SiteFooter } from "@/components/site-footer";
@@ -75,6 +75,26 @@ function SiteHeader() {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const t = await getTranslations("common");
+  const all = await getMessages();
+  // Only the namespaces client components read via useTranslations ship to
+  // the browser; server pages keep reading every namespace through
+  // getTranslations, so the data-pipeline prose (the largest file) never
+  // reaches the client bundle.
+  const clientNamespaces = [
+    "common",
+    "home",
+    "search",
+    "journals",
+    "authors",
+    "orgunits",
+    "publishers",
+    "funders",
+    "deals",
+    "docs",
+    "about",
+    "admin",
+  ] as const;
+  const messages = Object.fromEntries(clientNamespaces.map((ns) => [ns, all[ns]]));
   return (
     <html lang="en" className={`${inter.variable} ${montserrat.variable}`} suppressHydrationWarning>
       <head>
@@ -88,7 +108,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           {t("skipToContent")}
         </a>
         <Providers siteFallback={SITE_FALLBACK}>
-          <NextIntlClientProvider>
+          <NextIntlClientProvider messages={messages}>
             <SiteHeader />
             <main id="main" className="flex-1">
               {children}

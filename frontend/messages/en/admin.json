@@ -43,7 +43,6 @@
   "copy": {
     "json": "Copy JSON",
     "copied": "Copied ✓",
-    "record": "Copy record",
     "clickToCopy": "Click to copy"
   },
 
@@ -172,7 +171,6 @@
     "statusRejected": "Rejected",
     "reviewer": "Reviewer",
     "reviewerPlaceholder": "your name (for the audit log)",
-    "loading": "loading…",
     "rowsCount": "{count, plural, one {# row} other {# rows}}",
     "pagerRows": "rows",
     "caption": "Author identity resolution rows",
@@ -208,7 +206,6 @@
     "statusMissing": "Missing",
     "reviewer": "Reviewer",
     "reviewerPlaceholder": "your name (for the audit log)",
-    "loading": "loading…",
     "rowsCount": "{count, plural, one {# row} other {# rows}}",
     "pagerRows": "rows",
     "caption": "Work identity resolution rows",
