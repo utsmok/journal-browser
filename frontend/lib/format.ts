@@ -5,6 +5,11 @@ export function formatEur(n: number): string {
   return Math.round(n).toLocaleString("en");
 }
 
+/** Grouped integer for table cells and counts ("1,269"). */
+export function formatInt(n: number): string {
+  return n.toLocaleString("en");
+}
+
 /** Admin/list datetimes: "2 Nov 2026, 18:34". Naive timestamps (no zone)
  * parse as local — same semantics every existing caller relied on. */
 export function formatDateTime(iso: string | null | undefined): string {

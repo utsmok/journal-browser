@@ -8,6 +8,7 @@
     "loadError": "The institution list is unavailable. Check that the backend is running.",
     "retry": "Retry",
     "intro": "Choose your institution to browse its journal deals and publication data.",
+    "valueLine": "Open data, open code: every number links to the open source it came from.",
     "coverageToPresent": "Coverage: {start} to present",
     "coverageSingleYear": "Coverage: {year}",
     "coverageRange": "Coverage: {start} to {end}"
@@ -17,7 +18,7 @@
     "intro": "Search journals to see whether they are covered by an open access deal, what publishing there costs, and how the {institution} publishes in them."
   },
   "search": {
-    "placeholder": "Search by title, ISSN, publisher, or topic",
+    "placeholder": "Search journals, ISSNs, publishers, or topics",
     "placeholderSemantic": "Describe your topic, or paste an abstract",
     "inputLabel": "Search journals",
     "scopeLabel": "Search scope",
@@ -40,7 +41,7 @@
     "journal": "Journal",
     "publisher": "Publisher",
     "works": "Works",
-    "citedness": "2yr cited",
+    "citedness": "Citations/yr (2y avg)",
     "quartile": "Q",
     "apc": "APC",
     "topic": "Topic",
@@ -73,7 +74,10 @@
     "filters": "No journals match these filters.",
     "plain": "No journals match.",
     "trySemantic": "Try match by meaning",
-    "clearFilters": "Clear filters"
+    "clearFilters": "Clear filters",
+    "crossHintLead": "Not a journal?",
+    "crossAuthors": "Search authors for “{query}”",
+    "crossFunders": "Search funders for “{query}”"
   },
   "error": {
     "retry": "Retry",

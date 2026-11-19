@@ -315,10 +315,10 @@ export const OA_STATUS_ORDER = ["gold", "hybrid", "green", "bronze", "diamond", 
 /** Work-level OA statuses; one color map shared by chips and the trend
  * chart. Display names live in the messages (trend.status*). */
 export const OA_STATUS_META: Record<string, { bar: string }> = {
-  gold: { bar: "bg-amber-400 dark:bg-amber-500" },
+  gold: { bar: "bg-(--oa-gold)" },
   hybrid: { bar: "bg-blue-400 dark:bg-blue-500" },
   green: { bar: "bg-green-600 dark:bg-green-500" },
-  bronze: { bar: "bg-orange-400 dark:bg-orange-500/80" },
+  bronze: { bar: "bg-(--oa-bronze)" },
   diamond: { bar: "bg-(--oa-diamond)" },
   closed: { bar: "bg-slate-300 dark:bg-slate-600" },
 };
@@ -348,7 +348,7 @@ const OA_STATUS_LOCKUP: Record<
   bronze: {
     label: "BRONZE",
     titleKey: "badges.statusBronzeTitle",
-    className: "text-orange-700 dark:text-orange-300",
+    className: "text-rose-700 dark:text-rose-300",
     width: 68,
     glyph: <BronzeGlyph />,
   },

@@ -9,20 +9,37 @@ import { NavLink } from "@/components/nav-link";
 import { instFromSegment } from "@/lib/global-segments";
 
 /** Nav links scoped to the current institution segment; the "All
- * universities" link reaches the global landing chooser from any uni page. */
+ * universities" link reaches the global landing chooser from any uni page.
+ * Without an institution segment (chooser, /data-pipeline) the nav stays
+ * minimal instead of disappearing: links wrap on phones rather than
+ * truncating in a scrollbar-hidden row. */
 export function SiteNav() {
   const t = useTranslations("common");
   const pathname = usePathname() ?? "/";
   const seg = pathname.split("/")[1] ?? "";
   const inst = instFromSegment(seg);
   const prefix = inst && `/${inst}`;
-  if (!prefix) return null;
+  if (!prefix) {
+    // The chooser is the nav target itself; other global pages (such as
+    // /data-pipeline) keep one visible way back.
+    if (pathname === "/") return null;
+    return (
+      <nav
+        aria-label={t("nav.mainLabel")}
+        className="order-last w-full text-sm sm:order-none sm:w-auto"
+      >
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 sm:gap-x-6">
+          <NavLink href="/" label={t("nav.allUniversities")} />
+        </div>
+      </nav>
+    );
+  }
   return (
     <nav
       aria-label={t("nav.mainLabel")}
       className="order-last w-full whitespace-nowrap text-sm sm:order-none sm:w-auto"
     >
-      <div className="flex items-center gap-4 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-6 sm:overflow-visible sm:pb-0">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 sm:gap-x-6">
         <NavLink href={`${prefix}/`} label={t("nav.search")} />
         <NavLink href={`${prefix}/deals`} label={t("nav.deals")} />
         <NavLink href={`${prefix}/funders`} label={t("nav.funders")} />

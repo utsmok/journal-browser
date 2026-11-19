@@ -46,7 +46,7 @@
     "oaTypes": {
       "gold": "Gold OA",
       "diamond": "Diamond OA",
-      "modelUnknown": "OA (model unknown)",
+      "modelUnknown": "OA status unknown",
       "hybrid": "Hybrid",
       "subscription": "Subscription (closed)"
     }

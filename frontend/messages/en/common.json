@@ -57,6 +57,7 @@
   },
 
   "states": {
+    "loadingDetails": "Loading details…",
     "loadingJournal": "Loading journal details…",
     "backToSearch": "Back to search"
   },
@@ -102,10 +103,14 @@
     "groupTopic": "Topic",
     "groupPublisher": "Publisher",
     "groupQuartile": "Quartile",
+    "optionCountTitle": "{count, plural, one {# filter option} other {# filter options}}",
+    "countPending": "Count is loading or unavailable",
+    "loadError": "Facet counts could not be loaded.",
+    "retry": "Retry",
 
     "oaTypeGold": "Gold OA",
     "oaTypeDiamond": "Diamond OA",
-    "oaTypeGeneric": "OA (model unknown)",
+    "oaTypeGeneric": "OA status unknown",
     "oaTypeHybrid": "Hybrid",
     "oaTypeSubscription": "Subscription (closed)",
     "greenOaSubmitted": "Submitted version",
@@ -303,6 +308,8 @@
     "journalBrowser": "Journal browser",
     "openAccessInfo": "Open Access info",
     "publisherPage": "Publisher page",
+    "publisherOaPage": "Publisher OA page",
+    "agreementSlides": "Agreement slides (PPTX)",
     "workflow": "Workflow"
   },
 

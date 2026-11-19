@@ -41,12 +41,16 @@
   --brand-tint-bg: color-mix(in srgb, var(--brand-tint) 10%, transparent);
   /* OA-access spectrum, shared by badges, facets, and chart bars.
      Lightness climbs with openness: closed → hybrid → generic → gold →
-     diamond. */
+     diamond. Bronze sits outside this ladder (a work-level status in the
+     trend chart); rose keeps it distinguishable from gold at the same
+     lightness, including for color-vision deficiency. */
   --oa-closed: #64748b;
   --oa-hybrid: #4d84c7;
   --oa-generic: #8f7ae5;
   --oa-gold: #f4aa2a;
   --oa-diamond: #4fe4f8;
+  /* #e11d48 on white is 4.7:1; gold (#f4aa2a) is hue 38, bronze hue ~350. */
+  --oa-bronze: #e11d48;
 }
 
 /* Dark palette: same tokens, hand-rolled (no next-themes). */
@@ -78,6 +82,8 @@
   --oa-generic: #a99af0;
   --oa-gold: #fbbf24;
   --oa-diamond: #67e8f9;
+  /* #fb7185 on the night card is 6.4:1. */
+  --oa-bronze: #fb7185;
 }
 
 @theme inline {

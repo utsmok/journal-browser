@@ -37,7 +37,7 @@ import {
   type JournalsSearchIn,
   type SortKey,
 } from "@/lib/api";
-import { apcAmount, apcStatsText, formatApc } from "@/lib/format";
+import { apcAmount, apcStatsText, formatApc, formatInt } from "@/lib/format";
 import { COLUMN_SORTS, PUB_TYPE_LABELS, SEARCH_IN_OPTIONS, SORTS } from "@/lib/search-config";
 
 const SEARCH_INPUT_ID = "journal-search";
@@ -253,7 +253,10 @@ function SearchView() {
   const { data, isPending, isFetching, isError, error, refetch } = useJournals(query, semantic);
   const facetsQuery = useFacets(query, { enabled: !semantic });
 
-  const facets = facetsQuery.data?.facets ?? {};
+  // Undefined while the first facets request loads, so the panel shows —
+  // instead of hard zeros; keepPreviousData keeps stale counts on refilter.
+  const facets = facetsQuery.isPending ? undefined : (facetsQuery.data?.facets ?? {});
+  const facetsError = facetsQuery.isError;
 
   const filterSelection = {
     deal,
@@ -407,7 +410,7 @@ function SearchView() {
             state={sortRef.current}
           />
         ),
-        cell: (info) => <span className="tabular-nums">{info.getValue<number>()}</span>,
+        cell: (info) => <span className="tabular-nums">{formatInt(info.getValue<number>())}</span>,
       },
       {
         accessorKey: "twoyr_mean_citedness",
@@ -618,7 +621,7 @@ function SearchView() {
               update({ q: input || undefined });
             }}
           >
-            <div className="relative w-full min-[560px]:w-auto min-[560px]:flex-1">
+            <div className="relative w-full min-[560px]:w-auto min-[560px]:flex-1 min-[960px]:min-w-[24rem]">
               <Input
                 id={SEARCH_INPUT_ID}
                 value={input}
@@ -687,6 +690,8 @@ function SearchView() {
               selection={filterSelection}
               onToggle={handleFacetToggle}
               variant="chips"
+              error={facetsError}
+              onRetry={() => facetsQuery.refetch()}
             />
           </section>
         )}
@@ -699,6 +704,8 @@ function SearchView() {
               selection={filterSelection}
               onToggle={handleFacetToggle}
               variant="rows"
+              error={facetsError}
+              onRetry={() => facetsQuery.refetch()}
             />
           </aside>
         )}
@@ -794,6 +801,26 @@ function SearchView() {
                         {t("empty.trySemantic")}
                       </Button>
                     </div>
+                  )}
+                  {/* A person or funder name is not a journal title; offer the
+                  searches that match that shape of query. */}
+                  {spQ && !hasNonQueryFilters && (
+                    <p className="mt-4 text-sm">
+                      {t("empty.crossHintLead")}{" "}
+                      <Link
+                        href={`/${inst}/author?q=${encodeURIComponent(spQ)}`}
+                        className="underline underline-offset-2 hover:text-[var(--foreground)]"
+                      >
+                        {t("empty.crossAuthors", { query: spQ })}
+                      </Link>
+                      {" · "}
+                      <Link
+                        href={`/${inst}/funders?q=${encodeURIComponent(spQ)}`}
+                        className="underline underline-offset-2 hover:text-[var(--foreground)]"
+                      >
+                        {t("empty.crossFunders", { query: spQ })}
+                      </Link>
+                    </p>
                   )}
                   {hasNonQueryFilters && (
                     <div className="mt-3">

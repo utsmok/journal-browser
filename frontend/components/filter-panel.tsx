@@ -325,10 +325,13 @@ function FacetGroup({
   group,
   onToggle,
   variant,
+  loading,
 }: {
   group: FacetGroupDef;
   onToggle: (key: string, value: string) => void;
   variant: "chips" | "rows";
+  /** Facets request in flight or failed: every option renders inert. */
+  loading?: boolean;
 }) {
   const site = useSiteMeta();
   const t = useTranslations("common");
@@ -345,6 +348,14 @@ function FacetGroup({
   const idleClasses = `${layout} border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:border-[var(--primary)] hover:text-[var(--foreground)] ${focus}`;
   const zeroClasses = `${layout} cursor-not-allowed border border-transparent opacity-60`;
 
+  // The group's own number is an option count, not a journal count; it only
+  // shows while options are selected (n/N), and the total lives in the hover
+  // text where it cannot be misread as data.
+  const hintParts = [groupHint(t, key, site.name, site.windowStart)];
+  if (!loading && values.length > 0)
+    hintParts.push(t("facets.optionCountTitle", { count: values.length }));
+  const summaryTitle = hintParts.filter(Boolean).join(" · ") || undefined;
+
   return (
     // open never changes value, so React leaves the native toggle alone.
     <details
@@ -354,14 +365,16 @@ function FacetGroup({
       aria-label={t("facets.filterBy", { label })}
     >
       <summary
-        title={groupHint(t, key, site.name, site.windowStart)}
+        title={summaryTitle}
         className={`${focus} flex cursor-pointer select-none list-none items-center justify-between gap-2 rounded py-1.5 text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] [&::-webkit-details-marker]:hidden`}
       >
         <span>{label}</span>
         <span className="flex items-center gap-1.5">
-          <span className="tabular-nums">
-            {activeValues.length > 0 ? `${activeValues.length}/${values.length}` : values.length}
-          </span>
+          {activeValues.length > 0 && (
+            <span className="tabular-nums">
+              {activeValues.length}/{values.length}
+            </span>
+          )}
           <ChevronDown
             aria-hidden
             className="size-3.5 shrink-0 transition-transform group-open:rotate-180"
@@ -400,12 +413,19 @@ function FacetGroup({
             </svg>
           ) : null;
           const labelText = f.label ?? f.value;
+          // An unknown count is never a zero: render the em dash so a slow
+          // facets request or an uncounted active value cannot read as
+          // "no journals".
           const countNode =
-            f.count !== undefined ? (
+            f.count === undefined ? (
+              <span className="shrink-0 tabular-nums opacity-70" title={t("facets.countPending")}>
+                —
+              </span>
+            ) : (
               <span className={`shrink-0 tabular-nums ${chips ? "ml-0.5 opacity-80" : ""}`}>
                 {f.count.toLocaleString("en")}
               </span>
-            ) : null;
+            );
           const inner = chips ? (
             <>
               {iconNode}
@@ -432,6 +452,8 @@ function FacetGroup({
             <button
               key={f.value}
               type="button"
+              disabled={loading}
+              aria-disabled={loading || undefined}
               onClick={() => onToggle(key, f.value)}
               aria-pressed={active}
               title={optionTitle}
@@ -451,15 +473,23 @@ export function FacetGroupList({
   groups,
   onToggle,
   variant,
+  loading,
 }: {
   groups: FacetGroupDef[];
   onToggle: (key: string, value: string) => void;
   variant: "chips" | "rows";
+  loading?: boolean;
 }) {
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-2.5" aria-busy={loading || undefined}>
       {groups.map((group) => (
-        <FacetGroup key={group.key} group={group} onToggle={onToggle} variant={variant} />
+        <FacetGroup
+          key={group.key}
+          group={group}
+          onToggle={onToggle}
+          variant={variant}
+          loading={loading}
+        />
       ))}
     </div>
   );
@@ -474,49 +504,76 @@ export function FilterPanel({
   selection,
   onToggle,
   variant,
+  error,
+  onRetry,
 }: {
-  facets: FacetsData;
+  /** Undefined while the facets request is in flight: groups render with
+   * their known options and em-dash counts, all inert. */
+  facets: FacetsData | undefined;
   selection: FilterSelection;
   onToggle: (key: string, value: string) => void;
   variant: "chips" | "rows";
+  /** The facets request failed; a retry note renders above the groups. */
+  error?: boolean;
+  onRetry?: () => void;
 }) {
   const site = useSiteMeta();
   const t = useTranslations("common");
   const ts = useTranslations("search");
-  const topicValues = topValues(facets.topic, selection.topic);
-  const publisherValues = topValues(facets.publisher, selection.publisher);
+  const loading = facets === undefined;
+  const topicValues = topValues(facets?.topic, selection.topic);
+  const publisherValues = topValues(facets?.publisher, selection.publisher);
+
+  // Options with a fixed value list render even before the facets request
+  // returns, so the panel keeps its shape and shows — instead of 0.
+  const boolSeed = (): FacetValue[] => ["true", "false"].map((value) => ({ value }));
 
   const groups: FacetGroupDef[] = [
     {
       key: "pub_type",
       label: t("facets.groupVenueType"),
       defaultOpen: true,
-      values: topValues(facets.pub_type, selection.pubType).map((v) => ({
-        ...v,
-        label: PUB_TYPE_LABELS[v.value] ? ts(PUB_TYPE_LABELS[v.value]) : v.value,
-      })),
+      values: loading
+        ? Object.keys(PUB_TYPE_LABELS).map((value) => ({
+            value,
+            label: ts(PUB_TYPE_LABELS[value]),
+          }))
+        : topValues(facets?.pub_type, selection.pubType).map((v) => ({
+            ...v,
+            label: PUB_TYPE_LABELS[v.value] ? ts(PUB_TYPE_LABELS[v.value]) : v.value,
+          })),
       activeValues: selection.pubType ? [selection.pubType] : [],
     },
     {
       key: "deal",
       label: t("facets.groupDeal"),
       defaultOpen: true,
-      values: Object.entries(facets.deal_coverage ?? {}).map(([value, count]) => ({
-        value,
-        count,
-        label: value === "covered" ? t("facets.dealCovered") : t("facets.dealNone"),
-      })),
+      values: loading
+        ? ["covered", "not_covered"].map((value) => ({
+            value,
+            label: value === "covered" ? t("facets.dealCovered") : t("facets.dealNone"),
+          }))
+        : Object.entries(facets?.deal_coverage ?? {}).map(([value, count]) => ({
+            value,
+            count,
+            label: value === "covered" ? t("facets.dealCovered") : t("facets.dealNone"),
+          })),
       activeValues: selection.deal ? [selection.deal] : [],
     },
     {
       key: "oa",
       label: t("facets.groupOpenAccess"),
       defaultOpen: true,
-      values: Object.entries(facets.oa ?? {}).map(([value, count]) => ({
-        value,
-        count,
-        label: value === "true" ? t("facets.oaYes") : t("facets.oaNo"),
-      })),
+      values: loading
+        ? boolSeed().map((v) => ({
+            ...v,
+            label: v.value === "true" ? t("facets.oaYes") : t("facets.oaNo"),
+          }))
+        : Object.entries(facets?.oa ?? {}).map(([value, count]) => ({
+            value,
+            count,
+            label: value === "true" ? t("facets.oaYes") : t("facets.oaNo"),
+          })),
       activeValues: selection.oa !== null ? [selection.oa] : [],
     },
     {
@@ -525,7 +582,7 @@ export function FilterPanel({
       defaultOpen: true,
       values: ["diamond", "gold", "hybrid", "generic", "subscription"].map((v) => ({
         value: v,
-        count: facets.oa_type?.[v] ?? 0,
+        count: facets?.oa_type?.[v],
         label: OA_TYPE_LABEL_KEYS[v] ? t(OA_TYPE_LABEL_KEYS[v]) : v,
       })),
       // Multi-select: this group ORs values; the caller keeps every
@@ -536,7 +593,7 @@ export function FilterPanel({
       key: "language",
       label: t("facets.groupLanguage"),
       defaultOpen: true,
-      values: topValues(facets.language, selection.language).map((v) => ({
+      values: topValues(facets?.language, selection.language).map((v) => ({
         ...v,
         label: ts.has(`languages.${v.value}`) ? ts(`languages.${v.value}`) : v.value,
       })),
@@ -546,22 +603,32 @@ export function FilterPanel({
       key: "doaj",
       label: t("facets.groupDoaj"),
       defaultOpen: true,
-      values: Object.entries(facets.doaj ?? {}).map(([value, count]) => ({
-        value,
-        count,
-        label: value === "true" ? t("facets.doajYes") : t("facets.doajNo"),
-      })),
+      values: loading
+        ? boolSeed().map((v) => ({
+            ...v,
+            label: v.value === "true" ? t("facets.doajYes") : t("facets.doajNo"),
+          }))
+        : Object.entries(facets?.doaj ?? {}).map(([value, count]) => ({
+            value,
+            count,
+            label: value === "true" ? t("facets.doajYes") : t("facets.doajNo"),
+          })),
       activeValues: selection.doaj !== null ? [selection.doaj] : [],
     },
     {
       key: "has_apc",
       label: t("facets.groupApc"),
       defaultOpen: true,
-      values: Object.entries(facets.apc ?? {}).map(([value, count]) => ({
-        value,
-        count,
-        label: value === "true" ? t("facets.apcKnown") : t("facets.apcUnknown"),
-      })),
+      values: loading
+        ? boolSeed().map((v) => ({
+            ...v,
+            label: v.value === "true" ? t("facets.apcKnown") : t("facets.apcUnknown"),
+          }))
+        : Object.entries(facets?.apc ?? {}).map(([value, count]) => ({
+            value,
+            count,
+            label: value === "true" ? t("facets.apcKnown") : t("facets.apcUnknown"),
+          })),
       activeValues: selection.hasApc !== null ? [selection.hasApc] : [],
     },
     {
@@ -570,7 +637,7 @@ export function FilterPanel({
       defaultOpen: true,
       values: ["submitted", "accepted", "published", "none"].map((v) => ({
         value: v,
-        count: facets.green_oa?.[v] ?? 0,
+        count: facets?.green_oa?.[v],
         label: GREEN_OA_LABEL_KEYS[v] ? t(GREEN_OA_LABEL_KEYS[v]) : v,
       })),
       activeValues: selection.greenOa ? [selection.greenOa] : [],
@@ -579,19 +646,27 @@ export function FilterPanel({
       key: "has_works",
       label: t("facets.groupInstWorks", { short: site.short }),
       defaultOpen: true,
-      values: Object.entries(facets.works ?? {}).map(([value, count]) => ({
-        value,
-        count,
-        label:
-          value === "true"
-            ? t("facets.instWorksYes", { short: site.short })
-            : t("facets.instWorksNo", { short: site.short }),
-      })),
+      values: loading
+        ? boolSeed().map((v) => ({
+            ...v,
+            label:
+              v.value === "true"
+                ? t("facets.instWorksYes", { short: site.short })
+                : t("facets.instWorksNo", { short: site.short }),
+          }))
+        : Object.entries(facets?.works ?? {}).map(([value, count]) => ({
+            value,
+            count,
+            label:
+              value === "true"
+                ? t("facets.instWorksYes", { short: site.short })
+                : t("facets.instWorksNo", { short: site.short }),
+          })),
       activeValues: selection.hasWorks !== null ? [selection.hasWorks] : [],
     },
     // Only rendered when a funder is selected and its policy is structured
     // (the backend omits the facet otherwise).
-    ...(facets.funder_fit
+    ...(facets?.funder_fit
       ? [
           {
             key: "funder_fit",
@@ -599,7 +674,7 @@ export function FilterPanel({
             defaultOpen: true,
             values: ["compliant", "check", "no"].map((v) => ({
               value: v,
-              count: facets.funder_fit?.[v] ?? 0,
+              count: facets.funder_fit?.[v],
               label:
                 v === "compliant"
                   ? t("facets.funderFitCompliant")
@@ -641,11 +716,32 @@ export function FilterPanel({
       defaultOpen: true,
       values: ["Q1", "Q2", "Q3", "Q4"].map((q) => ({
         value: q,
-        count: facets.quartile?.[q] ?? 0,
+        count: facets?.quartile?.[q],
       })),
       activeValues: selection.quartile ? [selection.quartile] : [],
     },
   ];
 
-  return <FacetGroupList groups={groups} onToggle={onToggle} variant={variant} />;
+  return (
+    <div className="space-y-3">
+      {error && (
+        <div
+          role="status"
+          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--muted)] px-3 py-2 text-xs text-[var(--muted-foreground)]"
+        >
+          <span>{t("facets.loadError")}</span>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="rounded font-medium text-[var(--primary-text)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
+            >
+              {t("facets.retry")}
+            </button>
+          )}
+        </div>
+      )}
+      <FacetGroupList groups={groups} onToggle={onToggle} variant={variant} loading={loading} />
+    </div>
+  );
 }

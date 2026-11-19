@@ -34,7 +34,7 @@ export function OaTrend({ stats }: { stats: StatsYear[] }) {
         role="img"
         aria-label={t("trend.chartLabel", { short: site.short })}
       >
-        {stats.map((s) => {
+        {stats.map((s, i) => {
           const count = total(s);
           return (
             <div
@@ -68,7 +68,11 @@ export function OaTrend({ stats }: { stats: StatsYear[] }) {
                   );
                 })}
               </div>
-              <span className="max-w-full overflow-hidden text-[11px] tabular-nums text-[var(--muted-foreground)]">
+              {/* Every other year on phones: sixteen 4-digit labels do not
+              fit 390px without wrapping per glyph. */}
+              <span
+                className={`max-w-full overflow-hidden text-[11px] tabular-nums text-[var(--muted-foreground)] ${i % 2 === 1 ? "max-sm:hidden" : ""}`}
+              >
                 {s.year}
                 {s.year === currentYear && <span title={t("trend.yearInProgress")}>*</span>}
               </span>
