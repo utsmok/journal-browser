@@ -22,19 +22,22 @@ cd "$(dirname "$0")/.."
 
 # Stage names match the backend/jobs/ scripts so --from takes a job name.
 STAGES=(
-  # Credit-priced sweeps, while the daily budget is fresh (see header).
+  # Credit-priced sweep, while the daily budget is fresh (see header).
   harvest_stats
+  # Store rebuild + backfills before author resolution: the resolver reads
+  # openalex_work_authors and work_pure_authors, which the first two stages
+  # rewrite (bootstrap DAG: author-ids depends on openalex-works and
+  # pure-authors).
+  build_openalex_works
+  backfill_parts
+  backfill_pure_authors
   resolve_author_ids
   # Local projection right after identity resolution: publishes confirmed
   # author identities to the served roster; no API calls.
   ingest_authors
-  # Local derivation from stored data, no API calls.
+  # Local derivation from stored data, no API calls; reads works.oa_status,
+  # which build_openalex_works re-synced above.
   harvest_oa_colors
-  build_openalex_works
-  # Part-of backfill for OpenAlex Graph v12 payloads; free single-entity
-  # GETs, resumable, idempotent.
-  backfill_parts
-  backfill_pure_authors
   # Funder backfills: free single-entity GETs, then OpenAIRE.
   harvest_work_funders
   harvest_openalex_funders
