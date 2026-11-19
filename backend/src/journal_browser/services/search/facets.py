@@ -56,7 +56,7 @@ async def facet_counts(
     Only facets with an active own filter cost a second variant pass."""
     # Unfiltered browse facets are identical for every visitor until the next
     # harvest, so cache them briefly; ~0.6s of aggregates per landing view was
-    # the hot path. Bounded staleness (5 min) after a harvest is acceptable.
+    # the hot path. Bounded staleness (the 86400 s TTL below) after a harvest is acceptable.
     cacheable = not any(
         [
             q,

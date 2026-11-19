@@ -30,27 +30,35 @@ export function OpenaireCard({
       }
       contentClassName="space-y-4 text-sm"
     >
+      {/* The OpenAIRE usage counts exist for a small share of works; a 0
+          means "no data", so those tiles stay hidden instead of showing 0. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Metric
           label={t("metrics.openaireLabel")}
           hint={t("metrics.openaireHint", { name: site.name })}
           value={openaire.matched_works.toLocaleString("en")}
         />
-        <Metric
-          label={t("openaire.fulltextLabel")}
-          hint={t("openaire.fulltextHint")}
-          value={openaire.with_fulltext.toLocaleString("en")}
-        />
-        <Metric
-          label={t("openaire.usageLabel")}
-          hint={t("openaire.usageHint")}
-          value={openaire.with_usage.toLocaleString("en")}
-        />
-        <Metric
-          label={t("openaire.diamondLabel")}
-          hint={t("openaire.diamondHint")}
-          value={openaire.diamond_works.toLocaleString("en")}
-        />
+        {openaire.with_fulltext > 0 && (
+          <Metric
+            label={t("openaire.fulltextLabel")}
+            hint={t("openaire.fulltextHint")}
+            value={openaire.with_fulltext.toLocaleString("en")}
+          />
+        )}
+        {openaire.with_usage > 0 && (
+          <Metric
+            label={t("openaire.usageLabel")}
+            hint={t("openaire.usageHint")}
+            value={openaire.with_usage.toLocaleString("en")}
+          />
+        )}
+        {openaire.diamond_works > 0 && (
+          <Metric
+            label={t("openaire.diamondLabel")}
+            hint={t("openaire.diamondHint")}
+            value={openaire.diamond_works.toLocaleString("en")}
+          />
+        )}
       </div>
       {openaire.oa_color_total > 0 && (
         <p className="text-xs text-[var(--muted-foreground)]">

@@ -18,12 +18,6 @@ FieldSection = Literal["global", "institution"]
 FieldType = Literal["string", "number", "bool", "secret", "list"]
 
 _MASK = "********"
-_SECRETS = (
-    "admin_password",
-    "openalex_api_key",
-    "jisc_api_key",
-    "ut_metadata_dsn",
-)
 
 
 class FieldDef(BaseModel):
@@ -85,7 +79,7 @@ SETTINGS_REGISTRY: list[FieldDef] = [
         "global",
         "secret",
         "JISC API key",
-        "Credentials for the JISC integration (feature currently off).",
+        "Credentials for the Jisc Open Policy Finder sweeps.",
     ),
     _f(
         "contact_email",

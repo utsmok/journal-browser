@@ -2,8 +2,8 @@
 
 Read-only discovery + a dependency-free block parser: the frontend renders
 individual blocks so the admin can override any single one (doc_edits table;
-see routers/docs.py for the public GETs and routers/admin.py for the edit
-endpoints). A missing/unreadable docs dir degrades to an empty list / 404 —
+see routers/docs.py for the public GETs and the routers/admin/docs.py
+module for the edit endpoints). A missing/unreadable docs dir degrades to an empty list / 404 —
 docs are a nice-to-have, never a hard dependency.
 """
 

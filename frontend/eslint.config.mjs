@@ -10,13 +10,17 @@ const eslintConfig = [
         "error",
         { varsIgnorePattern: "^_", argsIgnorePattern: "^_" },
       ],
-      // react-hooks v7 (via eslint-config-next 16) added these rules; the
-      // existing effect-based data fetching predates them. Warnings only so
-      // the upgrade does not force a rewrite of fetching hooks.
-      "react-hooks/set-state-in-effect": "warn",
-      "react-hooks/refs": "warn",
-      "react-hooks/incompatible-library": "warn",
-      "react-hooks/static-components": "warn",
+      // react-hooks v7 (via eslint-config-next 16) added these rules.
+      // set-state-in-effect: every site is mount-time hydration from
+      // sessionStorage/localStorage (guarded so server and client render
+      // match) or a deliberate prop-change reset; the sanctioned
+      // useSyncExternalStore rewrite is deferred until after the demo.
+      "react-hooks/set-state-in-effect": "off",
+      // incompatible-library: TanStack Table's useReactTable intentionally
+      // returns non-memoizable getters; the compiler skips the component,
+      // and the search table is the only call site. refs and
+      // static-components had no remaining sites, so their defaults apply.
+      "react-hooks/incompatible-library": "off",
     },
   },
 ];

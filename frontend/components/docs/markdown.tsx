@@ -85,11 +85,6 @@ export function renderInline(text: string): ReactNode[] {
 
 // --- Block rendering -------------------------------------------------------
 
-function headingTag(level: number): "h2" | "h3" | "h4" {
-  // h1 is the doc title in the masthead; deeper levels clamp at h4.
-  return level >= 4 ? "h4" : level === 3 ? "h3" : "h2";
-}
-
 function listItems(text: string): { ordered: boolean; items: string[] } {
   const lines = text.split("\n").filter((l) => l.trim());
   const ordered = /^\s*\d+[.)]\s/.test(lines[0] ?? "");
@@ -120,11 +115,23 @@ export function BlockContent({ block }: { block: DocBlock }) {
       // Level 1 is the doc title; the masthead band already renders it.
       if (level === 1) return null;
       const text = block.text.replace(/^#{1,6}\s+/, "");
-      const Tag = headingTag(level);
-      return (
-        <Tag id={slugifyHeading(text)} className="scroll-mt-20 pt-4 font-bold">
-          {renderInline(text)}
-        </Tag>
+      const cls = "scroll-mt-20 pt-4 font-bold";
+      const id = slugifyHeading(text);
+      const inner = renderInline(text);
+      // Explicit branches: a component picked during render is static-
+      // components warning bait, and the levels are a closed set.
+      return level === 2 ? (
+        <h2 id={id} className={cls}>
+          {inner}
+        </h2>
+      ) : level === 3 ? (
+        <h3 id={id} className={cls}>
+          {inner}
+        </h3>
+      ) : (
+        <h4 id={id} className={cls}>
+          {inner}
+        </h4>
       );
     }
     case "paragraph":

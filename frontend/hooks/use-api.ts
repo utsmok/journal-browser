@@ -56,14 +56,16 @@ const qk = {
  * stale and discarded instead of feeding the current view.
  */
 function useFetchEpoch(params: JournalSearchParams) {
-  const epoch = React.useRef(0);
   const key = JSON.stringify(params);
-  const prev = React.useRef(key);
-  if (prev.current !== key) {
-    prev.current = key;
-    epoch.current += 1;
+  // Adjusting state during render (React's sanctioned "derive state from
+  // the previous props" pattern): a params change bumps the epoch without
+  // a committed extra render. A ref write here would also mutate on
+  // renders React later throws away.
+  const [state, setState] = React.useState({ key, epoch: 0 });
+  if (state.key !== key) {
+    setState({ key, epoch: state.epoch + 1 });
   }
-  return epoch;
+  return state.epoch;
 }
 
 /** Filter keys stored on a usage search event; paging/sort keys dropped. */
@@ -99,7 +101,7 @@ export function useJournals(params: JournalSearchParams, semantic?: boolean) {
   return useQuery({
     queryKey: [...qk.journals(inst, params), semantic ? "semantic" : "fts"] as const,
     queryFn: async () => {
-      const at = epoch.current;
+      const at = epoch;
       const startedAt = Date.now();
       const data = semantic
         ? // Free-text "journals like this description": embeddings, not FTS.
@@ -113,7 +115,7 @@ export function useJournals(params: JournalSearchParams, semantic?: boolean) {
         : await apiGet<JournalSearchResponse>(`/${inst}/journals`, {
             ...params,
           });
-      if (at !== epoch.current) throw new Error("stale fetch discarded");
+      if (at !== epoch) throw new Error("stale fetch discarded");
       trackSearch({
         query: params.q ?? "",
         results_count: data.total,
