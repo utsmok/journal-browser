@@ -1,3 +1,4 @@
+import json
 import warnings
 from typing import Any
 
@@ -54,35 +55,42 @@ async def facet_counts(
     the base twice, and the topic explode keeps its own statement because
     expanding ~130k topic arrays costs more than every other facet combined.
     Only facets with an active own filter cost a second variant pass."""
-    # Unfiltered browse facets are identical for every visitor until the next
-    # harvest, so cache them briefly; ~0.6s of aggregates per landing view was
-    # the hot path. Bounded staleness (the 86400 s TTL below) after a harvest is acceptable.
-    cacheable = not any(
-        [
-            q,
-            oa,
-            doaj,
-            quartile,
-            topic,
-            publisher,
-            has_apc is not None,
-            has_works is not None,
-            oa_types,
-            green_oa,
-            pub_type,
-            languages,
-            deal != "any",
-            search_in != "all",
-            funder_struct is not None,
-            funder_fit_value is not None,
-        ]
-    )
-    # The ignore-list and the harvest epoch shape the counts; either change
-    # invalidates immediately instead of serving stale facets for 24h.
+    # Cache every facet set, not just the landing view: a fresh filtered
+    # key costs ~1.5 s of aggregates per click. The harvest epoch sits in
+    # the key, so a harvest invalidates every entry immediately; the
+    # shorter TTL on filtered keys only bounds memory growth from
+    # arbitrary q/filter combinations (the corpus itself is read-mostly
+    # between harvests).
     # Deferred get_settings keeps the search-module monkeypatch seam
     # (tests/test_admin_deals.py) live.
     from journal_browser.services import search
 
+    filtered_sig = tuple(
+        sorted(
+            (
+                ("q", q or None),
+                ("search_in", search_in if search_in != "all" else None),
+                ("deal", deal if deal != "any" else None),
+                ("oa", oa),
+                ("doaj", doaj),
+                ("quartile", quartile),
+                ("topic", topic),
+                ("publisher", publisher),
+                ("has_apc", has_apc),
+                ("has_works", has_works),
+                ("oa_types", tuple(sorted(oa_types)) if oa_types else None),
+                ("green_oa", str(green_oa) if green_oa is not None else None),
+                ("pub_type", pub_type),
+                ("languages", tuple(sorted(languages)) if languages else None),
+                (
+                    "funder_struct",
+                    json.dumps(funder_struct, sort_keys=True) if funder_struct else None,
+                ),
+                ("funder_fit_value", funder_fit_value),
+            )
+        )
+    )
+    is_default_view = all(v is None for _, v in filtered_sig)
     # An active publication-year range joins the key (inactive: (None, None)
     # leaves the landing-view key untouched); the router clamps both bounds
     # to the institution window, so the pair fully identifies the counts.
@@ -93,11 +101,11 @@ async def facet_counts(
         await cache_epoch(session),
         year_from,
         year_to,
+        None if is_default_view else filtered_sig,
     )
-    if cacheable:
-        hit = cache_get(FACET_CACHE, cache_key, 86400)
-        if hit is not None:
-            return hit
+    hit = cache_get(FACET_CACHE, cache_key, 86400 if is_default_view else 3600)
+    if hit is not None:
+        return hit
     defaults = {
         "institution_id": institution_id,
         "q": q,
@@ -401,6 +409,5 @@ async def facet_counts(
             )
         ).scalar_one()
         facets["funder_fit"] = dict(counts or {})
-    if cacheable:
-        cache_put(FACET_CACHE, cache_key, (facets, total))
+    cache_put(FACET_CACHE, cache_key, (facets, total))
     return facets, total
