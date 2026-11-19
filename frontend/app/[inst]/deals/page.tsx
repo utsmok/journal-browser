@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, CircleCheck, CircleX, ExternalLink } from "lucide-react";
+import { ChevronDown, CircleCheck, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
@@ -21,19 +21,23 @@ import { dealLinkLabel, displayPublisherName, orderedDealLinks } from "@/lib/dea
 import { formatApc, formatEur } from "@/lib/format";
 import { cleanProse } from "@/lib/utils";
 
-/** One card line for a condition the deal either has or not. */
-function ConditionLine({ ok, label }: { ok: boolean; label: string }) {
+/** One card line for a condition the deal has. False conditions never
+ * render as ✗: a skimming reader parses "Corresponding authors only — ✗"
+ * as a broken deal. Callers either omit them or reword positively. */
+function ConditionLine({ label }: { label: string }) {
   const t = useTranslations("deals");
-  const Icon = ok ? CircleCheck : CircleX;
   return (
-    <span
-      className={`inline-flex items-center gap-1 ${ok ? "" : "text-[var(--muted-foreground)]"}`}
-      title={ok ? t("condition.applies") : t("condition.doesNotApply")}
-    >
-      <Icon aria-hidden className="size-3.5" />
+    <span className="inline-flex items-center gap-1" title={t("condition.applies")}>
+      <CircleCheck aria-hidden className="size-3.5 text-emerald-700 dark:text-emerald-400" />
       {label}
     </span>
   );
+}
+
+/** Whitespace-collapsed form, for comparing scraped text that differs
+ * only in line breaks and doubled spaces. */
+function normalizeProse(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
 }
 
 /** First sentence or two of the scraped summary, for the card description. */
@@ -133,24 +137,35 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
         {latestCap && (
           <span>{t("card.capUsage", { year: latestCap[0], count: Number(latestCap[1]) })}</span>
         )}
-        {deal.apc_n > 0 && (
+        {/* OpenAPC records without a euro amount must not read as €0. */}
+        {deal.apc_n > 0 && deal.apc_euro_total > 0 && (
           <span>{t("card.apcTotal", { total: formatEur(deal.apc_euro_total) })}</span>
         )}
-        {deal.apc_n > 1 && (
+        {deal.apc_n > 0 && deal.apc_euro_total > 0 && deal.apc_n > 1 && (
           <span>{t("card.apcMean", { mean: formatApc(deal.apc_euro_total / deal.apc_n) })}</span>
+        )}
+        {deal.apc_n > 0 && deal.apc_euro_total === 0 && (
+          <span title={t("card.noCostDataTitle", { count: deal.apc_n })}>
+            {t("card.noCostData")}
+          </span>
         )}
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-        <ConditionLine
-          ok={deal.corresponding_authors_only === true}
-          label={t("condition.correspondingOnly")}
-        />
-        <ConditionLine
-          ok={Boolean(deal.cap_text || capNumbers.length > 0)}
-          label={t("condition.capped")}
-        />
+        {deal.corresponding_authors_only === true && (
+          <ConditionLine label={t("condition.correspondingOnly")} />
+        )}
+        {deal.corresponding_authors_only === false && (
+          <ConditionLine label={t("condition.openToAll")} />
+        )}
+        {Boolean(deal.cap_text || capNumbers.length > 0) && (
+          <ConditionLine label={t("condition.capped")} />
+        )}
       </div>
-      {summary && summary !== preview && <p className="max-w-prose text-pretty">{summary}</p>}
+      {/* The scraped summary often restates the preview with different
+      whitespace; only render the full text when it adds real content. */}
+      {summary && preview && !normalizeProse(summary).startsWith(normalizeProse(preview)) && (
+        <p className="max-w-prose text-pretty">{summary}</p>
+      )}
       {deal.cap_text && (
         <p className="max-w-prose text-pretty">
           <span className="font-medium">{t("card.capsLabel")} </span>

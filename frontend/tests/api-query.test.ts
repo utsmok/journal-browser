@@ -16,7 +16,7 @@ describe("fetchAuthors query building", () => {
       "smith",
       { faculty: ["fw", "et"], topic: ["a"] },
       {
-        sort: "name",
+        sort: "name_asc",
         year_from: 2020,
         year_to: 2025,
         limit: 10,
@@ -29,7 +29,7 @@ describe("fetchAuthors query building", () => {
     expect(qs.get("q")).toBe("smith");
     expect(qs.get("faculty")).toBe("fw|et");
     expect(qs.get("topic")).toBe("a");
-    expect(qs.get("sort")).toBe("name");
+    expect(qs.get("sort")).toBe("name_asc");
     expect(qs.get("year_from")).toBe("2020");
     expect(qs.get("year_to")).toBe("2025");
     expect(qs.get("limit")).toBe("10");

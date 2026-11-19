@@ -3,6 +3,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { SourceNote } from "@/components/source-note";
@@ -57,12 +58,15 @@ function FunderRow({ funder, inst }: { funder: FunderListItem; inst: string }) {
   );
 }
 
-export default function FundersPage() {
+function FundersPageInner() {
   const t = useTranslations("funders");
   const tc = useTranslations("common");
   const inst = useInstitution();
   const site = useSiteMeta();
-  const [input, setInput] = React.useState("");
+  const sp = useSearchParams();
+  // ?q= pre-fills the box so cross-links from the journal search ("search
+  // funders for …") land on a running query instead of an empty input.
+  const [input, setInput] = React.useState(() => sp.get("q") ?? "");
   const q = useDebounced(input.trim(), 250);
   const [offset, setOffset] = React.useState(0);
   // A new search restarts at the first page.
@@ -154,5 +158,14 @@ export default function FundersPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+/** useSearchParams needs a Suspense boundary during prerender. */
+export default function FundersPage() {
+  return (
+    <React.Suspense fallback={null}>
+      <FundersPageInner />
+    </React.Suspense>
   );
 }

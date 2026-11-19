@@ -19,13 +19,16 @@ const DEAL_LINK_KEYS = Object.fromEntries(
   DEAL_LINK_ORDER.map(({ category, labelKey }) => [category, labelKey]),
 ) as Record<string, string>;
 
-/** Scraped text sometimes leaks the raw category token ("workflow", "info"). */
+/** Scraped text sometimes leaks the raw category token ("workflow", "info")
+ * or a useless generic label ("Powerpoint", "Website"). */
 const TEXT_ALIASES: Record<string, string> = {
   workflow: "dealLinks.workflow",
   contract: "dealLinks.contract",
   contact: "dealLinks.contact",
   info: "dealLinks.information",
   other: "dealLinks.information",
+  powerpoint: "dealLinks.agreementSlides",
+  website: "dealLinks.publisherOaPage",
 };
 
 function cleanLabel(t: LabelT, link: DealLink) {

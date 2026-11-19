@@ -19,8 +19,8 @@
   },
   "condition": {
     "applies": "Applies to this deal",
-    "doesNotApply": "Does not apply to this deal",
     "correspondingOnly": "Corresponding authors only",
+    "openToAll": "Open to all authors",
     "capped": "Discounted articles capped"
   },
   "card": {
@@ -36,6 +36,8 @@
     "capUsage": "Cap usage {year}: {count, number}",
     "apcTotal": "{total} in APC fees",
     "apcMean": "mean {mean}",
+    "noCostData": "No cost data",
+    "noCostDataTitle": "{count, plural, one {# APC record} other {# APC records}} report no amount in euros.",
     "conditions": "Conditions",
     "workflow": "Workflow",
     "articleTypes": "Article types",
