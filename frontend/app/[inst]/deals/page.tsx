@@ -199,7 +199,7 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
         {!archived && (
           <Link
-            href={`/${inst}/journals?deal=covered`}
+            href={`/${inst}?deal=covered`}
             className="inline-flex items-center gap-1 text-[var(--primary-text)] hover:underline"
           >
             {t("card.coveredJournals")}
