@@ -32,7 +32,10 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=8.3",
-    "pytest-asyncio>=0.24",
+    # <1.5: 1.5.0's auto-mode fixture binding runs async fixtures on a
+    # pytest-asyncio loop while anyio-marked tests run on anyio's own loop,
+    # so asyncpg futures cross event loops (tests/test_meta.py).
+    "pytest-asyncio>=0.24,<1.5",
     "ruff>=0.17.1",
     "ty>=0.0.95,<0.0.96",
 ]
