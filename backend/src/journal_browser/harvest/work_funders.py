@@ -13,6 +13,7 @@ convention, so an interrupted run simply resumes as a rerun.
 import logging
 from collections import defaultdict
 from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from aletheca import AlethecaClient
@@ -98,27 +99,55 @@ async def _prune(session: AsyncSession, works: Sequence[Any], rows: list[dict[st
     return int(getattr(result, "rowcount", 0) or 0)
 
 
-async def harvest_work_funders(session: AsyncSession) -> dict[str, Any]:
-    """Upsert work_funders from OpenAlex awards for every work with a
-    DOI. Idempotent full refresh; stats name the sweep's shape. Fetched
-    work payloads land verbatim in source_records via IngestSession
-    (deduped by content hash, merged W-ids included)."""
+async def harvest_work_funders(session: AsyncSession, *, ttl_days: int = 30) -> dict[str, Any]:
+    """Upsert work_funders from OpenAlex awards for works with a DOI whose
+    funders state is stale. A work counts as fresh when any of its
+    work_funders rows was harvested within ``ttl_days`` (the upsert
+    re-stamps ``harvested_at`` on every fetch); fresh works are skipped
+    instead of re-fetched each run. Works OpenAlex reports without awards
+    carry no rows and so stay eligible until a per-work check-state column
+    exists. Idempotent; stats name the sweep's shape. Fetched work payloads
+    land verbatim in source_records via IngestSession (deduped by content
+    hash, merged W-ids included)."""
     stats: dict[str, Any] = {
+        "works_with_doi": 0,
+        "skipped_fresh": 0,
         "works_attempted": 0,
         "matched_with_grants": 0,
         "rows_upserted": 0,
         "pruned": 0,
     }
 
+    total = await session.scalar(
+        select(func.count()).select_from(Work).where(Work.doi_normalized.is_not(None))
+    )
+    stats["works_with_doi"] = int(total or 0)
+    if not total:
+        raise RuntimeError("work_funders harvest: zero works with a doi_normalized")
+
+    cutoff = datetime.now(UTC) - timedelta(days=max(ttl_days, 0))
+    fresh = (
+        select(WorkFunder.institution_id, WorkFunder.pure_uuid)
+        .where(WorkFunder.harvested_at >= cutoff)
+        .subquery()
+    )
     result = await session.execute(
         select(Work.institution_id, Work.pure_uuid, Work.doi_normalized).where(
-            Work.doi_normalized.is_not(None)
+            Work.doi_normalized.is_not(None),
+            tuple_(Work.institution_id, Work.pure_uuid).not_in(
+                select(fresh.c.institution_id, fresh.c.pure_uuid)
+            ),
         )
     )
     works = result.all()
+    stats["skipped_fresh"] = stats["works_with_doi"] - len(works)
     stats["works_attempted"] = len(works)
     if not works:
-        raise RuntimeError("work_funders harvest: zero works with a doi_normalized")
+        logger.info(
+            "work_funders harvest: every work with a DOI was checked within %d days",
+            ttl_days,
+        )
+        return stats
 
     client_kwargs: dict[str, Any] = {}
     if api_key := get_settings().openalex_api_key:
