@@ -11,7 +11,13 @@ root unless noted.
 
 - Docker with Compose v2.24+ (the test and per-institute overrides use the
   `!override` merging feature).
-- About 10 GB of disk for the database plus the raw landing zone.
+- Disk, measured on the Twente-scale live instance: about 130 GB for the
+  database volume, plus the raw landing zone and one `pg_dump -Fc` archive
+  per night (~10 GB each; the default retention keeps 7). The bulk of the
+  database was the `journal_flags` table materialized for every known
+  institution; pruning it to active institutions shrinks the database by
+  roughly 90 GB. A narrower data window or a smaller institution needs
+  far less.
 - A free [OpenAlex API key](https://openalex.org) for the journals sweep.
 
 ## Configuration
@@ -21,8 +27,9 @@ configure the **default institution** — the one the first boot harvests and
 serves at its `/{code}` path. Additional universities are configured as
 `institutions` rows in the database (see "Adding a second institution");
 their display values, sources, and data windows come from their row, not
-from `.env`. The admin panel's settings overlay `backend/settings.yaml`
-overrides any of these keys and reloads live (see "Admin panel").
+from `.env`. The admin panel's settings overlay
+`backend/state/settings.yaml` overrides any of these keys and reloads
+live (see "Admin panel").
 
 ### Institution identity and display
 
@@ -53,7 +60,7 @@ in citation links on journal pages. Set it in `.env` before the first
 | `JB_PURE_OAI_BASE_URL` | Your repository's anonymous OAI-PMH endpoint (works data) | `https://ris.utwente.nl/ws/oai` |
 | `JB_OPENAIRE_ORG_ID` | OpenAIRE organization id (`openorgs____::...`). **Required**; unset = the OpenAIRE harvest is off. Not derivable from the ROR — look it up at `api.openaire.eu/graph/v1/organizations?legalName=<name>` | unset |
 | `OPENALEX_API_KEY` | Free OpenAlex key; needed for cursor-paged harvests only | unset |
-| `JB_CONTACT_EMAIL` | Polite-pool identification sent to OpenAlex | `s.f.abma@utwente.nl` |
+| `JB_CONTACT_EMAIL` | Polite-pool identification sent to OpenAlex. Set it in `.env`; an empty value sends anonymous requests | empty (the live deployment sets `s.f.abma@utwente.nl`) |
 | `JB_DATA_WINDOW_START` / `JB_DATA_WINDOW_END` | Inclusive publication-year window for the default institution's harvests. `END=0` = open (to now). A smaller window makes a deployment lighter (Groningen runs 2025/2025; additional institutions carry their window on their row) | `2020` / `0` |
 
 ### Operations
@@ -63,8 +70,14 @@ in citation links on journal pages. Set it in `.env` before the first
 | `JB_DATABASE_URL` | Postgres DSN | local default |
 | `JB_ADMIN_PASSWORD` | Admin panel password (`/admin`); empty disables the panel | empty |
 | `JB_BOOTSTRAP` | `auto` (skips only a completed pipeline; refuses a partial one), `always`, or `off` | `auto` |
-| `JB_LANDING_DIR` | Raw landing zone for downloaded files. Compose pins the bind mount to `./backend/landing`; the variable applies to non-compose runs | `backend/landing` |
-| `JB_UT_METADATA_DSN` | Twente-only: read-only ut-metadata Postgres for canonical works + the author roster (`authors` bootstrap step; skips cleanly when empty). Leave empty elsewhere; the works endpoints degrade to stats-only and `/authors` reports `enabled: false` | empty |
+| `JB_LANDING_DIR` | Raw landing zone for downloaded files. Compose pins the bind mount to `./backend/landing`; the variable applies to non-compose runs | `landing` |
+| `JB_UT_METADATA_DSN` | Twente-only: read-only ut-metadata Postgres for canonical works + the author roster (`authors` bootstrap step; skips cleanly when empty). Leave empty elsewhere; the works endpoints degrade to stats-only and `/authors` reports `enabled: false`. Currently off on the live demo — the works-merge features run on stats data only | empty |
+| `JB_ENABLE_USAGE_TRACKING` | Anonymous usage events (page paths, searches, coarse audience info; no cookies). `false` accepts and drops event batches instead of storing | `true` |
+| `JB_USAGE_RETENTION_DAYS` | Days usage events are kept before being nulled; `0` disables expiry | `90` |
+| `JB_IGNORED_ISSNS` | JSON list of ISSNs the browser treats as nonexistent on every journal surface | empty |
+| `JB_REFRESH_WAVE_CRON` | Cron schedule (UTC) for the nightly harvest wave, run by the `scheduler` service | `30 1 * * *` |
+| `JB_BACKUP_CRON` | Cron schedule (UTC) for the nightly database backup | `0 4 * * *` |
+| `JB_BACKUP_KEEP` | Nightly dump archives kept in `./backups` | `7` |
 
 ## First boot
 
@@ -72,6 +85,15 @@ in citation links on journal pages. Set it in `.env` before the first
 cp .env.example .env   # then edit
 docker compose up -d --build
 docker compose logs -f bootstrap
+```
+
+Existing deployments that predate the `backend/state/` settings directory
+move their overlay once, before the redeploy that introduces it (the file
+is gitignored; fresh clones need nothing because the entrypoint seeds the
+example):
+
+```bash
+mkdir backend/state && mv backend/settings.yaml backend/state/
 ```
 
 The one-shot `bootstrap` service runs `backend/jobs/bootstrap.py`, which
@@ -114,7 +136,7 @@ Useful variants (run inside the backend image, e.g.
 | `reconcile` | the two above | The deal register; participation per hosted institution (non-participation = no `deal_institutions` row; shared deals are never deleted) |
 | `backfill_issn_l` | issn_map | Links deal journal ISSNs to the canonical ISSN-L |
 | `ingest_openapc` | OpenAPC dataset | APC evidence and per-journal aggregates |
-| `ingest_scimagojr` | seeded from `backend/data/` | Quartiles (scimagojr.com is Cloudflare-hard; drop fresh CSVs in `backend/data/` to update) |
+| `ingest_scimagojr` | tracked seed CSVs, materialized into landing on first use | Quartiles (scimagojr.com is Cloudflare-hard; to update, drop `export_<year>.csv` into `backend/landing/scimagojr/` and rerun the job — `backend/data/` holds the tracked first-boot seeds only) |
 | `harvest_pure` | your repository OAI-PMH | The works corpus |
 | `enrich_works` | OpenAlex + Crossref | DOIs, types, citation counts per work |
 | `harvest_openaire` | OpenAIRE Graph | Institution works matched by DOI |
@@ -152,7 +174,7 @@ the JCT/ESAC dump. Rules:
 
 Set `JB_ADMIN_PASSWORD` and restart the backend. `http://<host>/admin` then
 shows the harvest run history with stats and deals flagged for curation,
-edits the settings (`backend/settings.yaml`, reloaded live — no restart;
+edits the settings (`backend/state/settings.yaml`, reloaded live — no restart;
 YAML values override `.env`), and edits per-institution configuration rows
 (institution fields, sources, data windows; secrets stay masked). Runs carry
 an institution column — shared/global steps are labeled "shared", and a
@@ -209,7 +231,9 @@ Harvested data goes stale, and rerunning the pipeline one job at a time is
 easy to get wrong. `backend/scripts/refresh_wave.sh` runs the repeating set
 of harvest and derivation jobs as one sequence, in the order that matters.
 Every job in it is idempotent, so rerunning the whole wave or any stage is
-safe. Run it right after the daily OpenAlex credit reset (00:00 UTC):
+safe. The `scheduler` service runs it nightly (see "Nightly scheduler"
+below); run it by hand right after the daily OpenAlex credit reset
+(00:00 UTC):
 
 ```bash
 cd backend
@@ -231,19 +255,25 @@ The stages, in order:
    OpenAlex works filters. Both also check `openalex_credits_remaining()`
    before spending credits, and at a zero budget each skips cleanly and
    notes the skip in its stats output.
-2. `harvest_oa_colors`, `build_openalex_works`, and `backfill_pure_authors`.
+2. `ingest_authors`. A local projection right after identity resolution:
+   it publishes confirmed author identities to the served roster and makes
+   no API calls.
+3. `harvest_oa_colors`, `build_openalex_works`, and `backfill_pure_authors`.
    The three derive from locally stored data and make no API calls. oa
    colors reads only locally held works today, so it spends no credits.
-3. The funder backfills. `harvest_work_funders` fetches each work by DOI as
+   `backfill_parts` follows the works rebuild in the same slot: free
+   single-entity GETs that fill the part-of chips for OpenAlex Graph v12
+   payloads, resumable and idempotent.
+4. The funder backfills. `harvest_work_funders` fetches each work by DOI as
    a free single-entity GET, and it commits per chunk. An interrupted run
    therefore resumes as a rerun. `harvest_openalex_funders` fetches full
    funder payloads only for ids the table lacks. `harvest_openaire_funders`
    pulls the curated funder canon from the OpenAIRE graph.
-4. `harvest_publishers`. It resolves journal host organizations in
+5. `harvest_publishers`. It resolves journal host organizations in
    credit-priced 50-id pipe-filter batches. Results cache in
    `openalex_publishers`, so only a fresh install pays for the full
    ~16k-host sweep once.
-5. `embed_journals` last. It re-embeds journals from the stats-built text,
+6. `embed_journals` last. It re-embeds journals from the stats-built text,
    and on CPU it is the slow step of the wave, at about 45 minutes for a
    full run.
 
@@ -273,6 +303,82 @@ only. `resolve_author_ids` and `build_openalex_works` cover every active
 institution. On a multi-institution deployment, run the first pair with
 `--institution <code>` for each additional institute after the wave.
 
+## Nightly scheduler
+
+The `scheduler` service runs the same backend image as the API, with
+supercronic (v0.2.51, checksum-verified in `backend/Dockerfile`) executing
+`backend/scripts/crontab`:
+
+- `30 1 * * *` — `backend/scripts/refresh_wave.sh`, the daily refresh wave
+  (see above). Starts just after the 00:00 UTC OpenAlex credit reset so
+  the credit-priced stages run on a fresh budget; they self-skip at a
+  spent budget, so nothing breaks when the wave runs at another time.
+- `0 4 * * *` — `backend/scripts/backup.sh`, the nightly database backup
+  (see below).
+
+Both schedules are UTC and overridable from `.env` (`JB_REFRESH_WAVE_CRON`,
+`JB_BACKUP_CRON`); changing them needs a scheduler restart
+(`docker compose up -d scheduler`). Job output lands in the container log:
+
+```bash
+docker compose logs scheduler
+```
+
+Run a job by hand through the same service:
+
+```bash
+docker compose run --rm --entrypoint /bin/sh scheduler /app/scripts/refresh_wave.sh
+```
+
+## Backups and restore
+
+`backend/scripts/backup.sh` runs nightly: `pg_dump --format=custom` into
+`./backups/journalbrowser-<UTC timestamp>.dump` (~10 GB on a full
+instance), followed by a `pg_restore --list` sanity check on the archive
+and pruning to the newest `JB_BACKUP_KEEP` (default 7) dumps. The backend
+image installs `postgresql-client-17` from the PGDG apt repo, so the dump
+client always matches the db service's Postgres major. The first
+`mkdir backend/state`-style fresh-host cases are handled by the bootstrap
+service, which hands the root-owned `./backups` bind mount to uid 1000.
+
+Run a backup on demand:
+
+```bash
+docker compose run --rm --entrypoint /bin/sh scheduler /app/scripts/backup.sh
+```
+
+Restore drill — prove an archive reads back, without touching the live
+database (the scheduler container has `pg_restore` and the `./backups`
+mount; the scratch database lives on the running db service):
+
+```bash
+docker compose exec db createdb -U journal restore_check
+docker compose run --rm scheduler \
+    pg_restore --no-password --exit-on-error \
+    -d postgresql://journal:journal@db:5432/restore_check \
+    /backups/journalbrowser-<timestamp>.dump
+docker compose exec db psql -U journal -d restore_check -c \
+    "SELECT count(*) FROM journals;"
+docker compose exec db dropdb -U journal restore_check
+```
+
+Disaster recovery: bring up only `db` on a fresh pgdata volume, recreate
+the database, and restore the same way before starting `backend`
+(schema is inside the custom-format archive; no migrations needed):
+
+```bash
+docker compose up -d db
+docker compose exec db createdb -U journal journalbrowser
+docker compose run --rm scheduler \
+    pg_restore --no-password --exit-on-error \
+    -d postgresql://journal:journal@db:5432/journalbrowser \
+    /backups/<newest archive>.dump
+docker compose up -d
+```
+
+The nightly dump stays on the same disk as the database. Copy at least one
+archive off-machine; an off-host target is a known open decision.
+
 ## Maintenance
 
 - **Re-harvest on demand:** every job is a standalone script under
@@ -281,8 +387,10 @@ institution. On a multi-institution deployment, run the first pair with
 - **After hand-fixing a deal** (alias, participation, merge): rerun
   `jobs/reconcile.py`. It re-derives, re-merges, refreshes coverage flags,
   and rewrites the curation report.
-- **Updating Scimago quartiles:** drop the new year's CSV into
-  `backend/data/` and rerun `jobs/ingest_scimagojr.py`.
+- **Updating Scimago quartiles:** drop `export_<year>.csv` into
+  `backend/landing/scimagojr/` (the compose bind mount) and rerun
+  `jobs/ingest_scimagojr.py`. `backend/data/` holds the tracked first-boot
+  seeds only; a CSV dropped there is never read.
 - **Importing the ut-metadata corpus (Twente):** with `JB_UT_METADATA_DSN`
   set, `jobs/import_utmetadata_works.py` copies every canonical work that
   maps to a Pure uuid into `works` — the full year range without a
