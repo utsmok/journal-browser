@@ -210,7 +210,7 @@ async def _body(ingest: IngestSession, limit: int | None) -> dict[str, Any]:
 
     _REQUIRED_HEADERS: dict[str, set[str]] = {
         "apc": {"issn_l", "issn", "doi", "period", "euro"},
-        "ta": {"issn_l", "institution", "group_id", "doi", "agreement", "is_hybrid"},
+        "ta": {"issn_l", "institution", "group_id", "doi", "agreement", "is_hybrid", "euro"},
         "contracts": {"group_id", "contract_name"},
     }
 
