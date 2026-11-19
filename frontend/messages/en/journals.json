@@ -204,7 +204,7 @@
     "funderWorks": "{count, plural, one {# work} other {# works}}"
   },
   "crisGaps": {
-    "title": "Not registered in Pure",
+    "title": "Works not matched in Pure",
     "description": "{count, plural, one {OpenAlex attributes # work from this journal that matches no Pure record, so it is likely missing from the research information system.} other {OpenAlex attributes # works from this journal that match no Pure record, so they are likely missing from the research information system.}}",
     "matchNote": "Each item lists the UT authors that OpenAlex matched to the university roster.",
     "showingRecent": "Showing the {count, plural, one {# most recent entry} other {# most recent entries}}.",

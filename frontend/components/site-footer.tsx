@@ -1,19 +1,27 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 
 import { GithubIcon } from "@/components/github-icon";
 import { instFromSegment } from "@/lib/global-segments";
+import { useInstitutionsDirectory } from "@/hooks/use-api";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 
 /** Footer with institution links from settings when scoped to an
- * institution; the chooser at "/" gets only the repo link and attribution. */
+ * institution; the chooser at "/" gets only the repo link and attribution.
+ * Discreet links to the data-pipeline page and the docs index (DECISIONS
+ * 12); admin stays unlinked. */
 export function SiteFooter() {
   const t = useTranslations("common");
   const site = useSiteMeta();
-  const seg = (usePathname() ?? "/").split("/")[1] ?? "";
-  const scoped = Boolean(instFromSegment(seg));
+  const pathname = usePathname() ?? "/";
+  const seg = pathname.split("/")[1] ?? "";
+  const inst = instFromSegment(seg);
+  const firstInst = useInstitutionsDirectory().data?.[0]?.code;
+  const docsHref = inst ? `/${inst}/docs` : firstInst ? `/${firstInst}/docs` : null;
+  const scoped = Boolean(inst);
   const links: { href: string; label: string; icon?: "github" }[] = [
     ...(scoped
       ? [
@@ -55,6 +63,25 @@ export function SiteFooter() {
             </li>
           ))}
         </ul>
+        <p className="mt-3 text-xs text-white/70">
+          <Link
+            href="/data-pipeline"
+            className="text-white/60 underline-offset-2 hover:text-white/90 hover:underline"
+          >
+            {t("footer.dataPipelineLink")}
+          </Link>
+          {docsHref && (
+            <>
+              {" · "}
+              <Link
+                href={docsHref}
+                className="text-white/60 underline-offset-2 hover:text-white/90 hover:underline"
+              >
+                {t("footer.docsLink")}
+              </Link>
+            </>
+          )}
+        </p>
         <p className="mt-3 text-xs text-white/70">{t("footer.dataSources")}</p>
       </div>
     </footer>

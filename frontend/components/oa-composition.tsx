@@ -77,7 +77,9 @@ export function OaCompositionLegend({ counts }: { counts: OaTypeCounts }) {
             className={`inline-block size-2.5 rounded-full ${OA_TYPE_BARS[type].bar}`}
           />
           {t(OA_TYPE_LABEL_KEYS[type])}
-          {counts[type] != null && <span className="tabular-nums">{counts[type]}</span>}
+          {counts[type] != null && (
+            <span className="tabular-nums">{counts[type].toLocaleString("en")}</span>
+          )}
         </li>
       ))}
     </ul>

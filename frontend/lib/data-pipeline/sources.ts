@@ -10,7 +10,7 @@ export const SOURCES: SourceRow[] = [
   { id: "openalex", name: "OpenAlex" },
   { id: "crossref", name: "Crossref" },
   { id: "openaire", name: "OpenAIRE Graph API" },
-  { id: "pureOai", name: "Pure OAI-PMH (ris.utwente.nl)" },
+  { id: "pureOai", name: "Pure OAI-PMH" },
   { id: "openaccessNl", name: "openaccess.nl" },
   { id: "jct", name: "JCT (cOAlition S)" },
   { id: "openapc", name: "OpenAPC" },
@@ -18,7 +18,7 @@ export const SOURCES: SourceRow[] = [
   { id: "scimago", name: "Scimago Journal Rank" },
   { id: "jisc", name: "Jisc Open Policy Finder" },
   { id: "ipApi", name: "ip-api.com" },
-  { id: "purePortal", name: "Pure portal (research.utwente.nl)" },
-  { id: "utMetadata", name: "ut-metadata platform" },
+  { id: "purePortal", name: "Pure research portal" },
+  { id: "utMetadata", name: "institutional metadata platform" },
   { id: "embeddings", name: "BAAI/bge-small-en-v1.5" },
 ];

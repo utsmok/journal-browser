@@ -33,6 +33,8 @@
     "oaGuideLink": "Open access publishing guide",
     "adminContact": "{email} (admin)",
     "sourceLink": "Source code on GitHub",
+    "dataPipelineLink": "Data pipeline",
+    "docsLink": "Documentation",
     "dataSources": "Data: OpenAlex, the cOAlition S Journal Checker Tool, openaccess.nl, OpenAPC, Scimago, and the Jisc Open Policy Finder. Links on every page lead to the upstream source."
   },
 
