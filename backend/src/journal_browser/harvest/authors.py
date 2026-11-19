@@ -25,6 +25,7 @@ faculty there fall back to the canonical-person path (person_org —
 locally, the merged profile + work-level affiliation arms)."""
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -45,7 +46,7 @@ from ..models import (
     Work,
     WorkPureAuthor,
 )
-from .author_names import bare_ror
+from .author_names import bare_orcid, bare_ror
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +219,53 @@ async def fetch_source(engine: AsyncEngine) -> SourceData:
     return data
 
 
+def _name_key(name: str) -> tuple[str, str]:
+    """(first initial, last name token) in lowercase-alphanumeric form.
+
+    Crossref author lists often abbreviate given names to initials, so
+    the match key is deliberately coarse; the candidate set is already
+    narrow (payloads joined through the author's own works' DOIs), and
+    only an unambiguous single match fills the column."""
+    parts = [p for p in re.findall(r"[a-z0-9]+", name.casefold()) if p]
+    if not parts:
+        return ("", "")
+    return (parts[0][:1], parts[-1])
+
+
+async def _crossref_orcid_lists(
+    session: AsyncSession, institution_id: int
+) -> dict[str, dict[str, tuple[str, str]]]:
+    """pure_uuid -> {orcid: name key} from stored Crossref work payloads.
+
+    Payloads land in source_records keyed 'doi:<doi>' (source crossref,
+    entity work) via harvest.enrich.enrich_crossref; each payload's
+    author list contributes its ORCIDs with the name key for matching."""
+    rows = await session.execute(
+        text(
+            "SELECT w.pure_uuid AS uuid, sr.payload->'author' AS authors "
+            "FROM works w "
+            "JOIN source_records sr ON sr.source = 'crossref' "
+            " AND sr.entity_type = 'work' "
+            " AND sr.source_pk = 'doi:' || w.doi_normalized "
+            "WHERE w.institution_id = :iid AND w.doi_normalized IS NOT NULL"
+        ),
+        {"iid": institution_id},
+    )
+    out: dict[str, dict[str, tuple[str, str]]] = {}
+    for row in rows.mappings():
+        for entry in row["authors"] or []:
+            if not isinstance(entry, dict):
+                continue
+            orcid = bare_orcid(entry.get("ORCID"))
+            if not orcid:
+                continue
+            listed = _name_key(
+                " ".join(part for part in (entry.get("given"), entry.get("family")) if part)
+            )
+            out.setdefault(row["uuid"], {})[orcid] = listed
+    return out
+
+
 async def fetch_local_source(session: AsyncSession, institution: Institution) -> SourceData:
     """Build SourceData from journal-browser's own tables (the standalone
     adapter, Phase 1-4 stores). Same contract as the ut-metadata pull, so
@@ -329,6 +377,13 @@ async def fetch_local_source(session: AsyncSession, institution: Institution) ->
         if tree.resolves(data.person_orgs.get(key, [])) or key in ids_by_author
     }
 
+    # Crossref ORCID corroboration: the stored Crossref work payloads
+    # (enrichment ladder rung 2, landed verbatim by enrich_crossref) list
+    # authors with ORCIDs. For roster authors whose Pure person has none,
+    # a name match against those lists fills crossref_orcid with zero
+    # extra API calls; run enrich_works first so the payloads exist.
+    xr_orcids = await _crossref_orcid_lists(session, institution.id)
+
     data.authors = []
     for uuid in sorted(roster):
         cerif = data.persons[uuid].get("cerif") or {}
@@ -342,6 +397,20 @@ async def fetch_local_source(session: AsyncSession, institution: Institution) ->
             else None
         )
         alts = sorted({r.external_id for r in rows} - {primary.external_id}) if primary else []
+        xr = None
+        if not orcid_by_person.get(uuid):
+            author_key = _name_key(
+                " ".join(filter(None, (cerif.get("first_names"), cerif.get("family_names"))))
+            )
+            matches = {
+                orcid
+                for orcid, listed_key in xr_orcids.get(uuid, {}).items()
+                if author_key == listed_key
+            }
+            # Only an unambiguous single match fills the column; a
+            # co-author name collision stays empty.
+            if len(matches) == 1:
+                xr = next(iter(matches))
         data.authors.append(
             {
                 "pure_uuid": uuid,
@@ -352,7 +421,7 @@ async def fetch_local_source(session: AsyncSession, institution: Institution) ->
                 "openalex_author_id": primary.external_id if primary else None,
                 "openalex_alt_ids": alts,
                 "openaire_person_id": None,
-                "crossref_orcid": None,
+                "crossref_orcid": xr,
             }
         )
 
