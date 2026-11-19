@@ -10,11 +10,11 @@ own publisher_name.
 """
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from aletheca import AlethecaClient
-from sqlalchemy import select, text
+from sqlalchemy import delete, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -78,8 +78,9 @@ async def distinct_host_orgs(session: AsyncSession) -> list[str | None]:
 def _rows_for(
     payloads: dict[str, dict[str, Any] | None], names: dict[str, str | None]
 ) -> list[dict[str, Any]]:
-    """One openalex_publishers row per attempted id; a None payload marks a
-    failed fetch (NULL lineage) so re-runs skip it."""
+    """One openalex_publishers row per attempted id; a None payload marks
+    an id absent from the response (NULL lineage). harvest_publishers
+    drops those rows after a week so they are retried on a later run."""
     rows = []
     for pid, payload in payloads.items():
         payload = payload or {}
@@ -141,7 +142,18 @@ async def backfill_canonical(session: AsyncSession) -> int:
 async def harvest_publishers(session: AsyncSession) -> dict[str, int]:
     """Resolve + cache every distinct source host organization's lineage,
     then backfill journals.publisher_canonical. Idempotent: only ids
-    without a cache row are fetched."""
+    without a cache row are fetched. Ids absent from a pipe-filter
+    response land as NULL-lineage rows; those are retried once they are
+    older than a week, so an upstream response that silently dropped ids
+    cannot poison the cache forever."""
+    # NULL-lineage rows past a week: drop them so they re-enter todo.
+    stale = await session.execute(
+        delete(OpenalexPublisher).where(
+            OpenalexPublisher.lineage.is_(None),
+            OpenalexPublisher.fetched_at < datetime.now(UTC) - timedelta(days=7),
+        )
+    )
+    retried = stale.rowcount or 0
     hosts = await distinct_host_orgs(session)
     p_ids = sorted({hpk for h in hosts if (hpk := host_pk(h)).startswith("P")})
     cache = {
@@ -155,6 +167,7 @@ async def harvest_publishers(session: AsyncSession) -> dict[str, int]:
         "fetched": 0,
         "failed": 0,
         "journals_updated": 0,
+        "retried_stale": retried,
     }
     if todo:
         client_kwargs: dict[str, Any] = {}

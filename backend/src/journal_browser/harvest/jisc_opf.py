@@ -122,7 +122,13 @@ async def harvest_all(
     if only is not None and only not in SWEEP_TYPES:
         raise ValueError(f"unknown item type {only!r}; expected one of {SWEEP_TYPES}")
     item_types = (only,) if only else SWEEP_TYPES
-    headers = {"x-api-key": get_settings().jisc_api_key}
+    api_key = get_settings().jisc_api_key
+    if not api_key:
+        # A keyless sweep dies mid-flight on the first 401; skip cleanly
+        # instead so the wave and a fresh install move on.
+        logger.info("jisc_opf: JB_JISC_API_KEY is not set; sweep skipped")
+        return {item_type: {"skipped": "JB_JISC_API_KEY not set"} for item_type in item_types}
+    headers = {"x-api-key": api_key}
     results: dict[str, Any] = {}
     swept = 0
     async with httpx.AsyncClient(timeout=60, headers=headers) as client:
