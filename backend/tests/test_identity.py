@@ -10,6 +10,8 @@ ingest/resolve outcome, stored rows, or a served response instead of
 driving private match helpers one branch at a time.
 """
 
+import csv
+import io
 from datetime import UTC, datetime
 
 import pytest
@@ -1265,3 +1267,228 @@ async def test_portal_person_bindings(db, institution_factory):
 def test_people_utwente_name_tiers(tile_name, tier):
     tile = {"name_clean": tile_clean_name(tile_name), "common_name": tile_common_name(tile_name)}
     assert name_match_tier("jan de jong", "de jong jan", tile) == tier
+
+
+# ── Venue authorship aggregates + missed-works CSV (regression folds) ─────
+
+
+@requires_db
+async def test_venue_authorship_aggregates(db, institution_factory):
+    """venue_authorship serves one consistent bundle: distinct served-type
+    works as the total, faculty/group buckets for the attribute holders
+    only, and top authors grouped per author uuid (never per name)."""
+    from journal_browser.services.authorship import venue_authorship
+
+    inst = await institution_factory(code="ut")
+    run = HarvestRun(
+        source="test",
+        entity_type="works",
+        institution_id=inst.id,
+        status="completed",
+        config_fingerprint="t",
+    )
+    db.add(run)
+    await db.flush()  # run.id needed by the work rows
+    db.add(journal_factory("aaaa-0001", title="Venue journal", search_text="Venue"))
+    db.add(journal_factory("zzzz-9999", title="Empty venue", search_text="Empty"))
+    db.add_all(
+        [
+            Author(
+                institution_id=inst.id,
+                pure_uuid="a1",
+                name="Ann A",
+                faculty="Science",
+                research_group="Group X",
+            ),
+            Author(
+                institution_id=inst.id,
+                pure_uuid="a2",
+                name="Bob B",
+                faculty="Science",
+                research_group=None,
+            ),
+            Author(
+                institution_id=inst.id,
+                pure_uuid="a3",
+                name="Cara C",
+                faculty=None,
+                research_group=None,
+            ),
+            # A second author sharing Ann's name: still a separate row.
+            Author(
+                institution_id=inst.id,
+                pure_uuid="a4",
+                name="Ann A",
+                faculty="Other",
+                research_group=None,
+            ),
+        ]
+    )
+
+    def work(uuid, wtype="article", issn="aaaa-0001"):
+        return Work(
+            institution_id=inst.id,
+            pure_uuid=uuid,
+            journal_issn_l=issn,
+            title=f"Work {uuid}",
+            norm_title=f"work {uuid}",
+            year=2022,
+            work_type=wtype,
+            first_seen_run=run.id,
+            last_seen_run=run.id,
+        )
+
+    db.add_all([work(f"w{i}") for i in (1, 2, 3)])
+    db.add(work("w4", wtype="dataset"))  # excluded type: edge leaves the population
+    db.add(work("w5", issn="zzzz-9999"))  # outside the venue set
+    await db.flush()  # works must exist before the edge rows (FK order)
+    db.add_all(
+        [
+            WorkPureAuthor(institution_id=inst.id, work_pure_uuid="w1", person_uuid="a1"),
+            WorkPureAuthor(institution_id=inst.id, work_pure_uuid="w1", person_uuid="a2"),
+            WorkPureAuthor(institution_id=inst.id, work_pure_uuid="w2", person_uuid="a1"),
+            WorkPureAuthor(institution_id=inst.id, work_pure_uuid="w2", person_uuid="a2"),
+            WorkPureAuthor(institution_id=inst.id, work_pure_uuid="w3", person_uuid="a3"),
+            WorkPureAuthor(institution_id=inst.id, work_pure_uuid="w5", person_uuid="a4"),
+        ]
+    )
+    await db.commit()
+
+    out = await venue_authorship(db, inst, issn_l="aaaa-0001")
+    # Distinct works with an edge and a served type: w1-w3 (w4 dataset
+    # excluded, w5 other venue).
+    assert out["n_ut_works"] == 3
+    # Faculty buckets: count(distinct works) desc, name asc; Cara and the
+    # a4 twin stay in the total but form no bucket here (attribute missing
+    # or edge outside the venue).
+    assert out["faculties"] == [{"name": "Science", "works": 2}]
+    assert out["research_groups"] == [{"name": "Group X", "works": 2}]
+    # Top authors: works desc, lower(name) asc, grouped per pure_uuid.
+    assert [(t["pure_uuid"], t["name"], t["works"]) for t in out["top_authors"]] == [
+        ("a1", "Ann A", 2),
+        ("a2", "Bob B", 2),
+        ("a3", "Cara C", 1),
+    ]
+    assert all(
+        set(t) == {"pure_uuid", "name", "faculty", "research_group", "works"}
+        for t in out["top_authors"]
+    )
+
+    assert await venue_authorship(db, inst, issns=[]) == {
+        "n_ut_works": 0,
+        "faculties": [],
+        "research_groups": [],
+        "top_authors": [],
+    }
+    empty = await venue_authorship(db, inst, issns=["9999-x999"])
+    assert empty["n_ut_works"] == 0 and empty["faculties"] == []
+
+
+def _store_row(w_id, title, year, doi, work_type="article", issn_l=None):
+    return {
+        "title": title,
+        "year": year,
+        "doi": doi,
+        "oa_status": "gold",
+        "work_type": work_type,
+        "venue_name": "Venue",
+        "issn_l": issn_l,
+        "openalex_id": w_id,
+        "authorships": None,
+        "parent_works": [],
+        "is_part": False,
+    }
+
+
+@requires_db
+async def test_profile_and_missed_csv_agree(client, db, institution_factory, monkeypatch):
+    """The author gap card and the missed-works CSV quote one population
+    (author_gap_works): the profile's likely_missing is the subset the
+    Pure-record tags cannot explain, and the CSV lists exactly those rows
+    — never the wider raw not_in_pure set."""
+    ut = await institution_factory(code="ut", data_window_start=2020)
+    run = HarvestRun(source="pure", entity_type="works", status="completed", config_fingerprint="t")
+    db.add(run)
+    await db.flush()
+    db.add_all(
+        [
+            Work(
+                institution_id=ut.id,
+                pure_uuid="w-own",
+                title="Own Work",
+                norm_title="own work",
+                year=2023,
+                doi_normalized="10.0.0/own",
+                first_seen_run=run.id,
+                last_seen_run=run.id,
+            ),
+            Work(
+                institution_id=ut.id,
+                pure_uuid="w-unlinked",
+                title="Unlinked Record",
+                norm_title="unlinked record",
+                year=2022,
+                doi_normalized="10.0.0/unlinked",
+                first_seen_run=run.id,
+                last_seen_run=run.id,
+            ),
+            Work(
+                institution_id=ut.id,
+                pure_uuid="w-sametitle",
+                title="Shared Title Study",
+                norm_title="shared title study",
+                year=2021,
+                first_seen_run=run.id,
+                last_seen_run=run.id,
+            ),
+        ]
+    )
+    db.add(
+        Author(
+            institution_id=ut.id,
+            pure_uuid="alice-uuid",
+            name="Alice Author",
+            openalex_ids=["a-alice"],
+            n_works=1,
+            confirmed=True,
+        )
+    )
+    await db.flush()
+    db.add(AuthorWork(institution_id=ut.id, author_pure_uuid="alice-uuid", work_pure_uuid="w-own"))
+    # The same-title Pure record shares the author: tagging needs the edge.
+    db.add(
+        WorkPureAuthor(institution_id=ut.id, work_pure_uuid="w-sametitle", person_uuid="alice-uuid")
+    )
+    await db.commit()
+
+    async def _fake(_session, _institution, _author):
+        return [
+            # A Pure record outside the author's list: tagged, stays in the
+            # gated total (unlinked twin by DOI, shared title).
+            _store_row("W-TAG-DOI", "Unlinked Twin", 2023, "10.0.0/unlinked"),
+            _store_row("W-TAG-TITLE", "Shared Title Study", 2021, None),
+            # The one real miss.
+            _store_row("W-GAP", "Real Gap Work", 2023, "10.9.9/gap", issn_l="1234-5678"),
+            # A DOI duplicating the author's own Pure work: drops entirely.
+            _store_row("W-OWN", "Dup Of Own", 2024, "https://doi.org/10.0.0/OWN"),
+            # Gates: out-of-window year and excluded type drop out.
+            _store_row("W-OLD", "Old", 2019, "10.9.9/old"),
+            _store_row("W-PRE", "Pre", 2023, "10.9.9/pre", work_type="preprint"),
+        ]
+
+    monkeypatch.setattr("journal_browser.services.authors.openalex_only_works_for_author", _fake)
+    r = await client.get("/api/v1/ut/authors/alice-uuid")
+    assert r.status_code == 200
+    section = r.json()["openalex_only"]
+    assert section["available"] is True
+    assert section["total"] == 3
+    assert section["likely_missing"] == 1
+
+    csv_r = await client.get("/api/v1/ut/authors/alice-uuid/works.csv", params={"scope": "missed"})
+    assert csv_r.status_code == 200
+    rows_out = list(csv.DictReader(io.StringIO(csv_r.text)))
+    # The CSV lists exactly the likely-missing rows — not the tagged ones,
+    # not the pre-refinement anti-join set.
+    assert [row["title"] for row in rows_out] == ["Real Gap Work"]
+    assert rows_out[0]["openalex_id"] == "W-GAP"
+    assert rows_out[0]["in_pure"] == "false"

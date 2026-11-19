@@ -13,7 +13,7 @@ import httpx
 import pytest
 from jobs.backfill_pure_authors import backfill_pure_work_authors
 from jobs.import_pure_export import import_pure_export
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from conftest import journal_factory, requires_db
@@ -1138,3 +1138,187 @@ async def test_pure_entity_mining_rebuild_contract(db, institution_factory):
     org_candidates2, person_candidates2 = await mine_publication_entities(db, inst.id)
     assert (await rebuild_pure_persons(db, inst.id, mined=person_candidates2)) == person_stats
     assert (await rebuild_pure_orgs(db, inst.id, mined=org_candidates2)) == org_stats
+
+
+# ── Pure re-harvest vs OpenAlex canon OA colour (folded from
+#    test_harvest2_store_oa_canon.py) ─────────────────────────────────────
+
+
+def _pure_payload(uuid: str, doi: str, rights: str) -> dict:
+    """Minimal Pure payload; the Eprints rights literal maps
+    closedAccess -> closed and openAccess -> green."""
+    return {
+        "oai_identifier": f"oai:ris.utwente.nl:publications:{uuid}",
+        "dc": {
+            "title": ["A work"],
+            "rights": [f"info:eu-repo/semantics/{rights}"],
+            "type": ["article"],
+        },
+        "doi_normalized": doi,
+        "cerif": {},
+    }
+
+
+@requires_db
+async def test_pure_reharvest_keeps_canon_oa_color(db, institution_factory):
+    """The OpenAlex canon sync is the authoritative oa_status writer for
+    DOI-matched works: a Pure re-harvest of a re-seen record must not
+    downgrade the canon colour."""
+    from journal_browser.harvest.pure.store import upsert_work
+
+    ut = await institution_factory(code="ut")
+    run = await _run(db, "pure", "work", ut)
+    await upsert_work(
+        db,
+        _pure_payload("u1", "10.1000/abc", "closedAccess"),
+        institution_id=ut.id,
+        year=2024,
+        run_id=run.id,
+    )
+    await db.commit()
+    stored = dict(
+        (
+            await db.execute(
+                select(Work.pure_uuid, Work.oa_status).where(Work.institution_id == ut.id)
+            )
+        ).all()
+    )
+    assert stored == {"u1": "closed"}
+
+    # The canon sync upgrades the colour and OpenAlex carries it.
+    await db.execute(
+        update(Work)
+        .where(Work.institution_id == ut.id, Work.pure_uuid == "u1")
+        .values(oa_status="gold")
+    )
+    db.add(
+        OpenalexWork(
+            institution_id=ut.id, w_id="W1", doi_normalized="10.1000/abc", oa_status="gold"
+        )
+    )
+    await db.commit()
+
+    # A Pure re-harvest of the same record must not downgrade it.
+    await upsert_work(
+        db,
+        _pure_payload("u1", "10.1000/abc", "closedAccess"),
+        institution_id=ut.id,
+        year=2024,
+        run_id=run.id,
+    )
+    await db.commit()
+    stored = dict(
+        (
+            await db.execute(
+                select(Work.pure_uuid, Work.oa_status).where(Work.institution_id == ut.id)
+            )
+        ).all()
+    )
+    assert stored == {"u1": "gold"}
+
+
+@requires_db
+async def test_pure_fills_color_without_openalex_row(db, institution_factory):
+    """Without an OpenAlex row for the DOI, Pure rights remain
+    authoritative: an upgraded rights value lands on the re-seen record."""
+    from journal_browser.harvest.pure.store import upsert_work
+
+    ut = await institution_factory(code="ut")
+    run = await _run(db, "pure", "work", ut)
+    await upsert_work(
+        db,
+        _pure_payload("u2", "10.1000/def", "closedAccess"),
+        institution_id=ut.id,
+        year=2024,
+        run_id=run.id,
+    )
+    await db.commit()
+    stored = dict(
+        (
+            await db.execute(
+                select(Work.pure_uuid, Work.oa_status).where(Work.institution_id == ut.id)
+            )
+        ).all()
+    )
+    assert stored == {"u2": "closed"}
+
+    await upsert_work(
+        db,
+        _pure_payload("u2", "10.1000/def", "openAccess"),
+        institution_id=ut.id,
+        year=2024,
+        run_id=run.id,
+    )
+    await db.commit()
+    stored = dict(
+        (
+            await db.execute(
+                select(Work.pure_uuid, Work.oa_status).where(Work.institution_id == ut.id)
+            )
+        ).all()
+    )
+    assert stored == {"u2": "green"}
+
+
+# ── works.funders_checked_at sweep gate (folded from
+#    test_correct_funders_checked_at.py) ──────────────────────────────────
+
+
+def _award_payload(doi: str, awarded: bool):
+    """Minimal OpenAlex work object: id + awards, plus the model_dump the
+    ingest session stores."""
+    awards = [{"funder_id": "https://openalex.org/F-1"}] if awarded else []
+    return SimpleNamespace(
+        id=f"https://openalex.org/W-{doi}",
+        awards=awards,
+        model_dump=lambda mode="json": {"id": f"W-{doi}", "awards": awards},
+    )
+
+
+@requires_db
+async def test_work_funders_sweep_gate(db, institution_factory, monkeypatch):
+    """works.funders_checked_at gates the work-funders sweep: a failed
+    fetch stamps nothing (the next run retries), zero-award works are
+    stamped so they leave the sweep, and past the TTL works return to it."""
+    ut = await institution_factory(code="ut", data_window_start=2020)
+    run = await _run(db, "pure", "works", ut)
+    _mk_work(db, ut, "w-awarded", run, doi="10.0.0/awarded", title="w-awarded", year=2023)
+    _mk_work(db, ut, "w-bare", run, doi="10.0.0/bare", title="w-bare", year=2023)
+    await db.commit()
+
+    async def _failing_fetch(_client, _dois, stats=None):
+        if stats is not None:
+            stats["fetch_errors"] = 2
+        raise RuntimeError("openalex down")
+
+    monkeypatch.setattr("journal_browser.harvest.work_funders.fetch_works_by_doi", _failing_fetch)
+    with pytest.raises(RuntimeError, match="openalex down"):
+        await harvest_work_funders(db, ttl_days=30)
+    stamps = (await db.execute(select(Work.funders_checked_at))).scalars().all()
+    assert all(s is None for s in stamps)
+
+    async def _fake_fetch(_client, dois, stats=None):
+        return (
+            {doi: _award_payload(doi, doi == "10.0.0/awarded") for doi in dois},
+            set(),
+            None,
+        )
+
+    monkeypatch.setattr("journal_browser.harvest.work_funders.fetch_works_by_doi", _fake_fetch)
+    stats = await harvest_work_funders(db, ttl_days=30)
+    assert stats["works_attempted"] == 2
+    rows = (await db.execute(select(Work.pure_uuid, Work.funders_checked_at))).all()
+    # Zero-award works are stamped too: they leave the sweep.
+    assert all(r.funders_checked_at is not None for r in rows)
+    wf = (await db.execute(select(WorkFunder))).scalars().all()
+    assert [(w.pure_uuid, w.funder_openalex_id) for w in wf] == [("w-awarded", "F-1")]
+
+    # Fresh stamps skip the sweep entirely.
+    stats2 = await harvest_work_funders(db, ttl_days=30)
+    assert stats2["works_attempted"] == 0
+    assert stats2["skipped_fresh"] == stats2["works_with_doi"] == 2
+
+    # Beyond the TTL the works become eligible again.
+    await db.execute(update(Work).values(funders_checked_at=datetime.now(UTC) - timedelta(days=31)))
+    stats3 = await harvest_work_funders(db, ttl_days=30)
+    assert stats3["works_attempted"] == 2

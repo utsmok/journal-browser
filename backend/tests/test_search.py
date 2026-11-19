@@ -16,7 +16,13 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from conftest import journal_factory, requires_db
 from journal_browser.config import reset_settings_cache
 from journal_browser.harvest.denorm import BROWSE_EXCLUDED_SQL, MATERIALIZE_SQL
-from journal_browser.models import Institution, IssnMap, JournalApcAggregate, Limitation
+from journal_browser.models import (
+    Institution,
+    IssnMap,
+    JournalApcAggregate,
+    JournalFlags,
+    Limitation,
+)
 
 DIM = 384
 
@@ -786,3 +792,110 @@ async def test_route_precedence(bare_client):
     assert res.status_code == 401
     res = await bare_client.get("/api/v1/docs")
     assert res.status_code == 200
+
+
+# ── Institution-rank tie-break + semantic total (regression folds) ────────
+
+
+@pytest.fixture
+async def rank_api(client, db, db_engine, institution_factory):
+    """Two identically-titled journals — one with UT works, one without —
+    plus a third distinct title, so FTS rank, prefix tier and global
+    prominence tie and the institution nudge alone decides."""
+    async with db_engine.begin() as conn:
+        await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+    ut = await institution_factory(code="ut", data_window_start=2020)
+    common = {"title": "Water Management Reports", "search_text": "Water Management Reports"}
+    db.add_all(
+        [
+            journal_factory("1111-2222", works_count=5000, **common),
+            journal_factory("3333-4444", works_count=5000, **common),
+            journal_factory(
+                "5555-6666",
+                title="Water Management X",
+                search_text="Water Management X",
+                works_count=5000,
+            ),
+        ]
+    )
+    await db.flush()
+    db.add_all(
+        [
+            JournalFlags(
+                institution_id=ut.id, issn_l="1111-2222", works_count=4, works_window_plus=10
+            ),
+            JournalFlags(
+                institution_id=ut.id, issn_l="3333-4444", works_count=0, works_window_plus=10
+            ),
+            JournalFlags(
+                institution_id=ut.id, issn_l="5555-6666", works_count=0, works_window_plus=10
+            ),
+        ]
+    )
+    await db.commit()
+    return client
+
+
+@requires_db
+async def test_institution_works_break_ties(rank_api):
+    """The institution's own works count (journal_flags) breaks rank ties
+    toward journals UT publishes in; exact FTS hits keep fuzzy off."""
+    r = await rank_api.get("/api/v1/ut/journals", params={"q": "water management"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["fuzzy"] is False
+    issns = [i["issn_l"] for i in body["items"]]
+    # Identical titles tie on rank, prefix tier and prominence; the
+    # UT-published journal (works_count 4) must come first.
+    assert issns[0] == "1111-2222"
+    assert set(issns) == {"1111-2222", "3333-4444", "5555-6666"}
+
+
+@requires_db
+async def test_semantic_total_exact_and_capped(client, db, institution_factory, monkeypatch):
+    """The semantic total counts only in-cap rows: exact below the cap
+    with paging through all of them, capped above it, where paging stops
+    at the cap and a cursor past the end serves an empty page."""
+    inst = await institution_factory(code="ut")
+    for n, (issn, vec_i) in enumerate(
+        [("aaaa-0001", 0), ("aaaa-0002", 0), ("aaaa-0003", 0), ("bbbb-0001", 1)]
+    ):
+        db.add(
+            journal_factory(
+                issn, title=f"Journal {n}", search_text=f"Journal {n}", embedding=_vec(vec_i)
+            )
+        )
+        db.add(
+            JournalFlags(institution_id=inst.id, issn_l=issn, works_count=10, works_window_plus=10)
+        )
+    await db.commit()
+
+    from journal_browser.services import embeddings
+    from journal_browser.services.search import similar
+
+    monkeypatch.setattr(embeddings, "encode_query", lambda q: _vec(0))
+    url = "/api/v1/ut/journals/semantic-search"
+    body = (await client.get(url, params={"q": "water technology", "limit": 2})).json()
+    # Three same-vector journals sit within the distance cap (the
+    # orthogonal bbbb-0001 stays out of items and total); order follows
+    # the (distance, issn) key.
+    assert body["total"] == 3
+    assert [i["issn_l"] for i in body["items"]] == ["aaaa-0001", "aaaa-0002"]
+    page2 = (
+        await client.get(url, params={"q": "wq", "limit": 2, "cursor": body["next_cursor"]})
+    ).json()
+    assert [i["issn_l"] for i in page2["items"]] == ["aaaa-0003"]
+    assert page2["next_cursor"] is None
+
+    monkeypatch.setattr(similar, "SEMANTIC_TOTAL_CAP", 2)
+    page1 = (await client.get(url, params={"q": "wq", "limit": 1})).json()
+    assert page1["total"] == 2
+    assert [i["issn_l"] for i in page1["items"]] == ["aaaa-0001"]
+    page2 = (
+        await client.get(url, params={"q": "wq", "limit": 1, "cursor": page1["next_cursor"]})
+    ).json()
+    assert [i["issn_l"] for i in page2["items"]] == ["aaaa-0002"]
+    assert page2["next_cursor"] is None
+    page3 = (await client.get(url, params={"q": "wq", "limit": 1, "cursor": "2"})).json()
+    assert page3["items"] == []
+    assert page3["total"] == 2

@@ -1,14 +1,16 @@
 """Admin surface outcomes: the auth gate and login rate limit, the
 settings overlay round trip (including stale overlay keys and a window
 edit that must serve downstream immediately), the docs API, feedback
-intake + triage, and the admin summary counters.
-
-Replaces test_admin.py, test_admin_login_ratelimit.py,
-test_settings_overlay.py, test_docs.py and test_feedback.py (scenario map:
-.audit/2026-11-19-sweep/p2-tests-plan.md).
+intake + triage, and the admin summary counters. Also folded from the
+2026-11-19 regression files: ops status, the cron next-fire parser,
+onboarding settings parsing, window validation + reactivation rebuild,
+write audit rows, and the unknown-ISSN deal guard.
 """
 
 import hashlib
+import os
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from httpx import AsyncClient
@@ -25,7 +27,9 @@ from journal_browser.models import (
     DealJournal,
     Feedback,
     HarvestRun,
+    HarvestState,
     Institution,
+    IssnMap,
     JournalFlags,
     Publisher,
     StatusChangeLog,
@@ -39,6 +43,7 @@ from journal_browser.routers.admin.auth import (
     LoginRateLimiter,
     reset_login_limiter,
 )
+from journal_browser.routers.admin.cron_next import next_fire
 from journal_browser.services.detail_enrichment import list_works
 
 PASSWORD = "test-admin-pw"
@@ -453,6 +458,21 @@ async def test_feedback_intake_and_triage(admin_api, db):
     r = await admin_api.delete(f"/api/v1/admin/feedback/{fid}", headers=headers)
     assert r.status_code == 204
     assert (await admin_api.get("/api/v1/admin/feedback", headers=headers)).json() == []
+    await db.rollback()
+    deleted = (
+        (
+            await db.execute(
+                select(StatusChangeLog).where(
+                    StatusChangeLog.table_name == "feedback_items",
+                    StatusChangeLog.field == "deleted",
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+    assert deleted is not None and deleted.new_value == "deleted"
+    assert "Wrong APC price" in (deleted.note or "")
 
 
 @requires_db
@@ -511,6 +531,16 @@ async def test_admin_summary_counts(admin_api, db):
             status="candidate",
         )
     )
+    db.add(
+        WorkIdentity(
+            institution_id=ut.id,
+            source="openalex",
+            source_pk="doi:10.1/miss",
+            work_id="w-sum",
+            matched_by="trgm:0.7",
+            status="missing",
+        )
+    )
     await db.flush()
     # Inserted last: becomes last_run globally.
     db.add(
@@ -526,6 +556,7 @@ async def test_admin_summary_counts(admin_api, db):
     assert body["open_feedback"] == 1
     assert body["author_identity_candidates"] == 1
     assert body["work_identity_candidates"] == 1
+    assert body["work_identity_missing"] == 1
     assert body["last_run"]["source"] == "openalex"
     assert body["last_run"]["status"] == "running"
 
@@ -543,3 +574,410 @@ async def test_admin_summary_counts(admin_api, db):
         "/api/v1/admin/summary", params={"institution": "nope"}, headers=headers
     )
     assert r.status_code == 404
+
+
+# ── Cron next-fire parser (folded from test_admin2_ops.py) ────────────────
+
+
+def test_cron_next_parser():
+    noon = datetime(2026, 11, 19, 12, 0, tzinfo=UTC)  # a Thursday
+    assert next_fire("30 1 * * *", noon) == datetime(2026, 11, 20, 1, 30, tzinfo=UTC)
+    for dow in ("0", "7"):
+        assert next_fire(f"0 22 * * {dow}", noon) == datetime(2026, 11, 22, 22, 0, tzinfo=UTC)
+    assert next_fire("0 9,18 * * 1-5", noon) == datetime(2026, 11, 19, 18, 0, tzinfo=UTC)
+    assert next_fire("0 */6 * * *", noon) == datetime(2026, 11, 19, 18, 0, tzinfo=UTC)
+    assert next_fire("0 0 30 2 *", noon) is None  # Feb 30 never matches
+    with pytest.raises(ValueError):
+        next_fire("61 * * * *", noon)
+    with pytest.raises(ValueError):
+        next_fire("30 1 * *", noon)
+
+
+# ── Ops status endpoint (folded from test_admin2_ops.py) ──────────────────
+
+
+@pytest.fixture
+async def ops_api(client, db, monkeypatch, tmp_path):
+    """Admin backdrop plus the ops fixtures: backup archives with mtimes
+    that differ from creation order, and a latest wave cluster of
+    harvest_stats + embed_journals runs, with an old global run excluded."""
+    monkeypatch.setenv("JB_ADMIN_PASSWORD", PASSWORD)
+    monkeypatch.setenv("JB_SETTINGS_YAML", str(tmp_path / "settings.yaml"))
+    monkeypatch.delenv("JB_SOURCE_WAVE_CRON", raising=False)
+    monkeypatch.delenv("JB_REFRESH_WAVE_CRON", raising=False)
+    monkeypatch.delenv("JB_BACKUP_CRON", raising=False)
+    backups = tmp_path / "backups"
+    backups.mkdir()
+    dump = backups / "journalbrowser-20261119-040000.dump"
+    dump.write_bytes(b"PGCOP" + b"0" * 1024)
+    old = backups / "journalbrowser-20261118-040000.dump"
+    old.write_bytes(b"older")
+    os.utime(old, (1_700_000_000, 1_700_000_000))
+    monkeypatch.setenv("JB_BACKUP_DIR", str(backups))
+    db.add(journal_factory("0000-0000"))
+    await db.flush()
+    wave_run = HarvestRun(
+        source="harvest_stats", entity_type="works", status="failed", config_fingerprint="t"
+    )
+    db.add(wave_run)
+    db.add(
+        HarvestRun(
+            source="embed_journals",
+            entity_type="embedding",
+            status="completed",
+            config_fingerprint="t",
+        )
+    )
+    # An old global run must stay out of the latest wave cluster.
+    db.add(
+        HarvestRun(
+            source="pure",
+            entity_type="works",
+            status="completed",
+            config_fingerprint="t",
+            started_at=datetime.now(UTC) - timedelta(days=3),
+        )
+    )
+    await db.flush()
+    db.add(
+        HarvestState(
+            source="harvest_stats",
+            entity_type="works",
+            filter_set="default",
+            status="failed",
+            last_run_id=wave_run.id,
+        )
+    )
+    await db.commit()
+    reset_settings_cache()
+    yield client
+    reset_settings_cache()
+
+
+@requires_db
+async def test_ops_status_sections(ops_api):
+    headers = await _login(ops_api)
+    r = await ops_api.get("/api/v1/admin/ops/status", headers=headers)
+    assert r.status_code == 200
+    body = r.json()
+
+    wave = body["last_wave"]
+    assert wave is not None
+    stages = {(s["source"], s["entity_type"]) for s in wave["stages"]}
+    assert ("harvest_stats", "works") in stages
+    assert ("embed_journals", "embedding") in stages
+    assert ("pure", "works") not in stages  # old run excluded from the cluster
+    assert wave["failed"] == 1 and wave["running"] == 0
+
+    schedules = {s["name"]: s for s in body["schedules"]}
+    assert set(schedules) == {"refresh_wave", "source_wave", "backup"}
+    assert schedules["refresh_wave"]["cron"] == "30 1 * * *"
+    assert schedules["refresh_wave"]["from_env"] is False
+    assert schedules["source_wave"]["cron"] == "0 22 * * 0"  # the weekly default
+    assert schedules["source_wave"]["error"] is None
+    now = datetime.now(UTC)
+    for entry in schedules.values():
+        assert entry["next_run_utc"] is not None
+        assert datetime.fromisoformat(entry["next_run_utc"]) > now
+
+    backup = body["backup"]
+    assert backup["available"] is True
+    assert backup["file"] == "journalbrowser-20261119-040000.dump"
+    assert backup["size_bytes"] > 0
+    assert backup["modified_at"] is not None
+
+    assert any(t["source"] == "harvest_stats" for t in body["freshness"])
+    assert "journals" in body["tables"]
+
+
+@requires_db
+async def test_ops_status_backup_unavailable(ops_api, monkeypatch):
+    monkeypatch.setenv("JB_BACKUP_DIR", "/nonexistent/backups")
+    headers = await _login(ops_api)
+    r = await ops_api.get("/api/v1/admin/ops/status", headers=headers)
+    assert r.status_code == 200
+    backup = r.json()["backup"]
+    assert backup["available"] is False
+    assert backup["file"] is None
+    assert backup["detail"]
+
+
+# ── Onboarding settings parsing (folded from test_onboarding_settings.py) ─
+
+
+def _example_overlay(monkeypatch, tmp_path):
+    """Hermetic overlay location and clean cache, with the checkout's
+    backend/.env (cwd-relative env_file) out of the picture."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("JB_SETTINGS_YAML", str(tmp_path / "settings.yaml"))
+    reset_settings_cache()
+
+
+def test_empty_env_values_parse_to_defaults(monkeypatch, tmp_path):
+    """Compose passes unset JB_* variables through as ""; that must mean
+    "use the default", not an empty list / int / bool parse error."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("JB_SETTINGS_YAML", str(tmp_path / "missing.yaml"))
+    monkeypatch.setenv("JB_IGNORED_ISSNS", "")
+    monkeypatch.setenv("JB_USAGE_RETENTION_DAYS", "")
+    monkeypatch.setenv("JB_ENABLE_USAGE_TRACKING", "")
+    s = get_settings()
+    assert s.ignored_issns == []
+    assert s.usage_retention_days == 90
+    assert s.enable_usage_tracking is True
+    reset_settings_cache()
+
+
+def test_null_overlay_keys_use_defaults(monkeypatch, tmp_path):
+    """Bare keys (YAML null) keep the defaults and the env fallback: a null
+    admin_password must not disable a JB_ADMIN_PASSWORD-set panel."""
+    _example_overlay(monkeypatch, tmp_path)
+    (tmp_path / "settings.yaml").write_text(
+        "admin_password:\njisc_api_key:\ncontact_email:\nut_metadata_dsn: postgresql://x\n",
+        encoding="utf-8",
+    )
+    for var in ("JB_ADMIN_PASSWORD", "JB_CONTACT_EMAIL", "JB_JISC_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("JB_ADMIN_PASSWORD", "envpw")
+    monkeypatch.setenv("JB_CONTACT_EMAIL", "env@example.com")
+    s = get_settings()
+    assert s.admin_password == "envpw"
+    assert s.contact_email == "env@example.com"
+    assert s.jisc_api_key == ""
+    assert s.ut_metadata_dsn == "postgresql://x"  # non-null values still win
+    reset_settings_cache()
+
+
+def test_repo_example_yaml_boots(monkeypatch, tmp_path):
+    """The shipped settings.yaml.example (what the entrypoint copies on
+    first boot) must load without a settings validation error."""
+    _example_overlay(monkeypatch, tmp_path)
+    example = Path(__file__).resolve().parents[1] / "settings.yaml.example"
+    (tmp_path / "settings.yaml").write_bytes(example.read_bytes())
+    s = get_settings()
+    assert s.institution_code == "ut"
+    assert s.data_window_end is None  # example's `0` = open-ended window
+    assert s.admin_contact == ""
+    reset_settings_cache()
+
+
+# ── Write-path guarantees (folded from test_admin2_writes.py) ─────────────
+
+
+@pytest.fixture
+async def writes_api(client, db, monkeypatch, tmp_path):
+    """Admin login backdrop with a works corpus, so flag materialization
+    and window-bounded counts have data: one hosted institution, one work
+    in the window, and the stats derived from them."""
+    monkeypatch.setenv("JB_ADMIN_PASSWORD", PASSWORD)
+    monkeypatch.setenv("JB_SETTINGS_YAML", str(tmp_path / "settings.yaml"))
+    reset_settings_cache()
+    inst = Institution(name="University of Twente", code="ut", active=True)
+    db.add(inst)
+    db.add(journal_factory("0000-0000"))
+    await db.flush()
+    run = HarvestRun(
+        source="pure",
+        entity_type="works",
+        status="completed",
+        institution_id=inst.id,
+        config_fingerprint="t",
+    )
+    db.add(run)
+    await db.flush()
+    db.add(
+        Work(
+            institution_id=inst.id,
+            pure_uuid="ut-in",
+            title="In window",
+            norm_title="in window",
+            year=2021,
+            work_type="article",
+            journal_issn_l="0000-0000",
+            first_seen_run=run.id,
+            last_seen_run=run.id,
+        )
+    )
+    await write_pure_canon_stats(db, inst)
+    await refresh_institution_stats(db, inst)
+    await db.commit()
+    yield client
+    reset_settings_cache()
+
+
+async def _inst_audit_rows(db) -> list[StatusChangeLog]:
+    rows = (
+        (
+            await db.execute(
+                select(StatusChangeLog)
+                .where(StatusChangeLog.table_name == "institutions")
+                .order_by(StatusChangeLog.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return list(rows)
+
+
+@requires_db
+async def test_window_validation_and_clear_audit(writes_api, db):
+    headers = await _login(writes_api)
+    r = await writes_api.put(
+        "/api/v1/admin/institutions/ut",
+        headers=headers,
+        json={"data_window_start": 2024, "data_window_end": 2020},
+    )
+    assert r.status_code == 400
+    assert "data_window" in r.json()["detail"]
+
+    # A one-sided body is checked against the stored row too.
+    r = await writes_api.put(
+        "/api/v1/admin/institutions/ut", headers=headers, json={"data_window_end": 2015}
+    )
+    assert r.status_code == 400
+
+    # Equal ends are a legal one-year window.
+    r = await writes_api.put(
+        "/api/v1/admin/institutions/ut",
+        headers=headers,
+        json={"data_window_start": 2020, "data_window_end": 2020},
+    )
+    assert r.status_code == 200
+    assert r.json()["data_window_end"] == 2020
+
+    # Clearing the end stores an open NULL window and audits "(cleared)".
+    r = await writes_api.put(
+        "/api/v1/admin/institutions/ut", headers=headers, json={"data_window_end": None}
+    )
+    assert r.status_code == 200
+    assert r.json()["data_window_end"] is None
+    await db.rollback()
+    row = (await _inst_audit_rows(db))[-1]
+    assert row.field == "data_window_end" and row.new_value == "(cleared)"
+    assert row.row_key == {"code": "ut"}
+
+
+@requires_db
+async def test_reactivate_rematerializes_flags_and_audits(writes_api, db):
+    inst = (await db.execute(select(Institution).where(Institution.code == "ut"))).scalar_one()
+    iid = inst.id
+    flags = await db.get(JournalFlags, {"institution_id": iid, "issn_l": "0000-0000"})
+    assert flags is not None and flags.works_count == 1
+
+    headers = await _login(writes_api)
+    r = await writes_api.put(
+        "/api/v1/admin/institutions/ut", headers=headers, json={"active": False}
+    )
+    assert r.status_code == 200
+    assert r.json()["rematerialized_journals"] is None
+    await db.rollback()
+    live = (
+        (await db.execute(select(JournalFlags).where(JournalFlags.institution_id == iid)))
+        .scalars()
+        .all()
+    )
+    assert live == []
+
+    r = await writes_api.put(
+        "/api/v1/admin/institutions/ut", headers=headers, json={"active": True}
+    )
+    assert r.status_code == 200
+    assert r.json()["rematerialized_journals"] == 1
+    await db.rollback()
+    fresh = (
+        (await db.execute(select(JournalFlags).where(JournalFlags.institution_id == iid)))
+        .scalars()
+        .all()
+    )
+    assert len(fresh) == 1 and fresh[0].works_count == 1
+
+    # Both flips are audited.
+    flips = [r for r in await _inst_audit_rows(db) if r.field == "active"]
+    assert [(r.old_value, r.new_value) for r in flips] == [("true", "false"), ("false", "true")]
+
+    # A plain field write is audited with its old and new value.
+    r = await writes_api.put(
+        "/api/v1/admin/institutions/ut", headers=headers, json={"short_name": "UT"}
+    )
+    assert r.status_code == 200
+    await db.rollback()
+    row = (await _inst_audit_rows(db))[-1]
+    assert (row.field, row.old_value, row.new_value) == ("short_name", None, "UT")
+
+
+@requires_db
+async def test_deal_journal_unknown_issn_rejected(admin_api, db):
+    db.add(IssnMap(issn="1111-1111", issn_l="1111-1119", source="test"))
+    await db.commit()
+    headers = await _login(admin_api)
+    deal_id = (await db.execute(select(Deal.id).order_by(Deal.id))).scalars().first()
+    r = await admin_api.put(
+        f"/api/v1/admin/deals/{deal_id}/journals",
+        headers=headers,
+        json={"add": [{"issn": "9999-9999", "journal_name": "P2 Added Journal"}]},
+    )
+    assert r.status_code == 400
+    assert "9999-9999" in r.json()["detail"]
+    await db.rollback()
+    assert (
+        await db.execute(select(DealJournal).where(DealJournal.issn == "9999-9999"))
+    ).scalars().first() is None
+
+    # A known ISSN resolves through issn_map to its ISSN-L.
+    r = await admin_api.put(
+        f"/api/v1/admin/deals/{deal_id}/journals",
+        headers=headers,
+        json={"add": [{"issn": "1111-1111"}]},
+    )
+    assert r.status_code == 200
+    added = next(j for j in r.json()["journals"] if j["issn"] == "1111-1111")
+    assert added["issn_l"] == "1111-1119"
+
+
+@requires_db
+async def test_settings_writes_audited_and_secret_masked(admin_api, db):
+    headers = await _login(admin_api)
+    r = await admin_api.put(
+        "/api/v1/admin/settings",
+        headers=headers,
+        json={"values": {"contact_email": "lib@example.edu"}},
+    )
+    assert r.status_code == 200
+    await db.rollback()
+    email_rows = list(
+        (
+            await db.execute(
+                select(StatusChangeLog).where(
+                    StatusChangeLog.table_name == "settings",
+                    StatusChangeLog.field == "contact_email",
+                )
+            )
+        ).scalars()
+    )
+    assert email_rows and email_rows[0].new_value == "lib@example.edu"
+
+    # A secret write is audited, but only as (masked) on both sides.
+    r = await admin_api.put(
+        "/api/v1/admin/settings",
+        headers=headers,
+        json={"values": {"openalex_api_key": "sekret-key-123"}},
+    )
+    assert r.status_code == 200
+    await db.rollback()
+    secret_rows = list(
+        (
+            await db.execute(
+                select(StatusChangeLog).where(
+                    StatusChangeLog.table_name == "settings",
+                    StatusChangeLog.field == "openalex_api_key",
+                )
+            )
+        ).scalars()
+    )
+    assert len(secret_rows) == 1
+    # Nothing was stored in the overlay before, so the old side may be
+    # null — either way the secret itself must not appear.
+    assert secret_rows[0].old_value in (None, "(masked)")
+    assert secret_rows[0].new_value == "(masked)"
+    assert "sekret-key-123" not in repr(secret_rows[0])

@@ -693,3 +693,87 @@ async def test_repository_matcher_table(case, names, expected):
     if case == "first-canon-row-wins":
         canon = [("PubMed Central", "first"), ("PubMed  Central", "second")]
     assert match_repositories(names, canon) == expected
+
+
+# ── Canonical metrics population (folded from test_correct_journal_metrics.py)
+
+
+@requires_db
+async def test_metrics_canonical_venue_cross_check(db, institution_factory):
+    """The FWCI/retracted tiles ride the canonical UT works population
+    (decision 22): an author-sweep venue row joins only the separately
+    named cross-check fields, never the canonical tiles."""
+    from journal_browser.services.detail_enrichment import institution_metrics
+
+    ut = await institution_factory(code="ut", data_window_start=2020)
+    db.add(journal_factory("1234-5678"))
+    run = HarvestRun(source="pure", entity_type="works", status="completed", config_fingerprint="t")
+    db.add(run)
+    await db.flush()
+    db.add_all(
+        [
+            Work(
+                institution_id=ut.id,
+                pure_uuid="w-a",
+                title="w-a",
+                norm_title="w-a",
+                year=2023,
+                doi_normalized="10.0.0/a",
+                journal_issn_l="1234-5678",
+                first_seen_run=run.id,
+                last_seen_run=run.id,
+            ),
+            Work(
+                institution_id=ut.id,
+                pure_uuid="w-b",
+                title="w-b",
+                norm_title="w-b",
+                year=2022,
+                journal_issn_l="1234-5678",
+                first_seen_run=run.id,
+                last_seen_run=run.id,
+            ),
+            # Venue-side only: not a works-table row (author sweep row of
+            # the same venue).
+            OpenalexWork(
+                institution_id=ut.id,
+                w_id="W-sweep",
+                title="sweep-only",
+                year=2023,
+                fwci=0.5,
+                authorships=[],
+                venue_issn_l="1234-5678",
+                venue_name="Journal 1234-5678",
+                source="author-sweep:1",
+            ),
+        ]
+    )
+    db.add(
+        OpenalexWork(
+            institution_id=ut.id,
+            w_id="W-a",
+            title="w-a",
+            year=2023,
+            doi_normalized="10.0.0/a",
+            fwci=2.0,
+            is_retracted=True,
+            cited_by_count=4,
+            authorships=[],
+            venue_issn_l="1234-5678",
+            venue_name="Journal 1234-5678",
+            source="works_stats",
+        )
+    )
+    await db.commit()
+
+    m = await institution_metrics(db, "1234-5678", ut)
+    # Canonical tiles: two works, one store-matched with fwci 2.0, retracted.
+    assert m["canonical_total"] == 2
+    assert m["fwci_n"] == 1 and m["fwci_avg"] == 2.0
+    assert m["retracted"] == 1 == m["canonical_retracted"]
+    # Venue cross-check keeps its own numbers (2 venue rows, fwci 0.5+2.0).
+    assert m["openalex_matched"] == 2
+    assert m["venue_fwci_n"] == 2
+    assert m["venue_fwci_avg"] == pytest.approx(1.25)
+    assert m["venue_retracted"] == 1
+    assert m["cited_total"] == 4

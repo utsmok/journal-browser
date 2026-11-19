@@ -7,14 +7,14 @@ admin deal CRUD with overrides and tombstones.
 Replaces test_deals_api, test_openapc, test_openapc_rerun, test_jct,
 test_deal_coverage, and test_admin_deals."""
 
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from conftest import requires_db
+from conftest import journal_factory, requires_db
 from journal_browser.config import reset_settings_cache
 from journal_browser.db import get_session
 from journal_browser.harvest.common import HarvestDataError, parse_csv_rows, store_raw_file
@@ -35,15 +35,19 @@ from journal_browser.models import (
     Deal,
     DealInstitution,
     DealJournal,
+    FunderLink,
     HarvestRun,
     Institution,
     IssnMap,
+    JiscFunder,
     Journal,
     JournalFlags,
     ManualOverride,
     Publisher,
     Work,
+    WorkFunder,
 )
+from journal_browser.services import funders as funders_service
 from journal_browser.services.deal_coverage import dj_scope
 
 PASSWORD = "test-admin-pw"
@@ -1086,3 +1090,102 @@ async def test_admin_deal_journals_and_participation_tombstones(admin_api, db_en
             )
             is None
         )
+
+
+# ── Funder UT-works counts (folded from test_correct_funder_metrics.py) ───
+
+
+@pytest.fixture
+async def funders_fixture(db, institution_factory):
+    """Two linked funders (one with two OpenAlex twin ids) and works that
+    exercise the gates: a retired work, a preprint, a pre-window work, and
+    one live work crediting both twins of funder 1."""
+    ut = await institution_factory(code="ut", data_window_start=2020)
+    for issn in ("1234-5678", "2345-6789"):
+        db.add(journal_factory(issn))
+    db.add_all(
+        [
+            JiscFunder(id=1, name="Alpha Council", country="nl"),
+            JiscFunder(id=2, name="Beta Fund", country="nl"),
+        ]
+    )
+    await db.flush()
+    db.add_all(
+        [
+            FunderLink(
+                funder_id=1, source="openalex", source_id="https://openalex.org/F-A", via="ror"
+            ),
+            FunderLink(
+                funder_id=1, source="openalex", source_id="https://openalex.org/F-B", via="ror"
+            ),
+            FunderLink(
+                funder_id=2, source="openalex", source_id="https://openalex.org/F-C", via="ror"
+            ),
+        ]
+    )
+    run = HarvestRun(source="pure", entity_type="works", status="completed", config_fingerprint="t")
+    db.add(run)
+    await db.flush()
+    works = [
+        # (pure_uuid, year, work_type, doi, issn, retired_at)
+        ("w-live", 2023, "article", "10.0.0/1", "1234-5678", None),
+        ("w-retired", 2023, "article", "10.0.0/2", "1234-5678", datetime.now(UTC)),
+        ("w-preprint", 2023, "preprint", None, "1234-5678", None),
+        ("w-old", 2019, "article", None, "1234-5678", None),
+        ("w-beta1", 2023, "article", None, "2345-6789", None),
+        ("w-beta2", 2023, "article", None, "2345-6789", None),
+    ]
+    db.add_all(
+        Work(
+            institution_id=ut.id,
+            pure_uuid=u,
+            title=u,
+            norm_title=u,
+            year=y,
+            work_type=t,
+            doi_normalized=doi,
+            journal_issn_l=issn,
+            retired_at=retired,
+            first_seen_run=run.id,
+            last_seen_run=run.id,
+        )
+        for (u, y, t, doi, issn, retired) in works
+    )
+    await db.flush()
+    db.add_all(
+        [
+            WorkFunder(institution_id=ut.id, pure_uuid="w-live", funder_openalex_id="F-A"),
+            WorkFunder(institution_id=ut.id, pure_uuid="w-live", funder_openalex_id="F-B"),
+            WorkFunder(institution_id=ut.id, pure_uuid="w-retired", funder_openalex_id="F-A"),
+            WorkFunder(institution_id=ut.id, pure_uuid="w-preprint", funder_openalex_id="F-A"),
+            WorkFunder(institution_id=ut.id, pure_uuid="w-old", funder_openalex_id="F-A"),
+            WorkFunder(institution_id=ut.id, pure_uuid="w-beta1", funder_openalex_id="F-C"),
+            WorkFunder(institution_id=ut.id, pure_uuid="w-beta2", funder_openalex_id="F-C"),
+        ]
+    )
+    await db.commit()
+    return ut
+
+
+@requires_db
+async def test_funder_counts_gate_dedupe_and_sort(db, client, funders_fixture):
+    per_bare = await funders_service.ut_work_counts(db, funders_fixture)
+    # Gates drop the retired, excluded-type and out-of-window works; the
+    # per-id counts stay per id (the display-twin pick uses them).
+    assert per_bare == {"F-A": 1, "F-B": 1, "F-C": 2}
+    union = await funders_service.ut_funder_work_counts(
+        db, funders_fixture, {1: {"F-A", "F-B"}, 2: {"F-C"}}
+    )
+    # The twin-deduped union: funder 1's double-credited work counts once.
+    assert union == {1: 1, 2: 2}
+
+    items = (await client.get("/api/v1/ut/funders")).json()["items"]
+    by_id = {i["id"]: i for i in items}
+    assert by_id[1]["n_ut_works"] == 1 and by_id[2]["n_ut_works"] == 2
+    # Re-sorted by the corrected counts (2 before 1), name breaks ties.
+    assert [i["id"] for i in items[:2]] == [2, 1]
+
+    body = (await client.get("/api/v1/ut/funders/1")).json()
+    assert body["n_ut_works"] == 1
+    # Only the live work's journal survives the gates.
+    assert [(j["issn_l"], j["n_works"]) for j in body["top_journals"]] == [("1234-5678", 1)]

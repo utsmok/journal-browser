@@ -19,7 +19,7 @@ from journal_browser.harvest.common import (
     require_headers,
 )
 from journal_browser.harvest.openalex_journals import journal_values
-from journal_browser.harvest.reconcile import reconcile_deals
+from journal_browser.harvest.reconcile import derive_nl_deal_coverage, reconcile_deals
 from journal_browser.harvest.scimagojr import issn_candidates
 from journal_browser.ingest import IngestSession, _strip_nuls, apply_overrides, content_hash
 from journal_browser.logging_setup import configure_logging
@@ -31,6 +31,7 @@ from journal_browser.models import (
     HarvestRun,
     HarvestState,
     Institution,
+    Journal,
     ManualOverride,
     Publisher,
     SourceRecord,
@@ -435,3 +436,107 @@ async def test_reconcile_dismissal_protects(db):
     d = await db.get(Deal, deal.id)
     assert d.needs_curation is False and d.needs_curation_reason is None
     assert d.curation_resolved_reason == "checked: local ACM deal"
+
+
+# ── NL deal coverage re-derive (folded from test_harvest2_reconcile_rederive.py)
+
+
+ACM = "Association for Computing Machinery"
+
+
+async def _pattern_deal(db) -> int:
+    """A deal whose coverage list derives from the publisher pattern (the
+    openaccess.nl ACM page naming Twente, duration in the conditions)."""
+    pub = Publisher(name=ACM)
+    db.add(pub)
+    await db.flush()
+    deal = Deal(
+        publisher_id=pub.id,
+        status="current",
+        corresponding_authors_only=False,
+        provenance=[],
+        openaccess_nl_url="https://www.openaccess.nl/en/publisherdeal/acm-2021-2030",
+        conditions_text=(
+            "License and conditions: ... University of Twente ... (duration 2026-2028)"
+        ),
+    )
+    db.add(deal)
+    await db.flush()
+    return deal.id
+
+
+@requires_db
+async def test_pattern_coverage_gains_new_journals(db):
+    db.add(
+        Institution(
+            name="University of Twente", ror="https://ror.org/006hf6230", code="ut", active=True
+        )
+    )
+    deal_id = await _pattern_deal(db)
+    for issn in ("0001-0001", "0002-0002"):
+        db.add(Journal(issn_l=issn, title=f"J{issn}", publisher_name=ACM))
+    await db.commit()
+
+    stats = await derive_nl_deal_coverage(db)
+    await db.commit()
+    assert stats["covered"] == 1 and stats["pattern_journals"] == 2
+
+    # A new journal of the same publisher joins the corpus later (e.g. ACM
+    # TOIS after the first derivation): each run re-derives the pattern.
+    db.add(
+        Journal(
+            issn_l="0003-0003", title="ACM Transactions on Information Systems", publisher_name=ACM
+        )
+    )
+    await db.commit()
+    stats2 = await derive_nl_deal_coverage(db)
+    await db.commit()
+    assert stats2["pattern_journals"] == 1 and stats2["covered"] == 1
+    rows = (
+        (await db.execute(select(DealJournal).where(DealJournal.deal_id == deal_id)))
+        .scalars()
+        .all()
+    )
+    assert {r.issn for r in rows} == {"0001-0001", "0002-0002", "0003-0003"}
+
+    # A third run with nothing new adds nothing (idempotent).
+    stats3 = await derive_nl_deal_coverage(db)
+    await db.commit()
+    assert stats3["pattern_journals"] == 0 and stats3["covered"] == 0
+
+
+@requires_db
+async def test_manual_coverage_freezes_pattern_derivation(db):
+    db.add(
+        Institution(
+            name="University of Twente", ror="https://ror.org/006hf6230", code="ut", active=True
+        )
+    )
+    deal_id = await _pattern_deal(db)
+    db.add(Journal(issn_l="0001-0001", title="J1", publisher_name=ACM))
+    await db.commit()
+    await derive_nl_deal_coverage(db)
+    await db.commit()
+
+    # ManualOverride precedence: a hand-added coverage row freezes the
+    # pattern list; pattern rows never join on top of a curated deal.
+    db.add(
+        DealJournal(
+            deal_id=deal_id,
+            issn="0009-0009",
+            issn_l="0009-0009",
+            journal_name="Hand-picked",
+            source="manual",
+        )
+    )
+    db.add(Journal(issn_l="0004-0004", title="J4", publisher_name=ACM))
+    await db.commit()
+    stats = await derive_nl_deal_coverage(db)
+    await db.commit()
+    assert stats["pattern_journals"] == 0 and stats["covered"] == 0
+    rows = (
+        (await db.execute(select(DealJournal).where(DealJournal.deal_id == deal_id)))
+        .scalars()
+        .all()
+    )
+    assert {r.issn for r in rows} == {"0001-0001", "0009-0009"}
