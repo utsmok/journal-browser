@@ -18,7 +18,8 @@ from typing import Any
 
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, literal, select
+from sqlalchemy import column, func, literal, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..harvest.openalex_works import AUTHOR_SWEEP_PREFIX
@@ -80,13 +81,27 @@ CSV_COLUMNS = (
     "part_of",
 )
 
-#: Rows buffered per streaming chunk.
+#: Rows buffered per streaming chunk (both the server-side cursor's
+#: yield_per and the CSV flush cadence).
 FLUSH_EVERY = 500
+
+#: Spreadsheet-active leading characters (OWASP CSV injection): a cell
+#: starting with one of these would evaluate as a formula in Excel, so it
+#: gets a leading apostrophe. Text comes from OpenAlex/Pure and is not
+#: trusted.
+_FORMULA_LEADS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_safe(value: str) -> str:
+    """One cell of CSV output: neutralize spreadsheet formula injection
+    by prefixing a `'` to dangerous leading characters."""
+    return "'" + value if value.startswith(_FORMULA_LEADS) else value
 
 
 def _t(value: Any) -> str:
-    """Cell text: empty string when missing, str() otherwise."""
-    return "" if value is None else str(value)
+    """Cell text: empty string when missing, str() otherwise, formula
+    guard applied."""
+    return "" if value is None else _csv_safe(str(value))
 
 
 def _part_of(parent_works: Any) -> str:
@@ -227,13 +242,13 @@ def _store_csv_row(
         _t(f"https://doi.org/{doi}" if doi else None),
         _t(raw.get("pdf_url")),
         _t(raw.get("landing_page_url")),
-        ";".join(a["name"] for a in authors if a["name"]),
-        ";".join(a["openalex_id"] for a in authors),
-        ";".join(a["orcid"] for a in authors if a["orcid"]),
+        _csv_safe(";".join(a["name"] for a in authors if a["name"])),
+        _csv_safe(";".join(a["openalex_id"] for a in authors)),
+        _csv_safe(";".join(a["orcid"] for a in authors if a["orcid"])),
         _t(raw.get("institution_rors")),
-        ";".join(a["name"] for a in ut),
-        ";".join(a["orcid"] for a in ut if a["orcid"]),
-        _ut_affiliations(ut),
+        _csv_safe(";".join(a["name"] for a in ut)),
+        _csv_safe(";".join(a["orcid"] for a in ut if a["orcid"])),
+        _csv_safe(_ut_affiliations(ut)),
         _t(r.venue_name),
         _t(r.venue_issn_l),
         _t(publisher),
@@ -279,9 +294,9 @@ def _canon_csv_row(
         "",
         "",
         "",
-        author.name,
+        _csv_safe(author.name),
         _t(author.orcid),
-        _ut_affiliations(ut),
+        _csv_safe(_ut_affiliations(ut)),
         _t(row.journal_title),
         _t(row.journal_issn_l),
         _t(publisher),
@@ -297,29 +312,63 @@ def _canon_csv_row(
     ]
 
 
-async def _store_csv_response(
-    session: AsyncSession, institution: Institution, rows: list[Any], filename: str
-) -> StreamingResponse:
-    """Batch enrichment (publisher names/RORs, roster) over the fetched
-    result, then the streaming CSV — no per-row queries."""
-    publishers = await journal_publisher_map(session, [r.venue_issn_l for r in rows])
-    rors = await _publisher_rors(session, publishers.values())
-    roster = await ut_roster_by_aids(
-        session,
-        institution,
-        {
-            aid.lower()
-            for r in rows
-            for entry in r.authorships or []
-            if (aid := str((entry or {}).get("a") or ""))
-        },
+async def _store_keys(
+    session: AsyncSession, institution: Institution, predicate: list[Any]
+) -> tuple[list[str], set[str]]:
+    """Enrichment keys over the export predicate: distinct venue ISSNs and
+    lowercased author ids. Gathered in SQL so the row query itself can
+    stream from a server-side cursor without a full in-memory fetch."""
+    where = [OpenalexWork.institution_id == institution.id, *predicate]
+    issns = (
+        (await session.execute(select(OpenalexWork.venue_issn_l).distinct().where(*where)))
+        .scalars()
+        .all()
     )
-    out_rows = [_store_csv_row(r, _raw_fields(r.payload), roster, publishers, rors) for r in rows]
-    return _csv_response(filename, out_rows)
+    aid = func.jsonb_array_elements(OpenalexWork.authorships).table_valued(
+        column("value", JSONB), name="aid"
+    )
+    aid_rows = await session.execute(
+        select(func.lower(aid.c.value.op("->>")("a")))
+        .distinct()
+        .select_from(OpenalexWork, aid)
+        .where(*where)
+    )
+    return list(issns), {r[0] for r in aid_rows if r[0]}
 
 
-def _csv_response(filename: str, rows: Iterable[list[str]]) -> StreamingResponse:
-    """CSV attachment; the csv module owns the quoting."""
+async def _store_csv_response(
+    session: AsyncSession,
+    institution: Institution,
+    stmt: Any,
+    predicate: list[Any],
+    filename: str,
+) -> StreamingResponse:
+    """Batch enrichment (publisher names/RORs, roster) over SQL-gathered
+    keys, then the streaming CSV off a server-side cursor (yield_per) —
+    no per-row queries and no whole-result fetch."""
+    issns, aids = await _store_keys(session, institution, predicate)
+    publishers = await journal_publisher_map(session, issns)
+    rors = await _publisher_rors(session, publishers.values())
+    roster = await ut_roster_by_aids(session, institution, aids)
+    result = await session.stream(stmt.execution_options(yield_per=FLUSH_EVERY))
+
+    async def rows() -> AsyncIterator[list[str]]:
+        async for partition in result.partitions(FLUSH_EVERY):
+            for r in partition:
+                yield _store_csv_row(r, _raw_fields(r.payload), roster, publishers, rors)
+
+    return _csv_response(filename, rows())
+
+
+async def _empty_rows() -> AsyncIterator[list[str]]:
+    """Header-only exports iterate nothing."""
+    return
+    yield  # pragma: no cover
+
+
+def _csv_response(filename: str, rows: AsyncIterator[list[str]]) -> StreamingResponse:
+    """CSV attachment; the csv module owns the quoting, rows arrive
+    lazily (one flush per FLUSH_EVERY rows)."""
 
     async def _stream() -> AsyncIterator[str]:
         buf = io.StringIO()
@@ -329,7 +378,7 @@ def _csv_response(filename: str, rows: Iterable[list[str]]) -> StreamingResponse
         buf = io.StringIO()
         writer = csv.writer(buf, lineterminator="\n")
         written = 0
-        for row in rows:
+        async for row in rows:
             writer.writerow(row)
             written += 1
             if written % FLUSH_EVERY == 0:
@@ -363,9 +412,12 @@ async def journal_openalex_only_csv(
         *store_gates(institution, year_range),
         not_in_pure(),
     ]
-    rows = (await session.execute(_export_stmt(institution, predicate))).all()
     return await _store_csv_response(
-        session, institution, rows, f"{_safe_filename(issn)}-openalex-only.csv"
+        session,
+        institution,
+        _export_stmt(institution, predicate),
+        predicate,
+        f"{_safe_filename(issn)}-openalex-only.csv",
     )
 
 
@@ -390,9 +442,12 @@ async def publisher_openalex_only_csv(
     ]
     if (parts_sql := parts_predicate(parts)) is not None:
         predicate.append(parts_sql)
-    rows = (await session.execute(_export_stmt(institution, predicate))).all()
     return await _store_csv_response(
-        session, institution, rows, f"{_safe_filename(name)}-openalex-only.csv"
+        session,
+        institution,
+        _export_stmt(institution, predicate),
+        predicate,
+        f"{_safe_filename(name)}-openalex-only.csv",
     )
 
 
@@ -425,16 +480,19 @@ async def _missed_csv(
     year_range: tuple[int, int] | None = None,
 ) -> StreamingResponse:
     aids = sorted({a.lower() for a in (author.openalex_ids or []) if a})
-    rows: list[Any] = []
-    if aids:
-        predicate = [
-            attributed_to_any(aids),
-            *store_gates(institution, year_range),
-            not_in_pure(),
-        ]
-        rows = (await session.execute(_export_stmt(institution, predicate))).all()
+    if not aids:
+        return _csv_response(f"{_safe_filename(author.pure_uuid)}-works-missed.csv", _empty_rows())
+    predicate = [
+        attributed_to_any(aids),
+        *store_gates(institution, year_range),
+        not_in_pure(),
+    ]
     return await _store_csv_response(
-        session, institution, rows, f"{_safe_filename(author.pure_uuid)}-works-missed.csv"
+        session,
+        institution,
+        _export_stmt(institution, predicate),
+        predicate,
+        f"{_safe_filename(author.pure_uuid)}-works-missed.csv",
     )
 
 
@@ -444,30 +502,41 @@ async def _canon_csv(
     author: Author,
     year_range: tuple[int, int] | None = None,
 ) -> StreamingResponse:
-    rows = (
-        await session.execute(
-            select(
-                Work.pure_uuid,
-                Work.title,
-                Work.year,
-                Work.doi_normalized,
-                Work.oa_status,
-                Work.work_type,
-                Work.journal_issn_l,
-                Journal.title.label("journal_title"),
-            )
-            .join(AuthorWork, author_works_join(institution.id, author.pure_uuid))
-            .outerjoin(Journal, Journal.issn_l == Work.journal_issn_l)
-            .where(
-                Work.institution_id == institution.id,
-                Work.retired_at.is_(None),
-                *work_year_window(institution, year_range),
-                work_type_not_excluded(Work.work_type),
-            )
-            .order_by(Work.year.desc(), func.lower(Work.title))
-        )
-    ).all()
-    publishers = await journal_publisher_map(session, [r.journal_issn_l for r in rows])
+    where = [
+        Work.institution_id == institution.id,
+        Work.retired_at.is_(None),
+        *work_year_window(institution, year_range),
+        work_type_not_excluded(Work.work_type),
+    ]
+    issns = (
+        (await session.execute(select(Work.journal_issn_l).distinct().where(*where)))
+        .scalars()
+        .all()
+    )
+    publishers = await journal_publisher_map(session, issns)
     rors = await _publisher_rors(session, publishers.values())
-    out_rows = [_canon_csv_row(r, author, publishers, rors) for r in rows]
-    return _csv_response(f"{_safe_filename(author.pure_uuid)}-works-canon.csv", out_rows)
+    stmt = (
+        select(
+            Work.pure_uuid,
+            Work.title,
+            Work.year,
+            Work.doi_normalized,
+            Work.oa_status,
+            Work.work_type,
+            Work.journal_issn_l,
+            Journal.title.label("journal_title"),
+        )
+        .join(AuthorWork, author_works_join(institution.id, author.pure_uuid))
+        .outerjoin(Journal, Journal.issn_l == Work.journal_issn_l)
+        .where(*where)
+        .order_by(Work.year.desc(), func.lower(Work.title))
+        .execution_options(yield_per=FLUSH_EVERY)
+    )
+    result = await session.stream(stmt)
+
+    async def rows() -> AsyncIterator[list[str]]:
+        async for partition in result.partitions(FLUSH_EVERY):
+            for r in partition:
+                yield _canon_csv_row(r, author, publishers, rors)
+
+    return _csv_response(f"{_safe_filename(author.pure_uuid)}-works-canon.csv", rows())
