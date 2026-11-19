@@ -14,10 +14,12 @@ RUN useradd --create-home --uid 1000 app
 # - postgresql-client-17 (PGDG): nightly pg_dump/pg_restore must match the
 #   db service's Postgres major; Debian bookworm's own client stops at 15.
 # - supercronic: runs the scheduler crontab; release binary, checksum-verified.
+# - git: uv fetches the bibliofabric packages from git sources until they
+#   are released on PyPI (see [tool.uv.sources] in pyproject.toml).
 ARG SUPERCRONIC_VERSION=v0.2.51
 ARG SUPERCRONIC_SHA256=cc232108374e8e2b537045f2d5eaa1229f619db314c3ba6a14d38b35dc0aa123
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl gnupg tzdata \
+    && apt-get install -y --no-install-recommends ca-certificates curl git gnupg tzdata \
     && install -d /usr/share/postgresql-common/pgdg \
     && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
         -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
