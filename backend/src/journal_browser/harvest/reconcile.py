@@ -238,19 +238,32 @@ async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
                 .on_conflict_do_nothing(index_elements=["deal_id", "institution_id"])
             )
             stats["linked"] += len(participants)
-        if linked is not None and has_journals:
-            # Earlier reconcile already derived this deal; the flag pass
-            # above re-flagged it, so clear it again (idempotent rerun).
-            if deal.id not in protected and deal.needs_curation:
-                deal.needs_curation = False
-                deal.needs_curation_reason = None
-            continue
         pname = (publisher_names.get(deal.publisher_id) or "").strip()
         # openaccess.nl names carry parenthetical sigla ("... (ACS)") that
         # OpenAlex publisher names lack; match on the bare name.
         base = re.sub(r"\s*\([^)]*\)\s*$", "", pname).strip()
         patterns = PUBLISHER_JOURNAL_PATTERNS.get(pname.casefold(), [f"{base}%"]) if base else []
-        if has_journals or not patterns:
+        # Hand-curated coverage freezes a deal's list: any journal row the
+        # JCT sheet or an admin added (source != 'publisher-pattern') wins,
+        # and pattern rows never join on top of it. Pattern-derived lists
+        # re-derive on every reconcile instead of freezing after the first
+        # derivation: the insert below is idempotent (on_conflict_do_nothing),
+        # so journals the publisher adds later join the deal.
+        curated = await session.scalar(
+            select(DealJournal.deal_id)
+            .where(
+                DealJournal.deal_id == deal.id,
+                DealJournal.source != "publisher-pattern",
+            )
+            .limit(1)
+        )
+        if linked is not None and has_journals and deal.id not in protected and deal.needs_curation:
+            # Earlier reconcile already derived (or curated) this deal; the
+            # flag pass above re-flagged it, so clear it again (idempotent
+            # rerun). Pattern-derived deals keep deriving below.
+            deal.needs_curation = False
+            deal.needs_curation_reason = None
+        if curated is not None or not patterns:
             continue
         journals = (
             await session.execute(
@@ -262,7 +275,7 @@ async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
         ).all()
         if not journals:
             continue
-        await session.execute(
+        result = await session.execute(
             pg_insert(DealJournal)
             .values(
                 [
@@ -281,6 +294,10 @@ async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
                 index_where=text("institution_id IS NULL"),
             )
         )
+        inserted = int(getattr(result, "rowcount", 0) or 0)
+        stats["pattern_journals"] += inserted
+        if not inserted:
+            continue
         deal.provenance = [
             *list(deal.provenance or []),
             {
@@ -295,7 +312,6 @@ async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
             deal.needs_curation = False
             deal.needs_curation_reason = None
         stats["covered"] += 1
-        stats["pattern_journals"] += len(journals)
     return stats
 
 
