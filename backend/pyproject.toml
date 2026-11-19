@@ -25,6 +25,7 @@ dependencies = [
     "nameparser>=2.8.0,<3",
     "levenshtein>=0.27.5",
     "pydantic>=2.14.1",
+    "maxminddb>=3.3.0",
 ]
 
 

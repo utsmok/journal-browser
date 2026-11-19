@@ -1,32 +1,37 @@
-"""Backfill usage_events.country from ip-api.com (free batch endpoint).
+"""Backfill usage_events.country from the DB-IP Country Lite database.
 
-Usage: uv run python jobs/enrich_usage_geo.py [--limit N]
-
-Batches of 100 unresolved IPs -> POST https://ip-api.com/batch; private,
-loopback, and reserved addresses are skipped. The free tier allows 15
-requests/minute, so batches are spaced 4.5 s apart.
+Country lookups are local: the monthly CC BY 4.0 country mmdb
+(https://download.db-ip.com/free/dbip-country-lite-YYYY-MM.mmdb.gz) is
+downloaded once into landing/dbip/ through the landing store, and every
+unresolved usage-event IP is read from the local file. Nothing about
+the visitors ever leaves the host; there is no request budget, so no
+batch pacing is needed. Country data by DB-IP (db-ip.com), DB-IP
+Country Lite (CC BY 4.0).
 """
 
 import argparse
 import asyncio
+import gzip
 import ipaddress
 import json
-from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
+from pathlib import Path
 
-import httpx
+import maxminddb
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
+from journal_browser.harvest.common import download_to_landing
+from journal_browser.ingest import IngestSession
+from journal_browser.logging_setup import configure_logging
 from journal_browser.models import UsageEvent
 
-BATCH_SIZE = 100
-BATCH_URL = "https://ip-api.com/batch"
-BATCH_FIELDS = "status,countryCode,query"
-BATCH_SPACING_S = 4.5  # free tier: 15 req/min
-
-# batch of IPs -> {ip: countryCode or None}; None marks a failed lookup.
-Fetcher = Callable[[list[str]], Awaitable[dict[str, str | None]]]
+SOURCE = "dbip"
+#: DB-IP publishes the lite database as one file per month; the job
+#: fetches the current month's file and re-downloads when the month
+#: rolls over.
+URL_TEMPLATE = "https://download.dbip.com/free/dbip-country-lite-{key}.mmdb.gz"
 
 
 def is_trackable(ip: str) -> bool:
@@ -45,28 +50,42 @@ def is_trackable(ip: str) -> bool:
     )
 
 
-def plan_batches(ips: list[str]) -> list[list[str]]:
-    return [ips[i : i + BATCH_SIZE] for i in range(0, len(ips), BATCH_SIZE)]
+def mmdb_path(landing_dir: Path, key: str) -> tuple[Path, Path, str]:
+    """(archive path, decompressed path, download url) for one month."""
+    base = landing_dir / SOURCE
+    url = URL_TEMPLATE.format(key=key)
+    return base / f"dbip-country-lite-{key}.mmdb.gz", base / f"dbip-country-lite-{key}.mmdb", url
 
 
-async def fetch_countries(client: httpx.AsyncClient, batch: list[str]) -> dict[str, str | None]:
-    """One POST /batch -> {ip: countryCode or None}; None marks a failed lookup."""
-    resp = await client.post(BATCH_URL, params={"fields": BATCH_FIELDS}, json=batch)
-    resp.raise_for_status()
-    return {
-        row["query"]: row.get("countryCode") if row.get("status") == "success" else None
-        for row in resp.json()
-    }
+async def ensure_mmdb(session) -> Path:
+    """Current month's decompressed mmdb in the landing dir, downloading
+    and decompressing it when missing. The .gz stays as the verbatim
+    landing copy; the decompressed file is what the reader opens."""
+    key = datetime.now(UTC).strftime("%Y-%m")
+    gz_path, db_path, url = mmdb_path(Path(get_settings().landing_dir), key)
+    if db_path.is_file():
+        return db_path
+    gz_path.parent.mkdir(parents=True, exist_ok=True)
+    ingest = IngestSession(session)
+    data, _ = await download_to_landing(session, ingest, SOURCE, "country-lite", url, ".mmdb.gz")
+    db_path.write_bytes(gzip.decompress(data))
+    await session.commit()
+    return db_path
 
 
-async def enrich(
-    session,
-    *,
-    limit: int | None = None,
-    sleep: float = BATCH_SPACING_S,
-    fetch: Fetcher,
-) -> dict[str, int]:
-    stats = {"resolved": 0, "batches": 0, "skipped_private": 0, "failed": 0}
+def lookup_country(reader: maxminddb.Reader, ip: str) -> str | None:
+    """ISO country code for one IP, or None when the database has none."""
+    record = reader.get(ip)
+    if not isinstance(record, dict):
+        return None
+    country = record.get("country")
+    if isinstance(country, dict):
+        return country.get("iso_code")
+    return None
+
+
+async def enrich(session, reader: maxminddb.Reader, *, limit: int | None = None) -> dict[str, int]:
+    stats = {"resolved": 0, "skipped_private": 0, "failed": 0}
     ips = [
         str(ip)
         for (ip,) in (
@@ -80,38 +99,36 @@ async def enrich(
     ]
     trackable = [ip for ip in ips if is_trackable(ip)]
     stats["skipped_private"] = len(ips) - len(trackable)
-
-    batches = plan_batches(trackable)
     if limit is not None:
-        batches = batches[:limit]
-    for i, batch in enumerate(batches):
-        if i:
-            await asyncio.sleep(sleep)
-        stats["batches"] += 1
-        for ip, country in (await fetch(batch)).items():
-            if country is None:
-                stats["failed"] += 1
-                continue
-            await session.execute(
-                update(UsageEvent)
-                .where(UsageEvent.ip == ip, UsageEvent.country.is_(None))
-                .values(country=country)
-            )
-            stats["resolved"] += 1
-        await session.commit()
+        trackable = trackable[:limit]
+    for ip in trackable:
+        country = lookup_country(reader, ip)
+        if country is None:
+            stats["failed"] += 1
+            continue
+        await session.execute(
+            update(UsageEvent)
+            .where(UsageEvent.ip == ip, UsageEvent.country.is_(None))
+            .values(country=country)
+        )
+        stats["resolved"] += 1
+    await session.commit()
     return stats
 
 
 async def main(limit: int | None = None) -> None:
+    configure_logging()
     engine = create_async_engine(get_settings().database_url)
     maker = async_sessionmaker(engine, expire_on_commit=False)
-    async with maker() as session, httpx.AsyncClient() as client:
-        stats = await enrich(session, limit=limit, fetch=lambda b: fetch_countries(client, b))
+    async with maker() as session:
+        db_path = await ensure_mmdb(session)
+        with maxminddb.open_database(str(db_path)) as reader:
+            stats = await enrich(session, reader, limit=limit)
     await engine.dispose()
     print(json.dumps(stats))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--limit", type=int, default=None, help="max batches to process")
+    parser.add_argument("--limit", type=int, default=None, help="max IPs to process")
     asyncio.run(main(parser.parse_args().limit))
