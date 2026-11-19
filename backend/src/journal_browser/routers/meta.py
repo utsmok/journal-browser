@@ -39,11 +39,15 @@ async def list_limitations(
     rows = list((await session.execute(query)).scalars().all())
     # The registry is global but windows are per institution: hints written
     # with the {window_start} placeholder render this institution's year.
+    # Served as dicts: rewriting row.hint on the session-persistent
+    # instances would flush the substitution into the canon table on any
+    # later query in the request.
     window = str(institution.data_window_start or 2020)
-    for row in rows:
-        if "{window_start}" in row.hint:
-            row.hint = row.hint.replace("{window_start}", window)
-    return rows
+    return [
+        {c.name: getattr(row, c.name) for c in Limitation.__table__.columns}
+        | {"hint": row.hint.replace("{window_start}", window)}
+        for row in rows
+    ]
 
 
 @router.get("/freshness", response_model=FreshnessResponse)

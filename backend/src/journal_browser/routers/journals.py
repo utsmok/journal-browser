@@ -1,6 +1,6 @@
 """/api/v1/journals: search + detail bundle with per-field attribution."""
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -50,7 +50,7 @@ from ..services import authorship, detail_enrichment, exports, repo_links
 from ..services import search as search_service
 from ..services.deal_coverage import DEAL_FIELDS, deal_institution_join, dj_scope
 from ..services.funder_fit import JournalFacts, compute_funder_fit
-from ..services.works_query import clamped_year_range
+from ..services.works_query import YEAR_BUCKETS, clamped_year_range
 from ..vocab import GreenOa, OaType
 
 router = APIRouter(prefix="/journals", tags=["journals"])
@@ -464,21 +464,29 @@ async def journal_detail(
     stats_totals = {
         source: sum(s.works_count for s in years.values()) for source, years in by_source.items()
     }
-    stats: list[InstitutionWorksStats] = []
+    stats: list[dict[str, Any]] = []
     works_source_by_year: dict[int, str] = {}
     for year in sorted({s.year for s in stats_rows}):
         oa_row = by_source["openalex_institution_filter"].get(year)
         primary = by_source["pure_canon"].get(year)
         # Works count: Pure-canonical when present. OA split: always the
-        # OpenAlex rows (pure_canon carries none by design).
+        # OpenAlex rows (pure_canon carries none by design). Plain dicts:
+        # writing the override onto a session-persistent instance would
+        # flush an UPDATE into the canon table on any later query.
         if oa_row is not None:
-            row = oa_row
+            row = {
+                "year": year,
+                "works_count": primary.works_count if primary is not None else oa_row.works_count,
+                **{f"oa_{k}": getattr(oa_row, f"oa_{k}") for k in YEAR_BUCKETS},
+            }
             if primary is not None:
-                # In-memory only; never persisted (no commit of these rows).
-                row.works_count = primary.works_count
                 works_source_by_year[year] = "pure_canon"
         elif primary is not None:
-            row = primary
+            row = {
+                "year": year,
+                "works_count": primary.works_count,
+                **{f"oa_{k}": getattr(primary, f"oa_{k}") for k in YEAR_BUCKETS},
+            }
             works_source_by_year[year] = "pure_canon"
         else:
             row = None
@@ -587,7 +595,7 @@ async def journal_detail(
             last_active_year=journal.last_active_year,
             deal_covered=bool(deals),
             deal_cap_reached=deal_cap_reached,
-            works=sum(s.works_count for s in stats),
+            works=sum(s["works_count"] for s in stats),
             quartile=sjr_rows[-1].best_quartile if sjr_rows else None,
             twoyr_mean_citedness=summary_stats.get("two_yr_mean_citedness"),
             oa_type=oa_type_val,
@@ -614,15 +622,10 @@ async def journal_detail(
         ],
         stats=[
             StatsYear(
-                year=s.year,
-                works_count=s.works_count,
-                works_count_source=works_source_by_year.get(s.year, "openalex_institution_filter"),
-                oa_gold=s.oa_gold,
-                oa_hybrid=s.oa_hybrid,
-                oa_green=s.oa_green,
-                oa_bronze=s.oa_bronze,
-                oa_diamond=s.oa_diamond,
-                oa_closed=s.oa_closed,
+                **s,
+                works_count_source=works_source_by_year.get(
+                    s["year"], "openalex_institution_filter"
+                ),
             )
             for s in stats
         ],
