@@ -45,8 +45,7 @@ backend/settings.yaml
 compose.override.yml
 
 # Wiki-video generation workspace: TTS models, narration audio, node
-# modules, and intermediate renders. Regenerable; the deliverable mp4 is
-# committed under droid-wiki/video/.
+# modules, and intermediate renders. Regenerable.
 .factory/video/
 
 # Impeccable design-review artifacts

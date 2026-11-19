@@ -50,7 +50,7 @@ def main(argv: list[str]) -> int:
             path.endswith(SKIP_SUFFIXES)
             or path.replace("\\", "/") in GENERATED_FILES
             or "/alembic/versions/" in path
-            or path.startswith(("droid-wiki/", "docs/"))
+            or path.startswith("docs/")
         ):
             continue
         if is_binary(path):
