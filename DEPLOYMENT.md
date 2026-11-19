@@ -450,6 +450,15 @@ Run a job by hand through the same service:
 docker compose run --rm --entrypoint /bin/sh scheduler /app/scripts/refresh_wave.sh
 ```
 
+Both waves end by running `backend/scripts/prewarm.py`, which requests the
+first pages a visitor reaches for every active institution, so cold
+Postgres pages and in-process caches are filled before anyone visits. Run
+it by hand after a redeploy or before a demo:
+
+```bash
+docker compose exec scheduler uv run --no-dev python scripts/prewarm.py
+```
+
 ## Backups and restore
 
 `backend/scripts/backup.sh` runs nightly: `pg_dump --format=custom` into

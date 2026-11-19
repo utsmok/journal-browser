@@ -120,3 +120,4 @@ if [[ -n "$from" ]] && ! $started; then
 fi
 
 echo "source_wave: complete"
+uv run --no-dev python scripts/prewarm.py > /dev/null || echo "source_wave: prewarm failed"

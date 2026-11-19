@@ -102,3 +102,6 @@ for i in "${!STAGES[@]}"; do
 done
 
 echo "wave: complete"
+# Re-warm the caches the wave just invalidated, so the first visitor after
+# the night does not pay for cold pages. A failure here never fails the wave.
+uv run --no-dev python scripts/prewarm.py > /dev/null || echo "wave: prewarm failed"
