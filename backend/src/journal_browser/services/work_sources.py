@@ -80,6 +80,18 @@ async def openalex_only_works_for_author(
                 OpenalexWork.venue_issn_l,
                 OpenalexWork.parent_works,
                 OpenalexWork.is_part,
+                # CSV-export cells (the 0068 columns plus language and
+                # metrics): scalar values, so the bulk profile fetch
+                # carries them for free and the missed-works CSV needs no
+                # second pass over the gap set.
+                OpenalexWork.publication_date,
+                OpenalexWork.pdf_url,
+                OpenalexWork.landing_page_url,
+                OpenalexWork.language,
+                OpenalexWork.cited_by_count,
+                OpenalexWork.fwci,
+                OpenalexWork.is_retracted,
+                OpenalexWork.institution_rors,
             ).where(
                 OpenalexWork.institution_id == institution.id,
                 attributed_to_any(aids),
@@ -107,6 +119,16 @@ async def openalex_only_works_for_author(
             # path's rows lack them and the caller defaults to []/False.
             "parent_works": r.parent_works or [],
             "is_part": bool(r.is_part),
+            # Export cells; the DSN path's rows lack them (callers
+            # default to None).
+            "publication_date": r.publication_date,
+            "pdf_url": r.pdf_url,
+            "landing_page_url": r.landing_page_url,
+            "language": r.language,
+            "cited_by_count": r.cited_by_count,
+            "fwci": r.fwci,
+            "is_retracted": r.is_retracted,
+            "institution_rors": r.institution_rors,
         }
         for r in rows
     ]

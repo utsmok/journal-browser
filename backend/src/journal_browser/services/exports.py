@@ -13,6 +13,7 @@ import csv
 import io
 import re
 from collections.abc import AsyncIterator, Iterable
+from types import SimpleNamespace
 from typing import Any
 
 from fastapi import HTTPException
@@ -31,9 +32,9 @@ from ..models import (
     OpenalexWork,
     Work,
 )
+from .authors import author_gap_works
 from .authorship import (
     OPENALEX_URL,
-    attributed_to_any,
     journal_publisher_map,
     not_in_pure,
     parts_predicate,
@@ -43,6 +44,7 @@ from .authorship import (
     work_authors_of,
 )
 from .publishers import group_issns
+from .work_sources import authorships_by_wid
 from .works_query import author_works_join, work_type_not_excluded, work_year_window
 
 #: CSV column order; every export uses exactly this header row.
@@ -440,21 +442,65 @@ async def _missed_csv(
     author: Author,
     year_range: tuple[int, int] | None = None,
 ) -> StreamingResponse:
-    aids = sorted({a.lower() for a in (author.openalex_ids or []) if a})
-    if not aids:
-        return _csv_response(f"{_safe_filename(author.pure_uuid)}-works-missed.csv", _empty_rows())
-    predicate = [
-        attributed_to_any(aids),
-        *store_gates(institution, year_range),
-        not_in_pure(),
+    """The author's likely-missing works as an uncapped CSV: exactly the
+    rows behind the profile's likely_missing count. authors.author_gap_works
+    is the one gap definition (window + work-type gates + the Pure-record
+    refinement), so card headline, sub-count and this download quote the
+    same population; the old raw not_in_pure anti-join served a wider set
+    that matched neither number."""
+    filename = f"{_safe_filename(author.pure_uuid)}-works-missed.csv"
+    gap = await author_gap_works(session, institution, author, year_range)
+    if gap is None or not gap[1]:
+        return _csv_response(filename, _empty_rows())
+    missing = gap[1]
+    # The profile fetch keeps authorships scalar; the authors/ut_authors
+    # columns need them. One keyed query over the author-bounded set.
+    ash = await authorships_by_wid(
+        session, institution, sorted({r["openalex_id"] for r in missing if r["openalex_id"]})
+    )
+    rows = [
+        SimpleNamespace(
+            w_id=r["openalex_id"],
+            doi_normalized=r["doi"],
+            title=r["title"],
+            year=r["year"],
+            publication_date=r.get("publication_date"),
+            pdf_url=r.get("pdf_url"),
+            landing_page_url=r.get("landing_page_url"),
+            authorships=ash.get(r["openalex_id"]) or [],
+            institution_rors=r.get("institution_rors"),
+            venue_name=r["journal_title"],
+            venue_issn_l=r["journal_issn_l"],
+            oa_status=r["oa_status"],
+            work_type=r["work_type"],
+            language=r.get("language"),
+            cited_by_count=r.get("cited_by_count"),
+            fwci=r.get("fwci"),
+            is_retracted=r.get("is_retracted"),
+            parent_works=r.get("parent_works"),
+        )
+        for r in missing
     ]
-    return await _store_csv_response(
+    publishers = await journal_publisher_map(
+        session, sorted({r.venue_issn_l for r in rows if r.venue_issn_l})
+    )
+    rors = await _publisher_rors(session, publishers.values())
+    roster = await ut_roster_by_aids(
         session,
         institution,
-        _export_stmt(institution, predicate),
-        predicate,
-        f"{_safe_filename(author.pure_uuid)}-works-missed.csv",
+        {
+            str(a.get("a") or "").lower()
+            for r in rows
+            for a in r.authorships
+            if (a.get("a") or "").strip()
+        },
     )
+
+    async def rows_iter() -> AsyncIterator[list[str]]:
+        for r in rows:
+            yield _store_csv_row(r, roster, publishers, rors)
+
+    return _csv_response(filename, rows_iter())
 
 
 async def _canon_csv(

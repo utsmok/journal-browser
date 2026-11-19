@@ -1,8 +1,10 @@
 """Author browsing: search, profile bundle, embedding-based recommendations.
 
-All journal-level views reuse search.base_query, so the per-institution
-corpus cutoff (works_window_plus > 3), proceedings exclusion and ignore-list
-apply to every suggestion; the oa_type case is shared via search._oa_type."""
+All journal-level views reuse search.base_query, so the global corpus
+cutoff (works_window_plus > 3: the journal's own OpenAlex works in the
+window, materialized from counts_by_year — not the institution's works),
+proceedings exclusion and ignore-list apply to every suggestion; the
+oa_type case is shared via search._oa_type."""
 
 from typing import Any
 
@@ -460,41 +462,27 @@ async def _similar_sections(
     return similar, alternatives
 
 
-async def _openalex_only_section(
+async def author_gap_works(
     session: AsyncSession,
     institution: Institution,
     author: Author,
-    work_rows: Any,
     year_range: tuple[int, int] | None = None,
-) -> tuple[dict[str, Any], int | None]:
-    """The profile's openalex_only section: OpenAlex-attributed works the
-    Pure population does not hold, as their own list — never truncated by
-    the works cap (that split-off fixes authors with >= 200 Pure works,
-    whose missed works used to render zero items while the count said
-    otherwise).
-
-    Returns the section plus the exact gated count (None when the source
-    could not answer — the caller then leaves openalex_only_count unset
-    and the section degrades to available=False).
-
-    Quality gates keep the section honest: the institution's
-    publication-year window applies (an explicit clamped range replaces
-    the bounds), excluded work types (preprints/books)
-    drop out, and a DOI that matches a local work is skipped (same
-    publication; the Pure copy stays the display record). Survivors group
-    under their main works (the shared entry shape) and the cap applies
-    to entries; total/likely_missing stay work counts."""
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]] | None:
+    """One definition of the author's OpenAlex-only gap population: store
+    rows attributed to the author that survive the institution's
+    publication-year window (an explicit clamped range replaces the
+    bounds) and the excluded work types, deduped by DOI against the
+    author's whole Pure list (uncapped — DOI identity does not stop at
+    the works cap), then tagged by tag_pure_matches so rows a Pure record
+    explains stay distinguishable. Returns (gated, missing); missing is
+    the untagged subset, the likely misses. The profile section, its
+    total/likely_missing counts, and the missed-works CSV export all
+    consume these two lists, so the card headline, its sub-count and the
+    download can never quote three different numbers. None = the works
+    source could not answer (foreign DSN institution); callers degrade."""
     rows = await openalex_only_works_for_author(session, institution, author)
     if rows is None:
-        return (
-            {"total": 0, "likely_missing": 0, "entries_total": 0, "items": [], "available": False},
-            None,
-        )
-    if not rows:
-        return (
-            {"total": 0, "likely_missing": 0, "entries_total": 0, "items": [], "available": True},
-            0,
-        )
+        return None
     if year_range is not None:
         year_start, year_end_bound = year_range
     else:
@@ -502,7 +490,17 @@ async def _openalex_only_section(
         year_end_bound = (
             institution.data_window_end if institution.data_window_end is not None else 9999
         )
-    seen_dois = {doi for row in work_rows if (doi := normalize_doi(row.doi_normalized))}
+    seen_dois = set(
+        await session.scalars(
+            select(Work.doi_normalized)
+            .join(AuthorWork, author_works_join(institution.id, author.pure_uuid))
+            .where(
+                Work.institution_id == institution.id,
+                Work.retired_at.is_(None),
+                Work.doi_normalized.is_not(None),
+            )
+        )
+    )
     gated: list[dict[str, Any]] = []
     for row in sorted(
         rows,
@@ -549,7 +547,40 @@ async def _openalex_only_section(
         [{author.pure_uuid}] * len(gated),
         check_own_doi=True,
     )
-    likely_missing = sum(1 for g in gated if g.get("pure_match") is None)
+    missing = [g for g in gated if g.get("pure_match") is None]
+    return gated, missing
+
+
+async def _openalex_only_section(
+    session: AsyncSession,
+    institution: Institution,
+    author: Author,
+    year_range: tuple[int, int] | None = None,
+) -> tuple[dict[str, Any], int | None]:
+    """The profile's openalex_only section: OpenAlex-attributed works the
+    Pure population does not hold, as their own list — never truncated by
+    the works cap (that split-off fixes authors with >= 200 Pure works,
+    whose missed works used to render zero items while the count said
+    otherwise). author_gap_works owns the population and both counts
+    (total = gated rows, likely_missing = the untagged subset); this
+    section adds the grouped entries and the shown-slice enrichment.
+
+    Returns the section plus the exact gated count (None when the source
+    could not answer — the caller then leaves openalex_only_count unset
+    and the section degrades to available=False)."""
+    gap = await author_gap_works(session, institution, author, year_range)
+    if gap is None:
+        return (
+            {"total": 0, "likely_missing": 0, "entries_total": 0, "items": [], "available": False},
+            None,
+        )
+    gated, missing = gap
+    if not gated:
+        return (
+            {"total": 0, "likely_missing": 0, "entries_total": 0, "items": [], "available": True},
+            0,
+        )
+    likely_missing = len(missing)
     # total is the exact gated count; missing parts group under their main
     # work and only the shown entries' parts get the authorships,
     # publisher and roster enrichment (the bulk fetch stays scalar).
@@ -823,7 +854,7 @@ async def author_profile(
     similar, alternatives = await _similar_sections(session, iid, journal_rows, embeddings)
 
     openalex_section, openalex_only_count = await _openalex_only_section(
-        session, institution, author, work_rows, year_range
+        session, institution, author, year_range
     )
 
     return {
