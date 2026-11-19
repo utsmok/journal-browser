@@ -6,29 +6,16 @@
  * on the server; payloads are never logged.
  */
 
-import { refForPath, type UsageRefType } from "./refs";
+import type { components } from "../api-types";
+import { refForPath } from "./refs";
 
 export type UsageScope = "journals" | "funders" | "authors" | "publishers" | "orgunits";
 
-/** Hand-written to match the wire contract; do not import api-types here. */
-type UsageEvent = {
-  type: "page_view" | "search" | "error";
-  session_id: string;
-  path: string;
-  duration_ms?: number;
-  query?: string;
-  is_browse?: boolean;
-  results_count?: number;
-  search_scope?: UsageScope;
-  filters?: Record<string, unknown>;
-  ref_type?: UsageRefType;
-  ref_id?: string;
-  referrer?: string;
-  source?: "js_error" | "unhandled_rejection" | "api_status";
-  message?: string;
-  detail?: string;
-  status?: number;
-};
+/** Wire contract: the generated discriminated union behind UsageBatchIn. */
+type UsageEvent =
+  | components["schemas"]["PageViewIn"]
+  | components["schemas"]["SearchIn"]
+  | components["schemas"]["ErrorIn"];
 
 const ENDPOINT = "/api/v1/usage/events";
 const SID_KEY = "jb_usage_sid";
@@ -161,7 +148,7 @@ export function endPageView(): void {
   current = null;
   const { sid, firstEvent } = currentSession();
   const ref = refForPath(path);
-  const ev: UsageEvent = {
+  const ev: components["schemas"]["PageViewIn"] = {
     type: "page_view",
     session_id: sid,
     path,
@@ -181,7 +168,6 @@ export function endPageView(): void {
 export function trackSearch(input: {
   query: string;
   results_count?: number;
-  duration_ms?: number;
   search_scope: UsageScope;
   filters?: Record<string, unknown>;
 }): void {
@@ -193,16 +179,16 @@ export function trackSearch(input: {
     session_id: sid,
     path: currentPath(),
     // Empty query = a default browse load, never a query string.
-    ...(query === "" ? { is_browse: true } : { query: query.slice(0, 512) }),
+    is_browse: query === "",
+    ...(query === "" ? {} : { query: query.slice(0, 512) }),
     results_count: input.results_count,
-    duration_ms: input.duration_ms,
     search_scope: input.search_scope,
     filters: input.filters,
   });
 }
 
 function trackError(
-  source: NonNullable<UsageEvent["source"]>,
+  source: components["schemas"]["ErrorIn"]["source"],
   message: string | undefined,
   detail: string | undefined,
   status: number | undefined,

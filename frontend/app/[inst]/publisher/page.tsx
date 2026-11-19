@@ -49,8 +49,17 @@ const OA_TYPE_KEYS: Record<string, string> = {
 
 const DEAL_KEYS: Record<string, string> = {
   covered: "facets.dealCovered",
+  not_covered: "facets.dealNone",
+  // Legacy bucket key still emitted by the publisher facets.
   none: "facets.dealNone",
 };
+
+/** Publisher deal filter: accept legacy "none" URLs, send the canonical value. */
+function normalizeDeal(value: string): "covered" | "not_covered" | null {
+  if (value === "covered" || value === "not_covered") return value;
+  if (value === "none") return "not_covered";
+  return null;
+}
 
 /** Matches the journal page's sort-select styling. */
 const SELECT_CLASS =
@@ -147,8 +156,7 @@ function PublishersView() {
 
   const oaTypes = paramValues(sp, "oa_type");
   const dealParam = sp.get("deal");
-  const deal: "covered" | "none" | null =
-    dealParam === "covered" || dealParam === "none" ? dealParam : null;
+  const deal = dealParam ? normalizeDeal(dealParam) : null;
   const quartiles = paramValues(sp, "quartile");
   const sizes = paramValues(sp, "size");
   const topic = sp.get("topic") ?? "";
@@ -251,7 +259,8 @@ function PublishersView() {
       return;
     }
     if (key === "deal") {
-      setParams({ deal: deal === value ? undefined : value });
+      const canonical = normalizeDeal(value) ?? undefined;
+      setParams({ deal: deal === canonical ? undefined : canonical });
       return;
     }
     if (key === "topic") {

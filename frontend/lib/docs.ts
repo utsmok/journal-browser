@@ -59,21 +59,6 @@ export function slugifyHeading(text: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-/** Plain-text version of inline markdown, for index descriptions. */
-export function stripMarkdown(text: string): string {
-  return text
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/[*`]+/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/** First paragraph of a doc, for the index one-liner. */
-export function docDescription(doc: DocDetail): string | null {
-  const p = doc.blocks.find((b) => b.type === "paragraph");
-  return p ? stripMarkdown(p.text) : null;
-}
-
 export function truncate(text: string, max = 140): string {
   if (text.length <= max) return text;
   return `${text.slice(0, text.lastIndexOf(" ", max))}…`;

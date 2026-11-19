@@ -34,7 +34,7 @@ import {
   encodeNamePath,
   errorMessage,
   type JournalListItem,
-  type SearchIn,
+  type JournalsSearchIn,
   type SortKey,
 } from "@/lib/api";
 import { apcAmount, apcStatsText, formatApc } from "@/lib/format";
@@ -89,7 +89,7 @@ function SearchView() {
   const hasApc = sp.get("has_apc");
   const hasWorks = sp.get("has_works");
   const greenOa = sp.get("green_oa");
-  const searchIn = (sp.get("search_in") ?? "all") as SearchIn;
+  const searchIn = (sp.get("search_in") ?? "all") as JournalsSearchIn;
   // oa_type is the one multi-select facet: comma-joined in the URL, OR'd
   // server-side.
   const oaTypes = (sp.get("oa_type") ?? "").split(",").filter(Boolean);

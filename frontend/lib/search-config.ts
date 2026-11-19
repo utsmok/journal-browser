@@ -1,4 +1,4 @@
-import type { OrgUnitSearchSort, PublisherSearchSort, SearchIn, SortKey } from "@/lib/api";
+import type { OrgUnitSearchSort, PublisherSearchSort, JournalsSearchIn, SortKey } from "@/lib/api";
 
 export const SORTS: { value: SortKey; labelKey: string }[] = [
   { value: "relevance", labelKey: "sorts.relevance" },
@@ -47,7 +47,7 @@ export const ORGUNIT_COLUMN_SORTS: Record<
   deal_works: { key: "deal_works", natural: "desc" },
 };
 
-export const SEARCH_IN_OPTIONS: { value: SearchIn; labelKey: string }[] = [
+export const SEARCH_IN_OPTIONS: { value: JournalsSearchIn; labelKey: string }[] = [
   { value: "all", labelKey: "searchIn.all" },
   { value: "title", labelKey: "searchIn.title" },
   { value: "publisher", labelKey: "searchIn.publisher" },

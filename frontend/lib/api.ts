@@ -1,8 +1,9 @@
-import type { components } from "./api-types";
+import type { components, operations } from "./api-types";
 import type { LabelT } from "./work-type";
 import { trackApiError, trackSearch } from "./usage/tracker";
 
 type Schemas = components["schemas"];
+type Operations = operations;
 
 export type JournalListItem = Schemas["JournalListItem"];
 
@@ -44,8 +45,12 @@ export type AuthorSearchItem = Schemas["AuthorItem"];
 
 export type AuthorFacetBucket = Schemas["AuthorFacet"];
 
-/** Author search ordering; the backend default is works_desc. */
-export type AuthorSearchSort = "works_desc" | "name_asc" | "name_desc" | "last_pub_desc";
+/** Author search ordering; the backend default is works_desc. Derived from
+ * the generated enum in search_authors (GET /{inst}/authors). */
+type AuthorsSearchQuery = NonNullable<
+  Operations["search_authors_api_v1__institution_code__authors_get"]["parameters"]["query"]
+>;
+export type AuthorSearchSort = NonNullable<AuthorsSearchQuery["sort"]>;
 
 export type AuthorSearchResponse = Schemas["AuthorSearchResponse"];
 
@@ -91,7 +96,11 @@ export type SortKey =
   | "apc"
   | "2yr_mean_citedness";
 
-export type SearchIn = "all" | "title" | "publisher" | "topic";
+/** Journals search scope. The backend validates this as a regex pattern, so
+ * the generated types carry it as `string`; the union mirrors
+ * `^(all|title|publisher|topic)$` in openapi.json. Named JournalsSearchIn to
+ * avoid the generated usage-event schema SearchIn. */
+export type JournalsSearchIn = "all" | "title" | "publisher" | "topic";
 
 /** Publication-year range params accepted by the works/profile/detail/CSV
  * endpoints; the global year lens feeds these. */
@@ -99,7 +108,7 @@ export type YearParams = { year_from?: number; year_to?: number };
 
 export type JournalSearchParams = {
   q?: string;
-  search_in?: SearchIn;
+  search_in?: JournalsSearchIn;
   deal?: "any" | "covered" | "not_covered";
   oa?: boolean;
   doaj?: boolean;
@@ -191,7 +200,6 @@ export async function fetchAuthors(
   filters: AuthorSearchFilters = {},
   opts: AuthorFetchOptions = {},
 ): Promise<AuthorSearchResponse> {
-  const startedAt = Date.now();
   const data = await apiGet<AuthorSearchResponse>(`/${inst}/authors`, {
     q,
     limit: opts.limit,
@@ -209,7 +217,6 @@ export async function fetchAuthors(
   trackSearch({
     query: q ?? "",
     results_count: data.total,
-    duration_ms: Date.now() - startedAt,
     search_scope: "authors",
     filters: Object.keys(filters).length ? { ...filters } : undefined,
   });
@@ -251,7 +258,8 @@ export type PublisherPartsFilter = "chapter" | "part" | "standalone";
 export type PublisherSearchParams = {
   q?: string;
   oa_type?: string[];
-  deal?: "covered" | "none";
+  /** Canonical backend value; legacy "none" URLs are normalized client-side. */
+  deal?: "covered" | "not_covered";
   quartile?: string[];
   topic?: string;
   size?: string[];
@@ -317,7 +325,6 @@ export async function fetchPublishers(
   inst: string,
   params: PublisherSearchParams = {},
 ): Promise<PublisherSearchResponse> {
-  const startedAt = Date.now();
   const data = await apiGet<PublisherSearchResponse>(`/${inst}/publishers`, {
     q: params.q,
     oa_type: params.oa_type?.join("|"),
@@ -337,7 +344,6 @@ export async function fetchPublishers(
   trackSearch({
     query: params.q ?? "",
     results_count: data.total,
-    duration_ms: Date.now() - startedAt,
     search_scope: "publishers",
     filters: usageDirectoryFilters(params),
   });
@@ -361,7 +367,6 @@ export async function fetchOrgUnits(
   inst: string,
   params: OrgUnitSearchParams = {},
 ): Promise<OrgUnitSearchResponse> {
-  const startedAt = Date.now();
   const data = await apiGet<OrgUnitSearchResponse>(`/${inst}/orgunits`, {
     level: params.level,
     q: params.q,
@@ -377,7 +382,6 @@ export async function fetchOrgUnits(
   trackSearch({
     query: params.q ?? "",
     results_count: data.total,
-    duration_ms: Date.now() - startedAt,
     search_scope: "orgunits",
     filters: usageDirectoryFilters(params),
   });
