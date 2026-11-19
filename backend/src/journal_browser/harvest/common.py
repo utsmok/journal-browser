@@ -358,9 +358,9 @@ async def run_harvest(
         final = await ingest.finish_run("completed", stats)
         await session.commit()
         return final
-    except Exception:
+    except Exception as exc:
         logger.exception("Harvest %s/%s failed", source, entity_type)
-        await ingest.finish_run("failed", {"error": "see logs"})
+        await ingest.finish_run("failed", {"error": f"{type(exc).__name__}: {exc}"[:200]})
         await session.commit()
         raise
 
