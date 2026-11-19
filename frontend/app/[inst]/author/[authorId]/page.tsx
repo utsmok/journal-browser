@@ -561,8 +561,10 @@ export default function AuthorPage() {
               description={
                 <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                   <p className="text-sm text-[var(--muted-foreground)]">
-                    {t("gap.found", { count: data.openalex_only.total })}{" "}
-                    {t("gap.missing", { count: data.openalex_only.likely_missing })}
+                    {t("gap.found", {
+                      count: data.openalex_only.total,
+                      missing: data.openalex_only.likely_missing,
+                    })}{" "}
                     {gapShownTotal > gapEntries.length &&
                       ` ${t("gap.showing", { count: gapEntries.length })}`}
                   </p>

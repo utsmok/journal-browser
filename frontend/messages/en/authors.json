@@ -120,8 +120,7 @@
     "colLinks": "Links"
   },
   "gap": {
-    "found": "OpenAlex attributes {count, plural, one {# work} other {# works}} to this author without a link in Pure.",
-    "missing": "{count, plural, one {# of them is likely missing.} other {# of them are likely missing.}}",
+    "found": "OpenAlex attributes {count, plural, one {# work} other {# works}} to this author; {missing, plural, one {# is} other {# are}} not linked in Pure.",
     "showing": "Showing the {count, plural, one {# most recent entry} other {# most recent entries}}.",
     "none": "None found. Every OpenAlex work attributed to this author has a record in Pure."
   }
