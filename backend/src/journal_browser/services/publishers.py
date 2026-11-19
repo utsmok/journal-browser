@@ -1,8 +1,9 @@
 """Publisher browsing: browsable journals aggregated per canonical publisher.
 
 Mirror of the journal/author surfaces: the browsable cutoffs are the same
-predicates as search.base_query (type='journal', per-institution
-works_window_plus > 3, not browse_excluded, not admin-ignored). The
+predicates as search.base_query (type='journal', works_window_plus > 3 —
+the journal's own OpenAlex works in the window, not the institution's —
+not browse_excluded, not admin-ignored). The
 grouping key is COALESCE(NULLIF(publisher_canonical, ''), publisher_name)
 — the OpenAlex lineage root resolved by jobs/harvest_publishers.py, so
 sub-brands group under their root publisher; rows without a canonical

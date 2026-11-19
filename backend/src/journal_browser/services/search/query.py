@@ -30,8 +30,10 @@ SortKey = str
 NUMERIC_SORTS = frozenset({"relevance", "institution_works", "2yr_mean_citedness", "apc"})
 #: Global corpus cutoff (owner decision 2026-10-23, superseding decision
 #: 12): journals with <= 3 works in the 2020+ window. Used by corpus counts
-#: and the embed job; serving reads the per-institution journal_flags row
-#: (works_window_plus), which applies the scoped institution's window.
+#: and the embed job; serving reads the scoped institution's journal_flags
+#: row (works_window_plus), whose value is the journal's own OpenAlex works
+#: in that institution's window — materialized from counts_by_year, not
+#: the institution's works.
 WORKS_CUTOFF = Journal.works_2020_plus > 3
 
 #: Trigram similarity threshold for the fuzzy fallback; pg_trgm's built-in
@@ -139,8 +141,10 @@ def base_query(
 ):
     """Filtered select with computed columns; search + facet counts share it.
 
-    Browsable corpus: journals above the per-institution window cutoff
-    (works_window_plus > 3), plus every other OpenAlex venue type with at
+    Browsable corpus: journals above the global window cutoff
+    (works_window_plus > 3 — the journal's own OpenAlex works in the
+    window, materialized from counts_by_year; not a per-institution
+    works count, decision 24), plus every other OpenAlex venue type with at
     least one institution work (book series, conference, ...; owner
     decision 2026-11-04). Scoped to one institution's journal_flags row,
     and the proceedings exclusion always applies.
@@ -201,16 +205,20 @@ def base_query(
     openaire_diamond = flags.c.openaire_diamond
     if q and not fuzzy:
         qstr = q.strip()
-        # Relevance = title-prefix match tier + FTS rank + prominence nudge
-        # from corpus size (works_count). One expression so keyset
-        # pagination can compare (rank, issn_l) tuples; the tier spacing
-        # dwarfs the other ranges, so title matches always sort first, and
-        # within a tier an established flagship outranks a niche journal
-        # with a momentarily higher citedness metric.
+        # Relevance = title-prefix match tier + FTS rank + two prominence
+        # nudges: the journal's global corpus size (works_count) and the
+        # scoped institution's own works count (decision 23), so journals
+        # UT publishes in win ties over same-named titles with no UT
+        # works. One expression so keyset pagination can compare
+        # (rank, issn_l) tuples; the tier spacing dwarfs the other
+        # ranges, so title matches always sort first, and within a tier
+        # an established flagship outranks a niche journal with a
+        # momentarily higher citedness metric.
         rank = (
             case((J.title.ilike(f"{_like(qstr)}%", escape="\\"), 100.0), else_=0.0)
             + func.ts_rank(J.search_vector, func.websearch_to_tsquery(text("'english'"), qstr))
             + func.least(func.coalesce(J.works_count, 0), 100000) * 0.00001
+            + func.least(func.coalesce(year_works, 0), 100000) * 0.00001
         ).label("rank")
     else:
         rank = cast(text("0"), Numeric).label("rank")
