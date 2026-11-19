@@ -17,6 +17,14 @@ SIMILAR_ALL_LIMIT = 10
 #: totals in the hundreds-to-thousands band across five probe queries,
 #: measured 2026-11-13 on the live corpus (~177k vectors).
 SEMANTIC_MAX_DISTANCE = 0.32
+#: Scan ceiling for the one ordered HNSW scan that serves both the page
+#: and `total`: rows beyond the cap stop the enumeration, so queries with
+#: more than SEMANTIC_TOTAL_CAP matches within SEMANTIC_MAX_DISTANCE
+#: report the cap instead of the exact count. The ordered scan costs
+#: ~0.16 s warm at the cap versus ~1.5 s for the boundless count seq scan
+#: it replaced (live EXPLAIN, 2026-11-19); probe-query totals sit well
+#: under it.
+SEMANTIC_TOTAL_CAP = 2000
 #: Paging-depth ceiling for the semantic-search cursor. ef_search scales
 #: with the offset, so a client-chosen seven-figure offset would drive a
 #: full iterative HNSW scan per request on an unauthenticated endpoint;
@@ -134,8 +142,8 @@ async def semantic_search(
     the embedding model (fastembed ONNX, CPU) and rank by cosine distance.
     Shares base_query cutoffs and proceedings exclusion; journals without a
     stored vector are absent. total counts journals within the semantic
-    range (SEMANTIC_MAX_DISTANCE), not the whole vectorized corpus;
-    ranking is unchanged. Response rows match search_journals items so
+    range (SEMANTIC_MAX_DISTANCE), capped at SEMANTIC_TOTAL_CAP; ranking
+    is unchanged. Response rows match search_journals items so
     the frontend table renders them unchanged.
 
     The (distance, issn_l) order is deterministic for a fixed query and
@@ -162,30 +170,31 @@ async def semantic_search(
         .add_columns(distance)
         .where(
             Journal.embedding.is_not(None),
-            # Inside the subquery so total, page and cursor paging share
-            # the one bound.
+            # Inside the subquery so the scan shares the one bound; also
+            # lets the iterative scan stop at SEMANTIC_TOTAL_CAP passing
+            # rows instead of exhausting the index.
             dist_expr <= SEMANTIC_MAX_DISTANCE,
         )
         .subquery()
     )
-    # Iterative HNSW scan (pgvector 0.8): strict_order keeps distance
-    # ordering exact across the flags join and offset paging, and iterates
-    # past ef_search until enough tuples pass the filter, so no silent cap.
-    # ef_search scales with paging depth (per-iteration batch); the exact
-    # scan this replaced cost ~0.8 s over ~134k vectors.
+    # One ordered HNSW scan serves the page and the total: strict_order
+    # keeps distance ordering exact across the flags join, and iterates
+    # past ef_search until enough tuples pass the filter, so the first
+    # SEMANTIC_TOTAL_CAP rows are the exact nearest within the cap and
+    # their count is the exact total below it. The boundless count query
+    # this replaced could not use the index (no ORDER BY/LIMIT) and seq
+    # scanned every embedded journal.
     await session.execute(text("SET LOCAL hnsw.iterative_scan = strict_order"))
-    await session.execute(text(f"SET LOCAL hnsw.ef_search = {max(200, offset + limit + 100)}"))
-    total = (await session.execute(select(func.count()).select_from(subq))).scalar_one()
+    await session.execute(text(f"SET LOCAL hnsw.ef_search = {min(200, SEMANTIC_TOTAL_CAP)}"))
     rows = (
         await session.execute(
-            select(subq)
-            .order_by(subq.c.dist.asc(), subq.c.issn_l.asc())
-            .offset(offset)
-            .limit(limit + 1)
+            select(subq).order_by(subq.c.dist.asc(), subq.c.issn_l.asc()).limit(SEMANTIC_TOTAL_CAP)
         )
     ).all()
-    has_more = len(rows) > limit
-    rows = rows[:limit]
+    total = len(rows)
+    paged = rows[offset : offset + limit + 1]
+    has_more = len(paged) > limit
+    rows = paged[:limit]
     items = []
     for row in rows:
         item = dict(row._mapping)
