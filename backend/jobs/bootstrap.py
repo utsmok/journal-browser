@@ -122,6 +122,17 @@ INST_DEPS: dict[str, list[str]] = {
 #: Institution-neutral, so it runs once after every stats layer.
 EMBEDDINGS_STEP = ("embeddings", ["jobs/embed_journals.py"])
 
+#: Institution-neutral funder chain, run once after the per-institution
+#: layer so a fresh deployment fills /funders without a manual wave:
+#: work funders read every institution's works by DOI (free singletons);
+#: OpenAlex funders gap-fill from work_funders rows; OpenAIRE funders is
+#: an independent curated canon pull.
+FUNDER_STEPS: list[tuple[str, list[str]]] = [
+    ("work-funders", ["jobs/harvest_work_funders.py"]),
+    ("openalex-funders", ["jobs/harvest_openalex_funders.py"]),
+    ("openaire-funders", ["jobs/harvest_openaire_funders.py"]),
+]
+
 
 async def hosted_codes() -> list[str]:
     engine = create_async_engine(get_settings().database_url)
@@ -201,8 +212,9 @@ async def run_step(name: str, job_args: list[str]) -> bool:
 
 def build_plan(codes: list[str], only_institution: str | None) -> tuple[list, dict]:
     """(steps, deps) for the run: global layer, per-institution layers,
-    embeddings last. only_institution drops the global layer and embeddings
-    (they are shared and already built)."""
+    the funder chain, embeddings last. only_institution drops the global
+    layer, the funder chain, and embeddings (they are shared and already
+    built)."""
     steps = list(GLOBAL_STEPS)
     deps = dict(GLOBAL_DEPS)
     stats_names: list[str] = []
@@ -214,6 +226,13 @@ def build_plan(codes: list[str], only_institution: str | None) -> tuple[list, di
             if name == "stats":
                 stats_names.append(full)
     if only_institution is None:
+        funder_dep_names = [name for name, _ in FUNDER_STEPS]
+        for i, (name, job_args) in enumerate(FUNDER_STEPS):
+            steps.append((name, job_args))
+            # work-funders waits for every institution's works (the stats
+            # step is the layer's tail gate, same as embeddings); each
+            # later funder step waits on the previous one.
+            deps[name] = list(stats_names) if i == 0 else [funder_dep_names[i - 1]]
         steps.append(EMBEDDINGS_STEP)
         deps[EMBEDDINGS_STEP[0]] = stats_names
     else:
