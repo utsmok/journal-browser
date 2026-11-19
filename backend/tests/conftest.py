@@ -17,6 +17,11 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from journal_browser.db import get_session
 from journal_browser.models import Base, Journal
 
+# Tests stay offline: the fastembed model must never load (main imports it
+# eagerly at create_app time). conftest is imported before test modules, so
+# this also covers test files that import journal_browser.main themselves.
+os.environ.setdefault("JB_SKIP_EMBEDDING_WARMUP", "1")
+
 # Admin ops (CREATE/DROP DATABASE) go through the always-present maintenance
 # db, not `journalbrowser`: the CI service only creates journalbrowser_test.
 ADMIN_URL = "postgresql://journal:journal@localhost:5433/postgres"
@@ -158,9 +163,6 @@ def pair_rows(*works):
 
 @pytest.fixture
 async def client(db_engine):
-    os.environ.setdefault(
-        "JB_SKIP_EMBEDDING_WARMUP", "1"
-    )  # offline tests: the ONNX model must never load at import time
     from journal_browser.main import app
 
     maker = async_sessionmaker(db_engine, expire_on_commit=False)
