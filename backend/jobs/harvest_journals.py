@@ -1,6 +1,13 @@
-"""Full OpenAlex sources sweep + corpus-cutoff counts (decisions.md #15).
+"""Refresh journals: seed deal ISSNs + delta of works-referenced journals.
 
-Usage: uv run python jobs/harvest_journals.py [--seed-deals-only]
+Usage: uv run python jobs/harvest_journals.py [--seed-deals-only] [--sweep-all] [--refresh]
+
+Default is the credit-free route: keyless deal seed + paced singleton
+delta for works-referenced journals missing from the table. --sweep-all
+runs the full listing sweep (costs credits) — a rare manual operation,
+not a per-refresh step. --refresh re-fetches every stored journal via
+free singleton GETs (for upstream corrections such as citation
+re-matches) instead of the delta.
 """
 
 import asyncio
@@ -11,6 +18,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
 from journal_browser.harvest.openalex_journals import harvest_journals, refresh_publisher_links
+from journal_browser.logging_setup import configure_logging
 from journal_browser.models import Journal
 from journal_browser.services.search import WORKS_CUTOFF
 
@@ -24,11 +32,17 @@ async def corpus_counts(session) -> dict[str, int]:
 async def main() -> None:
     import sys
 
+    configure_logging()
+
     seed_only = "--seed-deals-only" in sys.argv
+    sweep_all = "--sweep-all" in sys.argv
+    refresh = "--refresh" in sys.argv
     engine = create_async_engine(get_settings().database_url)
     maker = async_sessionmaker(engine, expire_on_commit=False)
     async with maker() as session:
-        stats = await harvest_journals(session, seed_only=seed_only)
+        stats = await harvest_journals(
+            session, seed_only=seed_only, sweep_all=sweep_all, refresh_existing=refresh
+        )
         linked = await refresh_publisher_links(session)
         counts = await corpus_counts(session)
         await session.commit()

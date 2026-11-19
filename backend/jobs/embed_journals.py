@@ -19,6 +19,7 @@ from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
+from journal_browser.ingest import IngestSession
 from journal_browser.models import Journal
 from journal_browser.services.embeddings import MODEL_NAME, embed_text
 
@@ -72,56 +73,68 @@ async def main(limit: int | None, batch: int) -> None:
             keys.append(issn_l)
     skipped = len(rows) - len(texts)
     print(f"embedding {len(texts)} of {len(rows)} journals (skipped: {skipped} without text)")
-    if not texts:
-        print("nothing to embed")
-        await engine.dispose()
-        return
 
-    from fastembed import TextEmbedding
-
-    model = TextEmbedding(model_name=MODEL_NAME)
-    print(f"model={MODEL_NAME} backend=fastembed")
-    vectors = np.stack([np.asarray(v) for v in model.embed(texts, batch_size=batch)])
-    vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
-
+    # Run bookkeeping: one harvest_runs/harvest_state pair per embed run
+    # (source local / journal_embeddings), so the step shows up in
+    # freshness like every other job; the run closes on every path,
+    # including "nothing to embed".
+    cleared = 0
     async with session_factory() as session:
-        for start in range(0, len(keys), DB_CHUNK):
-            chunk = keys[start : start + DB_CHUNK]
-            await session.execute(
-                update(Journal),
-                [
-                    {"issn_l": k, "embedding": vectors[start + i].tolist()}
-                    for i, k in enumerate(chunk)
-                ],
-                execution_options={"synchronize_session": False},
-            )
-            await session.commit()
-            print(f"stored {min(start + DB_CHUNK, len(keys))}/{len(keys)}", flush=True)
+        ingest = IngestSession(session)
+        await ingest.start_run(
+            "local", "journal_embeddings", "embed", {"limit": limit, "batch": batch}
+        )
+        if texts:
+            from fastembed import TextEmbedding
 
-        # Full runs also retire vectors whose text vanished (e.g. a journal
-        # lost both title and topics): a stale vector would keep ranking it
-        # in semantic results. --limit runs leave the rest of the DB alone.
-        if limit is None:
-            keyset = set(keys)
-            embedded = (
-                (
-                    await session.execute(
-                        select(Journal.issn_l).where(Journal.embedding.is_not(None))
-                    )
-                )
-                .scalars()
-                .all()
-            )
-            stale = [k for k in embedded if k not in keyset]
-            for start in range(0, len(stale), DB_CHUNK):
+            model = TextEmbedding(model_name=MODEL_NAME)
+            print(f"model={MODEL_NAME} backend=fastembed")
+            vectors = np.stack([np.asarray(v) for v in model.embed(texts, batch_size=batch)])
+            vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
+
+            for start in range(0, len(keys), DB_CHUNK):
+                chunk = keys[start : start + DB_CHUNK]
                 await session.execute(
-                    update(Journal)
-                    .where(Journal.issn_l.in_(stale[start : start + DB_CHUNK]))
-                    .values(embedding=None)
+                    update(Journal),
+                    [
+                        {"issn_l": k, "embedding": vectors[start + i].tolist()}
+                        for i, k in enumerate(chunk)
+                    ],
+                    execution_options={"synchronize_session": False},
                 )
-            if stale:
-                await session.commit()
-                print(f"cleared {len(stale)} stale embeddings", flush=True)
+                await ingest.commit()
+                print(f"stored {min(start + DB_CHUNK, len(keys))}/{len(keys)}", flush=True)
+
+            # Full runs also retire vectors whose text vanished (e.g. a journal
+            # lost both title and topics): a stale vector would keep ranking it
+            # in semantic results. --limit runs leave the rest of the DB alone.
+            if limit is None:
+                keyset = set(keys)
+                embedded = (
+                    (
+                        await session.execute(
+                            select(Journal.issn_l).where(Journal.embedding.is_not(None))
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                stale = [k for k in embedded if k not in keyset]
+                for start in range(0, len(stale), DB_CHUNK):
+                    await session.execute(
+                        update(Journal)
+                        .where(Journal.issn_l.in_(stale[start : start + DB_CHUNK]))
+                        .values(embedding=None)
+                    )
+                if stale:
+                    await session.commit()
+                    print(f"cleared {len(stale)} stale embeddings", flush=True)
+                cleared = len(stale)
+        await ingest.finish_run(
+            "completed",
+            {"embedded": len(keys), "skipped_no_text": skipped, "cleared_stale": cleared},
+        )
+        await session.commit()
     await engine.dispose()
 
 

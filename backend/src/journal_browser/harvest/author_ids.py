@@ -13,11 +13,12 @@ work, and no contradicting ORCID. Competing namesake ids stay
 candidates for the review queue. The authors ingest reads this table
 additively: confirmed rows feed authors.openalex_ids.
 
-Runs with no DSN; the only API spend is the authors listing sweep
-(filter affiliations.institution.ror, verified live 2026-10-30 — the
-singular "affiliation." form is rejected by the API) and the
-budget-capped per-author works enrichment (50 batched A-ids per keyed
-call) covering authors whose OpenAlex profile lacks the institution.
+Runs with no DSN; the only API spend is the budget-capped per-author
+works enrichment (50 batched A-ids per keyed call, skipped at a zero
+credit budget) covering authors whose OpenAlex profile lacks the
+institution. The author listing sweep is retired: author profiles are
+gathered from stored work authorships, with paced free single-entity
+GETs filling gaps.
 """
 
 import logging
@@ -25,7 +26,7 @@ import time
 from collections import Counter, defaultdict
 from typing import Any
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -52,6 +53,7 @@ from .author_cascade import (
     openalex_entries,
 )
 from .author_names import bare_orcid, decompose_parts
+from .common import openalex_credits_remaining, paced_single_gets
 from .openalex_journals import openalex_id_to_pk, resolve_institution_openalex_id
 from .org_closure import load_org_tree
 
@@ -59,6 +61,26 @@ logger = logging.getLogger(__name__)
 
 SOURCE = "openalex"
 SOURCE_OPENAIRE = "openaire"
+
+
+def openaire_author_orcid(author: dict[str, Any]) -> str | None:
+    """Bare ORCID from one OpenAIRE CERIF author entry, confirmed only.
+
+    Graph v12 (2026-11) adds coauthorship-inferred identifiers marked
+    scheme=orcid_pending; those must never drive the orcid-exact rung, so
+    only confirmed orcid-scheme pids (and scheme-less legacy pids) count."""
+    pid = author.get("pid")
+    inner = pid.get("id") if isinstance(pid, dict) else None
+    if not isinstance(inner, dict):
+        return None
+    orcid = bare_orcid(inner.get("value"))
+    if not orcid:
+        return None
+    if str(inner.get("scheme") or "").lower() == "orcid_pending":
+        return None
+    return orcid
+
+
 AUTHOR_ENTITY = "authors"
 SWEEP_FILTER_PREFIX = "author-sweep"
 BATCH_SIZE = 50  # OpenAlex pipe-OR ceiling (ut-metadata gap-fetch size)
@@ -88,47 +110,100 @@ def _derived_status(method: str | None, conflicts: int) -> str:
     return "candidate"
 
 
-async def sweep_openalex_authors(
+async def gather_openalex_authors(
     client, session: AsyncSession, institution, limit: int | None = None
 ) -> dict[str, Any]:
-    """Listing sweep: the institution's OpenAlex author profiles
-    (affiliations.institution.ror filter) into source_records
-    (entity_type authors). Corroboration source + recall complement for
-    the work-anchored cascade."""
-    ror = institution.ror.rsplit("/", 1)[-1].lower() if institution.ror else None
-    if not ror:
-        raise ValueError(f"institution {institution.code!r} has no ROR")
+    """Land author profiles for the authors cited by the institution's
+    stored work payloads — local extraction + paced free single-entity
+    GETs; no listing sweep.
+
+    Work authorships carry the author id (and orcid) for exactly the
+    authors the resolution cascade needs. Authors already in
+    source_records keep their stored profile; gaps fetch full profiles,
+    falling back to authorship stubs ({id, orcid, display_name}) on 404
+    or parse failure so orcid corroboration never loses recall. Costs no
+    credits (the affiliations.institution.ror listing it replaces did,
+    and 429-crashed at a zero budget)."""
     inst_id = await resolve_institution_openalex_id(client, session, institution)
-    filter_set = f"affiliations.institution.ror={ror}"
-    ingest = IngestSession(session)
-    config = {
-        "filter": filter_set,
-        "institution_openalex_id": inst_id,
-        "page_size": PER_PAGE,
-    }
-    await ingest.start_run(SOURCE, AUTHOR_ENTITY, filter_set, config, institution_id=institution.id)
-
-    async def commit_page(_page: int, _cursor: str | None) -> None:
-        await ingest.commit()
-
-    async for item in client.authors.iterate(
-        page_size=PER_PAGE,
-        filters={"affiliations.institution.ror": ror},
-        on_page=commit_page,
-    ):
-        payload = (
-            item
-            if isinstance(item, dict)
-            else (item.model_dump(mode="json") if hasattr(item, "model_dump") else None)
+    rows = (
+        await session.execute(
+            text(
+                "SELECT DISTINCT ON (COALESCE(a->>'id', a->'author'->>'id'))"
+                " COALESCE(a->>'id', a->'author'->>'id') AS aid_url,"
+                " COALESCE(a->'author'->>'orcid', a->>'orcid') AS orcid,"
+                " COALESCE(a->>'display_name', a->'author'->>'display_name') AS name"
+                " FROM source_records sr"
+                " JOIN harvest_runs hr ON hr.id = sr.harvest_run_id"
+                " CROSS JOIN LATERAL jsonb_array_elements(sr.payload->'authorships') a"
+                " WHERE sr.source = :source AND sr.entity_type = :entity"
+                " AND hr.institution_id = :iid"
+                " AND jsonb_typeof(sr.payload->'authorships') = 'array'"
+                " AND jsonb_typeof(a->'author') = 'object'"
+                " AND a->'author'->>'id' IS NOT NULL"
+            ),
+            {"source": SOURCE, "entity": "work", "iid": institution.id},
         )
-        if not payload or not payload.get("id"):
-            await ingest.record_parse_failure({"source_pk": None, "reason": "author parse failure"})
+    ).all()
+    authorship_by_url = {r.aid_url: (bare_orcid(r.orcid), r.name) for r in rows}
+    known = {
+        pk
+        for (pk,) in (
+            await session.execute(
+                select(SourceRecord.source_pk)
+                .join(HarvestRun, HarvestRun.id == SourceRecord.harvest_run_id)
+                .where(
+                    SourceRecord.source == SOURCE,
+                    SourceRecord.entity_type == AUTHOR_ENTITY,
+                    HarvestRun.institution_id == institution.id,
+                )
+                .distinct()
+            )
+        ).all()
+    }
+    todo = sorted({u for u in authorship_by_url if openalex_id_to_pk(u) not in known})
+    if limit is not None:
+        todo = todo[:limit]
+    stats: dict[str, Any] = {
+        "authors_in_works": len(authorship_by_url),
+        "already_stored": len(authorship_by_url) - len(todo),
+        "todo": len(todo),
+        "fetched": 0,
+        "stubs": 0,
+        "failed": 0,
+    }
+    if not todo:
+        return stats
+    ingest = IngestSession(session)
+    await ingest.start_run(
+        SOURCE,
+        AUTHOR_ENTITY,
+        "authorships-delta",
+        {"route": "delta", "institution_openalex_id": inst_id, "page_size": PER_PAGE},
+        institution_id=institution.id,
+    )
+    payloads, failed = await paced_single_gets(client.authors.get, todo)
+    stats["failed"] = len(failed)
+    if failed:
+        logger.warning("author gather: %d lookups failed, e.g. %s", len(failed), sorted(failed)[:5])
+    for url, entity in payloads.items():
+        payload = (
+            entity
+            if isinstance(entity, dict)
+            else (entity.model_dump(mode="json") if hasattr(entity, "model_dump") else None)
+        )
+        if payload and payload.get("id"):
+            await ingest.ingest_record(openalex_id_to_pk(payload.get("id")), payload)
+            stats["fetched"] += 1
             continue
-        await ingest.ingest_record(openalex_id_to_pk(payload.get("id")), payload)
-        if limit is not None and ingest.records_seen >= limit:
-            logger.info("Reached --limit %s", limit)
-            break
-    stats = await ingest.finish_run("completed", {})
+        # 404 / parse failure: land the authorship stub so the cascade's
+        # orcid corroboration keeps working for this author.
+        orcid, name = authorship_by_url[url]
+        await ingest.ingest_record(
+            openalex_id_to_pk(url),
+            {"id": url, "orcid": orcid, "display_name": name},
+        )
+        stats["stubs"] += 1
+    await ingest.finish_run("completed", stats)
     await session.commit()
     return stats
 
@@ -162,8 +237,20 @@ async def sweep_author_works(
     covers authors whose OpenAlex profile lacks the institution."""
     settings = get_settings()
     budget = settings.openalex_author_sweep_max_authors
-    stats: dict[str, Any] = {"queried_authors": 0, "calls": 0, "works_seen": 0}
+    stats: dict[str, Any] = {
+        "queried_authors": 0,
+        "calls": 0,
+        "works_seen": 0,
+        "skipped": None,
+    }
     if budget <= 0 or not a_ids:
+        return stats
+    remaining = await openalex_credits_remaining()
+    if remaining is not None and remaining <= 0:
+        # Pipe-OR works filters cost credits; at a zero budget every call
+        # 429s and used to crash the whole resolve run. Skip and surface.
+        stats["skipped"] = "daily credit budget exhausted (resets 00:00 UTC)"
+        logger.info("sweep_author_works skipped: %s", stats["skipped"])
         return stats
     ids = sorted({i for i in a_ids if i})[:budget]
     stats["queried_authors"] = len(ids)
@@ -533,9 +620,7 @@ async def resolve_author_ids(
                 name = a.get("fullName") or " ".join(
                     p for p in (a.get("name"), a.get("surname")) if p
                 )
-                pid = a.get("pid")
-                inner = pid.get("id") if isinstance(pid, dict) else None
-                orcid = bare_orcid(inner.get("value") if isinstance(inner, dict) else None)
+                orcid = openaire_author_orcid(a)
                 entry_id = (a.get("id") or "").rsplit("/", 1)[-1] or None
                 if not name and not orcid:
                     continue
@@ -820,7 +905,7 @@ async def resolve_author_ids(
         if settings.openalex_api_key:
             client_kwargs["api_key"] = settings.openalex_api_key
         async with AlethecaClient(**client_kwargs) as client:
-            sweep_stats["listing"] = await sweep_openalex_authors(
+            sweep_stats["gather"] = await gather_openalex_authors(
                 client, session, institution, limit=listing_limit
             )
             confirmed_ids = [

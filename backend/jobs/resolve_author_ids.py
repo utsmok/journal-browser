@@ -1,10 +1,11 @@
 """Resolve author identities (the ported cascade) for one institution —
 or all hosted ones.
 
-Sweeps the OpenAlex author listing (ror filter), runs the work-anchored
-cascade over work_pure_authors x openalex_works, writes the
-author_identities review surface, enriches works for resolved authors
-(budget-capped) and re-projects the works store.
+Gathers author profiles from stored work authorships (free singleton
+gap-fill), runs the work-anchored cascade over work_pure_authors x
+openalex_works, writes the author_identities review surface, enriches
+works for resolved authors (budget-capped, skipped at a zero credit
+budget) and re-projects the works store.
 
 uv run python jobs/resolve_author_ids.py [--institution rug]
        [--listing-limit N] [--no-sweeps]

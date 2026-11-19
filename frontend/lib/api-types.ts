@@ -84,7 +84,9 @@ export interface paths {
          * @description Counters for the admin dashboard: pipeline health and open work.
          *
          *     One cheap set of aggregate queries so the overview page needs one call
-         *     instead of four list fetches.
+         *     instead of four list fetches. With `institution`, the run/candidate/
+         *     last-run counters scope to that institution; flagged deals and feedback
+         *     stay instance-global (deals span institutions via participations).
          */
         get: operations["admin_summary_api_v1_admin_summary_get"];
         put?: never;
@@ -280,6 +282,8 @@ export interface paths {
         /**
          * List Author Identities
          * @description Identity rows, newest activity first, with the local author name.
+         *
+         *     Server-paged via offset/limit; total is the full filtered count.
          */
         get: operations["list_author_identities_api_v1_admin_author_identities_get"];
         /**
@@ -303,6 +307,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/external-author/{external_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stored External Author
+         * @description The harvest's stored OpenAlex author profile + recent works.
+         *
+         *     The review drawer reads the verbatim source_records payload (the listing
+         *     sweep lands every institutional author profile there) plus a recent-works
+         *     sample from the openalex_works projection — no live API call. 404 when
+         *     this id was never swept; the UI falls back to an OpenAlex link.
+         */
+        get: operations["stored_external_author_api_v1_admin_external_author__external_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/work-identities": {
         parameters: {
             query?: never;
@@ -313,6 +342,8 @@ export interface paths {
         /**
          * List Work Identities
          * @description Identity rows, newest activity first, with the work title.
+         *
+         *     Server-paged via offset/limit; total is the full filtered count.
          */
         get: operations["list_work_identities_api_v1_admin_work_identities_get"];
         /**
@@ -331,6 +362,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/work-identities/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk Work Identity Decisions
+         * @description Apply one reviewer's decisions to many work-identity rows.
+         *
+         *     One transaction: each row that exists gets the same audited flip the
+         *     PUT does; unknown rows land in `errors` without aborting the batch.
+         *     An unexpected database error rolls the whole batch back.
+         */
+        post: operations["bulk_work_identity_decisions_api_v1_admin_work_identities_bulk_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/status-changes": {
         parameters: {
             query?: never;
@@ -343,6 +398,40 @@ export interface paths {
          * @description Audited status flips, newest first, optionally per subject table.
          */
         get: operations["list_status_changes_api_v1_admin_status_changes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/usage/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Usage Summary */
+        get: operations["usage_summary_api_v1_admin_usage_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/usage/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Usage Events */
+        get: operations["usage_events_api_v1_admin_usage_events_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -396,6 +485,23 @@ export interface paths {
         get: operations["doc_detail_api_v1_docs__slug__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/usage/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Events */
+        post: operations["create_events_api_v1_usage_events_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -473,6 +579,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/{institution_code}/journals/{issn_l}/openalex-only.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Journal Openalex Only Csv
+         * @description Uncapped CSV of the journal's CRIS-gap (OpenAlex-only) list.
+         */
+        get: operations["journal_openalex_only_csv_api_v1__institution_code__journals__issn_l__openalex_only_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/{institution_code}/journals/{issn_l}": {
         parameters: {
             query?: never;
@@ -482,6 +608,40 @@ export interface paths {
         };
         /** Journal Detail */
         get: operations["journal_detail_api_v1__institution_code__journals__issn_l__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/{institution_code}/funders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search Funders */
+        get: operations["search_funders_api_v1__institution_code__funders_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/{institution_code}/funders/{funder_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Funder Detail */
+        get: operations["funder_detail_api_v1__institution_code__funders__funder_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -524,6 +684,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/{institution_code}/authors/{pure_uuid}/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Author Avatar
+         * @description The author's people.utwente.nl portrait: uuid-verified matches
+         *     (or admin-confirmed candidates) only; 404 otherwise.
+         */
+        get: operations["author_avatar_api_v1__institution_code__authors__pure_uuid__avatar_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/{institution_code}/authors/{pure_uuid}/works.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Author Works Csv
+         * @description Uncapped CSV of the author's works: scope=missed (default) serves
+         *     the openalex-only list, scope=canon the Pure works; 400 otherwise.
+         */
+        get: operations["author_works_csv_api_v1__institution_code__authors__pure_uuid__works_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/{institution_code}/publishers": {
         parameters: {
             query?: never;
@@ -533,6 +735,26 @@ export interface paths {
         };
         /** Search Publishers */
         get: operations["search_publishers_api_v1__institution_code__publishers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/{institution_code}/publishers/{name}/openalex-only.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Publisher Openalex Only Csv
+         * @description Uncapped CSV of the publisher group's CRIS-gap (OpenAlex-only) list.
+         */
+        get: operations["publisher_openalex_only_csv_api_v1__institution_code__publishers__name__openalex_only_csv_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -740,6 +962,8 @@ export interface components {
             } | null;
             /** Cap Text */
             cap_text: string | null;
+            /** Cap Usage */
+            cap_usage?: components["schemas"]["CapUsageEntry"][] | null;
             /** Summary */
             summary: string | null;
             /** Journal Count */
@@ -792,6 +1016,8 @@ export interface components {
             } | null;
             /** Cap Text */
             cap_text: string | null;
+            /** Cap Usage */
+            cap_usage?: components["schemas"]["CapUsageEntry"][] | null;
             /** Summary */
             summary: string | null;
             /** Journal Count */
@@ -804,6 +1030,41 @@ export interface components {
             needs_curation_reason: string | null;
             /** Curation Resolved Reason */
             curation_resolved_reason: string | null;
+        };
+        /**
+         * AdminExternalAuthorOut
+         * @description Stored OpenAlex author profile (source_records) + recent works.
+         *
+         *     Serves the identity review drawer from the harvest's verbatim payloads
+         *     instead of the live API.
+         */
+        AdminExternalAuthorOut: {
+            /** Source Pk */
+            source_pk: string;
+            /** Harvested At */
+            harvested_at: string | null;
+            /** Author */
+            author: {
+                [key: string]: unknown;
+            };
+            /** Works */
+            works: components["schemas"]["AdminExternalWorkOut"][];
+        };
+        /**
+         * AdminExternalWorkOut
+         * @description One recent OpenAlex work of a candidate author, from the projection.
+         */
+        AdminExternalWorkOut: {
+            /** W Id */
+            w_id: string;
+            /** Title */
+            title: string | null;
+            /** Year */
+            year: number | null;
+            /** Doi */
+            doi: string | null;
+            /** Venue */
+            venue: string | null;
         };
         /** AdminInstitutionOut */
         AdminInstitutionOut: {
@@ -990,6 +1251,21 @@ export interface components {
             /** Updated At */
             updated_at: string | null;
         };
+        /**
+         * AuthorIdentityPageOut
+         * @description Paged identity-cascade review queue (total is the unpaginated count).
+         */
+        AuthorIdentityPageOut: {
+            /** Total */
+            total: number;
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
+            /** Items */
+            items: components["schemas"]["AuthorIdentityAdminOut"][];
+        };
         /** AuthorItem */
         AuthorItem: {
             /** Pure Uuid */
@@ -1024,6 +1300,175 @@ export interface components {
             /** Oa Type */
             oa_type: string;
         };
+        /**
+         * AuthorOpenalexOnly
+         * @description The author's OpenAlex-only works as their own section: total is
+         *     exact, items hold the grouped entries (missing parts under their main
+         *     work), safety-capped at the entry level; entries_total counts entries
+         *     before the cap.
+         */
+        AuthorOpenalexOnly: {
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /**
+             * Entries Total
+             * @default 0
+             */
+            entries_total: number;
+            /**
+             * Items
+             * @default []
+             */
+            items: (components["schemas"]["AuthorOpenalexOnlySingle"] | components["schemas"]["AuthorOpenalexOnlyGroup"])[];
+            /**
+             * Available
+             * @default true
+             */
+            available: boolean;
+            /**
+             * Likely Missing
+             * @default 0
+             */
+            likely_missing: number;
+        };
+        /**
+         * AuthorOpenalexOnlyGroup
+         * @description One main work with its missing parts (only missing works are
+         *     listed); the parent itself may well be registered.
+         */
+        AuthorOpenalexOnlyGroup: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "group";
+            parent: components["schemas"]["GapGroupParent"];
+            /**
+             * Parts
+             * @default []
+             */
+            parts: components["schemas"]["AuthorOpenalexOnlyWork"][];
+            /**
+             * Parts Total
+             * @default 0
+             */
+            parts_total: number;
+        };
+        /**
+         * AuthorOpenalexOnlySingle
+         * @description One standalone gap work (no parent works): all work-row fields at
+         *     the top level.
+         */
+        AuthorOpenalexOnlySingle: {
+            /** Pure Uuid */
+            pure_uuid?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Year */
+            year?: number | null;
+            /** Doi */
+            doi?: string | null;
+            /** Oa Status */
+            oa_status?: string | null;
+            /** Work Type */
+            work_type?: string | null;
+            /** Journal Issn L */
+            journal_issn_l?: string | null;
+            /** Journal Title */
+            journal_title?: string | null;
+            /** Publisher Name */
+            publisher_name?: string | null;
+            /** Openalex Id */
+            openalex_id?: string | null;
+            /** Openalex Url */
+            openalex_url?: string | null;
+            /**
+             * In Pure
+             * @default false
+             */
+            in_pure: boolean;
+            /**
+             * Ut Authors
+             * @default []
+             */
+            ut_authors: components["schemas"]["UtAuthorAttribution"][];
+            /**
+             * Parent Works
+             * @default []
+             */
+            parent_works: components["schemas"]["WorkParent"][];
+            /**
+             * Is Part
+             * @default false
+             */
+            is_part: boolean;
+            /** Pure Match */
+            pure_match?: ("doi_in_pure" | "parent_book_in_pure" | "same_title_in_pure") | null;
+            /** Pure Match Url */
+            pure_match_url?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "single";
+        };
+        /**
+         * AuthorOpenalexOnlyWork
+         * @description One OpenAlex-only (missed) work in the author page's dedicated
+         *     section: same gates the merged works list used to apply, but the list
+         *     is the section's own — never truncated by the works cap.
+         */
+        AuthorOpenalexOnlyWork: {
+            /** Pure Uuid */
+            pure_uuid?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Year */
+            year?: number | null;
+            /** Doi */
+            doi?: string | null;
+            /** Oa Status */
+            oa_status?: string | null;
+            /** Work Type */
+            work_type?: string | null;
+            /** Journal Issn L */
+            journal_issn_l?: string | null;
+            /** Journal Title */
+            journal_title?: string | null;
+            /** Publisher Name */
+            publisher_name?: string | null;
+            /** Openalex Id */
+            openalex_id?: string | null;
+            /** Openalex Url */
+            openalex_url?: string | null;
+            /**
+             * In Pure
+             * @default false
+             */
+            in_pure: boolean;
+            /**
+             * Ut Authors
+             * @default []
+             */
+            ut_authors: components["schemas"]["UtAuthorAttribution"][];
+            /**
+             * Parent Works
+             * @default []
+             */
+            parent_works: components["schemas"]["WorkParent"][];
+            /**
+             * Is Part
+             * @default false
+             */
+            is_part: boolean;
+            /** Pure Match */
+            pure_match?: ("doi_in_pure" | "parent_book_in_pure" | "same_title_in_pure") | null;
+            /** Pure Match Url */
+            pure_match_url?: string | null;
+        };
         /** AuthorOut */
         AuthorOut: {
             /** Pure Uuid */
@@ -1048,6 +1493,31 @@ export interface components {
             orgs: string[];
             /** N Works */
             n_works: number;
+            people?: components["schemas"]["AuthorPeopleProfile"] | null;
+            /** Research Portal Url */
+            research_portal_url?: string | null;
+        };
+        /**
+         * AuthorPeopleProfile
+         * @description people.utwente.nl profile linked to the author: uuid-verified via
+         *     the profile's research.utwente.nl portal link, or an admin-promoted
+         *     name match. has_photo gates the avatar endpoint URL.
+         */
+        AuthorPeopleProfile: {
+            /** Slug */
+            slug: string;
+            /** Url */
+            url: string;
+            /** Canonical Name */
+            canonical_name: string | null;
+            /** Email */
+            email: string | null;
+            /** Orgs */
+            orgs: string[];
+            /** Faculty Abbr */
+            faculty_abbr: string | null;
+            /** Has Photo */
+            has_photo: boolean;
         };
         /** AuthorProfileResponse */
         AuthorProfileResponse: {
@@ -1063,6 +1533,18 @@ export interface components {
             alternatives: components["schemas"]["AuthorAlternative"][];
             /** Works */
             works: components["schemas"]["AuthorWorkItem"][];
+            /**
+             * @default {
+             *       "total": 0,
+             *       "entries_total": 0,
+             *       "items": [],
+             *       "available": true,
+             *       "likely_missing": 0
+             *     }
+             */
+            openalex_only: components["schemas"]["AuthorOpenalexOnly"];
+            /** Openalex Only Count */
+            openalex_only_count?: number | null;
         };
         /** AuthorSearchResponse */
         AuthorSearchResponse: {
@@ -1131,15 +1613,27 @@ export interface components {
             doi: string | null;
             /** Oa Status */
             oa_status: string | null;
+            /** Work Type */
+            work_type?: string | null;
             /** Journal Issn L */
             journal_issn_l: string | null;
             /** Journal Title */
             journal_title: string | null;
+            /** Pure Url */
+            pure_url?: string | null;
+            /** Openalex Url */
+            openalex_url?: string | null;
             /**
              * In Pure
              * @default true
              */
             in_pure: boolean;
+            /**
+             * Oa Status Source
+             * @default openalex
+             * @enum {string}
+             */
+            oa_status_source: "openalex" | "pure";
         };
         /** AuthorYearRow */
         AuthorYearRow: {
@@ -1203,6 +1697,51 @@ export interface components {
              * @default 0
              */
             unknown: number;
+        };
+        /**
+         * CapUsageEntry
+         * @description One contract year's publisher-reported APC cap usage (admin-entered
+         *     from library email updates; the harvest never rewrites it).
+         */
+        CapUsageEntry: {
+            /** Year */
+            year: number;
+            /** Pool */
+            pool?: string | null;
+            /** Total */
+            total: number;
+            /** Used */
+            used?: number | null;
+            /** As Of */
+            as_of?: string | null;
+            /** Note */
+            note?: string | null;
+        };
+        /**
+         * ChapterBook
+         * @description One parent book of the parts rollup: a distinct volume parent of
+         *     the page's chapter-kind gap works, with its chapter count and up to
+         *     3 sample chapter titles.
+         */
+        ChapterBook: {
+            /** Parent Id */
+            parent_id?: string | null;
+            /** Name */
+            name: string;
+            /** Chapters */
+            chapters: number;
+            /**
+             * Sample
+             * @default []
+             */
+            sample: string[];
+        };
+        /** ClientInfo */
+        ClientInfo: {
+            /** Tz */
+            tz?: string | null;
+            /** Locale */
+            locale?: string | null;
         };
         /** CreateFeedbackIn */
         CreateFeedbackIn: {
@@ -1330,6 +1869,8 @@ export interface components {
             per_year_oa_counts: {
                 [key: string]: unknown;
             } | null;
+            /** Cap Usage */
+            cap_usage?: components["schemas"]["CapUsageEntry"][] | null;
             /** Needs Curation */
             needs_curation: boolean;
             /** Needs Curation Reason */
@@ -1341,6 +1882,16 @@ export interface components {
              * @default 0
              */
             journal_count: number;
+            /**
+             * Apc Euro Total
+             * @default 0
+             */
+            apc_euro_total: number;
+            /**
+             * Apc N
+             * @default 0
+             */
+            apc_n: number;
         };
         /** DealParticipationsBody */
         DealParticipationsBody: {
@@ -1380,6 +1931,8 @@ export interface components {
             } | null;
             /** Cap Text */
             cap_text?: string | null;
+            /** Cap Usage */
+            cap_usage?: components["schemas"]["CapUsageEntry"][] | null;
             /** Summary */
             summary?: string | null;
             /** Esac Id */
@@ -1472,6 +2025,29 @@ export interface components {
             order: number;
             /** Edits */
             edits: number;
+        };
+        /** ErrorIn */
+        ErrorIn: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "error";
+            /** Session Id */
+            session_id: string;
+            /** Path */
+            path: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "js_error" | "unhandled_rejection" | "api_status";
+            /** Message */
+            message?: string | null;
+            /** Detail */
+            detail?: string | null;
+            /** Status */
+            status?: number | null;
         };
         /** FeedbackAdminOut */
         FeedbackAdminOut: {
@@ -1632,6 +2208,238 @@ export interface components {
              */
             degraded: components["schemas"]["DegradedSource"][];
         };
+        /** FunderDetailResponse */
+        FunderDetailResponse: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string | null;
+            /** Country */
+            country: string | null;
+            /** Url */
+            url: string | null;
+            /** Ror */
+            ror: string | null;
+            /** Fundref */
+            fundref: string | null;
+            /** Openalex Funder Id */
+            openalex_funder_id?: string | null;
+            /**
+             * Policy Structured
+             * @default false
+             */
+            policy_structured: boolean;
+            /**
+             * N Ut Works
+             * @default 0
+             */
+            n_ut_works: number;
+            /** Publications Policy */
+            publications_policy?: {
+                [key: string]: unknown;
+            } | null;
+            /** Data Archiving Policy */
+            data_archiving_policy?: {
+                [key: string]: unknown;
+            } | null;
+            openaire?: components["schemas"]["FunderOpenaireBlock"] | null;
+            /**
+             * Top Journals
+             * @default []
+             */
+            top_journals: components["schemas"]["FunderTopJournal"][];
+        };
+        /**
+         * FunderFitOut
+         * @description How well one journal satisfies the selected funder's OA policy.
+         *
+         *     status None = the funder's policy is text-only, no tier derivable.
+         */
+        FunderFitOut: {
+            /** Status */
+            status: ("compliant" | "check" | "no") | null;
+            /**
+             * Reasons
+             * @default []
+             */
+            reasons: string[];
+        };
+        /** FunderListItem */
+        FunderListItem: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string | null;
+            /** Country */
+            country: string | null;
+            /** Url */
+            url: string | null;
+            /** Ror */
+            ror: string | null;
+            /** Fundref */
+            fundref: string | null;
+            /** Openalex Funder Id */
+            openalex_funder_id?: string | null;
+            /**
+             * Policy Structured
+             * @default false
+             */
+            policy_structured: boolean;
+            /**
+             * N Ut Works
+             * @default 0
+             */
+            n_ut_works: number;
+        };
+        /**
+         * FunderOpenaireBlock
+         * @description OpenAIRE graph identity for the same funder (canon-linked via ROR).
+         */
+        FunderOpenaireBlock: {
+            /** Openaire Id */
+            openaire_id: string;
+            /** Name */
+            name?: string | null;
+            /** Short Name */
+            short_name?: string | null;
+            /** Jurisdiction */
+            jurisdiction?: string | null;
+            /** Website Url */
+            website_url?: string | null;
+            /**
+             * Streams
+             * @default []
+             */
+            streams: components["schemas"]["FunderOpenaireStream"][];
+        };
+        /**
+         * FunderOpenaireStream
+         * @description One funding level-0 stream with its OpenAIRE project count.
+         */
+        FunderOpenaireStream: {
+            /** Level0 Id */
+            level0_id: string;
+            /** Name */
+            name?: string | null;
+            /** N Projects */
+            n_projects: number;
+        };
+        /** FunderSearchResponse */
+        FunderSearchResponse: {
+            /** Items */
+            items: components["schemas"]["FunderListItem"][];
+            /** Total */
+            total: number;
+        };
+        /** FunderTopJournal */
+        FunderTopJournal: {
+            /** Title */
+            title: string | null;
+            /** Issn L */
+            issn_l: string | null;
+            /** N Works */
+            n_works: number;
+        };
+        /**
+         * GapGroupParent
+         * @description The main work a group entry's missing parts belong to: the parts'
+         *     primary parent (the first rel=volume parent among a part's
+         *     parent_works, else the first listed parent). name comes from the
+         *     parts' parent_works (registry title when the registry row has one);
+         *     work_type/doi/pure_registered are null without an openalex_work_parents
+         *     row (parts backfill pending). pure_registered is derived live from the
+         *     works table and false includes no-DOI parents.
+         */
+        GapGroupParent: {
+            /** W Id */
+            w_id?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Work Type */
+            work_type?: string | null;
+            /** Doi */
+            doi?: string | null;
+            /** Pure Registered */
+            pure_registered?: boolean | null;
+        };
+        /**
+         * GreenOa
+         * @description Best green (self-archiving) route per Jisc Open Policy Finder
+         *     (journals.jisc_allows_sa_* / jisc_in_opf; search filter + facet
+         *     vocabulary). "none" = swept but no route permitted (or OA prohibited
+         *     outright); never-swept journals land in no bucket.
+         * @enum {string}
+         */
+        GreenOa: "submitted" | "accepted" | "published" | "none";
+        /**
+         * GreenOaPolicy
+         * @description Jisc Open Policy Finder green-OA policy bundle (journals.jisc_policy
+         *     display object + stamp columns); null when the journal was never swept.
+         */
+        GreenOaPolicy: {
+            /** In Opf */
+            in_opf: boolean;
+            /** Oa Prohibited */
+            oa_prohibited?: boolean | null;
+            /**
+             * Routes
+             * @default {}
+             */
+            routes: {
+                [key: string]: components["schemas"]["GreenOaRoute"];
+            };
+            /** Internal Moniker */
+            internal_moniker?: string | null;
+            /**
+             * Urls
+             * @default []
+             */
+            urls: {
+                [key: string]: string;
+            }[];
+            /**
+             * Repository Links
+             * @default {}
+             */
+            repository_links: {
+                [key: string]: string;
+            };
+            /** Policy Uri */
+            policy_uri?: string | null;
+            /** Harvested At */
+            harvested_at?: string | null;
+        };
+        /**
+         * GreenOaRoute
+         * @description One self-archiving route (per article version) as aggregated by the
+         *     Jisc normalizer from publisher_policy[].permitted_oa.
+         */
+        GreenOaRoute: {
+            /**
+             * Locations
+             * @default []
+             */
+            locations: string[];
+            /**
+             * Repositories
+             * @default []
+             */
+            repositories: string[];
+            /**
+             * Licenses
+             * @default []
+             */
+            licenses: string[];
+            /** Embargo Months */
+            embargo_months?: number | null;
+            /**
+             * Conditions
+             * @default []
+             */
+            conditions: string[];
+            /** Additional Oa Fee */
+            additional_oa_fee?: string | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1730,7 +2538,7 @@ export interface components {
         /**
          * InstitutionUpdate
          * @description PATCH-shaped PUT body: absent fields are untouched, explicit null
-         *     clears nullable columns, and the four non-nullable fields reject null.
+         *     clears nullable columns, and the three non-nullable fields reject null.
          */
         InstitutionUpdate: {
             /** Name */
@@ -1841,19 +2649,22 @@ export interface components {
             openalex?: components["schemas"]["OpenalexInfo"] | null;
             /**
              * @default {
-             *       "matched_works": 0
+             *       "matched_works": 0,
+             *       "with_fulltext": 0,
+             *       "with_usage": 0,
+             *       "diamond_works": 0,
+             *       "oa_color_total": 0,
+             *       "oa_color_disagree": 0,
+             *       "top_fos": [],
+             *       "top_funders": []
              *     }
              */
             openaire: components["schemas"]["OpenaireInfo"];
-            /**
-             * @default {
-             *       "openalex_matched": 0,
-             *       "fwci_n": 0,
-             *       "retracted": 0,
-             *       "cited_total": 0
-             *     }
-             */
+            green_oa?: components["schemas"]["GreenOaPolicy"] | null;
+            funder_fit?: components["schemas"]["FunderFitOut"] | null;
             institution_metrics: components["schemas"]["InstitutionMetrics"];
+            ut_authorship: components["schemas"]["UTAuthorship"];
+            openalex_only: components["schemas"]["OpenalexOnly"];
             /**
              * Attribution
              * @default {}
@@ -1889,6 +2700,11 @@ export interface components {
              */
             deal_covered: boolean;
             /**
+             * Deal Cap Reached
+             * @default false
+             */
+            deal_cap_reached: boolean;
+            /**
              * Works
              * @default 0
              */
@@ -1899,6 +2715,10 @@ export interface components {
             twoyr_mean_citedness?: number | null;
             /** @default subscription */
             oa_type: components["schemas"]["OaType"];
+            /** Pub Type */
+            pub_type?: string | null;
+            /** Language */
+            language?: string | null;
             /** Primary Topic */
             primary_topic?: string | null;
             /** Apc Source */
@@ -1916,6 +2736,7 @@ export interface components {
              * @default []
              */
             apc_stats: components["schemas"]["ApcAggregateOut"][];
+            funder_fit?: components["schemas"]["FunderFitOut"] | null;
         };
         /** JournalSearchResponse */
         JournalSearchResponse: {
@@ -1964,16 +2785,120 @@ export interface components {
          * OaType
          * @description Journal-level OA classification (journals.oa_type; services/search.py
          *     SQL case + Python mirror, search filter vocabulary).
+         *
+         *     Member order is the facet display order (most open first); every
+         *     oa_type facet/composition dict iterates OA_TYPES, so do not reorder
+         *     alphabetically.
          * @enum {string}
          */
-        OaType: "gold" | "diamond" | "generic" | "hybrid" | "subscription";
-        /** OpenaireInfo */
+        OaType: "diamond" | "gold" | "hybrid" | "generic" | "subscription";
+        /**
+         * OpenaireFactsOut
+         * @description OpenAIRE-derived facts for one work (openaire_work_facts row).
+         */
+        OpenaireFactsOut: {
+            /** Views */
+            views?: number | null;
+            /** Downloads */
+            downloads?: number | null;
+            /** Oa Url */
+            oa_url?: string | null;
+            /** License */
+            license?: string | null;
+            /** Oa Color */
+            oa_color?: string | null;
+            /**
+             * Diamond
+             * @default false
+             */
+            diamond: boolean;
+            /** Embargo End */
+            embargo_end?: string | null;
+            /**
+             * Fos
+             * @default []
+             */
+            fos: string[];
+            /**
+             * Projects
+             * @default []
+             */
+            projects: components["schemas"]["OpenaireProjectOut"][];
+        };
+        /**
+         * OpenaireInfo
+         * @description OpenAIRE cross-check for one journal, over the confirmed-identity
+         *     facts store (openaire_work_facts).
+         */
         OpenaireInfo: {
             /**
              * Matched Works
              * @default 0
              */
             matched_works: number;
+            /**
+             * With Fulltext
+             * @default 0
+             */
+            with_fulltext: number;
+            /**
+             * With Usage
+             * @default 0
+             */
+            with_usage: number;
+            /**
+             * Diamond Works
+             * @default 0
+             */
+            diamond_works: number;
+            /**
+             * Oa Color Total
+             * @default 0
+             */
+            oa_color_total: number;
+            /**
+             * Oa Color Disagree
+             * @default 0
+             */
+            oa_color_disagree: number;
+            /**
+             * Top Fos
+             * @default []
+             */
+            top_fos: components["schemas"]["OpenaireTopFos"][];
+            /**
+             * Top Funders
+             * @default []
+             */
+            top_funders: components["schemas"]["OpenaireTopFunder"][];
+        };
+        /**
+         * OpenaireProjectOut
+         * @description One project linked to the work by OpenAIRE (fields may be null).
+         */
+        OpenaireProjectOut: {
+            /** Id */
+            id?: string | null;
+            /** Funder */
+            funder?: string | null;
+            /** Code */
+            code?: string | null;
+            /** Acronym */
+            acronym?: string | null;
+        };
+        /** OpenaireTopFos */
+        OpenaireTopFos: {
+            /** Subject */
+            subject: string;
+            /** Works */
+            works: number;
+        };
+        /** OpenaireTopFunder */
+        OpenaireTopFunder: {
+            /** Funder */
+            funder: string;
+            /** Works */
+            works: number;
         };
         /**
          * OpenalexInfo
@@ -1999,6 +2924,182 @@ export interface components {
              * @default []
              */
             topics: components["schemas"]["OpenalexTopicOut"][];
+        };
+        /**
+         * OpenalexOnly
+         * @description OpenAlex store works attributed to the venue or to the unit's
+         *     member authors whose DOI matches no Pure work — candidates missing
+         *     from the CRIS. items holds the grouped entries (missing parts
+         *     collected under their main work), capped; total counts works and
+         *     entries_total counts entries (before the cap), both exact.
+         *     available=False when the openalex_works projection never ran
+         *     (frontend hides the card).
+         */
+        OpenalexOnly: {
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /**
+             * Entries Total
+             * @default 0
+             */
+            entries_total: number;
+            /**
+             * Items
+             * @default []
+             */
+            items: (components["schemas"]["OpenalexOnlySingle"] | components["schemas"]["OpenalexOnlyGroup"])[];
+            /**
+             * Available
+             * @default true
+             */
+            available: boolean;
+        };
+        /**
+         * OpenalexOnlyAuthor
+         * @description One compact OpenAlex authorship of a gap work ({a, n, o}).
+         */
+        OpenalexOnlyAuthor: {
+            /** Openalex Id */
+            openalex_id: string;
+            /** Name */
+            name?: string | null;
+            /** Orcid */
+            orcid?: string | null;
+        };
+        /**
+         * OpenalexOnlyGroup
+         * @description One main work with its missing parts. A group exists when any part
+         *     of the work is missing from Pure; parts hold only those missing works
+         *     (registered parts never enter the gap set) and the parent itself may
+         *     well be registered (pure_registered true).
+         */
+        OpenalexOnlyGroup: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "group";
+            parent: components["schemas"]["GapGroupParent"];
+            /**
+             * Parts
+             * @default []
+             */
+            parts: components["schemas"]["OpenalexOnlyWork"][];
+            /**
+             * Parts Total
+             * @default 0
+             */
+            parts_total: number;
+        };
+        /**
+         * OpenalexOnlySingle
+         * @description One standalone gap work (no parent works): all work-row fields at
+         *     the top level.
+         */
+        OpenalexOnlySingle: {
+            /** Title */
+            title?: string | null;
+            /** Year */
+            year?: number | null;
+            /** Doi */
+            doi?: string | null;
+            /** Oa Status */
+            oa_status?: string | null;
+            /** Work Type */
+            work_type?: string | null;
+            /** Venue */
+            venue?: string | null;
+            /** Openalex Id */
+            openalex_id?: string | null;
+            /** Openalex Url */
+            openalex_url?: string | null;
+            /**
+             * Authors
+             * @default []
+             */
+            authors: components["schemas"]["OpenalexOnlyAuthor"][];
+            /**
+             * Ut Authors
+             * @default []
+             */
+            ut_authors: components["schemas"]["UtAuthorAttribution"][];
+            /** Journal Issn L */
+            journal_issn_l?: string | null;
+            /** Journal Title */
+            journal_title?: string | null;
+            /** Publisher Name */
+            publisher_name?: string | null;
+            /**
+             * Parent Works
+             * @default []
+             */
+            parent_works: components["schemas"]["WorkParent"][];
+            /**
+             * Is Part
+             * @default false
+             */
+            is_part: boolean;
+            /** Pure Match */
+            pure_match?: ("doi_in_pure" | "parent_book_in_pure" | "same_title_in_pure") | null;
+            /** Pure Match Url */
+            pure_match_url?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "single";
+        };
+        /** OpenalexOnlyWork */
+        OpenalexOnlyWork: {
+            /** Title */
+            title?: string | null;
+            /** Year */
+            year?: number | null;
+            /** Doi */
+            doi?: string | null;
+            /** Oa Status */
+            oa_status?: string | null;
+            /** Work Type */
+            work_type?: string | null;
+            /** Venue */
+            venue?: string | null;
+            /** Openalex Id */
+            openalex_id?: string | null;
+            /** Openalex Url */
+            openalex_url?: string | null;
+            /**
+             * Authors
+             * @default []
+             */
+            authors: components["schemas"]["OpenalexOnlyAuthor"][];
+            /**
+             * Ut Authors
+             * @default []
+             */
+            ut_authors: components["schemas"]["UtAuthorAttribution"][];
+            /** Journal Issn L */
+            journal_issn_l?: string | null;
+            /** Journal Title */
+            journal_title?: string | null;
+            /** Publisher Name */
+            publisher_name?: string | null;
+            /**
+             * Parent Works
+             * @default []
+             */
+            parent_works: components["schemas"]["WorkParent"][];
+            /**
+             * Is Part
+             * @default false
+             */
+            is_part: boolean;
+            /** Pure Match */
+            pure_match?: ("doi_in_pure" | "parent_book_in_pure" | "same_title_in_pure") | null;
+            /** Pure Match Url */
+            pure_match_url?: string | null;
         };
         /**
          * OpenalexTopicOut
@@ -2038,6 +3139,8 @@ export interface components {
             orcid: string | null;
             /** Primary Topic */
             primary_topic: string | null;
+            /** Oa Diamond Gold Share */
+            oa_diamond_gold_share?: number | null;
         };
         /** OrgUnitDetailResponse */
         OrgUnitDetailResponse: {
@@ -2064,6 +3167,8 @@ export interface components {
              * @default []
              */
             deal_usage: components["schemas"]["DealUsageRow"][];
+            openalex_only: components["schemas"]["OpenalexOnly"];
+            chapter_rollup: components["schemas"]["PartsRollup"];
         };
         /** OrgUnitItem */
         OrgUnitItem: {
@@ -2127,6 +3232,50 @@ export interface components {
                 };
             };
         };
+        /** PageViewIn */
+        PageViewIn: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "page_view";
+            /** Session Id */
+            session_id: string;
+            /** Path */
+            path: string;
+            /** Duration Ms */
+            duration_ms?: number | null;
+            /** Referrer */
+            referrer?: string | null;
+            /** Ref Type */
+            ref_type?: ("journal" | "funder" | "author" | "orgunit" | "publisher") | null;
+            /** Ref Id */
+            ref_id?: string | null;
+        };
+        /**
+         * PartsRollup
+         * @description Chapter/book rollup over the page's full openalex-only population
+         *     (before the gap card's item cap): chapters_total counts chapter-kind
+         *     works (is_part with a rel=volume parent), books_total the distinct
+         *     parents. books is the top 10 by chapter count.
+         */
+        PartsRollup: {
+            /**
+             * Chapters Total
+             * @default 0
+             */
+            chapters_total: number;
+            /**
+             * Books Total
+             * @default 0
+             */
+            books_total: number;
+            /**
+             * Books
+             * @default []
+             */
+            books: components["schemas"]["ChapterBook"][];
+        };
         /** PublisherApcSummary */
         PublisherApcSummary: {
             /** N Journals */
@@ -2161,6 +3310,9 @@ export interface components {
              * @default []
              */
             works_by_year: components["schemas"]["StatsYear"][];
+            ut_authorship: components["schemas"]["UTAuthorship"];
+            openalex_only: components["schemas"]["OpenalexOnly"];
+            chapter_rollup: components["schemas"]["PartsRollup"];
         };
         /**
          * PublisherExternalIds
@@ -2170,6 +3322,8 @@ export interface components {
         PublisherExternalIds: {
             /** Openaccess Nl Slug */
             openaccess_nl_slug?: string | null;
+            /** Ror */
+            ror?: string | null;
         };
         /** PublisherListItem */
         PublisherListItem: {
@@ -2225,6 +3379,33 @@ export interface components {
             /** H Index */
             h_index: number | null;
         };
+        /** SearchIn */
+        SearchIn: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "search";
+            /** Session Id */
+            session_id: string;
+            /** Path */
+            path: string;
+            /** Query */
+            query?: string | null;
+            /**
+             * Is Browse
+             * @default false
+             */
+            is_browse: boolean;
+            /** Results Count */
+            results_count?: number | null;
+            /** Search Scope */
+            search_scope?: ("journals" | "funders" | "authors" | "publishers" | "orgunits") | null;
+            /** Filters */
+            filters?: {
+                [key: string]: unknown;
+            } | null;
+        };
         /** SettingsUpdate */
         SettingsUpdate: {
             /** Values */
@@ -2248,6 +3429,11 @@ export interface components {
             is_oa: boolean | null;
             /** Deal Covered */
             deal_covered: boolean;
+            /**
+             * Deal Cap Reached
+             * @default false
+             */
+            deal_cap_reached: boolean;
             /** Works */
             works: number;
             /** Shared Topics */
@@ -2323,6 +3509,249 @@ export interface components {
             /** N */
             n: number;
         };
+        /** UTAuthorRow */
+        UTAuthorRow: {
+            /** Pure Uuid */
+            pure_uuid: string;
+            /** Name */
+            name: string;
+            /** Faculty */
+            faculty?: string | null;
+            /** Research Group */
+            research_group?: string | null;
+            /** Works */
+            works: number;
+        };
+        /**
+         * UTAuthorship
+         * @description Who at this institution authors the venue's canonical works:
+         *     distinct works per faculty / research group and the top authors,
+         *     over the same population the search card counts (so the numbers
+         *     reconcile with journal_flags.works_count). n_ut_works counts rows
+         *     with at least one UT author edge; venue totals can exceed it.
+         */
+        UTAuthorship: {
+            /**
+             * N Ut Works
+             * @default 0
+             */
+            n_ut_works: number;
+            /**
+             * Faculties
+             * @default []
+             */
+            faculties: components["schemas"]["UTBucket"][];
+            /**
+             * Research Groups
+             * @default []
+             */
+            research_groups: components["schemas"]["UTBucket"][];
+            /**
+             * Top Authors
+             * @default []
+             */
+            top_authors: components["schemas"]["UTAuthorRow"][];
+        };
+        /**
+         * UTBucket
+         * @description Distinct works attributed to one faculty or research group.
+         */
+        UTBucket: {
+            /** Name */
+            name: string;
+            /** Works */
+            works: number;
+        };
+        /** UsageBatchIn */
+        UsageBatchIn: {
+            client?: components["schemas"]["ClientInfo"] | null;
+            /** Events */
+            events: (components["schemas"]["PageViewIn"] | components["schemas"]["SearchIn"] | components["schemas"]["ErrorIn"])[];
+        };
+        /** UsageCountryCount */
+        UsageCountryCount: {
+            /** Country */
+            country: string;
+            /** Count */
+            count: number;
+        };
+        /**
+         * UsageDayCount
+         * @description Per-day usage-event counts, one entry per calendar day.
+         */
+        UsageDayCount: {
+            /** Date */
+            date: string;
+            /** Page View */
+            page_view: number;
+            /** Search */
+            search: number;
+            /** Error */
+            error: number;
+        };
+        /** UsageErrorGroup */
+        UsageErrorGroup: {
+            /** Source */
+            source: string | null;
+            /** Status */
+            status: number | null;
+            /** Message */
+            message: string | null;
+            /** Count */
+            count: number;
+            /**
+             * Last Ts
+             * Format: date-time
+             */
+            last_ts: string;
+        };
+        /**
+         * UsageEventOut
+         * @description One raw usage event as stored (admin event list).
+         */
+        UsageEventOut: {
+            /** Id */
+            id: number;
+            /**
+             * Ts
+             * Format: date-time
+             */
+            ts: string;
+            /** Event Type */
+            event_type: string;
+            /** Path */
+            path: string;
+            /** Duration Ms */
+            duration_ms: number | null;
+            /** Query */
+            query: string | null;
+            /** Is Browse */
+            is_browse: boolean;
+            /** Results Count */
+            results_count: number | null;
+            /** Search Scope */
+            search_scope: string | null;
+            /** Filters */
+            filters: {
+                [key: string]: unknown;
+            } | null;
+            /** Ref Type */
+            ref_type: string | null;
+            /** Ref Id */
+            ref_id: string | null;
+            /** Source */
+            source: string | null;
+            /** Message */
+            message: string | null;
+            /** Detail */
+            detail: string | null;
+            /** Status */
+            status: number | null;
+            /** Referrer */
+            referrer: string | null;
+            /** Ip */
+            ip: string | null;
+            /** Country */
+            country: string | null;
+            /** User Agent */
+            user_agent: string | null;
+            /** Tz */
+            tz: string | null;
+            /** Locale */
+            locale: string | null;
+            /** Session Id */
+            session_id: string;
+        };
+        /**
+         * UsageEventsPageOut
+         * @description One offset page of the admin usage event list.
+         */
+        UsageEventsPageOut: {
+            /** Total */
+            total: number;
+            /** Items */
+            items: components["schemas"]["UsageEventOut"][];
+        };
+        /**
+         * UsageSearchSplit
+         * @description Search events split into real queries vs default browse loads.
+         */
+        UsageSearchSplit: {
+            /** Browse */
+            browse: number;
+            /** Queries */
+            queries: number;
+        };
+        /**
+         * UsageSummaryOut
+         * @description Admin usage snapshot over the trailing `days` window.
+         */
+        UsageSummaryOut: {
+            /** Days */
+            days: number;
+            /** Totals */
+            totals: {
+                [key: string]: number;
+            };
+            searches: components["schemas"]["UsageSearchSplit"];
+            /** Daily */
+            daily: components["schemas"]["UsageDayCount"][];
+            /** Top Paths */
+            top_paths: components["schemas"]["UsageTopPath"][];
+            /** Top Queries */
+            top_queries: components["schemas"]["UsageTopQuery"][];
+            /** Top Refs */
+            top_refs: components["schemas"]["UsageTopRef"][];
+            /** Errors */
+            errors: components["schemas"]["UsageErrorGroup"][];
+            /** Countries */
+            countries: components["schemas"]["UsageCountryCount"][];
+            /** Sessions */
+            sessions: number;
+        };
+        /** UsageTopPath */
+        UsageTopPath: {
+            /** Path */
+            path: string;
+            /** Page Views */
+            page_views: number;
+            /** Avg Duration Ms */
+            avg_duration_ms: number | null;
+        };
+        /** UsageTopQuery */
+        UsageTopQuery: {
+            /** Query */
+            query: string;
+            /** Count */
+            count: number;
+            /** Zero Share */
+            zero_share: number;
+        };
+        /** UsageTopRef */
+        UsageTopRef: {
+            /** Ref Type */
+            ref_type: string;
+            /** Ref Id */
+            ref_id: string;
+            /** Count */
+            count: number;
+        };
+        /**
+         * UtAuthorAttribution
+         * @description Roster author matched on a gap work's OpenAlex authorships.
+         */
+        UtAuthorAttribution: {
+            /** Name */
+            name: string;
+            /** Orcid */
+            orcid?: string | null;
+            /** Faculty */
+            faculty?: string | null;
+            /** Research Group */
+            research_group?: string | null;
+            /** Institute */
+            institute?: string | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -2365,6 +3794,75 @@ export interface components {
             note: string | null;
             /** Updated At */
             updated_at: string | null;
+        };
+        /**
+         * WorkIdentityBulkIn
+         * @description POST /admin/work-identities/bulk: many rows, one reviewer, one source.
+         */
+        WorkIdentityBulkIn: {
+            /** Institution Id */
+            institution_id: number;
+            /** Source */
+            source: string;
+            /** Reviewer */
+            reviewer: string;
+            /** Updates */
+            updates: components["schemas"]["WorkIdentityBulkUpdate"][];
+        };
+        /**
+         * WorkIdentityBulkOut
+         * @description POST /admin/work-identities/bulk result: a tally plus per-row errors.
+         */
+        WorkIdentityBulkOut: {
+            /** Confirmed */
+            confirmed: number;
+            /** Missing */
+            missing: number;
+            /** Reopened */
+            reopened: number;
+            /** Unchanged */
+            unchanged: number;
+            /**
+             * Errors
+             * @default []
+             */
+            errors: components["schemas"]["WorkIdentityBulkRowError"][];
+        };
+        /**
+         * WorkIdentityBulkRowError
+         * @description One bulk row that could not be applied (e.g. unknown source_pk).
+         */
+        WorkIdentityBulkRowError: {
+            /** Source Pk */
+            source_pk: string;
+            /** Error */
+            error: string;
+        };
+        /**
+         * WorkIdentityBulkUpdate
+         * @description One row decision inside a bulk work-identity request.
+         */
+        WorkIdentityBulkUpdate: {
+            /** Source Pk */
+            source_pk: string;
+            status: components["schemas"]["WorkIdentityStatus"];
+            /** Note */
+            note?: string | null;
+        };
+        /**
+         * WorkIdentityPageOut
+         * @description Paged work-identity review queue (total is the unpaginated count).
+         */
+        WorkIdentityPageOut: {
+            /** Total */
+            total: number;
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
+            /** Items */
+            items: components["schemas"]["WorkIdentityAdminOut"][];
         };
         /**
          * WorkIdentityStatus
@@ -2420,6 +3918,43 @@ export interface components {
             work_type?: string | null;
             /** In Openalex */
             in_openalex?: boolean | null;
+            /**
+             * Ut Authors
+             * @default []
+             */
+            ut_authors: components["schemas"]["WorkUtAuthor"][];
+            /**
+             * Ut Groups
+             * @default []
+             */
+            ut_groups: components["schemas"]["WorkUtGroup"][];
+            openaire?: components["schemas"]["OpenaireFactsOut"] | null;
+        };
+        /**
+         * WorkParent
+         * @description One parent work of a store row (compact {id, name, rel}): id is
+         *     the bare OpenAlex W-id, rel one of volume/component/data-series/part
+         *     (chapter of a book, figure of a paper, ...).
+         */
+        WorkParent: {
+            /** Id */
+            id?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Rel */
+            rel?: string | null;
+        };
+        /** WorkUtAuthor */
+        WorkUtAuthor: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /** WorkUtGroup */
+        WorkUtGroup: {
+            /** Name */
+            name: string;
         };
         /** WorksPage */
         WorksPage: {
@@ -2557,7 +4092,9 @@ export interface operations {
     };
     admin_summary_api_v1_admin_summary_get: {
         parameters: {
-            query?: never;
+            query?: {
+                institution?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2571,6 +4108,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminSummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -3054,6 +4600,7 @@ export interface operations {
                 status?: string | null;
                 /** @description institution code */
                 institution?: string | null;
+                offset?: number;
                 limit?: number;
             };
             header?: never;
@@ -3068,7 +4615,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AuthorIdentityAdminOut"][];
+                    "application/json": components["schemas"]["AuthorIdentityPageOut"];
                 };
             };
             /** @description Validation Error */
@@ -3115,6 +4662,39 @@ export interface operations {
             };
         };
     };
+    stored_external_author_api_v1_admin_external_author__external_id__get: {
+        parameters: {
+            query?: {
+                institution?: string | null;
+            };
+            header?: never;
+            path: {
+                external_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminExternalAuthorOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_work_identities_api_v1_admin_work_identities_get: {
         parameters: {
             query?: {
@@ -3122,6 +4702,7 @@ export interface operations {
                 /** @description institution code */
                 institution?: string | null;
                 source?: string | null;
+                offset?: number;
                 limit?: number;
             };
             header?: never;
@@ -3136,7 +4717,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["WorkIdentityAdminOut"][];
+                    "application/json": components["schemas"]["WorkIdentityPageOut"];
                 };
             };
             /** @description Validation Error */
@@ -3183,6 +4764,39 @@ export interface operations {
             };
         };
     };
+    bulk_work_identity_decisions_api_v1_admin_work_identities_bulk_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkIdentityBulkIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkIdentityBulkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_status_changes_api_v1_admin_status_changes_get: {
         parameters: {
             query?: {
@@ -3202,6 +4816,71 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StatusChangeOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    usage_summary_api_v1_admin_usage_summary_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageSummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    usage_events_api_v1_admin_usage_events_get: {
+        parameters: {
+            query?: {
+                event_type?: ("page_view" | "search" | "error") | null;
+                days?: number;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageEventsPageOut"];
                 };
             };
             /** @description Validation Error */
@@ -3299,6 +4978,37 @@ export interface operations {
             };
         };
     };
+    create_events_api_v1_usage_events_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UsageBatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     search_journals_api_v1__institution_code__journals_get: {
         parameters: {
             query?: {
@@ -3313,11 +5023,23 @@ export interface operations {
                 has_apc?: boolean | null;
                 has_works?: boolean | null;
                 oa_type?: components["schemas"]["OaType"][] | null;
+                green_oa?: components["schemas"]["GreenOa"] | null;
+                pub_type?: string | null;
+                /** @description Comma-separated ISO 639-1 codes; unknown values match nothing */
+                language?: string | null;
                 sort?: string;
                 dir?: string | null;
                 cursor?: string | null;
                 limit?: number;
                 include_facets?: boolean;
+                /** @description Jisc OPF funder id */
+                funder?: number | null;
+                /** @description Funder-fit tier filter */
+                funder_fit?: string | null;
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
             };
             header?: never;
             path: {
@@ -3419,6 +5141,10 @@ export interface operations {
             query?: {
                 page?: number;
                 page_size?: number;
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
             };
             header?: never;
             path: {
@@ -3449,9 +5175,53 @@ export interface operations {
             };
         };
     };
+    journal_openalex_only_csv_api_v1__institution_code__journals__issn_l__openalex_only_csv_get: {
+        parameters: {
+            query?: {
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+            };
+            header?: never;
+            path: {
+                issn_l: string;
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     journal_detail_api_v1__institution_code__journals__issn_l__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Jisc OPF funder id */
+                funder?: number | null;
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+            };
             header?: never;
             path: {
                 issn_l: string;
@@ -3481,6 +5251,82 @@ export interface operations {
             };
         };
     };
+    search_funders_api_v1__institution_code__funders_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                offset?: number;
+                limit?: number;
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+            };
+            header?: never;
+            path: {
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunderSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    funder_detail_api_v1__institution_code__funders__funder_id__get: {
+        parameters: {
+            query?: {
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+            };
+            header?: never;
+            path: {
+                funder_id: number;
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunderDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     search_authors_api_v1__institution_code__authors_get: {
         parameters: {
             query?: {
@@ -3494,6 +5340,10 @@ export interface operations {
                 topic?: string | null;
                 sort?: "works_desc" | "name_asc" | "name_desc" | "last_pub_desc";
                 offset?: number;
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
             };
             header?: never;
             path: {
@@ -3525,7 +5375,12 @@ export interface operations {
     };
     author_profile_api_v1__institution_code__authors__pure_uuid__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+            };
             header?: never;
             path: {
                 pure_uuid: string;
@@ -3555,6 +5410,76 @@ export interface operations {
             };
         };
     };
+    author_avatar_api_v1__institution_code__authors__pure_uuid__avatar_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pure_uuid: string;
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    author_works_csv_api_v1__institution_code__authors__pure_uuid__works_csv_get: {
+        parameters: {
+            query?: {
+                scope?: string;
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+            };
+            header?: never;
+            path: {
+                pure_uuid: string;
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     search_publishers_api_v1__institution_code__publishers_get: {
         parameters: {
             query?: {
@@ -3571,6 +5496,10 @@ export interface operations {
                 offset?: number;
                 limit?: number;
                 include_facets?: boolean;
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
             };
             header?: never;
             path: {
@@ -3600,9 +5529,53 @@ export interface operations {
             };
         };
     };
+    publisher_openalex_only_csv_api_v1__institution_code__publishers__name__openalex_only_csv_get: {
+        parameters: {
+            query?: {
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+                parts?: ("standalone" | "chapter" | "part")[] | null;
+            };
+            header?: never;
+            path: {
+                name: string;
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     publisher_detail_api_v1__institution_code__publishers__name__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+                parts?: ("standalone" | "chapter" | "part")[] | null;
+            };
             header?: never;
             path: {
                 name: string;
@@ -3645,6 +5618,10 @@ export interface operations {
                 offset?: number;
                 limit?: number;
                 include_facets?: boolean;
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
             };
             header?: never;
             path: {
@@ -3676,7 +5653,14 @@ export interface operations {
     };
     faculty_detail_api_v1__institution_code__orgunits_faculty__name__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Top-authors ordering: share = share of the author's counted works published diamond/gold OA (authors with fewer than 4 counted works unranked, share null), works = works count */
+                sort?: "share" | "works";
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+            };
             header?: never;
             path: {
                 name: string;
@@ -3708,7 +5692,14 @@ export interface operations {
     };
     group_detail_api_v1__institution_code__orgunits_group__name__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Top-authors ordering: share = share of the author's counted works published diamond/gold OA (authors with fewer than 4 counted works unranked, share null), works = works count */
+                sort?: "share" | "works";
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+            };
             header?: never;
             path: {
                 name: string;
@@ -3740,7 +5731,14 @@ export interface operations {
     };
     institute_detail_api_v1__institution_code__orgunits_institute__name__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Top-authors ordering: share = share of the author's counted works published diamond/gold OA (authors with fewer than 4 counted works unranked, share null), works = works count */
+                sort?: "share" | "works";
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+            };
             header?: never;
             path: {
                 name: string;

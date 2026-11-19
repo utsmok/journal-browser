@@ -6,13 +6,34 @@ import yaml
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Works of these types are not journal output and stay out of every count,
-# list, and stat (author pages, works stats, trends): preprints and books
-# would inflate open-access numbers. Conference proceedings stay in.
-# Compared via normalize_work_type, so the bare and info:eu-repo/semantics/
-# spellings in works.work_type collapse onto one form.
+# Works of these types are not research output this app describes and stay
+# out of every count, list, and stat (author pages, works stats, trends):
+# preprints and books would inflate open-access numbers; datasets,
+# software, peer reviews, errata, paratext, and similar artifacts are not
+# the works Pure registers or the pages compare. Book chapters and book
+# parts stay IN — conference proceedings hide there. Compared via
+# normalize_work_type, so the bare and info:eu-repo/semantics/ spellings
+# in works.work_type collapse onto one form.
 EXCLUDED_WORK_TYPES = frozenset(
-    {"preprint", "postedcontent", "workingpaper", "book", "bookchapter", "bookpart", "monograph"}
+    {
+        "preprint",
+        "postedcontent",
+        "workingpaper",
+        "book",
+        "monograph",
+        "dataset",
+        "software",
+        "other",
+        "erratum",
+        "supplementarymaterials",
+        "peerreview",
+        "paratext",
+        "referenceentry",
+        "bookreview",
+        "retraction",
+        "libguides",
+        "standard",
+    }
 )
 
 
@@ -98,12 +119,24 @@ class Settings(BaseSettings):
     data_window_start: int = 2020
     data_window_end: int | None = None
 
+    @field_validator("data_window_end", mode="before")
+    @classmethod
+    def _window_end_zero_means_open(cls, v: object) -> object:
+        # docker-compose/.env default END=0 as the open-ended sentinel;
+        # without this it ships as year 0 and the window is empty.
+        return None if v in (0, "0", "") else v
+
     # Bootstrap job mode: auto = only on an empty DB, always, off.
     bootstrap: str = "auto"
 
-    # Feature flags. Both scaffolds stay OFF until explicitly enabled.
     enable_journal_citations: bool = False
-    enable_jisc: bool = False
+
+    # Anonymous usage-event intake (paths, searches, dwell, client errors).
+    # False = the ingest endpoint accepts batches and drops them.
+    enable_usage_tracking: bool = True
+    # Null raw usage-event IPs older than this many days (rows and country
+    # stay). 0 disables the nightly prune loop entirely.
+    usage_retention_days: int = 90
     jisc_api_key: str = ""
 
     # Pure OAI-PMH endpoint (anonymous) and request pacing.

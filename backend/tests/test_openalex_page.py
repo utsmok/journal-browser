@@ -83,3 +83,20 @@ async def test_seed_deal_journals_lands_raw_payloads(db):
     assert raw.payload["apc_prices"] == [{"currency": "EUR", "price": 2500}]
     run = await db.get(HarvestRun, raw.harvest_run_id)
     assert run.status == "completed" and run.stats["records_stored"] == 1
+
+
+@requires_db
+async def test_page_upsert_skips_rekeyed_source_variant(db):
+    """Regression: OpenAlex re-keyed a source's issn_l upstream; the sweep
+    offered the same openalex_id under a new issn_l and used to abort the
+    whole page on journals_openalex_id_key."""
+    await _upsert_journal_page(db, [{"id": "S1", "issn_l": "0043-1354", "display_name": "Old key"}])
+    await db.flush()
+    n = await _upsert_journal_page(
+        db, [{"id": "S1", "issn_l": "2227-2437", "display_name": "New key"}]
+    )
+    await db.flush()
+    assert n == 1  # payload normalized, journals row skipped
+    row = await db.get(Journal, "0043-1354")
+    assert row.openalex_id == "S1"
+    assert await db.get(Journal, "2227-2437") is None

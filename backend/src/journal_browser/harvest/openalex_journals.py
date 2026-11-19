@@ -12,14 +12,14 @@ from datetime import UTC, datetime
 from typing import Any
 
 from aletheca import AlethecaClient
-from sqlalchemy import select
+from sqlalchemy import delete, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..ingest import IngestSession
 from ..models import Institution, IssnMap, Journal, Publisher
-from .common import issn_checksum_ok, normalize_issn, upsert_issn_map
+from .common import issn_checksum_ok, normalize_issn, paced_single_gets, upsert_issn_map
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +145,22 @@ async def _upsert_journal(session: AsyncSession, payload: dict[str, Any]) -> str
     values = journal_values(payload)
     if values is None:
         return None
+    # Re-key guard (see _upsert_journal_page): an upstream issn_l change
+    # must not crash on the openalex_id unique key; keep the stored row and
+    # map the variant ISSNs onto it so links keep resolving.
+    stored_issn_l = await session.scalar(
+        select(Journal.issn_l).where(Journal.openalex_id == values["openalex_id"])
+    )
+    if stored_issn_l is not None and stored_issn_l != values["issn_l"]:
+        logger.warning(
+            "openalex %s: source re-keyed upstream (stored issn_l=%s, payload issn_l=%s); "
+            "variant skipped, issn_map pointed at stored row",
+            values["openalex_id"],
+            stored_issn_l,
+            values["issn_l"],
+        )
+        await upsert_issn_map(session, values["issns"], stored_issn_l, SOURCE)
+        return stored_issn_l
     await session.execute(
         pg_insert(Journal)
         .values(**values)
@@ -204,13 +220,28 @@ async def _upsert_journal_page(session: AsyncSession, payloads: list[dict[str, A
             issn_rows[issn] = {"issn": issn, "issn_l": values["issn_l"], "source": SOURCE}
     if journal_rows:
         rows = list(journal_rows.values())
-        stmt = pg_insert(Journal).values(rows)
-        await session.execute(
-            stmt.on_conflict_do_update(
-                index_elements=["issn_l"],
-                set_={k: stmt.excluded[k] for k in rows[0] if k != "issn_l"},
+        # OpenAlex can re-key a source's issn_l upstream. The sweep then
+        # offers the same openalex_id under a new issn_l while the stored
+        # row (old issn_l) still exists; the issn_l arbiter cannot merge
+        # those and the openalex_id unique key would abort the page. Skip
+        # the re-keyed variant (raw payload stays in source_records).
+        existing = (
+            await session.execute(
+                select(Journal.issn_l, Journal.openalex_id).where(
+                    Journal.openalex_id.in_([r["openalex_id"] for r in rows])
+                )
             )
-        )
+        ).all()
+        keyed_issn: dict[str, str] = {oid: il for il, oid in existing}
+        rows = [r for r in rows if keyed_issn.get(r["openalex_id"]) in (None, r["issn_l"])]
+        if rows:
+            stmt = pg_insert(Journal).values(rows)
+            await session.execute(
+                stmt.on_conflict_do_update(
+                    index_elements=["issn_l"],
+                    set_={k: stmt.excluded[k] for k in rows[0] if k != "issn_l"},
+                )
+            )
     if issn_rows:
         rows = list(issn_rows.values())
         stmt = pg_insert(IssnMap).values(rows)
@@ -221,6 +252,21 @@ async def _upsert_journal_page(session: AsyncSession, payloads: list[dict[str, A
             )
         )
     return counted
+
+
+async def prune_orphan_issn_map(session: AsyncSession) -> int:
+    """Drop issn_map rows whose issn_l has no journals row; returns count.
+
+    Map writes are not transactional with journal creation, and an
+    upstream issn_l re-key can retire a target while its map rows survive
+    (production residue since 2026-10-22: variants pointing at the absent
+    issn_l 1760-7760). The sweep re-adds rows for live targets, so pruning
+    here converges the map to the journal universe on every full sweep.
+    """
+    result = await session.execute(
+        delete(IssnMap).where(IssnMap.issn_l.not_in(select(Journal.issn_l)))
+    )
+    return result.rowcount or 0
 
 
 async def sweep_all_sources(
@@ -267,16 +313,180 @@ async def sweep_all_sources(
             logger.info("Reached --limit %s", limit)
             break
     await ingest.ingest_records(page)
-    normalized += await _upsert_journal_page(session, [p for _, p in page])
-    stats = await ingest.finish_run("completed", {"journals_normalized": normalized})
+    pruned = await prune_orphan_issn_map(session)
+    stats = await ingest.finish_run(
+        "completed", {"journals_normalized": normalized, "issn_map_pruned": pruned}
+    )
     await session.commit()
     return stats
 
 
-async def harvest_journals(
-    session: AsyncSession, limit: int | None = None, seed_only: bool = False
+async def harvest_journals_delta(
+    client: AlethecaClient, session: AsyncSession, limit: int | None = None
 ) -> dict:
-    """Run both routes. seed_only=True fetches just deal-covered journals."""
+    """Fetch full source payloads for journals cited by stored works but
+    missing from journals — paced free single-entity GETs, no listing.
+
+    The full sweep seeded the table once; refreshes only need journals
+    the corpus actually cites, and singletons cost no credits so the
+    delta works even with the daily budget at zero. Lands raws in
+    source_records exactly like the sweep so downstream derivations see
+    them. Idempotent: reruns fetch nothing."""
+    referenced = sorted(
+        {
+            pk
+            for (pk,) in (
+                await session.execute(
+                    text(
+                        "SELECT DISTINCT payload->'primary_location'->'source'->>'id'"
+                        " FROM source_records"
+                        " WHERE source = 'openalex' AND entity_type = 'work'"
+                        " AND payload->'primary_location'->'source'->>'id' IS NOT NULL"
+                    )
+                )
+            ).all()
+        }
+    )
+    todo = sorted(
+        {openalex_id_to_pk(pk) for pk in referenced}
+        - {r for (r,) in (await session.execute(select(Journal.openalex_id))).all()}
+    )
+    if limit is not None:
+        todo = todo[:limit]
+    stats: dict[str, int] = {
+        "referenced": len(referenced),
+        "todo": len(todo),
+        "ingested": 0,
+        "missing": 0,
+        "failed": 0,
+    }
+    if not todo:
+        return stats
+    ingest = IngestSession(session)
+    await ingest.start_run(SOURCE, ENTITY_TYPE, "delta", {"route": "delta", "per_id": True})
+    payloads, failed = await paced_single_gets(
+        client.sources.get, [f"https://openalex.org/{pk}" for pk in todo]
+    )
+    stats["failed"] = len(failed)
+    if failed:
+        logger.warning(
+            "journals delta: %d lookups failed, e.g. %s", len(failed), sorted(failed)[:5]
+        )
+    page: list[tuple[str, dict[str, Any]]] = []
+    for pk in todo:
+        entity = payloads.get(f"https://openalex.org/{pk}")
+        payload = _payload_dict(entity)
+        if payload is None:
+            stats["missing"] += 1
+            continue
+        page.append((pk, payload))
+        if len(page) >= PER_PAGE:
+            await ingest.ingest_records(page)
+            stats["ingested"] += await _upsert_journal_page(session, [p for _, p in page])
+            page = []
+    await ingest.ingest_records(page)
+    stats["ingested"] += await _upsert_journal_page(session, [p for _, p in page])
+    await ingest.commit()
+    final = await ingest.finish_run("completed", stats)
+    await session.commit()
+    return final
+
+
+async def refresh_existing_journals(session: AsyncSession, limit: int | None = None) -> dict:
+    """Re-fetch every stored journal's full source payload (free singleton
+    GETs), refreshing counts fields (cited_by_count, counts_by_year,
+    summary_stats) that upstream recompute. Lands raws in source_records
+    exactly like the sweep. Reruns refresh again by design — this route
+    exists for upstream data corrections such as the 2026-11 citation
+    re-matcher."""
+    todo = sorted(
+        pk
+        for (pk,) in (
+            await session.execute(
+                select(Journal.openalex_id).where(Journal.openalex_id.is_not(None))
+            )
+        ).all()
+    )
+    if limit is not None:
+        todo = todo[:limit]
+    stats: dict[str, int] = {
+        "selected": len(todo),
+        "ingested": 0,
+        "missing": 0,
+        "failed": 0,
+    }
+    if not todo:
+        return stats
+    ingest = IngestSession(session)
+    await ingest.start_run(SOURCE, ENTITY_TYPE, "refresh", {"route": "refresh", "per_id": True})
+    # Fetch in chunks and commit per chunk: one paced_single_gets over all
+    # ids would hold every payload in memory for the whole run — a kill
+    # wave then loses the entire run, and on this 14 GB host it competes
+    # with rebuilds and other sweeps. A kill now loses only the current
+    # chunk; reruns re-fetch everything anyway.
+    chunk_size = 2_000
+    for start in range(0, len(todo), chunk_size):
+        chunk = todo[start : start + chunk_size]
+        # A fresh client per chunk: one long-lived client's keepalive
+        # sockets die during the between-chunk ingest gap (Cloudflare
+        # closes idle connections), and the next burst then hangs on
+        # dead sockets before its retry chain reconnects — chunk wall
+        # time ballooned from minutes to an hour that way.
+        client_kwargs: dict[str, Any] = {}
+        if api_key := get_settings().openalex_api_key:
+            client_kwargs["api_key"] = api_key
+        async with AlethecaClient(**client_kwargs) as chunk_client:
+            payloads, failed = await paced_single_gets(
+                chunk_client.sources.get, [f"https://openalex.org/{pk}" for pk in chunk]
+            )
+        stats["failed"] += len(failed)
+        if failed:
+            logger.warning(
+                "journals refresh: %d lookups failed, e.g. %s",
+                len(failed),
+                sorted(failed)[:5],
+            )
+        page: list[tuple[str, dict[str, Any]]] = []
+        for pk in chunk:
+            entity = payloads.get(f"https://openalex.org/{pk}")
+            payload = _payload_dict(entity)
+            if payload is None:
+                stats["missing"] += 1
+                continue
+            page.append((pk, payload))
+            if len(page) >= PER_PAGE:
+                await ingest.ingest_records(page)
+                stats["ingested"] += await _upsert_journal_page(session, [p for _, p in page])
+                page = []
+        await ingest.ingest_records(page)
+        stats["ingested"] += await _upsert_journal_page(session, [p for _, p in page])
+        await ingest.commit()
+        logger.info(
+            "journals refresh: %d/%d ids done",
+            min(start + chunk_size, len(todo)),
+            len(todo),
+        )
+    pruned = await prune_orphan_issn_map(session)
+    stats["issn_map_pruned"] = pruned
+    final = await ingest.finish_run("completed", stats)
+    await session.commit()
+    return final
+
+
+async def harvest_journals(
+    session: AsyncSession,
+    limit: int | None = None,
+    seed_only: bool = False,
+    sweep_all: bool = False,
+    refresh_existing: bool = False,
+) -> dict:
+    """Refresh route: seed deal ISSNs (keyless batches) plus the delta of
+    works-referenced journals (free singletons). sweep_all=True runs the
+    full listing sweep instead of the delta — a rare manual operation,
+    not a per-refresh step: journal metadata does not change every
+    refresh and the sweep costs credits. refresh_existing=True re-fetches
+    every stored journal (free singletons) for upstream corrections such
+    as citation re-matches; it replaces the delta step."""
     client_kwargs: dict[str, Any] = {}
     api_key = get_settings().openalex_api_key
     if api_key:
@@ -284,11 +494,18 @@ async def harvest_journals(
     async with AlethecaClient(**client_kwargs) as client:
         # Institution OpenAlex ids resolve lazily in each institution's
         # stats harvest (resolve_institution_openalex_id); the journals
-        # sweep itself is institution-neutral.
+        # harvest itself is institution-neutral.
         seed_stats = await seed_deal_journals(client, session)
         await session.commit()
-        sweep_stats = {} if seed_only else await sweep_all_sources(client, session, limit)
-    return {"seed": seed_stats, "sweep": sweep_stats}
+        main_stats: dict = {}
+        if not seed_only:
+            if refresh_existing:
+                main_stats = await refresh_existing_journals(session, limit)
+            elif sweep_all:
+                main_stats = await sweep_all_sources(client, session, limit)
+            else:
+                main_stats = await harvest_journals_delta(client, session, limit)
+    return {"seed": seed_stats, "delta": main_stats}
 
 
 async def refresh_publisher_links(session: AsyncSession) -> int:

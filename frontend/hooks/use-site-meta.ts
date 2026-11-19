@@ -23,7 +23,7 @@ export function useSiteMeta() {
   // Resolution order: freshness (authoritative) → directory row (per-inst,
   // fast) → this stack's JB_* env seed (default institution only).
   return {
-    name: data?.institution ?? dir?.name ?? seed?.name ?? "Journal Browser",
+    name: data?.institution ?? dir?.name ?? seed?.name ?? "Open Journal Browser",
     short: data?.institution_short ?? dir?.short_name ?? seed?.short ?? "",
     libraryUrl: data?.library_url ?? dir?.library_url ?? seed?.libraryUrl ?? "",
     oaGuideUrl: data?.oa_guide_url ?? dir?.oa_guide_url ?? seed?.oaGuideUrl ?? "",

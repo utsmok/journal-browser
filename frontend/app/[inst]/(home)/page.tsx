@@ -2,12 +2,14 @@
 
 import { flexRender, getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
 import { Search } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { notFound, usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
-import { DealBadge, OaTypeBadge, QuartileBadge } from "@/components/badges";
+import { DealBadge, FunderFitBadge, OaTypeBadge, QuartileBadge } from "@/components/badges";
 import { FilterPanel } from "@/components/filter-panel";
+import { FunderPicker } from "@/components/search/funder-picker";
 import { Pagination } from "@/components/search/pagination";
 import { SortHead } from "@/components/search/sort-head";
 import { SourceNote } from "@/components/source-note";
@@ -25,7 +27,9 @@ import {
 } from "@/components/ui/table";
 import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
-import { useFacets, useJournals } from "@/hooks/use-api";
+import { useYearRange } from "@/hooks/use-year-filter";
+import { useFacets, useInstitutionsDirectory, useJournals } from "@/hooks/use-api";
+import { useFunderPrefs } from "@/lib/funder-prefs";
 import {
   encodeNamePath,
   errorMessage,
@@ -34,7 +38,7 @@ import {
   type SortKey,
 } from "@/lib/api";
 import { apcAmount, apcStatsText, formatApc } from "@/lib/format";
-import { COLUMN_SORTS, SEARCH_IN_OPTIONS, SORTS } from "@/lib/search-config";
+import { COLUMN_SORTS, PUB_TYPE_LABELS, SEARCH_IN_OPTIONS, SORTS } from "@/lib/search-config";
 
 const SEARCH_INPUT_ID = "journal-search";
 
@@ -48,12 +52,27 @@ export default function HomePage() {
 }
 
 function SearchView() {
+  const t = useTranslations("home");
+  const ts = useTranslations("search");
+  const tc = useTranslations("common");
   const inst = useInstitution();
 
   const sp = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
   const site = useSiteMeta();
+  const institutions = useInstitutionsDirectory();
+  // Short name can be briefly empty before the directory resolves.
+  const instShort = site.short || site.name;
+
+  /** Venue-type label for table cells; unknown backend values show raw. */
+  const pubTypeLabel = React.useCallback(
+    (code: string) => {
+      const labelKey = PUB_TYPE_LABELS[code];
+      return labelKey ? ts(labelKey) : code;
+    },
+    [ts],
+  );
 
   const spQ = sp.get("q") ?? "";
   // A browse-all with no query has nothing to rank, so Twente works is the
@@ -69,16 +88,27 @@ function SearchView() {
   const publisher = sp.get("publisher") ?? "";
   const hasApc = sp.get("has_apc");
   const hasWorks = sp.get("has_works");
+  const greenOa = sp.get("green_oa");
   const searchIn = (sp.get("search_in") ?? "all") as SearchIn;
   // oa_type is the one multi-select facet: comma-joined in the URL, OR'd
   // server-side.
   const oaTypes = (sp.get("oa_type") ?? "").split(",").filter(Boolean);
+  const pubType = sp.get("pub_type") ?? "";
+  const language = sp.get("language") ?? "";
   // mode=semantic: rank by embedding similarity instead of FTS. Filters and
   // sort do not apply to the vector ranking, so their UI is hidden. Needs a
   // real query: the UI follows the toggle so it never lies about the active
   // mode, while shorter input just falls back to a normal browse.
   const semanticMode = sp.get("mode") === "semantic";
   const semantic = semanticMode && spQ.trim().length >= 2;
+  // Selected funder lives in localStorage, not the URL: it's a personal
+  // lens over the same result set. The tier filter is URL state like the
+  // other facets.
+  const [funder] = useFunderPrefs();
+  const funderFit = sp.get("funder_fit") ?? "";
+  // Same idea for the publication-year lens (header control): context
+  // state, not URL state, scoped per institution.
+  const { year_from, year_to } = useYearRange();
 
   const [input, setInput] = React.useState(spQ);
   const [stack, setStack] = React.useState<string[]>([]);
@@ -148,6 +178,18 @@ function SearchView() {
     router.replace(`${pathname}?${next}`, { scroll: false });
   };
 
+  // The year lens is context state, so it bypasses the URL-filter reset
+  // above; a lens change must also drop the keyset position, or the next
+  // page would mix two different ranges.
+  const yearsKey = `${year_from ?? ""}-${year_to ?? ""}`;
+  const prevYearsKey = React.useRef(yearsKey);
+  React.useEffect(() => {
+    if (prevYearsKey.current === yearsKey) return;
+    prevYearsKey.current = yearsKey;
+    if (cursor !== undefined || sp.get("p") !== null) update({ cursor: undefined, p: undefined });
+    // update/sp/cursor are read once per lens change; only the lens drives this.
+  }, [yearsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Live search with debounce; keep the input in sync with back/forward nav.
   React.useEffect(() => {
     setInput(spQ);
@@ -193,8 +235,15 @@ function SearchView() {
     publisher: publisher || undefined,
     has_apc: hasApc === null ? undefined : hasApc === "true",
     has_works: hasWorks === null ? undefined : hasWorks === "true",
+    green_oa: greenOa ?? undefined,
+    funder: funder && !semanticMode ? funder.id : undefined,
+    funder_fit: funderFit || undefined,
     topic: topic || undefined,
     oa_type: oaTypes.join(",") || undefined,
+    pub_type: pubType || undefined,
+    language: language || undefined,
+    year_from,
+    year_to,
     sort,
     dir: dir ?? undefined,
     cursor,
@@ -215,7 +264,11 @@ function SearchView() {
     publisher,
     hasApc,
     hasWorks,
+    greenOa,
+    funderFit,
     oaTypes,
+    pubType,
+    language,
   };
 
   // Single-select per group: clicking the active value clears it.
@@ -258,7 +311,9 @@ function SearchView() {
       {
         accessorKey: "title",
         meta: { columnId: "title" },
-        header: () => <SortHead columnId="title" label="Journal" state={sortRef.current} />,
+        header: () => (
+          <SortHead columnId="title" label={t("table.journal")} state={sortRef.current} />
+        ),
         cell: (info) => (
           <div className="max-w-md">
             <Link
@@ -271,10 +326,18 @@ function SearchView() {
             >
               {info.row.original.title ?? info.row.original.issn_l}
             </Link>
+            {info.row.original.pub_type && info.row.original.pub_type !== "journal" && (
+              <span
+                className="ml-2 text-xs text-[var(--muted-foreground)]"
+                title={t("table.pubTypeTooltip", { type: info.row.original.pub_type })}
+              >
+                {pubTypeLabel(info.row.original.pub_type)}
+              </span>
+            )}
             {info.row.original.is_in_doaj && (
               <span
                 className="ml-2 cursor-help align-middle text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]"
-                title="Listed in DOAJ, the authoritative registry for gold and diamond open access journals"
+                title={t("table.doajTooltip")}
               >
                 DOAJ
               </span>
@@ -285,7 +348,9 @@ function SearchView() {
       {
         id: "publisher",
         meta: { columnId: "publisher" },
-        header: () => <SortHead columnId="publisher" label="Publisher" state={sortRef.current} />,
+        header: () => (
+          <SortHead columnId="publisher" label={t("table.publisher")} state={sortRef.current} />
+        ),
         cell: (info) => {
           const row = info.row.original;
           const v = row.publisher_canonical ?? row.publisher_name;
@@ -305,12 +370,23 @@ function SearchView() {
         accessorKey: "deal_covered",
         // Orderable via the facet, not the column; screen readers still get
         // a column name.
-        header: () => <span className="sr-only">Deal coverage</span>,
-        cell: (info) => <DealBadge covered={info.getValue<boolean>()} />,
+        header: () => <span className="sr-only">{t("table.dealCoverage")}</span>,
+        cell: (info) => {
+          const row = info.row.original;
+          return <DealBadge covered={row.deal_covered} capped={row.deal_cap_reached} />;
+        },
+      },
+      {
+        accessorKey: "funder_fit",
+        header: () => <span className="sr-only">{t("table.funderFit")}</span>,
+        cell: (info) => {
+          const fit = info.row.original.funder_fit;
+          return <FunderFitBadge status={fit?.status ?? null} reasons={fit?.reasons ?? []} />;
+        },
       },
       {
         accessorKey: "is_oa",
-        header: () => <span className="sr-only">Open access type</span>,
+        header: () => <span className="sr-only">{t("table.oaType")}</span>,
         cell: (info) => {
           const row = info.row.original;
           return <OaTypeBadge oaType={row.oa_type} isOa={row.is_oa} />;
@@ -322,10 +398,12 @@ function SearchView() {
         header: () => (
           <SortHead
             columnId="works"
-            label="Works"
-            title={`${site.name} publications in this journal${
-              site.windowStart === undefined ? "" : `, ${site.windowStart} onwards`
-            }. Click to sort, again to reverse, again to reset`}
+            label={t("table.works")}
+            title={`${t("table.worksTitle", {
+              inst: instShort,
+              windowStart: site.windowStart === undefined ? "none" : String(site.windowStart),
+              yearRange: year_from === undefined ? "none" : `${year_from} to ${year_to}`,
+            })} ${t("table.sortHint")}`}
             state={sortRef.current}
           />
         ),
@@ -337,8 +415,8 @@ function SearchView() {
         header: () => (
           <SortHead
             columnId="citedness"
-            label="2yr cited"
-            title="2-year mean citedness (OpenAlex): average citations that the journal's last two years of works have received. Click to sort, again to reverse, again to reset"
+            label={t("table.citedness")}
+            title={`${t("table.citednessTooltip")} ${t("table.sortHint")}`}
             state={sortRef.current}
           />
         ),
@@ -347,7 +425,7 @@ function SearchView() {
           return v == null ? (
             <span className="text-[var(--muted-foreground)]">—</span>
           ) : (
-            <span className="tabular-nums" title="2-year mean citedness (OpenAlex)">
+            <span className="tabular-nums" title={t("table.citednessCellTitle")}>
               {v.toFixed(2)}
             </span>
           );
@@ -359,8 +437,8 @@ function SearchView() {
         header: () => (
           <SortHead
             columnId="quartile"
-            label="Q"
-            title="SCImago quartile. Click to sort, again to reverse, again to reset"
+            label={t("table.quartile")}
+            title={`${t("table.quartileTooltip")} ${t("table.sortHint")}`}
             state={sortRef.current}
           />
         ),
@@ -371,8 +449,8 @@ function SearchView() {
         header: () => (
           <SortHead
             columnId="apc"
-            label="APC"
-            title="APC: the journal's list price (OpenAlex) where known, otherwise the range of APCs actually reported to OpenAPC over the newest two reporting periods. Click to sort, again to reverse, again to reset"
+            label={t("table.apc")}
+            title={`${t("table.apcTooltip")} ${t("table.sortHint")}`}
             state={sortRef.current}
           />
         ),
@@ -380,7 +458,7 @@ function SearchView() {
           const row = info.row.original as JournalListItem;
           if (row.apc_source === "openalex" && row.apc_price != null) {
             return (
-              <span className="tabular-nums" title="List price (OpenAlex)">
+              <span className="tabular-nums" title={t("table.listPriceTitle")}>
                 {apcAmount(row.apc_currency, row.apc_price)}
               </span>
             );
@@ -399,8 +477,8 @@ function SearchView() {
                 {detail && (
                   <span
                     className="cursor-help rounded-full border border-[var(--muted-foreground)]/50 px-[5px] text-[10px] leading-[14px] text-[var(--muted-foreground)]"
-                    title={`Reported to OpenAPC per year:\n${detail}`}
-                    aria-label="OpenAPC APC detail"
+                    title={t("table.openapcDetail", { detail })}
+                    aria-label={t("table.openapcAria")}
                   >
                     ?
                   </span>
@@ -417,8 +495,8 @@ function SearchView() {
         header: () => (
           <SortHead
             columnId="topic"
-            label="Topic"
-            title="Primary OpenAlex topic of the journal's works. Click to sort, again to reverse, again to reset"
+            label={t("table.topic")}
+            title={`${t("table.topicTooltip")} ${t("table.sortHint")}`}
             state={sortRef.current}
           />
         ),
@@ -431,7 +509,7 @@ function SearchView() {
             <button
               type="button"
               className="block max-w-44 truncate text-left underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-              title={`Filter the search by topic "${v}"`}
+              title={t("table.topicFilterTitle", { topic: v })}
               onClick={(event) => {
                 event.stopPropagation();
                 update({ topic: v });
@@ -443,7 +521,7 @@ function SearchView() {
         },
       },
     ],
-    [site, inst, update],
+    [site, instShort, inst, update, year_from, year_to, t, pubTypeLabel],
   );
 
   // Backend fields the generated types trail (see lib/api.ts).
@@ -475,7 +553,10 @@ function SearchView() {
       publisher ||
       hasApc !== null ||
       hasWorks !== null ||
-      oaTypes.length > 0,
+      greenOa !== null ||
+      oaTypes.length > 0 ||
+      Boolean(pubType) ||
+      Boolean(language),
   );
   const hasNonQueryFilters = Boolean(
     deal ||
@@ -486,7 +567,10 @@ function SearchView() {
       publisher ||
       hasApc !== null ||
       hasWorks !== null ||
-      oaTypes.length > 0,
+      greenOa !== null ||
+      oaTypes.length > 0 ||
+      Boolean(pubType) ||
+      Boolean(language),
   );
   const clearFilters = () =>
     update({
@@ -500,13 +584,21 @@ function SearchView() {
       publisher: undefined,
       has_apc: undefined,
       has_works: undefined,
+      green_oa: undefined,
       oa_type: undefined,
+      pub_type: undefined,
+      language: undefined,
     });
 
   // Detail pages offer a "Back to search" that restores this exact URL.
   React.useEffect(() => {
     if (hasFilters) sessionStorage.setItem("jb-last-search", `${pathname}?${sp.toString()}`);
   }, [hasFilters, pathname, sp]);
+
+  // An unknown institution code would leave every query 404ing, so render
+  // the not-found page instead. Wait for the directory to load first: valid
+  // codes must not flash not-found while it resolves.
+  if (institutions.isSuccess && !institutions.data?.some((i) => i.code === inst)) notFound();
 
   return (
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
@@ -516,12 +608,9 @@ function SearchView() {
       <div className="flex flex-col min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[960px]:gap-6 min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
         {/* Hero and search: first in stacked flow, top of the results column from 960px. */}
         <section className="order-1 mb-8 min-[960px]:col-start-2 min-[960px]:row-start-1 min-[960px]:mb-6">
-          <h1 className="mb-3 text-3xl font-bold text-balance">
-            Find the best home for your next article
-          </h1>
+          <h1 className="mb-3 text-3xl font-bold text-balance">{t("hero.title")}</h1>
           <p className="mb-6 max-w-2xl text-[var(--muted-foreground)]">
-            Search journals to see whether they are covered by an open access deal, what publishing
-            there costs, and how the {site.name} publishes in them.
+            {t("hero.intro", { institution: site.name })}
           </p>
           <form
             className="flex max-w-2xl flex-wrap gap-2"
@@ -539,11 +628,9 @@ function SearchView() {
                   if (event.key === "Escape") event.currentTarget.blur();
                 }}
                 placeholder={
-                  semanticMode
-                    ? "Describe your topic, or paste an abstract"
-                    : "Search by title, ISSN, publisher, or topic"
+                  semanticMode ? t("search.placeholderSemantic") : t("search.placeholder")
                 }
-                aria-label="Search journals"
+                aria-label={t("search.inputLabel")}
                 className="pr-8"
               />
               {input === "" && (
@@ -557,22 +644,22 @@ function SearchView() {
             </div>
             {!semanticMode && (
               <select
-                aria-label="Search scope"
-                title="Which field the query matches: everything, journal title, publisher, or topic"
+                aria-label={t("search.scopeLabel")}
+                title={t("search.scopeTitle")}
                 value={searchIn}
                 onChange={(event) => update({ search_in: event.target.value })}
                 className="h-10 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
               >
                 {SEARCH_IN_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
-                    {o.label}
+                    {ts(o.labelKey)}
                   </option>
                 ))}
               </select>
             )}
             <label
               className="flex h-10 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2.5 text-sm select-none"
-              title="Rank journals by meaning instead of exact words; filters and sorting are off in this mode"
+              title={t("search.semanticTitle")}
             >
               <input
                 type="checkbox"
@@ -582,12 +669,15 @@ function SearchView() {
                   update({ mode: event.target.checked ? "semantic" : undefined })
                 }
               />
-              Match by meaning
+              {t("search.semanticLabel")}
             </label>
             <Button type="submit" className="flex-1 min-[560px]:flex-none">
-              <Search aria-hidden className="size-4" /> Search
+              <Search aria-hidden className="size-4" /> {t("search.submit")}
             </Button>
           </form>
+          <div className="mt-2 max-w-2xl">
+            <FunderPicker />
+          </div>
         </section>
 
         {/* Stacked filter card: the only filter UI below 960px. */}
@@ -620,11 +710,11 @@ function SearchView() {
             {!semanticMode && (
               <>
                 <label htmlFor="sort" className="whitespace-nowrap">
-                  Sort by
+                  {t("toolbar.sortBy")}
                 </label>
                 <select
                   id="sort"
-                  title="Order of the results. Match by meaning always ranks by similarity instead"
+                  title={t("toolbar.sortTitle")}
                   value={sort}
                   onChange={(event) =>
                     // A sort change invalidates the old direction: keeping
@@ -635,7 +725,9 @@ function SearchView() {
                 >
                   {SORTS.map((s) => (
                     <option key={s.value} value={s.value}>
-                      {s.value === "institution_works" ? `${site.short} works` : s.label}
+                      {s.value === "institution_works"
+                        ? t("toolbar.sortInstitutionWorks", { inst: instShort })
+                        : ts(s.labelKey)}
                     </option>
                   ))}
                 </select>
@@ -644,19 +736,17 @@ function SearchView() {
                     variant="ghost"
                     size="sm"
                     className="text-[var(--muted-foreground)]"
-                    title="Clears the search text and all active filters"
+                    title={t("toolbar.resetTitle")}
                     onClick={clearFilters}
                   >
-                    {hasNonQueryFilters ? "Reset filters" : "Reset search"}
+                    {hasNonQueryFilters ? t("toolbar.resetFilters") : t("toolbar.resetSearch")}
                   </Button>
                 )}
               </>
             )}
             {semanticMode && (
               <p className="text-[var(--muted-foreground)]">
-                {semantic
-                  ? "Ranked by meaning; filters and sorting are off in this mode."
-                  : "Match by meaning activates from two characters; regular search runs until then."}
+                {semantic ? t("toolbar.semanticStatusActive") : t("toolbar.semanticStatusPending")}
               </p>
             )}
           </div>
@@ -667,9 +757,9 @@ function SearchView() {
 
               {isError ? (
                 <div className="py-10 text-center">
-                  <p className="text-[var(--destructive)]">{errorMessage(error)}</p>
+                  <p className="text-[var(--destructive)]">{errorMessage(tc, error)}</p>
                   <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
-                    Retry
+                    {t("error.retry")}
                   </Button>
                   {(cursor || sp.get("p")) && (
                     // A stale or hand-edited cursor 400s forever; Retry re-sends
@@ -680,7 +770,7 @@ function SearchView() {
                       className="mt-3 ml-2"
                       onClick={() => update({})}
                     >
-                      Back to page 1
+                      {t("error.backToPage1")}
                     </Button>
                   )}
                 </div>
@@ -689,12 +779,9 @@ function SearchView() {
               ) : rows.length === 0 ? (
                 <div className="py-10 text-center text-[var(--muted-foreground)]">
                   {spQ && !hasNonQueryFilters ? (
-                    <>No journals match &ldquo;{spQ}&rdquo;.</>
+                    <>{t("empty.query", { query: spQ })}</>
                   ) : (
-                    <>
-                      No journals match
-                      {hasNonQueryFilters ? " these filters" : ""}.
-                    </>
+                    <>{hasNonQueryFilters ? t("empty.filters") : t("empty.plain")}</>
                   )}
                   {/* Zero hits still leaves pivots: facets stay query-free (see
                   useFacets) and meaning-based ranking skips the exact words. */}
@@ -705,14 +792,14 @@ function SearchView() {
                         size="sm"
                         onClick={() => update({ mode: "semantic" })}
                       >
-                        Try match by meaning
+                        {t("empty.trySemantic")}
                       </Button>
                     </div>
                   )}
                   {hasNonQueryFilters && (
                     <div className="mt-3">
                       <Button variant="outline" size="sm" onClick={clearFilters}>
-                        Clear filters
+                        {t("empty.clearFilters")}
                       </Button>
                     </div>
                   )}
@@ -721,7 +808,7 @@ function SearchView() {
                 <>
                   {data.fuzzy && spQ && (
                     <p className="mb-3 text-sm text-[var(--muted-foreground)]" role="status">
-                      No exact matches for &ldquo;{spQ}&rdquo; &mdash; showing close name matches.
+                      {t("table.fuzzy", { query: spQ })}
                     </p>
                   )}
                   {/* Stacked cards on narrow viewports: the six-column table would
@@ -729,7 +816,7 @@ function SearchView() {
                   scrolling. */}
                   <ul
                     className={isFetching ? "opacity-60 md:hidden" : "md:hidden"}
-                    aria-label="Journal results"
+                    aria-label={t("table.listAria")}
                   >
                     {rows.map((row) => {
                       const pub = row.publisher_canonical ?? row.publisher_name;
@@ -754,7 +841,13 @@ function SearchView() {
                                 {pub}
                               </Link>
                             ) : (
-                              "Unknown publisher"
+                              t("table.unknownPublisher")
+                            )}
+                            {row.pub_type && row.pub_type !== "journal" && (
+                              <>
+                                {" · "}
+                                {pubTypeLabel(row.pub_type)}
+                              </>
                             )}
                             {topic && (
                               <>
@@ -764,7 +857,7 @@ function SearchView() {
                                 <button
                                   type="button"
                                   className="relative z-10 text-left underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-                                  title={`Filter the search by topic "${topic}"`}
+                                  title={t("table.topicFilterTitle", { topic })}
                                   onClick={(event) => {
                                     event.stopPropagation();
                                     update({ topic });
@@ -776,22 +869,40 @@ function SearchView() {
                             )}
                           </div>
                           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                            <DealBadge covered={row.deal_covered} />
+                            <DealBadge covered={row.deal_covered} capped={row.deal_cap_reached} />
+                            <FunderFitBadge
+                              status={row.funder_fit?.status ?? null}
+                              reasons={row.funder_fit?.reasons ?? []}
+                            />
                             <OaTypeBadge oaType={row.oa_type} isOa={row.is_oa} />
                             <QuartileBadge quartile={row.quartile ?? null} />
                           </div>
                           <div className="mt-1 text-xs tabular-nums text-[var(--muted-foreground)]">
-                            {row.works.toLocaleString("en")} {site.short} works
-                            {row.apc_source === "openalex" &&
-                              row.apc_price != null &&
-                              ` · APC ${apcAmount(row.apc_currency, row.apc_price)}`}
-                            {row.apc_source === "openapc" &&
-                              row.apc_low != null &&
-                              ` · APC €${
-                                row.apc_low !== row.apc_high
-                                  ? `${formatApc(row.apc_low)} to ${formatApc(row.apc_high ?? row.apc_low)}`
-                                  : formatApc(row.apc_low)
-                              }`}
+                            {t("table.listWorks", {
+                              count: row.works.toLocaleString("en"),
+                              inst: site.short,
+                            })}
+                            {row.apc_source === "openalex" && row.apc_price != null && (
+                              <>
+                                {" · "}
+                                {t("table.listApcOpenalex", {
+                                  amount: apcAmount(row.apc_currency, row.apc_price),
+                                })}
+                              </>
+                            )}
+                            {row.apc_source === "openapc" && row.apc_low != null && (
+                              <>
+                                {" · "}
+                                {t("table.listApcOpenapc", {
+                                  range:
+                                    row.apc_low !== row.apc_high
+                                      ? `${formatApc(row.apc_low)} to ${formatApc(
+                                          row.apc_high ?? row.apc_low,
+                                        )}`
+                                      : formatApc(row.apc_low),
+                                })}
+                              </>
+                            )}
                           </div>
                         </li>
                       );
@@ -799,7 +910,7 @@ function SearchView() {
                   </ul>
                   <div className={isFetching ? "hidden opacity-60 md:block" : "hidden md:block"}>
                     <Table>
-                      <caption className="sr-only">Journal search results</caption>
+                      <caption className="sr-only">{t("table.resultsCaption")}</caption>
                       <TableHeader>
                         {table.getHeaderGroups().map((group) => (
                           <TableRow key={group.id}>
@@ -851,11 +962,15 @@ function SearchView() {
                 {/* Only render a range while real rows exist; "0–-1 of 0" is noise. */}
                 <span>
                   {data && rows.length > 0
-                    ? `Showing ${pageStart}–${pageStart + rows.length - 1} of ${data.total.toLocaleString("en")}`
+                    ? t("footer.showing", {
+                        start: String(pageStart),
+                        end: String(pageStart + rows.length - 1),
+                        total: data.total.toLocaleString("en"),
+                      })
                     : ""}
                 </span>
                 <SourceNote
-                  source="OpenAlex · DOAJ · Scimago · JCT · openaccess.nl"
+                  source={t("footer.sources")}
                   url="https://doaj.org"
                   codes={[
                     "stats-window",
@@ -864,6 +979,9 @@ function SearchView() {
                     "doaj-canon",
                     "jct-coverage",
                     "issn-mapping",
+                    // Funder fit is heuristic (deal/DOAJ/green-route rules),
+                    // never a policy opinion; surface the currency caveat.
+                    ...(funder ? ["jisc-policy-currency"] : []),
                   ]}
                 />
               </div>

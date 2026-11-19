@@ -195,6 +195,80 @@ async def test_update_deal_records_overrides(admin_api, db_engine):
 
 
 @requires_db
+async def test_cap_usage_persists_and_records_override(admin_api, db_engine):
+    headers = await _login(admin_api)
+    deal_id = (await admin_api.get("/api/v1/admin/deals", headers=headers)).json()[0]["id"]
+    usage = [
+        {
+            "year": 2026,
+            "pool": "hybrid",
+            "total": 300,
+            "used": 261,
+            "as_of": "October 2026",
+            "note": "library email, OUP hybrid pool",
+        },
+        {"year": 2026, "total": 150, "used": 150},
+    ]
+    # Responses normalize omitted optional fields to explicit nulls.
+    expected = [
+        dict(usage[0]),
+        {"year": 2026, "pool": None, "total": 150, "used": 150, "as_of": None, "note": None},
+    ]
+    r = await admin_api.put(
+        f"/api/v1/admin/deals/{deal_id}", headers=headers, json={"cap_usage": usage}
+    )
+    assert r.status_code == 200
+    assert r.json()["cap_usage"] == expected
+
+    detail = (await admin_api.get(f"/api/v1/admin/deals/{deal_id}", headers=headers)).json()
+    assert detail["cap_usage"] == expected
+
+    async with async_sessionmaker(db_engine)() as session:
+        deal = await session.get(Deal, deal_id)
+        assert deal.cap_usage == usage
+        fields = set(
+            await session.scalars(
+                select(ManualOverride.field).where(
+                    ManualOverride.table_name == "deals",
+                    ManualOverride.row_key == str(deal_id),
+                    ManualOverride.field == "cap_usage",
+                )
+            )
+        )
+        assert fields == {"cap_usage"}
+
+    r = await admin_api.put(
+        f"/api/v1/admin/deals/{deal_id}",
+        headers=headers,
+        json={"cap_usage": [{"year": 2026, "total": 10, "used": -1}]},
+    )
+    assert r.status_code == 422
+    r = await admin_api.put(
+        f"/api/v1/admin/deals/{deal_id}",
+        headers=headers,
+        json={"cap_usage": [{"year": 1800, "total": 10}]},
+    )
+    assert r.status_code == 422
+
+
+@requires_db
+async def test_clear_cap_usage_with_null(admin_api):
+    headers = await _login(admin_api)
+    deal_id = (await admin_api.get("/api/v1/admin/deals", headers=headers)).json()[0]["id"]
+    r = await admin_api.put(
+        f"/api/v1/admin/deals/{deal_id}",
+        headers=headers,
+        json={"cap_usage": [{"year": 2026, "total": 10, "used": 5}]},
+    )
+    assert r.status_code == 200
+    r = await admin_api.put(
+        f"/api/v1/admin/deals/{deal_id}", headers=headers, json={"cap_usage": None}
+    )
+    assert r.status_code == 200
+    assert r.json()["cap_usage"] is None
+
+
+@requires_db
 async def test_journals_add_remove_and_jct_survival(admin_api, db_engine):
     headers = await _login(admin_api)
     deal_id = (await admin_api.get("/api/v1/admin/deals", headers=headers)).json()[0]["id"]

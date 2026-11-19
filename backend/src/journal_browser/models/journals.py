@@ -64,6 +64,11 @@ class Journal(Base):
     # is_oa without saying which OA color. bronze/closed/green mean "no OA
     # color observed"; oa_type falls back to deal/subscription for them.
     oa_status_observed: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # Modal OpenAlex work language (ISO 639-1, e.g. "en", "nl") across the
+    # journal's openalex_works (harvest/openalex_works.py rebuild); NULL =
+    # never observed. Journal-level attribute: works carry the language,
+    # OpenAlex sources do not (feedback 2026-11-05).
+    language: Mapped[str | None] = mapped_column(String(8), nullable=True)
     # DOAJ journal-record canon (harvest/doaj.py): the authoritative OA-model
     # source. doaj_in_doaj is tri-state until a full DOAJ sweep stamps the
     # OA candidates that did not match; classification treats NULL as
@@ -76,6 +81,21 @@ class Journal(Base):
     doaj_apc_currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
     doaj_homepage_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     doaj_harvested_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    # Jisc Open Policy Finder journal canon (harvest/jisc_opf.py + normalizer):
+    # same tri-state convention as DOAJ — NULL = never swept, never read as
+    # "no policy". jisc_policy is the normalizer-built display object
+    # (routes/open_access_prohibited/policy_uri), not the raw record.
+    jisc_in_opf: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    jisc_oa_prohibited: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    jisc_sherpa_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    jisc_allows_sa_submitted: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    jisc_allows_sa_accepted: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    jisc_allows_sa_published: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    jisc_embargo_accepted_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    jisc_policy: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    jisc_harvested_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
     crossref_meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
@@ -134,6 +154,16 @@ class JournalFlags(Base):
     works_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     # Effective deal coverage for this institution (override-aware).
     deal_covered: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    # Latest-year cap usage reached on ALL effective covering deals;
+    # denorm-refreshed, see harvest.denorm.
+    deal_cap_reached: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    # Some work of this journal is diamond per OpenAIRE isInDiamondJournal
+    # (second diamond evidence source beside DOAJ; denorm-refreshed).
+    openaire_diamond: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
     # Journal's own works inside THIS institution's data window; the >3

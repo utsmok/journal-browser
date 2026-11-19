@@ -2,7 +2,7 @@
 
 Active contributors: utsmok
 
-Journal Browser ships two deployable applications that share one Postgres
+Open Journal Browser ships two deployable applications that share one Postgres
 database. The frontend proxies every `/api/*` request to the backend, so the
 backend is never exposed publicly; see
 [Architecture](../overview/architecture.md).

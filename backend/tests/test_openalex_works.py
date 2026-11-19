@@ -12,6 +12,7 @@ from journal_browser.models import (
     HarvestRun,
     HarvestState,
     OpenalexWork,
+    OpenalexWorkAuthor,
     SourceRecord,
 )
 
@@ -26,6 +27,8 @@ def _payload(
     oa: str | None = "gold",
     source_id: str | None = "S123",
     source_name: str | None = "Journal One",
+    source_type: str | None = "journal",
+    language: str | None = "en",
     authorships: list[dict] | None = None,
     cited: int = 5,
     fwci: float | None = 1.2,
@@ -45,7 +48,13 @@ def _payload(
             for a, x, orc in (("A1", "7", True), ("A2", "8", False))
         ]
     )
-    primary = {"source": {"id": f"https://openalex.org/{source_id}", "display_name": source_name}}
+    primary = {
+        "source": {
+            "id": f"https://openalex.org/{source_id}",
+            "display_name": source_name,
+            "type": source_type,
+        }
+    }
     if source_id is None:
         primary = {"source": None}
     return {
@@ -56,6 +65,7 @@ def _payload(
         "type": type_,
         "open_access": {"oa_status": oa},
         "primary_location": primary,
+        "language": language,
         "authorships": authorships,
         "cited_by_count": cited,
         "fwci": fwci,
@@ -69,7 +79,9 @@ def test_work_row_shape():
     assert row["doi_normalized"] == "10.1234/abc"
     assert row["venue_issn_l"] == "1234-5678"
     assert row["venue_name"] == "Journal One"
+    assert row["source_type"] == "journal"
     assert row["oa_status"] == "gold"
+    assert row["language"] == "en"
     assert row["source"] == "works_stats"
     # compact authorships: bare ids, lower-cased bare orcids, name kept
     assert row["authorships"] == [
@@ -81,8 +93,18 @@ def test_work_row_shape():
 def test_work_row_gates():
     # no usable W-id
     assert work_row(_payload(w_id=""), {"S123": "1234-5678"}) is None
-    # excluded work type (preprint/book never enter journal views)
+    # excluded work types (preprint/book/dataset/peer review never enter
+    # app views) project to None
     assert work_row(_payload(type_="preprint"), {"S123": "x"}) is None
+    assert work_row(_payload(type_="dataset"), {"S123": "x"}) is None
+    assert work_row(_payload(type_="peer-review"), {"S123": "x"}) is None
+    # book chapters and book parts ARE app output (conference proceedings
+    # hide there) and project like any other work
+    assert work_row(_payload(type_="book-chapter"), {"S123": "x"}) is not None
+    assert work_row(_payload(type_="info:eu-repo/semantics/bookPart"), {"S123": "x"}) is not None
+    # repository sources project their type; gap queries drop the rows
+    row = work_row(_payload(source_type="repository"), {})
+    assert row["source_type"] == "repository" and row["venue_name"] == "Journal One"
     # unmapped venue keeps the name, loses the issn; unknown oa folds to closed
     row = work_row(_payload(oa="archive"), {})
     assert row["venue_issn_l"] is None and row["venue_name"] == "Journal One"
@@ -178,10 +200,20 @@ async def test_rebuild_latest_wins_and_sweep_marking(db, institution_factory):
     assert rows["W2"].source == "author-sweep"
     assert rows["W1"].venue_issn_l == "1234-5678"
 
+    # Attribution edges ride along: one pair per stored authorship.
+    pairs = (await db.execute(select(OpenalexWorkAuthor))).scalars().all()
+    assert {(p.w_id, p.author_id) for p in pairs} == {
+        ("W1", "a1"),
+        ("W1", "a2"),
+        ("W2", "a1"),
+        ("W2", "a2"),
+    }
+
     # Re-run folds into the same rows (deterministic full-replace).
     stats2 = await rebuild_openalex_works(db, inst)
     assert stats2["works"] == 2
-    assert len((await db.execute(select(OpenalexWork))).scalars().all()) == 2
+    assert stats2["attributions"] == 4
+    assert len((await db.execute(select(OpenalexWorkAuthor))).scalars().all()) == 4
 
 
 @requires_db
@@ -193,3 +225,157 @@ async def test_rebuild_scoped_to_institution(db, institution_factory):
     assert stats["works"] == 0
     rows = (await db.execute(select(OpenalexWork))).scalars().all()
     assert rows == []
+
+
+@requires_db
+async def test_rebuild_stamps_modal_journal_language(db, institution_factory):
+    """journals.language = modal work language per venue, over every
+    institution's stored works; ties break alphabetically (feedback
+    2026-11-05)."""
+    from journal_browser.models import Journal
+
+    inst = await institution_factory(code="ut")
+    db.add(journal_factory("2334-5678", openalex_id="S999"))
+    db.add(journal_factory("3434-3434", openalex_id="S888"))
+    db.add(journal_factory("4545-4545", openalex_id="S777"))
+    await db.flush()
+    # 2334: two nl vs one en -> nl. 3434: en/de tie -> de (alphabetical).
+    # 4545: no works at all -> never stamped.
+    await _seed_sweep(
+        db,
+        inst,
+        [
+            ("W1", _payload(w_id="W1", language="en", source_id="S999")),
+            ("W2", _payload(w_id="W2", language="nl", source_id="S999")),
+            ("W3", _payload(w_id="W3", language="nl", source_id="S999")),
+            ("W4", _payload(w_id="W4", language="de", source_id="S888")),
+            ("W5", _payload(w_id="W5", language="en", source_id="S888")),
+        ],
+        filter_set="institutions.id=I1",
+    )
+    stats = await rebuild_openalex_works(db, inst)
+    assert (await db.scalar(select(Journal.language).where(Journal.issn_l == "2334-5678"))) == "nl"
+    assert (await db.scalar(select(Journal.language).where(Journal.issn_l == "3434-3434"))) == "de"
+    assert (await db.scalar(select(Journal.language).where(Journal.issn_l == "4545-4545"))) is None
+    assert stats["journals_language_stamped"] == 2
+
+
+@requires_db
+async def test_rebuild_syncs_work_oa_status(db, institution_factory):
+    """The rebuild folds the store's fresh oa_status into works rows whose
+    status froze at enrichment time (e.g. closed -> green after a later
+    repository deposit). Both directions sync; store NULL and unmatched
+    DOIs leave works rows alone."""
+    from journal_browser.models import Work
+
+    inst = await institution_factory(code="ut")
+    await _seed_sweep(
+        db,
+        inst,
+        [
+            ("W1", _payload(w_id="W1", doi="10.1234/went-green", oa="green")),
+            ("W2", _payload(w_id="W2", doi="10.1234/still-closed", oa="closed")),
+            ("W3", _payload(w_id="W3", doi="10.1234/store-null", oa=None)),
+            ("W4", _payload(w_id="W4", doi="10.1234/reversed", oa="closed")),
+            # one DOI under two W-ids with conflicting colors: the most
+            # open record is canonical (owner decision 2026-11-05)
+            ("W5", _payload(w_id="W5", doi="10.1234/dup-conflict", oa="green")),
+            ("W6", _payload(w_id="W6", doi="10.1234/dup-conflict", oa="closed")),
+        ],
+        filter_set="institutions.id=I1",
+    )
+    run = HarvestRun(
+        source="openalex",
+        entity_type="works_stats",
+        institution_id=inst.id,
+        status="completed",
+        config_fingerprint="t",
+    )
+    db.add(run)
+    await db.flush()
+
+    def _work(uuid: str, doi: str, oa: str) -> Work:
+        return Work(
+            institution_id=inst.id,
+            pure_uuid=uuid,
+            doi_normalized=doi,
+            title=f"Work {uuid}",
+            norm_title=f"work {uuid}",
+            year=2024,
+            oa_status=oa,
+            first_seen_run=run.id,
+            last_seen_run=run.id,
+        )
+
+    db.add_all(
+        [
+            _work("w-stale", "10.1234/went-green", "closed"),  # closed -> green
+            _work("w-same", "10.1234/still-closed", "closed"),  # already right
+            _work("w-null", "10.1234/store-null", "closed"),  # store NULL: untouched
+            _work("w-rev", "10.1234/reversed", "green"),  # green -> closed
+            _work("w-orphan", "10.1234/no-store-row", "closed"),  # no store row
+            _work("w-dup", "10.1234/dup-conflict", "closed"),  # most open wins
+        ]
+    )
+    await db.flush()
+
+    stats = await rebuild_openalex_works(db, inst)
+    assert stats["works_oa_synced"] == 3
+    rows = {r.pure_uuid: r.oa_status for r in (await db.execute(select(Work))).scalars()}
+    assert rows == {
+        "w-stale": "green",
+        "w-same": "closed",
+        "w-null": "closed",
+        "w-rev": "closed",
+        "w-orphan": "closed",
+        "w-dup": "green",
+    }
+
+
+@requires_db
+async def test_rebuild_carries_parts_facts(db, institution_factory):
+    inst = await institution_factory(code="ut")
+    db.add(journal_factory("1234-5678", openalex_id="S123"))
+    await db.flush()
+    # Prior row from before this sweep: silent payload today, but parts
+    # facts exist from the per-DOI backfill — a rebuild must inherit
+    # them, not reset them.
+    prior = OpenalexWork(
+        institution_id=inst.id,
+        w_id="W2",
+        title="Prior",
+        parent_works=[{"id": "Wbook", "name": "Book", "rel": "volume"}],
+        is_part=True,
+        parts_checked_at=datetime.now(UTC) - timedelta(days=1),
+    )
+    db.add(prior)
+    await db.flush()
+    # Seed order matters: W1 (payload names parents) is seen first, so
+    # its row carries the parts_checked_at key into the compiled INSERT;
+    # the old code then crashed when W3's dict lacked the key.
+    chapter = _payload(w_id="W1", title="Chapter")
+    chapter["parent_works"] = [{"id": "Wbook", "name": "Book", "rel": "volume"}]
+    await _seed_sweep(
+        db,
+        inst,
+        [
+            ("W1", chapter),
+            ("W2", _payload(w_id="W2", title="Prior")),
+            ("W3", _payload(w_id="W3", title="Standalone New")),
+        ],
+        filter_set="institutions.id=I1",
+    )
+    stats = await rebuild_openalex_works(db, inst)
+    assert stats["works"] == 3
+    rows = {r.w_id: r for r in (await db.execute(select(OpenalexWork))).scalars()}
+    # Payload names parents: checked now, is a part.
+    assert rows["W1"].is_part is True
+    assert rows["W1"].parts_checked_at is not None
+    # Silent payload with prior facts: inherited untouched.
+    assert rows["W2"].is_part is True
+    assert rows["W2"].parent_works == [{"id": "Wbook", "name": "Book", "rel": "volume"}]
+    assert rows["W2"].parts_checked_at == prior.parts_checked_at
+    # Silent payload, no prior row: unchecked — and the chunked insert
+    # survives the heterogeneous key sets.
+    assert rows["W3"].is_part is False
+    assert rows["W3"].parts_checked_at is None

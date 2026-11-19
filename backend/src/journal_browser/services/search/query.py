@@ -3,6 +3,7 @@ from typing import Any
 from sqlalchemy import (
     Numeric,
     Text,
+    and_,
     case,
     cast,
     exists,
@@ -14,7 +15,9 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...models import IssnMap, Journal, JournalApcAggregate, JournalFlags
+from ...models import InstitutionWorksStats, IssnMap, Journal, JournalApcAggregate, JournalFlags
+from ...vocab import GreenOa
+from ..funder_fit import fit_case
 from .classify import _oa_type
 from .currency import _to_eur
 
@@ -50,6 +53,48 @@ APC_SHOWN = or_(
     APC_COST_EXISTS,
 )
 
+#: Green-OA route buckets over the Jisc OPF columns. The facet counts the
+#: best allowed route (submitted > accepted > published; "none" = swept but
+#: no route, or OA prohibited); the search filter matches the literal
+#: per-column mapping from the design doc. jisc columns NULL (never swept)
+#: land in no bucket, never in "none" (DOAJ tri-state convention).
+GREEN_OA_BEST_ROUTE = case(
+    (
+        and_(Journal.jisc_in_opf.is_(True), Journal.jisc_oa_prohibited.is_(True)),
+        GreenOa.NONE,
+    ),
+    (Journal.jisc_allows_sa_submitted.is_(True), GreenOa.SUBMITTED),
+    (Journal.jisc_allows_sa_accepted.is_(True), GreenOa.ACCEPTED),
+    (Journal.jisc_allows_sa_published.is_(True), GreenOa.PUBLISHED),
+    (Journal.jisc_in_opf.is_(True), GreenOa.NONE),
+    else_=None,
+)
+GREEN_OA_CONDS: dict[GreenOa, Any] = {
+    GreenOa.SUBMITTED: and_(
+        Journal.jisc_oa_prohibited.is_not(True),
+        Journal.jisc_allows_sa_submitted.is_(True),
+    ),
+    GreenOa.ACCEPTED: and_(
+        Journal.jisc_oa_prohibited.is_not(True),
+        Journal.jisc_allows_sa_accepted.is_(True),
+    ),
+    GreenOa.PUBLISHED: and_(
+        Journal.jisc_oa_prohibited.is_not(True),
+        Journal.jisc_allows_sa_published.is_(True),
+    ),
+    GreenOa.NONE: and_(
+        Journal.jisc_in_opf.is_(True),
+        or_(
+            Journal.jisc_oa_prohibited.is_(True),
+            and_(
+                Journal.jisc_allows_sa_submitted.is_not(True),
+                Journal.jisc_allows_sa_accepted.is_not(True),
+                Journal.jisc_allows_sa_published.is_not(True),
+            ),
+        ),
+    ),
+}
+
 
 def _list_price(currency: str) -> Any:
     """OpenAlex list-price APC in one currency; None without an entry."""
@@ -83,13 +128,30 @@ def base_query(
     has_apc: bool | None = None,
     has_works: bool | None = None,
     oa_types: list[str] | None = None,
+    green_oa: GreenOa | str | None = None,
     fuzzy: bool = False,
+    funder_fit: bool | None = None,
+    funder_fit_value: str | None = None,
+    pub_type: str | None = None,
+    languages: list[str] | None = None,
+    year_from: int | None = None,
+    year_to: int | None = None,
 ):
     """Filtered select with computed columns; search + facet counts share it.
 
-    Scoped to one institution's journal_flags row: the per-institution
-    corpus cutoff (works_window_plus > 3) and proceedings exclusion always
-    apply."""
+    Browsable corpus: journals above the per-institution window cutoff
+    (works_window_plus > 3), plus every other OpenAlex venue type with at
+    least one institution work (book series, conference, ...; owner
+    decision 2026-11-04). Scoped to one institution's journal_flags row,
+    and the proceedings exclusion always applies.
+
+    An explicit publication-year range (clamped by the caller, both bounds
+    set or both None) swaps the denormalized per-journal works count for a
+    year-scoped SUM over institution_works_stats. The stats source mirrors
+    the flags column's own pipeline (harvest.denorm WORKS_COUNT_SQL:
+    pure_canon rows only, LEFT JOIN semantics -> 0 without rows); journal
+    attributes, the corpus cutoff (works_window_plus) and the relevance
+    rank's global-prominence term stay unfiltered."""
     J = Journal
     F = JournalFlags
     # Admin ignore-list (settings.yaml): hidden from every listing, detail
@@ -102,11 +164,41 @@ def base_query(
     # OpenAlex publishes this metric as "two_yr_mean_citedness".
     twoyr = cast(J.summary_stats.op("->>")("two_yr_mean_citedness"), Numeric).label("twoyr")
     flags = (
-        select(F.issn_l, F.works_count, F.deal_covered, F.works_window_plus, F.browse_excluded)
+        select(
+            F.issn_l,
+            F.works_count,
+            F.deal_covered,
+            F.deal_cap_reached,
+            F.openaire_diamond,
+            F.works_window_plus,
+            F.browse_excluded,
+        )
         .where(F.institution_id == institution_id)
         .subquery()
     )
+    # Year-scoped per-journal works (same pure_canon-only population the
+    # denormalized column sums, bounded to the clamped range). Outer join:
+    # journals without in-range stats rows keep their zero.
+    year_active = year_from is not None
+    yearly = None
+    if year_active:
+        yearly = (
+            select(
+                InstitutionWorksStats.issn_l.label("issn_l"),
+                func.sum(InstitutionWorksStats.works_count).label("works_count"),
+            )
+            .where(
+                InstitutionWorksStats.institution_id == institution_id,
+                InstitutionWorksStats.source == "pure_canon",
+                InstitutionWorksStats.year >= year_from,
+                InstitutionWorksStats.year <= year_to,
+            )
+            .group_by(InstitutionWorksStats.issn_l)
+            .subquery()
+        )
+    year_works = func.coalesce(yearly.c.works_count, 0) if year_active else flags.c.works_count
     covered = flags.c.deal_covered
+    openaire_diamond = flags.c.openaire_diamond
     if q and not fuzzy:
         qstr = q.strip()
         # Relevance = title-prefix match tier + FTS rank + prominence nudge
@@ -122,7 +214,7 @@ def base_query(
         ).label("rank")
     else:
         rank = cast(text("0"), Numeric).label("rank")
-    oa_type = _oa_type(covered)
+    oa_type = _oa_type(covered, openaire_diamond)
     query = (
         select(
             J.issn_l,
@@ -134,7 +226,8 @@ def base_query(
             J.in_scimago,
             J.last_active_year,
             covered.label("deal_covered"),
-            flags.c.works_count.label("works"),
+            flags.c.deal_cap_reached.label("deal_cap_reached"),
+            year_works.label("works"),
             J.latest_quartile.label("quartile"),
             twoyr,
             oa_type,
@@ -143,6 +236,10 @@ def base_query(
             func.coalesce(J.topics.op("->")(0).op("->>")("display_name"), "").label(
                 "primary_topic"
             ),
+            # OpenAlex venue type (journal, book series, conference, ...).
+            J.type.label("pub_type"),
+            # Modal work language (ISO 639-1); NULL = never observed.
+            J.language.label("language"),
             # Display/sort price: OpenAlex list price (EUR, then USD), else
             # the OpenAPC latest cost. apc_prices order is unspecified, so
             # the currency match goes through jsonb_path_query_first.
@@ -151,19 +248,55 @@ def base_query(
             ),
             # Any-source APC presence; the facet pass filters on this.
             APC_SHOWN.label("apc_any"),
+            # Best green-OA route bucket (facet pass; NULL = never swept).
+            GREEN_OA_BEST_ROUTE.label("green_oa"),
+            *(
+                [
+                    # Funder-fit tier for a structured funder (facet pass
+                    # only; SQL twin of services.funder_fit, keep in sync).
+                    fit_case(
+                        oa_type,
+                        covered,
+                        J.jisc_oa_prohibited,
+                        J.jisc_allows_sa_submitted,
+                        J.jisc_allows_sa_accepted,
+                        J.jisc_allows_sa_published,
+                    ).label("funder_fit")
+                ]
+                if funder_fit
+                else []
+            ),
         )
         .select_from(J)
         .join(flags, flags.c.issn_l == J.issn_l)
         .where(
-            J.type == "journal",
+            or_(
+                and_(J.type == "journal", flags.c.works_window_plus > 3),
+                and_(J.type.is_not(None), J.type != "journal", flags.c.works_count > 0),
+            ),
             J.issn_l.is_not(None),
-            flags.c.works_window_plus > 3,
             flags.c.browse_excluded.is_not(True),
             *([J.issn_l.not_in(sorted(set(ignored)))] if ignored else []),
         )
     )
+    if year_active:
+        # Journals without in-range stats rows must stay listed (works: 0),
+        # so the year sum joins outside.
+        query = query.outerjoin(yearly, yearly.c.issn_l == J.issn_l)
     if oa_types:
         query = query.where(oa_type.in_(oa_types))
+    if funder_fit_value:
+        query = query.where(
+            fit_case(
+                oa_type,
+                covered,
+                J.jisc_oa_prohibited,
+                J.jisc_allows_sa_submitted,
+                J.jisc_allows_sa_accepted,
+                J.jisc_allows_sa_published,
+            )
+            == funder_fit_value
+        )
     if q:
         qstr = q.strip()
         if fuzzy:
@@ -219,10 +352,16 @@ def base_query(
         query = query.where(J.topics.contains([{"display_name": topic}]))
     if publisher:
         query = query.where(J.publisher_name == publisher)
+    if pub_type:
+        query = query.where(J.type == pub_type)
+    if languages:
+        query = query.where(J.language.in_(languages))
     if has_apc is not None:
         query = query.where(APC_SHOWN if has_apc else ~APC_SHOWN)
     if has_works is not None:
-        query = query.where(flags.c.works_count > 0 if has_works else flags.c.works_count == 0)
+        query = query.where(year_works > 0 if has_works else year_works == 0)
+    if green_oa:
+        query = query.where(GREEN_OA_CONDS[GreenOa(green_oa)])
     return query
 
 

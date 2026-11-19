@@ -18,7 +18,7 @@ from ...models import (
     ManualOverride,
     Publisher,
 )
-from ...schemas import AdminDealDetail, AdminDealOut
+from ...schemas import AdminDealDetail, AdminDealOut, CapUsageEntry
 from ...services.flags_refresh import _schedule_flags_refresh
 from ...vocab import DealStatus
 from .auth import AdminDep, SessionDep
@@ -48,6 +48,7 @@ class DealUpdate(BaseModel):
     corresponding_authors_only: StrictBool | None = None
     cap_numbers: dict[constr(pattern=r"^\d{4}$"), int] | None = None
     cap_text: str | None = None
+    cap_usage: list[CapUsageEntry] | None = None
     summary: str | None = None
     esac_id: str | None = None
     publisher_id: int | None = None
@@ -83,6 +84,7 @@ def _deal_payload(
         "capped": bool(deal.cap_numbers),
         "cap_numbers": deal.cap_numbers,
         "cap_text": deal.cap_text,
+        "cap_usage": deal.cap_usage,
         "summary": deal.summary,
         "journal_count": journal_count,
         "participations": participations,

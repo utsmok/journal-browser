@@ -1,18 +1,20 @@
+import asyncio
 import logging
 import os
 import time
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from . import __version__
 from .config import get_settings
-from .db import get_session
+from .db import get_engine, get_session
 from .logging_setup import REQUEST_ID_HEADER, configure_logging, new_request_id, request_id_ctx
 from .routers import (
     admin,
@@ -20,11 +22,13 @@ from .routers import (
     deals,
     docs,
     feedback,
+    funders,
     institutions,
     journals,
     meta,
     orgunits,
     publishers,
+    usage,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,9 +43,12 @@ api_router.include_router(feedback.router)
 # Docs before the scoped router, same reason as /admin: /api/v1/docs must
 # not be captured by /{institution_code}.
 api_router.include_router(docs.router)
+# Usage intake before the scoped router, same reason as /admin.
+api_router.include_router(usage.router)
 # Institution-scoped surface: /api/v1/{code}/journals|deals|meta/...
 scoped_router = APIRouter(prefix="/{institution_code}")
 scoped_router.include_router(journals.router)
+scoped_router.include_router(funders.router)
 scoped_router.include_router(authors.router)
 scoped_router.include_router(publishers.router)
 scoped_router.include_router(orgunits.router)
@@ -118,10 +125,116 @@ def _warm_embedding_model() -> None:
     threading.Thread(target=lambda: encode_query("warmup"), daemon=True).start()
 
 
+USAGE_PRUNE_FIRST_DELAY_S = 60
+USAGE_PRUNE_INTERVAL_S = 24 * 60 * 60
+VECTOR_WARM_DELAY_S = 5
+SNAPSHOT_WARM_DELAY_S = 2
+SNAPSHOT_REFRESH_INTERVAL_S = 6 * 3600
+
+
+async def _warm_snapshots_task() -> None:
+    """Build the orgunits/publishers/authors snapshots and the default
+    journals browse facets for every institution with authors: the first
+    visitor to those pages otherwise pays multi-second cold builds after a
+    restart or a cache-TTL/harvest-bump invalidation. Errors are logged,
+    never propagated (a pass over an empty or unreachable DB must not
+    break boot)."""
+    # Boot warmers skip wholesale in CI and offline dumps.
+    if os.environ.get("JB_SKIP_EMBEDDING_WARMUP") == "1":
+        return
+    await asyncio.sleep(SNAPSHOT_WARM_DELAY_S)
+    while True:
+        try:
+            from .models import Author, Institution
+            from .services.authors import search_authors
+            from .services.orgunits import search_orgunits
+            from .services.publishers import search_publishers
+            from .services.search import search_journals
+
+            async with async_sessionmaker(get_engine(), expire_on_commit=False)() as session:
+                subq = select(Author.institution_id).distinct()
+                rows = await session.scalars(select(Institution).where(Institution.id.in_(subq)))
+                insts = rows.all()
+                for inst in insts:
+                    # One faculty-level orgunits call builds the whole
+                    # snapshot (faculty+group+institute).
+                    await search_orgunits(session, institution=inst, level="faculty")
+                    await search_publishers(session, institution_id=inst.id)
+                    await search_authors(
+                        session,
+                        inst.id,
+                        None,
+                        limit=20,
+                        require_confirmed=inst.require_confirmed_affiliation,
+                    )
+                    # Defaults fill the default browse FACET_CACHE key;
+                    # facets ignore limit.
+                    await search_journals(session, institution_id=inst.id, limit=1)
+            logger.info("snapshot warm: %d institution(s)", len(insts))
+        except Exception:
+            logger.exception("snapshot warm failed")
+        # 6h beats the caches' 86400s TTL, and a harvest bump changes the
+        # cache_epoch cache key: the next pass rebuilds the new key in the
+        # background, so no visitor pays a cold build.
+        await asyncio.sleep(SNAPSHOT_REFRESH_INTERVAL_S)
+
+
+async def _warm_vector_index_task() -> None:
+    """Pre-walk the journals HNSW graph once after boot: the first author
+    pages after a restart otherwise pay seconds of cold random reads on
+    the ~350 MB vector index before it lands in the page cache. Errors
+    are logged, never propagated (fresh deployments may have no
+    embeddings yet)."""
+    if os.environ.get("JB_SKIP_EMBEDDING_WARMUP") == "1":
+        return
+    await asyncio.sleep(VECTOR_WARM_DELAY_S)
+    try:
+        from .services.embeddings import warm_journal_vector_index
+
+        async with async_sessionmaker(get_engine(), expire_on_commit=False)() as session:
+            ran = await warm_journal_vector_index(session)
+            await session.commit()
+        logger.info("vector index warm: %d hnsw search(es)", ran)
+    except Exception:
+        logger.exception("vector index warm failed")
+
+
+async def _usage_ip_retention_loop(days: int) -> None:
+    """Nightly: null raw usage-event IPs older than `days` (rows and
+    country stay). Errors are logged, never propagated."""
+    from .services.usage_retention import prune_old_ips
+
+    delay = USAGE_PRUNE_FIRST_DELAY_S
+    while True:
+        await asyncio.sleep(delay)
+        try:
+            async with async_sessionmaker(get_engine(), expire_on_commit=False)() as session:
+                nulled = await prune_old_ips(session, days)
+            logger.info("usage ip retention: nulled ip on %d event(s)", nulled)
+        except Exception:
+            logger.exception("usage ip retention run failed")
+        # Subsequent runs are a full day apart; only the first waits 60s.
+        delay = USAGE_PRUNE_INTERVAL_S
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    days = get_settings().usage_retention_days
+    task = asyncio.create_task(_usage_ip_retention_loop(days)) if days > 0 else None
+    warm_task = asyncio.create_task(_warm_vector_index_task())
+    snapshot_task = asyncio.create_task(_warm_snapshots_task())
+    yield
+    for t in (task, warm_task, snapshot_task):
+        if t is not None:
+            t.cancel()
+            with suppress(asyncio.CancelledError):
+                await t
+
+
 def create_app() -> "FastAPI":
     settings = get_settings()
     configure_logging()
-    app = FastAPI(title="Journal Browser API", version=__version__)
+    app = FastAPI(title="Journal Browser API", version=__version__, lifespan=_lifespan)
     # CORS first, observability second: add_middleware prepends, so the
     # request-id middleware runs outermost and even CORS-rejected requests
     # get a request id.

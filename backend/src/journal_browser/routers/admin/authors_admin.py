@@ -11,15 +11,25 @@ Every actual flip appends a status_changes audit row (see audit_admin).
 """
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 
-from ...models import Author, AuthorIdentity, Institution, StatusChangeLog
-from ...schemas import AuthorIdentityAdminOut
+from ...models import (
+    Author,
+    AuthorIdentity,
+    HarvestRun,
+    Institution,
+    OpenalexWork,
+    SourceRecord,
+    StatusChangeLog,
+)
+from ...schemas import AdminExternalAuthorOut, AuthorIdentityAdminOut, AuthorIdentityPageOut
+from ...services.authorship import attributed_to_any
 from .auth import AdminDep, SessionDep
+from .settings_admin import _get_institution_or_404
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -38,18 +48,22 @@ class IdentityStatusIn(BaseModel):
     note: str | None = Field(default=None, max_length=2000)
 
 
-@router.get("/author-identities", response_model=list[AuthorIdentityAdminOut])
+@router.get("/author-identities", response_model=AuthorIdentityPageOut)
 async def list_author_identities(
     session: SessionDep,
     _: AdminDep,
     status: str | None = Query(default=None),
     institution: str | None = Query(default=None, description="institution code"),
+    offset: int = Query(default=0, ge=0),
     limit: int = Query(default=200, ge=1, le=1000),
-) -> list[dict[str, Any]]:
-    """Identity rows, newest activity first, with the local author name."""
+) -> AuthorIdentityPageOut:
+    """Identity rows, newest activity first, with the local author name.
+
+    Server-paged via offset/limit; total is the full filtered count.
+    """
     if status is not None and status not in IDENTITY_STATUSES:
         raise HTTPException(422, f"status must be one of {list(IDENTITY_STATUSES)}")
-    stmt = (
+    filtered = (
         select(AuthorIdentity, Institution.code, Author.name)
         .select_from(AuthorIdentity)
         .join(Institution, Institution.id == AuthorIdentity.institution_id)
@@ -58,32 +72,39 @@ async def list_author_identities(
             (Author.institution_id == AuthorIdentity.institution_id)
             & (Author.pure_uuid == AuthorIdentity.author_pure_uuid),
         )
-        .order_by(desc(AuthorIdentity.updated_at))
-        .limit(limit)
     )
     if status is not None:
-        stmt = stmt.where(AuthorIdentity.status == status)
+        filtered = filtered.where(AuthorIdentity.status == status)
     if institution is not None:
-        stmt = stmt.where(Institution.code == institution)
-    rows = (await session.execute(stmt)).all()
-    return [
-        {
-            "institution_id": row.institution_id,
-            "institution_code": code,
-            "author_pure_uuid": row.author_pure_uuid,
-            "author_name": name,
-            "source": row.source,
-            "external_id": row.external_id,
-            "status": row.status,
-            "method": row.method,
-            "confidence": row.confidence,
-            "n_works": row.n_works,
-            "orcid_corroborated": row.orcid_corroborated,
-            "evidence": row.evidence,
-            "updated_at": row.updated_at,
-        }
-        for row, code, name in rows
-    ]
+        filtered = filtered.where(Institution.code == institution)
+    total = await session.scalar(select(func.count()).select_from(filtered.subquery()))
+    rows = (
+        await session.execute(
+            filtered.order_by(desc(AuthorIdentity.updated_at)).offset(offset).limit(limit)
+        )
+    ).all()
+    return AuthorIdentityPageOut(
+        total=total or 0,
+        offset=offset,
+        items=[
+            {
+                "institution_id": row.institution_id,
+                "institution_code": code,
+                "author_pure_uuid": row.author_pure_uuid,
+                "author_name": name,
+                "source": row.source,
+                "external_id": row.external_id,
+                "status": row.status,
+                "method": row.method,
+                "confidence": row.confidence,
+                "n_works": row.n_works,
+                "orcid_corroborated": row.orcid_corroborated,
+                "evidence": row.evidence,
+                "updated_at": row.updated_at,
+            }
+            for row, code, name in rows
+        ],
+    )
 
 
 @router.put("/author-identities", response_model=AuthorIdentityAdminOut)
@@ -161,4 +182,69 @@ async def _identity_payload(session: SessionDep, row: AuthorIdentity) -> dict[st
         "orcid_corroborated": row.orcid_corroborated,
         "evidence": row.evidence,
         "updated_at": row.updated_at,
+    }
+
+
+@router.get("/external-author/{external_id}", response_model=AdminExternalAuthorOut)
+async def stored_external_author(
+    external_id: str,
+    session: SessionDep,
+    _: AdminDep,
+    institution: Annotated[str | None, Query(max_length=32)] = None,
+) -> dict[str, Any]:
+    """The harvest's stored OpenAlex author profile + recent works.
+
+    The review drawer reads the verbatim source_records payload (the listing
+    sweep lands every institutional author profile there) plus a recent-works
+    sample from the openalex_works projection — no live API call. 404 when
+    this id was never swept; the UI falls back to an OpenAlex link.
+    """
+    record = (
+        await session.execute(
+            select(SourceRecord)
+            .join(HarvestRun, HarvestRun.id == SourceRecord.harvest_run_id)
+            .where(
+                SourceRecord.source == "openalex",
+                SourceRecord.entity_type == "authors",
+                SourceRecord.source_pk == external_id,
+            )
+            .order_by(desc(SourceRecord.id))
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if record is None:
+        raise HTTPException(404, f"no stored OpenAlex profile for {external_id}")
+
+    # Same indexed attribution probe as the gap queries (edge-table rows
+    # store lower-cased bare ids).
+    conditions = [attributed_to_any([external_id])]
+    if institution is not None:
+        inst = await _get_institution_or_404(session, institution)
+        conditions.append(OpenalexWork.institution_id == inst.id)
+    works = (
+        (
+            await session.execute(
+                select(OpenalexWork)
+                .where(*conditions)
+                .order_by(desc(OpenalexWork.year), OpenalexWork.w_id)
+                .limit(8)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {
+        "source_pk": record.source_pk,
+        "harvested_at": record.harvested_at,
+        "author": record.payload,
+        "works": [
+            {
+                "w_id": work.w_id,
+                "title": work.title,
+                "year": work.year,
+                "doi": work.doi_normalized,
+                "venue": work.venue_name,
+            }
+            for work in works
+        ],
     }

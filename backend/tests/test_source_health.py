@@ -10,6 +10,7 @@ from journal_browser.services.search import _year_rate
 
 
 def test_registry_round_trip():
+    source_health.clear_all()
     source_health.record_degraded("src-a", "first")
     source_health.record_degraded("src-b", "down")
     source_health.record_degraded("src-a", "second")
@@ -25,7 +26,6 @@ def test_registry_round_trip():
     assert source_health.snapshot() == []
 
 
-@requires_db
 @pytest.fixture
 async def health_api(client, db_engine):
     maker = async_sessionmaker(db_engine, expire_on_commit=False)
@@ -38,6 +38,7 @@ async def health_api(client, db_engine):
 
 @requires_db
 async def test_freshness_carries_degraded_entry(health_api):
+    source_health.clear_all()
     source_health.record_degraded("ut-metadata", "works query failed; serving stats-only")
     try:
         r = await health_api.get("/api/v1/ut/meta/freshness")

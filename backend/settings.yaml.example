@@ -36,7 +36,7 @@ contact_email: s.f.abma@utwente.nl
 cors_origins:
 - http://localhost:3000
 
-# ISSNs excluded from listings (admin scaffold; not applied anywhere yet).
+# ISSN-Ls treated as nonexistent on every journal surface (search, facets, detail 404s).
 #ignored_issns: ["1234-5678"]
 
 # Raw landing zone for downloaded source artifacts (compose bind mount).
@@ -53,9 +53,8 @@ bootstrap: auto
 pure_oai_base_url: https://ris.utwente.nl/ws/oai
 pure_oai_min_spacing: 1.0
 
-# Feature scaffolds; leave off until explicitly enabled.
+# Feature scaffold; leave off until explicitly enabled.
 enable_journal_citations: false
-enable_jisc: false
 
 # ── Institution (seed for the default institutions row) ─────────────────
 

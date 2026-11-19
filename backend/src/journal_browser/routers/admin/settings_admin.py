@@ -3,7 +3,14 @@ from typing import Any
 
 import yaml
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    field_validator,
+    model_validator,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +21,8 @@ from ...config import (
     settings_yaml_path,
 )
 from ...harvest.common import normalize_issn
+from ...harvest.denorm import refresh_institution_stats
+from ...harvest.institution_stats import write_pure_canon_stats
 from ...models import Institution
 from ...schemas import AdminInstitutionOut
 from ...settings_schema import SETTINGS_REGISTRY, value_for_response
@@ -101,7 +110,7 @@ async def update_settings(body: SettingsUpdate, _: AdminDep) -> dict[str, Any]:
 
 class InstitutionUpdate(BaseModel):
     """PATCH-shaped PUT body: absent fields are untouched, explicit null
-    clears nullable columns, and the four non-nullable fields reject null."""
+    clears nullable columns, and the three non-nullable fields reject null."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -113,6 +122,14 @@ class InstitutionUpdate(BaseModel):
     openaire_org_id: str | None = None
     data_window_start: int | None = None
     data_window_end: int | None = None
+
+    @field_validator("data_window_end", mode="before")
+    @classmethod
+    def _window_end_zero_means_open(cls, v: object) -> object:
+        # The column is nullable and the help text says empty = open; 0 is
+        # the same sentinel Settings accepts from JB_DATA_WINDOW_END.
+        return None if v in (0, "0", "") else v
+
     library_url: str | None = None
     oa_guide_url: str | None = None
     support_email: str | None = None
@@ -125,7 +142,7 @@ class InstitutionUpdate(BaseModel):
     @classmethod
     def _reject_cleared_nonnullable(cls, data: Any) -> Any:
         if isinstance(data, dict):
-            for key in ("name", "data_window_start", "data_window_end", "active"):
+            for key in ("name", "data_window_start", "active"):
                 if key in data and data[key] is None:
                     raise ValueError(f"{key} must not be null")
         return data
@@ -171,7 +188,16 @@ async def update_institution(
     code: str, body: InstitutionUpdate, session: SessionDep, _: AdminDep
 ) -> dict[str, Any]:
     inst = await _get_institution_or_404(session, code)
+    window_changed = bool(body.model_fields_set & {"data_window_start", "data_window_end"})
     for key in body.model_fields_set:
         setattr(inst, key, getattr(body, key))
+    if window_changed:
+        # works_count is window-bounded, so the card goes stale the moment
+        # the window moves. Rebuild the canon stats rows and flags in this
+        # request's transaction. The OpenAlex OA split keeps its old window
+        # until the next stats job — that cross-check dimension is not the
+        # card number.
+        await write_pure_canon_stats(session, inst)
+        await refresh_institution_stats(session, inst)
     await session.commit()
     return _institution_payload(inst)

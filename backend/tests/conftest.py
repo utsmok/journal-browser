@@ -36,10 +36,10 @@ def _db_reachable() -> bool:
         return False
 
 
+SKIP_DB_REASON = "JB_SKIP_DB_TESTS=1 set: database tests skipped by explicit opt-out"
+
 if os.environ.get("JB_SKIP_DB_TESTS") == "1":
-    requires_db = pytest.mark.skip(
-        reason="JB_SKIP_DB_TESTS=1 set: database tests skipped by explicit opt-out"
-    )
+    requires_db = pytest.mark.skip(reason=SKIP_DB_REASON)
 elif not _db_reachable():
     raise RuntimeError(
         "Database tests require Postgres on localhost:5433 (journal/journal). "
@@ -53,12 +53,16 @@ else:
 
 @pytest.fixture
 async def db_engine():
+    if os.environ.get("JB_SKIP_DB_TESTS") == "1":
+        pytest.skip(SKIP_DB_REASON)
     # Function-scoped: pytest-asyncio runs each test in its own event loop,
     # and an asyncpg pool must not cross loops.
-    from journal_browser.services import cache
+    from journal_browser.services import cache, repo_links, source_health
 
     cache.FACET_CACHE.clear()
     cache.SNAPSHOT_CACHE.clear()
+    repo_links.reset_canon_cache()
+    source_health.clear_all()
     conn = await asyncpg.connect(ADMIN_URL)
     await conn.execute(f'DROP DATABASE IF EXISTS "{TEST_DB}" WITH (FORCE)')
     await conn.execute(f'CREATE DATABASE "{TEST_DB}"')
@@ -135,6 +139,22 @@ def journal_factory(issn_l: str, **kw) -> Journal:
     }
     base.update(kw)
     return Journal(**base)
+
+
+def pair_rows(*works):
+    """Attribution edges for the given openalex_works rows under test —
+    the same derivation the store rebuild applies to its authorships."""
+    from journal_browser.models import OpenalexWorkAuthor
+
+    return [
+        OpenalexWorkAuthor(
+            institution_id=work.institution_id,
+            author_id=aid,
+            w_id=work.w_id,
+        )
+        for work in works
+        for aid in sorted({a["a"].lower() for a in (work.authorships or []) if a.get("a")})
+    ]
 
 
 @pytest.fixture

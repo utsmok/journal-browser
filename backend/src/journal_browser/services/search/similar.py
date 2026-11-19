@@ -12,6 +12,12 @@ from .query import attach_apc_display, base_query
 SIMILAR_FILTERED_LIMIT = 5
 SIMILAR_ALL_LIMIT = 10
 
+#: Semantic search distance cap. bge-small cosine distances have no knee
+#: (they rise smoothly), so a sharp cutoff does not exist; 0.32 keeps
+#: totals in the hundreds-to-thousands band across five probe queries,
+#: measured 2026-11-13 on the live corpus (~177k vectors).
+SEMANTIC_MAX_DISTANCE = 0.32
+
 
 async def similar_journals(
     session: AsyncSession, issn_l: str, institution_id: int
@@ -122,7 +128,9 @@ async def semantic_search(
     """Free-text "find journals like this description": encode the query with
     the embedding model (fastembed ONNX, CPU) and rank by cosine distance.
     Shares base_query cutoffs and proceedings exclusion; journals without a
-    stored vector are absent. Response rows match search_journals items so
+    stored vector are absent. total counts journals within the semantic
+    range (SEMANTIC_MAX_DISTANCE), not the whole vectorized corpus;
+    ranking is unchanged. Response rows match search_journals items so
     the frontend table renders them unchanged.
 
     The (distance, issn_l) order is deterministic for a fixed query and
@@ -140,11 +148,17 @@ async def semantic_search(
     # ONNX inference (and the lazy ~130 MB model load) would stall the event
     # loop for every other request; run it in a worker thread.
     query_vec = await asyncio.to_thread(encode_query, q)
-    distance = Journal.embedding.cosine_distance(query_vec).label("dist")
+    dist_expr = Journal.embedding.cosine_distance(query_vec)
+    distance = dist_expr.label("dist")
     subq = (
         base_query(institution_id=institution_id)
         .add_columns(distance)
-        .where(Journal.embedding.is_not(None))
+        .where(
+            Journal.embedding.is_not(None),
+            # Inside the subquery so total, page and cursor paging share
+            # the one bound.
+            dist_expr <= SEMANTIC_MAX_DISTANCE,
+        )
         .subquery()
     )
     # Iterative HNSW scan (pgvector 0.8): strict_order keeps distance

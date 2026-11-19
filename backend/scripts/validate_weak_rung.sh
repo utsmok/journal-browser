@@ -14,11 +14,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-LIVE_URL="postgresql+asyncpg://journal:journal@localhost:5433/journalbrowser"
+LIVE_URL="postgresql+asyncpg://journal:journal@localhost:5434/journalbrowser"
 PSQL_LIVE="${LIVE_URL/postgresql+asyncpg:/postgresql:}"
 
 echo "== 0. db up check"
-pg_isready -h localhost -p 5433 -U journal >/dev/null || { echo "postgres down"; exit 1; }
+pg_isready -h localhost -p 5434 -U journal >/dev/null || { echo "postgres down"; exit 1; }
 
 echo "== 1. live population snapshot"
 psql "$PSQL_LIVE" -tAc \

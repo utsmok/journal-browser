@@ -18,45 +18,65 @@ def others(conds: dict, own: str) -> list:
     return [c for key, c in conds.items() if key != own]
 
 
-def works_expr() -> Any:
+def works_expr(column: Any | None = None) -> Any:
+    """Works-strata buckets over the given count column; None = the
+    denormalized Author.n_works snapshot."""
+    n = column if column is not None else Author.n_works
     return case(
-        (Author.n_works >= 50, "50+"),
-        (Author.n_works >= 20, "20-49"),
-        (Author.n_works >= 5, "5-19"),
-        (Author.n_works >= 1, "1-4"),
+        (n >= 50, "50+"),
+        (n >= 20, "20-49"),
+        (n >= 5, "5-19"),
+        (n >= 1, "1-4"),
     )
 
 
-def last_pub_expr() -> Any:
+def last_pub_expr(column: Any | None = None) -> Any:
+    """Last-publication buckets over the given year column; None = the
+    denormalized Author.last_pub_year snapshot."""
+    year = column if column is not None else Author.last_pub_year
     return case(
-        (Author.last_pub_year.is_(None), "none"),
-        (Author.last_pub_year >= 2025, "2025-2026"),
-        (Author.last_pub_year >= 2022, "2022-2024"),
-        (Author.last_pub_year >= 2020, "2020-2021"),
+        (year.is_(None), "none"),
+        (year >= 2025, "2025-2026"),
+        (year >= 2022, "2022-2024"),
+        (year >= 2020, "2020-2021"),
     )
 
 
 async def author_facets(
-    session: AsyncSession, base: list[Any], conds: dict[str, Any]
+    session: AsyncSession,
+    base: list[Any],
+    conds: dict[str, Any],
+    *,
+    scoped: Any | None = None,
+    n_col: Any | None = None,
+    last_col: Any | None = None,
 ) -> dict[str, Any]:
     """Author search facets: one GROUP BY pass per dimension over the
-    filtered base, each dropping its own filter."""
+    filtered base, each dropping its own filter. With an active
+    publication-year range, `scoped` is the per-author year aggregation to
+    LEFT JOIN in and n_col/last_col the year-scoped count/last-year
+    expressions the works and last_pub buckets evaluate; the join rides on
+    the shared base so every dimension's counts describe the same
+    year-scoped population. Without a range nothing joins and the queries
+    stay byte-identical to the snapshot-serving path."""
     exprs = {
         "faculty": Author.faculty,
         "org": Author.research_group,
-        "works": works_expr(),
-        "last_pub": last_pub_expr(),
+        "works": works_expr(n_col),
+        "last_pub": last_pub_expr(last_col),
         "topic": Author.primary_topic,
     }
     out: dict[str, Any] = {}
     for name, expr in exprs.items():
-        rows = (
-            await session.execute(
-                select(expr, func.count().label("n"))
-                .where(*base, *others(conds, name), expr.is_not(None))
-                .group_by(expr)
-                .order_by(func.count().desc(), expr)
+        stmt = select(expr, func.count().label("n")).where(
+            *base, *others(conds, name), expr.is_not(None)
+        )
+        if scoped is not None:
+            stmt = stmt.select_from(Author).outerjoin(
+                scoped, scoped.c.author_pure_uuid == Author.pure_uuid
             )
+        rows = (
+            await session.execute(stmt.group_by(expr).order_by(func.count().desc(), expr))
         ).all()
         out[name] = [{"value": value, "count": n} for value, n in rows if value is not None]
     return out

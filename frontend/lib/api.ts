@@ -1,4 +1,6 @@
 import type { components } from "./api-types";
+import type { LabelT } from "./work-type";
+import { trackApiError, trackSearch } from "./usage/tracker";
 
 type Schemas = components["schemas"];
 
@@ -24,9 +26,16 @@ export type InstitutionMetrics = Schemas["InstitutionMetrics"];
 
 export type WorksPage = Schemas["WorksPage"];
 
+/** OpenAIRE cross-check facts for one journal. */
+export type OpenaireInfo = Schemas["OpenaireInfo"];
+
 export type LimitationOut = Schemas["LimitationOut"];
 export type FreshnessResponse = Schemas["FreshnessResponse"];
 export type StatsYear = Schemas["StatsYear"];
+export type FunderListItem = Schemas["FunderListItem"];
+export type FunderSearchResponse = Schemas["FunderSearchResponse"];
+export type FunderDetailResponse = Schemas["FunderDetailResponse"];
+export type FunderFitOut = Schemas["FunderFitOut"];
 export type Attribution = Schemas["Attribution"];
 
 // --- Author profiles (Pure-based, per institution) ---
@@ -40,11 +49,14 @@ export type AuthorSearchSort = "works_desc" | "name_asc" | "name_desc" | "last_p
 
 export type AuthorSearchResponse = Schemas["AuthorSearchResponse"];
 
-/** Sort and paging options for fetchAuthors. */
+/** Sort, paging, and publication-year options for fetchAuthors. */
 export type AuthorFetchOptions = {
   sort?: AuthorSearchSort;
   offset?: number;
   limit?: number;
+  /** Publication-year range (global year lens; server clamps to the data window). */
+  year_from?: number;
+  year_to?: number;
 };
 
 /** Author search facet filters; arrays are comma-joined in the query string. */
@@ -61,6 +73,12 @@ export type AuthorSearchFilters = {
 
 export type AuthorSimilarJournal = Schemas["AuthorSimilarJournal"];
 
+/** Roster author matched on a gap work's OpenAlex authorships. */
+export type UtAuthorAttribution = Schemas["UtAuthorAttribution"];
+
+/** Compact parent-work reference of an OpenAlex-side row ({id, name, rel}). */
+export type WorkParent = Schemas["WorkParent"];
+
 export type AuthorProfile = Schemas["AuthorProfileResponse"];
 
 export type SortKey =
@@ -75,6 +93,10 @@ export type SortKey =
 
 export type SearchIn = "all" | "title" | "publisher" | "topic";
 
+/** Publication-year range params accepted by the works/profile/detail/CSV
+ * endpoints; the global year lens feeds these. */
+export type YearParams = { year_from?: number; year_to?: number };
+
 export type JournalSearchParams = {
   q?: string;
   search_in?: SearchIn;
@@ -88,6 +110,20 @@ export type JournalSearchParams = {
   topic?: string;
   /** Comma-separated multi-select, OR'd server-side. */
   oa_type?: string;
+  /** OpenAlex venue type filter: "journal", "book series", ... */
+  pub_type?: string;
+  /** Modal journal language, comma-separated ISO 639-1 codes ("en"). */
+  language?: string;
+  /** Self-archiving route per Jisc: "submitted" | "accepted" | "published" | "none". */
+  green_oa?: string;
+  /** Jisc OPF funder id; annotates rows with funder_fit. */
+  funder?: number;
+  /** Funder-fit tier filter; needs `funder` set. */
+  funder_fit?: string;
+  /** Publication-year range start (global year lens; server clamps to the data window). */
+  year_from?: number;
+  /** Publication-year range end (global year lens; server clamps to the data window). */
+  year_to?: number;
   sort?: SortKey;
   /** Sort direction; omitted = each key's natural direction. */
   dir?: "asc" | "desc";
@@ -108,16 +144,16 @@ class ApiError extends Error {
 
 /**
  * Human copy for fetch failures; the raw error is already in the console
- * (apiGet logs it). Maps the statuses the UI can actually hit.
+ * (apiGet logs it). Maps the statuses the UI can actually hit. Sentences
+ * live under common.errors.
  */
-export function errorMessage(err: unknown): string {
+export function errorMessage(t: LabelT, err: unknown): string {
   if (err instanceof ApiError) {
-    if (err.status === 400 || err.status === 422)
-      return "The request was not valid. Adjust the filters and try again.";
-    if (err.status === 404) return "We could not find that information.";
-    if (err.status >= 500) return "The server could not process the search. Try again in a moment.";
+    if (err.status === 400 || err.status === 422) return t("errors.badRequest");
+    if (err.status === 404) return t("errors.notFound");
+    if (err.status >= 500) return t("errors.server");
   }
-  return "Something went wrong while loading this data. Try again in a moment.";
+  return t("errors.unknown");
 }
 
 /** GET helper against the same-origin /api proxy (next.config.mjs rewrites). */
@@ -137,6 +173,7 @@ export async function apiGet<T>(
     });
     if (!res.ok) {
       console.error(`API ${res.status} on ${path}`);
+      trackApiError("GET", path, res.status);
       throw new ApiError(res.status, path);
     }
     return (await res.json()) as T;
@@ -152,7 +189,8 @@ export async function fetchAuthors(
   filters: AuthorSearchFilters = {},
   opts: AuthorFetchOptions = {},
 ): Promise<AuthorSearchResponse> {
-  return apiGet<AuthorSearchResponse>(`/${inst}/authors`, {
+  const startedAt = Date.now();
+  const data = await apiGet<AuthorSearchResponse>(`/${inst}/authors`, {
     q,
     limit: opts.limit,
     faculty: filters.faculty?.join("|"),
@@ -163,11 +201,28 @@ export async function fetchAuthors(
     topic: filters.topic?.join("|"),
     sort: opts.sort,
     offset: opts.offset,
+    year_from: opts.year_from,
+    year_to: opts.year_to,
   });
+  trackSearch({
+    query: q ?? "",
+    results_count: data.total,
+    duration_ms: Date.now() - startedAt,
+    search_scope: "authors",
+    filters: Object.keys(filters).length ? { ...filters } : undefined,
+  });
+  return data;
 }
 
-export async function fetchAuthor(inst: string, pureUuid: string): Promise<AuthorProfile> {
-  return apiGet<AuthorProfile>(`/${inst}/authors/${encodeURIComponent(pureUuid)}`);
+export async function fetchAuthor(
+  inst: string,
+  pureUuid: string,
+  years?: YearParams,
+): Promise<AuthorProfile> {
+  return apiGet<AuthorProfile>(`/${inst}/authors/${encodeURIComponent(pureUuid)}`, {
+    year_from: years?.year_from,
+    year_to: years?.year_to,
+  });
 }
 
 // --- Publishers + org units (browse facets) ---
@@ -185,6 +240,10 @@ export type DealDiscrepancy = Schemas["DealDiscrepancyRow"];
 export type PublisherDetailResponse = Schemas["PublisherDetailResponse"];
 
 export type PublisherSearchSort = "relevance" | "name" | "journals" | "works" | "deals" | "apc";
+
+/** Part-kind filter on the publisher detail and gap-CSV endpoints; matches
+ * the backend ?parts= values. */
+export type PublisherPartsFilter = "chapter" | "part" | "standalone";
 
 /** List params for the publisher surface; arrays are pipe-joined in the query. */
 export type PublisherSearchParams = {
@@ -215,6 +274,9 @@ export type OrgUnitDetailResponse = Schemas["OrgUnitDetailResponse"];
 
 export type OrgUnitSearchSort = "relevance" | "name" | "authors" | "works" | "deal_works";
 
+/** Top-authors card ordering on org-unit detail pages. */
+export type OrgUnitAuthorSort = "share" | "works";
+
 export type OrgUnitSearchParams = {
   level?: OrgUnitLevel;
   q?: string;
@@ -235,11 +297,26 @@ export function encodeNamePath(name: string): string {
   return name.split("/").map(encodeURIComponent).join("/");
 }
 
+/** Usage filter dump for directory fetchers: paging keys stripped. */
+function usageDirectoryFilters(params: object): Record<string, unknown> | undefined {
+  const {
+    q: _q,
+    sort: _sort,
+    dir: _dir,
+    offset: _offset,
+    limit: _limit,
+    include_facets: _include_facets,
+    ...rest
+  } = params as Record<string, unknown>;
+  return Object.keys(rest).length ? rest : undefined;
+}
+
 export async function fetchPublishers(
   inst: string,
   params: PublisherSearchParams = {},
 ): Promise<PublisherSearchResponse> {
-  return apiGet<PublisherSearchResponse>(`/${inst}/publishers`, {
+  const startedAt = Date.now();
+  const data = await apiGet<PublisherSearchResponse>(`/${inst}/publishers`, {
     q: params.q,
     oa_type: params.oa_type?.join("|"),
     deal: params.deal,
@@ -255,17 +332,35 @@ export async function fetchPublishers(
     limit: params.limit,
     include_facets: params.include_facets ? "true" : undefined,
   });
+  trackSearch({
+    query: params.q ?? "",
+    results_count: data.total,
+    duration_ms: Date.now() - startedAt,
+    search_scope: "publishers",
+    filters: usageDirectoryFilters(params),
+  });
+  return data;
 }
 
-export async function fetchPublisher(inst: string, name: string): Promise<PublisherDetailResponse> {
-  return apiGet<PublisherDetailResponse>(`/${inst}/publishers/${encodeNamePath(name)}`);
+export async function fetchPublisher(
+  inst: string,
+  name: string,
+  years?: YearParams,
+  parts?: PublisherPartsFilter,
+): Promise<PublisherDetailResponse> {
+  return apiGet<PublisherDetailResponse>(`/${inst}/publishers/${encodeNamePath(name)}`, {
+    year_from: years?.year_from,
+    year_to: years?.year_to,
+    parts,
+  });
 }
 
 export async function fetchOrgUnits(
   inst: string,
   params: OrgUnitSearchParams = {},
 ): Promise<OrgUnitSearchResponse> {
-  return apiGet<OrgUnitSearchResponse>(`/${inst}/orgunits`, {
+  const startedAt = Date.now();
+  const data = await apiGet<OrgUnitSearchResponse>(`/${inst}/orgunits`, {
     level: params.level,
     q: params.q,
     faculty: params.faculty?.join("|"),
@@ -277,12 +372,26 @@ export async function fetchOrgUnits(
     limit: params.limit,
     include_facets: params.include_facets ? "true" : undefined,
   });
+  trackSearch({
+    query: params.q ?? "",
+    results_count: data.total,
+    duration_ms: Date.now() - startedAt,
+    search_scope: "orgunits",
+    filters: usageDirectoryFilters(params),
+  });
+  return data;
 }
 
 export async function fetchOrgUnit(
   inst: string,
   level: OrgUnitLevel,
   name: string,
+  years?: YearParams,
+  sort?: OrgUnitAuthorSort,
 ): Promise<OrgUnitDetailResponse> {
-  return apiGet<OrgUnitDetailResponse>(`/${inst}/orgunits/${level}/${encodeNamePath(name)}`);
+  return apiGet<OrgUnitDetailResponse>(`/${inst}/orgunits/${level}/${encodeNamePath(name)}`, {
+    year_from: years?.year_from,
+    year_to: years?.year_to,
+    sort,
+  });
 }

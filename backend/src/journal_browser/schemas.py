@@ -1,9 +1,9 @@
 """Pydantic response schemas for the API (openapi-typescript feeds on these)."""
 
-from datetime import datetime
-from typing import Any, Literal
+from datetime import date, datetime
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .vocab import (
     DealJournalSource,
@@ -25,6 +25,15 @@ class Attribution(BaseModel):
     caveat_codes: list[str] = []
 
 
+class FunderFitOut(BaseModel):
+    """How well one journal satisfies the selected funder's OA policy.
+
+    status None = the funder's policy is text-only, no tier derivable."""
+
+    status: Literal["compliant", "check", "no"] | None
+    reasons: list[str] = []
+
+
 class JournalListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -39,10 +48,18 @@ class JournalListItem(BaseModel):
     in_scimago: bool = False
     last_active_year: int | None = None
     deal_covered: bool = False
+    # True when every effective covering deal's latest cap_usage entry has
+    # used >= total; free OA publishing no longer guaranteed (harvest.denorm).
+    deal_cap_reached: bool = False
     works: int = 0
     quartile: str | None = None
     twoyr_mean_citedness: float | None = None
     oa_type: OaType = OaType.SUBSCRIPTION
+    # OpenAlex venue type (journal, book series, conference, ...); NULL for
+    # untyped sources.
+    pub_type: str | None = None
+    # Modal work language (ISO 639-1, e.g. "en"); NULL = never observed.
+    language: str | None = None
     # OpenAlex primary topic (first entry of the topics list); None when the
     # journal has no topics.
     primary_topic: str | None = None
@@ -56,6 +73,8 @@ class JournalListItem(BaseModel):
     apc_low: float | None = None
     apc_high: float | None = None
     apc_stats: list["ApcAggregateOut"] = []
+    # Present only when the list query selects a funder.
+    funder_fit: FunderFitOut | None = None
 
 
 class JournalSearchResponse(BaseModel):
@@ -66,6 +85,60 @@ class JournalSearchResponse(BaseModel):
     facets: dict[str, dict[str, int]] = {}
 
 
+class FunderListItem(BaseModel):
+    id: int
+    name: str | None
+    country: str | None
+    url: str | None
+    ror: str | None
+    fundref: str | None
+    # ROR-preferred link into openalex_funders; None when neither id links.
+    openalex_funder_id: str | None = None
+    policy_structured: bool = False
+    # UT works crediting this funder (work_funders); 0 before migration 0049
+    # lands or the harvest runs.
+    n_ut_works: int = 0
+
+
+class FunderSearchResponse(BaseModel):
+    items: list[FunderListItem]
+    total: int
+
+
+class FunderTopJournal(BaseModel):
+    title: str | None
+    issn_l: str | None
+    n_works: int
+
+
+class FunderOpenaireStream(BaseModel):
+    """One funding level-0 stream with its OpenAIRE project count."""
+
+    level0_id: str
+    name: str | None = None
+    n_projects: int
+
+
+class FunderOpenaireBlock(BaseModel):
+    """OpenAIRE graph identity for the same funder (canon-linked via ROR)."""
+
+    openaire_id: str
+    name: str | None = None
+    short_name: str | None = None
+    jurisdiction: str | None = None
+    website_url: str | None = None
+    # Top funding streams by project count (empty before the streams
+    # harvest runs).
+    streams: list[FunderOpenaireStream] = []
+
+
+class FunderDetailResponse(FunderListItem):
+    publications_policy: dict[str, Any] | None = None
+    data_archiving_policy: dict[str, Any] | None = None
+    openaire: FunderOpenaireBlock | None = None
+    top_journals: list[FunderTopJournal] = []
+
+
 class SimilarJournalItem(BaseModel):
     issn_l: str
     title: str | None
@@ -74,6 +147,7 @@ class SimilarJournalItem(BaseModel):
     quartile: str | None
     is_oa: bool | None
     deal_covered: bool
+    deal_cap_reached: bool = False
     works: int
     shared_topics: int
     # Embedding-cosine similarity (0-1); null on the shared-topic fallback.
@@ -135,6 +209,18 @@ class DealLinkOut(BaseModel):
     category: str | None = None
 
 
+class CapUsageEntry(BaseModel):
+    """One contract year's publisher-reported APC cap usage (admin-entered
+    from library email updates; the harvest never rewrites it)."""
+
+    year: int = Field(ge=1900, le=2100)
+    pool: str | None = None
+    total: int = Field(ge=0)
+    used: int | None = Field(default=None, ge=0)
+    as_of: str | None = None
+    note: str | None = None
+
+
 class DealOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -159,11 +245,17 @@ class DealOut(BaseModel):
     openaccess_nl_url: str | None
     jct_data_url: str | None
     per_year_oa_counts: dict[str, Any] | None
+    cap_usage: list[CapUsageEntry] | None = None
     needs_curation: bool
     needs_curation_reason: str | None
     # Register links; None on rows not yet seeded.
     links: list[DealLinkOut] | None = None
     journal_count: int = 0
+    # Observed APC spend for the institution's works in the deal's
+    # effective journal list (latest-period evidence per DOI, mirror of
+    # orgunit APC aggregation).
+    apc_euro_total: float = 0.0
+    apc_n: int = 0
 
 
 class OpenalexTopicOut(BaseModel):
@@ -191,8 +283,32 @@ class OpenalexInfo(BaseModel):
     topics: list[OpenalexTopicOut] = []
 
 
+class OpenaireTopFos(BaseModel):
+    subject: str
+    works: int
+
+
+class OpenaireTopFunder(BaseModel):
+    funder: str
+    works: int
+
+
 class OpenaireInfo(BaseModel):
+    """OpenAIRE cross-check for one journal, over the confirmed-identity
+    facts store (openaire_work_facts)."""
+
     matched_works: int = 0
+    # Facts rows carrying a fulltext url / any usage count / the diamond
+    # flag.
+    with_fulltext: int = 0
+    with_usage: int = 0
+    diamond_works: int = 0
+    # OA-color cross-check vs OpenAlex: rows where both sides state a
+    # label, and how many of those disagree (case-insensitive).
+    oa_color_total: int = 0
+    oa_color_disagree: int = 0
+    top_fos: list[OpenaireTopFos] = []
+    top_funders: list[OpenaireTopFunder] = []
 
 
 class CanonicalOa(BaseModel):
@@ -222,6 +338,194 @@ class InstitutionMetrics(BaseModel):
     canonical_oa: CanonicalOa | None = None
 
 
+class UTBucket(BaseModel):
+    """Distinct works attributed to one faculty or research group."""
+
+    name: str
+    works: int
+
+
+class UTAuthorRow(BaseModel):
+    pure_uuid: str
+    name: str
+    faculty: str | None = None
+    research_group: str | None = None
+    works: int
+
+
+class UTAuthorship(BaseModel):
+    """Who at this institution authors the venue's canonical works:
+    distinct works per faculty / research group and the top authors,
+    over the same population the search card counts (so the numbers
+    reconcile with journal_flags.works_count). n_ut_works counts rows
+    with at least one UT author edge; venue totals can exceed it."""
+
+    n_ut_works: int = 0
+    faculties: list[UTBucket] = []
+    research_groups: list[UTBucket] = []
+    top_authors: list[UTAuthorRow] = []
+
+
+class OpenalexOnlyAuthor(BaseModel):
+    """One compact OpenAlex authorship of a gap work ({a, n, o})."""
+
+    openalex_id: str
+    name: str | None = None
+    orcid: str | None = None
+
+
+class UtAuthorAttribution(BaseModel):
+    """Roster author matched on a gap work's OpenAlex authorships."""
+
+    name: str
+    orcid: str | None = None
+    faculty: str | None = None
+    research_group: str | None = None
+    institute: str | None = None
+
+
+class WorkParent(BaseModel):
+    """One parent work of a store row (compact {id, name, rel}): id is
+    the bare OpenAlex W-id, rel one of volume/component/data-series/part
+    (chapter of a book, figure of a paper, ...)."""
+
+    id: str | None = None
+    name: str | None = None
+    rel: str | None = None
+
+
+class GapGroupParent(BaseModel):
+    """The main work a group entry's missing parts belong to: the parts'
+    primary parent (the first rel=volume parent among a part's
+    parent_works, else the first listed parent). name comes from the
+    parts' parent_works (registry title when the registry row has one);
+    work_type/doi/pure_registered are null without an openalex_work_parents
+    row (parts backfill pending). pure_registered is derived live from the
+    works table and false includes no-DOI parents."""
+
+    w_id: str | None = None
+    name: str | None = None
+    work_type: str | None = None
+    doi: str | None = None
+    pure_registered: bool | None = None
+
+
+class OpenalexOnlyWork(BaseModel):
+    title: str | None = None
+    year: int | None = None
+    doi: str | None = None
+    oa_status: str | None = None
+    work_type: str | None = None
+    venue: str | None = None
+    openalex_id: str | None = None
+    openalex_url: str | None = None
+    authors: list[OpenalexOnlyAuthor] = []
+    ut_authors: list[UtAuthorAttribution] = []
+    journal_issn_l: str | None = None
+    journal_title: str | None = None
+    publisher_name: str | None = None
+    # Work parts (OpenAlex, Nov 2026): compact parent works and the
+    # is_part flag — chapter of a book when a parent has rel=volume.
+    parent_works: list[WorkParent] = []
+    is_part: bool = False
+    # Why the row is not truly missing from Pure, when a record was
+    # identified; None = likely missing. pure_match_url is that record's
+    # public page (None without a portal URL).
+    pure_match: Literal["doi_in_pure", "parent_book_in_pure", "same_title_in_pure"] | None = None
+    pure_match_url: str | None = None
+
+
+class OpenalexOnlySingle(OpenalexOnlyWork):
+    """One standalone gap work (no parent works): all work-row fields at
+    the top level."""
+
+    kind: Literal["single"] = "single"
+
+
+class OpenalexOnlyGroup(BaseModel):
+    """One main work with its missing parts. A group exists when any part
+    of the work is missing from Pure; parts hold only those missing works
+    (registered parts never enter the gap set) and the parent itself may
+    well be registered (pure_registered true)."""
+
+    kind: Literal["group"] = "group"
+    parent: GapGroupParent
+    parts: list[OpenalexOnlyWork] = []
+    parts_total: int = 0
+
+
+OpenalexOnlyEntry = Annotated[OpenalexOnlySingle | OpenalexOnlyGroup, Field(discriminator="kind")]
+
+
+class OpenalexOnly(BaseModel):
+    """OpenAlex store works attributed to the venue or to the unit's
+    member authors whose DOI matches no Pure work — candidates missing
+    from the CRIS. items holds the grouped entries (missing parts
+    collected under their main work), capped; total counts works and
+    entries_total counts entries (before the cap), both exact.
+    available=False when the openalex_works projection never ran
+    (frontend hides the card)."""
+
+    total: int = 0
+    entries_total: int = 0
+    items: list[OpenalexOnlyEntry] = []
+    available: bool = True
+
+
+class ChapterBook(BaseModel):
+    """One parent book of the parts rollup: a distinct volume parent of
+    the page's chapter-kind gap works, with its chapter count and up to
+    3 sample chapter titles."""
+
+    parent_id: str | None = None
+    name: str
+    chapters: int
+    sample: list[str] = []
+
+
+class PartsRollup(BaseModel):
+    """Chapter/book rollup over the page's full openalex-only population
+    (before the gap card's item cap): chapters_total counts chapter-kind
+    works (is_part with a rel=volume parent), books_total the distinct
+    parents. books is the top 10 by chapter count."""
+
+    chapters_total: int = 0
+    books_total: int = 0
+    books: list[ChapterBook] = []
+
+
+class WorkUtAuthor(BaseModel):
+    id: str
+    name: str
+
+
+class WorkUtGroup(BaseModel):
+    name: str
+
+
+class OpenaireProjectOut(BaseModel):
+    """One project linked to the work by OpenAIRE (fields may be null)."""
+
+    id: str | None = None
+    funder: str | None = None
+    code: str | None = None
+    acronym: str | None = None
+
+
+class OpenaireFactsOut(BaseModel):
+    """OpenAIRE-derived facts for one work (openaire_work_facts row)."""
+
+    views: int | None = None
+    downloads: int | None = None
+    oa_url: str | None = None
+    license: str | None = None
+    oa_color: str | None = None
+    diamond: bool = False
+    embargo_end: date | None = None
+    fos: list[str] = []
+    projects: list[OpenaireProjectOut] = []
+
+
 class WorkItem(BaseModel):
     id: str | None = None
     url: str | None = None
@@ -233,10 +537,16 @@ class WorkItem(BaseModel):
     cited_by_count: int = 0
     is_retracted: bool | None = None
     type: str | None = None
-    # ut-metadata provenance: canonical work type, and whether the item is
-    # backed by an OpenAlex works_stats row.
+    # work_type is the canonical (Pure) type; in_openalex marks whether the
+    # DOI matched a store row (OpenAlex metrics available).
     work_type: str | None = None
     in_openalex: bool | None = None
+    # The work's Pure authors (roster order) and their research groups.
+    ut_authors: list[WorkUtAuthor] = []
+    ut_groups: list[WorkUtGroup] = []
+    # OpenAIRE-derived facts; None when the work has no confirmed
+    # openaire identity (no facts row).
+    openaire: OpenaireFactsOut | None = None
 
 
 class WorksPage(BaseModel):
@@ -244,6 +554,34 @@ class WorksPage(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class GreenOaRoute(BaseModel):
+    """One self-archiving route (per article version) as aggregated by the
+    Jisc normalizer from publisher_policy[].permitted_oa."""
+
+    locations: list[str] = []
+    repositories: list[str] = []
+    licenses: list[str] = []
+    embargo_months: int | None = None
+    conditions: list[str] = []
+    additional_oa_fee: str | None = None
+
+
+class GreenOaPolicy(BaseModel):
+    """Jisc Open Policy Finder green-OA policy bundle (journals.jisc_policy
+    display object + stamp columns); null when the journal was never swept."""
+
+    in_opf: bool
+    oa_prohibited: bool | None = None
+    routes: dict[str, GreenOaRoute] = {}
+    internal_moniker: str | None = None
+    urls: list[dict[str, str]] = []
+    # Route repository short name -> jisc_repositories url; names the
+    # normalizer could not match are absent (frontend keeps them plain).
+    repository_links: dict[str, str] = {}
+    policy_uri: str | None = None
+    harvested_at: datetime | None = None
 
 
 class JournalDetailResponse(BaseModel):
@@ -269,7 +607,14 @@ class JournalDetailResponse(BaseModel):
     apc_evidence: list[ApcEvidenceOut] = []
     openalex: OpenalexInfo | None = None
     openaire: OpenaireInfo = OpenaireInfo()
-    institution_metrics: InstitutionMetrics = InstitutionMetrics()
+    green_oa: GreenOaPolicy | None = None
+    # Present only when the detail query passes ?funder=<jisc funder id>.
+    funder_fit: FunderFitOut | None = None
+    institution_metrics: InstitutionMetrics
+    # Who at this institution authors the journal's canonical works.
+    ut_authorship: UTAuthorship
+    # Store works in this journal missing from the Pure population.
+    openalex_only: OpenalexOnly
     attribution: dict[str, Attribution] = {}
 
 
@@ -353,6 +698,20 @@ class AuthorSearchResponse(BaseModel):
     facets: dict[str, list[AuthorFacet]] = {}
 
 
+class AuthorPeopleProfile(BaseModel):
+    """people.utwente.nl profile linked to the author: uuid-verified via
+    the profile's research.utwente.nl portal link, or an admin-promoted
+    name match. has_photo gates the avatar endpoint URL."""
+
+    slug: str
+    url: str
+    canonical_name: str | None
+    email: str | None
+    orgs: list[str]
+    faculty_abbr: str | None
+    has_photo: bool
+
+
 class AuthorOut(BaseModel):
     pure_uuid: str
     name: str
@@ -365,6 +724,11 @@ class AuthorOut(BaseModel):
     institute: str | None
     orgs: list[str]
     n_works: int
+    people: AuthorPeopleProfile | None = None
+    # The author's public Pure portal page: the people profile's own
+    # link, else constructed when portal persons listings carry the
+    # author (portal visibility), else None.
+    research_portal_url: str | None = None
 
 
 class AuthorYearRow(BaseModel):
@@ -419,9 +783,85 @@ class AuthorWorkItem(BaseModel):
     year: int
     doi: str | None
     oa_status: str | None
+    # Raw works.work_type (e.g. 'info:eu-repo/semantics/bookPart'); the
+    # frontend normalizes it into a plain label.
+    work_type: str | None = None
     journal_issn_l: str | None
     journal_title: str | None
+    # Pure public record page; None when the institution has no portal URL.
+    pure_url: str | None = None
+    # Matching openalex_works record (same institution, same normalized
+    # DOI, lowest w_id); None without a DOI or store row.
+    openalex_url: str | None = None
     in_pure: bool = True
+    # Where oa_status came from: OpenAlex sync (DOI-matched) or Pure's own
+    # access flag (DOI-less rows, where the venue's OA model is unknown).
+    oa_status_source: Literal["openalex", "pure"] = "openalex"
+
+
+class AuthorOpenalexOnlyWork(BaseModel):
+    """One OpenAlex-only (missed) work in the author page's dedicated
+    section: same gates the merged works list used to apply, but the list
+    is the section's own — never truncated by the works cap."""
+
+    pure_uuid: str | None = None
+    title: str | None = None
+    year: int | None = None
+    doi: str | None = None
+    oa_status: str | None = None
+    work_type: str | None = None
+    journal_issn_l: str | None = None
+    journal_title: str | None = None
+    publisher_name: str | None = None
+    openalex_id: str | None = None
+    openalex_url: str | None = None
+    in_pure: bool = False
+    ut_authors: list[UtAuthorAttribution] = []
+    # Work parts (OpenAlex, Nov 2026): compact parent works and the
+    # is_part flag — chapter of a book when a parent has rel=volume.
+    parent_works: list[WorkParent] = []
+    is_part: bool = False
+    # Why the row is not truly missing from Pure, when a record was
+    # identified; None = likely missing. pure_match_url is that record's
+    # public page (None without a portal URL).
+    pure_match: Literal["doi_in_pure", "parent_book_in_pure", "same_title_in_pure"] | None = None
+    pure_match_url: str | None = None
+
+
+class AuthorOpenalexOnlySingle(AuthorOpenalexOnlyWork):
+    """One standalone gap work (no parent works): all work-row fields at
+    the top level."""
+
+    kind: Literal["single"] = "single"
+
+
+class AuthorOpenalexOnlyGroup(BaseModel):
+    """One main work with its missing parts (only missing works are
+    listed); the parent itself may well be registered."""
+
+    kind: Literal["group"] = "group"
+    parent: GapGroupParent
+    parts: list[AuthorOpenalexOnlyWork] = []
+    parts_total: int = 0
+
+
+AuthorOpenalexOnlyEntry = Annotated[
+    AuthorOpenalexOnlySingle | AuthorOpenalexOnlyGroup, Field(discriminator="kind")
+]
+
+
+class AuthorOpenalexOnly(BaseModel):
+    """The author's OpenAlex-only works as their own section: total is
+    exact, items hold the grouped entries (missing parts under their main
+    work), safety-capped at the entry level; entries_total counts entries
+    before the cap."""
+
+    total: int = 0
+    entries_total: int = 0
+    items: list[AuthorOpenalexOnlyEntry] = []
+    available: bool = True
+    # Gated rows with no pure_match: the ones likely missing for real.
+    likely_missing: int = 0
 
 
 class AuthorProfileResponse(BaseModel):
@@ -432,6 +872,11 @@ class AuthorProfileResponse(BaseModel):
     similar: AuthorSimilarBundle
     alternatives: list[AuthorAlternative]
     works: list[AuthorWorkItem]
+    openalex_only: AuthorOpenalexOnly = AuthorOpenalexOnly()
+    # Exact count of OpenAlex-only works after gating; None when the
+    # source could not answer (DSN path). The openalex_only section
+    # carries the works themselves.
+    openalex_only_count: int | None = None
 
 
 # ── Publisher browsing (journals grouped per publisher_name) ───────────────
@@ -456,6 +901,10 @@ class PublisherExternalIds(BaseModel):
     # (openaccess.nl/en/publisher/{slug}); None when the publisher is not
     # in their deals overview.
     openaccess_nl_slug: str | None = None
+    # ROR registration url as harvested from jisc_publishers
+    # ("https://ror.org/<id>"); None when no OPF row with a ROR id
+    # matches the publisher by name.
+    ror: str | None = None
 
 
 class PublisherListItem(BaseModel):
@@ -494,6 +943,13 @@ class PublisherDetailResponse(BaseModel):
     deal_discrepancies: list[DealDiscrepancyRow] = []
     n_discrepancies: int = 0
     works_by_year: list[StatsYear] = []
+    # Who at this institution authors the group's canonical works.
+    ut_authorship: UTAuthorship
+    # Store works in the group's journals missing from the Pure population.
+    openalex_only: OpenalexOnly
+    # Chapter/book rollup over the same gap population (before the list
+    # cap): chapter-kind works and their volume parents.
+    chapter_rollup: PartsRollup
 
 
 # ── Org-unit browsing (faculties + research groups) ────────────────────────
@@ -535,6 +991,10 @@ class OrgUnitAuthorRow(BaseModel):
     n_works: int
     orcid: str | None
     primary_topic: str | None
+    # Share (0..1) of the author's counted works whose OA status is
+    # diamond or gold; None below the 4-work ranking minimum (such rows
+    # sort after all ranked authors in the share ordering).
+    oa_diamond_gold_share: float | None = None
 
 
 class DealUsageRow(BaseModel):
@@ -551,6 +1011,12 @@ class OrgUnitDetailResponse(BaseModel):
     authors: list[OrgUnitAuthorRow] = []
     works_by_year: list[StatsYear] = []
     deal_usage: list[DealUsageRow] = []
+    # Store works attributed to the unit's member authors and missing
+    # from the Pure population.
+    openalex_only: OpenalexOnly
+    # Chapter/book rollup over the same gap population (before the card's
+    # item cap): chapter-kind works and their volume parents.
+    chapter_rollup: PartsRollup
 
 
 # ── Admin responses (dict payload shapes in routers/admin.py) ──────────────
@@ -619,6 +1085,29 @@ class AuthorIdentityAdminOut(BaseModel):
     updated_at: datetime | None
 
 
+class AdminExternalWorkOut(BaseModel):
+    """One recent OpenAlex work of a candidate author, from the projection."""
+
+    w_id: str
+    title: str | None
+    year: int | None
+    doi: str | None
+    venue: str | None
+
+
+class AdminExternalAuthorOut(BaseModel):
+    """Stored OpenAlex author profile (source_records) + recent works.
+
+    Serves the identity review drawer from the harvest's verbatim payloads
+    instead of the live API.
+    """
+
+    source_pk: str
+    harvested_at: datetime | None
+    author: dict[str, Any]
+    works: list[AdminExternalWorkOut]
+
+
 class WorkIdentityAdminOut(BaseModel):
     """One cross-source work-identity row for the admin review list.
 
@@ -637,6 +1126,62 @@ class WorkIdentityAdminOut(BaseModel):
     status: WorkIdentityStatus
     note: str | None
     updated_at: datetime | None
+
+
+class AuthorIdentityPageOut(BaseModel):
+    """Paged identity-cascade review queue (total is the unpaginated count)."""
+
+    total: int
+    offset: int = 0
+    items: list[AuthorIdentityAdminOut]
+
+
+class WorkIdentityPageOut(BaseModel):
+    """Paged work-identity review queue (total is the unpaginated count)."""
+
+    total: int
+    offset: int = 0
+    items: list[WorkIdentityAdminOut]
+
+
+# --- Work identity bulk curation ---------------------------------------
+# Admin bulk review of work_identity rows (POST /admin/work-identities/bulk
+# and the jobs/bulk_work_identity.py deploy CLI). Kept as its own section;
+# everything above serves the existing single-row surfaces.
+
+
+class WorkIdentityBulkUpdate(BaseModel):
+    """One row decision inside a bulk work-identity request."""
+
+    source_pk: str
+    status: WorkIdentityStatus
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class WorkIdentityBulkIn(BaseModel):
+    """POST /admin/work-identities/bulk: many rows, one reviewer, one source."""
+
+    institution_id: int
+    source: str
+    reviewer: str = Field(max_length=200)
+    updates: list[WorkIdentityBulkUpdate] = Field(max_length=5000)
+
+
+class WorkIdentityBulkRowError(BaseModel):
+    """One bulk row that could not be applied (e.g. unknown source_pk)."""
+
+    source_pk: str
+    error: str
+
+
+class WorkIdentityBulkOut(BaseModel):
+    """POST /admin/work-identities/bulk result: a tally plus per-row errors."""
+
+    confirmed: int
+    missing: int
+    reopened: int
+    unchanged: int
+    errors: list[WorkIdentityBulkRowError] = []
 
 
 class StatusChangeOut(BaseModel):
@@ -692,6 +1237,7 @@ class AdminDealOut(BaseModel):
     capped: bool
     cap_numbers: dict[str, Any] | None
     cap_text: str | None
+    cap_usage: list[CapUsageEntry] | None = None
     summary: str | None
     journal_count: int
     participations: list[str]
@@ -756,3 +1302,108 @@ class DocDetailOut(BaseModel):
     group: str
     order: int
     blocks: list[DocBlock]
+
+
+class UsageDayCount(BaseModel):
+    """Per-day usage-event counts, one entry per calendar day."""
+
+    date: str
+    page_view: int
+    search: int
+    error: int
+
+
+class UsageTopPath(BaseModel):
+    path: str
+    page_views: int
+    avg_duration_ms: float | None
+
+
+class UsageTopQuery(BaseModel):
+    query: str
+    count: int
+    zero_share: float
+
+
+class UsageTopRef(BaseModel):
+    ref_type: str
+    ref_id: str
+    count: int
+
+
+class UsageErrorGroup(BaseModel):
+    source: str | None
+    status: int | None
+    message: str | None
+    count: int
+    last_ts: datetime
+
+
+class UsageCountryCount(BaseModel):
+    country: str
+    count: int
+
+
+class UsageSearchSplit(BaseModel):
+    """Search events split into real queries vs default browse loads."""
+
+    browse: int
+    queries: int
+
+
+class UsageEventOut(BaseModel):
+    """One raw usage event as stored (admin event list)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    # asyncpg hands the INET column back as IPv4Address/IPv6Address, not str.
+    @field_validator("ip", mode="before")
+    @classmethod
+    def _ip_as_str(cls, v: object) -> str | None:
+        return None if v is None else str(v)
+
+    id: int
+    ts: datetime
+    event_type: str
+    path: str
+    duration_ms: int | None
+    query: str | None
+    is_browse: bool
+    results_count: int | None
+    search_scope: str | None
+    filters: dict[str, Any] | None
+    ref_type: str | None
+    ref_id: str | None
+    source: str | None
+    message: str | None
+    detail: str | None
+    status: int | None
+    referrer: str | None
+    ip: str | None
+    country: str | None
+    user_agent: str | None
+    tz: str | None
+    locale: str | None
+    session_id: str
+
+
+class UsageEventsPageOut(BaseModel):
+    """One offset page of the admin usage event list."""
+
+    total: int
+    items: list[UsageEventOut]
+
+
+class UsageSummaryOut(BaseModel):
+    """Admin usage snapshot over the trailing `days` window."""
+
+    days: int
+    totals: dict[str, int]
+    searches: UsageSearchSplit
+    daily: list[UsageDayCount]
+    top_paths: list[UsageTopPath]
+    top_queries: list[UsageTopQuery]
+    top_refs: list[UsageTopRef]
+    errors: list[UsageErrorGroup]
+    countries: list[UsageCountryCount]
+    sessions: int

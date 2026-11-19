@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 import { Inter, Montserrat } from "next/font/google";
+import { NextIntlClientProvider } from "next-intl";
+import { getTranslations } from "next-intl/server";
 import "./globals.css";
 
 import { SiteFooter } from "@/components/site-footer";
 import { BrandLink, SiteNav } from "@/components/site-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { YearFilterControl } from "@/components/year-filter";
 import { FeedbackWidget } from "@/components/feedback/feedback-widget";
 import { Providers } from "./providers";
 
@@ -20,14 +23,19 @@ const montserrat = Montserrat({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: {
-    default: "Journal Browser",
-    template: "%s — Journal Browser",
-  },
-  description:
-    "Find the best home for your next article: open access deals, publication statistics, and journal information.",
-};
+async function getMetadata(): Promise<Metadata> {
+  const t = await getTranslations("common");
+  return {
+    title: {
+      default: t("appTitle"),
+      // Next's own %s placeholder stays in the message string.
+      template: t("appTitleTemplate"),
+    },
+    description: t("appDescription"),
+  };
+}
+
+export const generateMetadata = getMetadata;
 
 // Runtime env (same JB_* vars the backend reads) so the server render
 // already names this stack's institution instead of flashing the Twente
@@ -56,13 +64,17 @@ function SiteHeader() {
       <div className="mx-auto flex min-h-16 max-w-screen-2xl flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2 sm:flex-nowrap sm:py-0">
         <BrandLink />
         <SiteNav />
-        <ThemeToggle />
+        <div className="flex items-center gap-1 sm:gap-2">
+          <YearFilterControl />
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const t = await getTranslations("common");
   return (
     <html lang="en" className={`${inter.variable} ${montserrat.variable}`} suppressHydrationWarning>
       <head>
@@ -73,15 +85,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="#main"
           className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-[var(--radius)] focus:bg-[var(--card)] focus:px-3 focus:py-2 focus:text-sm focus:shadow-md"
         >
-          Skip to content
+          {t("skipToContent")}
         </a>
         <Providers siteFallback={SITE_FALLBACK}>
-          <SiteHeader />
-          <main id="main" className="flex-1">
-            {children}
-          </main>
-          <SiteFooter />
-          <FeedbackWidget />
+          <NextIntlClientProvider>
+            <SiteHeader />
+            <main id="main" className="flex-1">
+              {children}
+            </main>
+            <SiteFooter />
+            <FeedbackWidget />
+          </NextIntlClientProvider>
         </Providers>
       </body>
     </html>

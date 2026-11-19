@@ -1,8 +1,8 @@
-# Deploying the Journal Browser
+# Deploying the Open Journal Browser
 
 Everything beyond the README quick start: configuration reference, what the
 first boot does, how the deal register is built, admin panel, second-institute
-deployment, and maintenance.
+deployment, the daily refresh wave, and maintenance.
 
 Written for the operator of an instance. All commands run from the repository
 root unless noted.
@@ -62,7 +62,7 @@ in citation links on journal pages. Set it in `.env` before the first
 |---|---|---|
 | `JB_DATABASE_URL` | Postgres DSN | local default |
 | `JB_ADMIN_PASSWORD` | Admin panel password (`/admin`); empty disables the panel | empty |
-| `JB_BOOTSTRAP` | `auto` (only on an empty DB), `always`, or `off` | `auto` |
+| `JB_BOOTSTRAP` | `auto` (skips only a completed pipeline; refuses a partial one), `always`, or `off` | `auto` |
 | `JB_LANDING_DIR` | Raw landing zone for downloaded files. Compose pins the bind mount to `./backend/landing`; the variable applies to non-compose runs | `backend/landing` |
 | `JB_UT_METADATA_DSN` | Twente-only: read-only ut-metadata Postgres for canonical works + the author roster (`authors` bootstrap step; skips cleanly when empty). Leave empty elsewhere; the works endpoints degrade to stats-only and `/authors` reports `enabled: false` | empty |
 
@@ -84,8 +84,13 @@ served.
 
 Expect the first boot to take 1.5–2 hours, dominated by the OpenAlex journals
 sweep (~60 min for the ~177k journal universe) and journal embeddings (~45 min
-on CPU). Subsequent restarts are cheap: `auto` mode skips the pipeline when
-journals already exist.
+on CPU). Subsequent restarts are cheap: `auto` mode skips the pipeline only
+when a plan run completed and left its marker in `harvest_state` (source
+`local`, entity type `bootstrap_plan`; written by bootstrap itself on exit
+0 and seeded for pre-marker deployments by migration 0055). When journals
+exist but that marker is missing (a bootstrap died partway), `auto` exits
+nonzero and names the repair path instead of quietly serving a
+half-filled database.
 
 Useful variants (run inside the backend image, e.g.
 `docker compose run --rm bootstrap uv run python jobs/bootstrap.py --always`):
@@ -94,14 +99,15 @@ Useful variants (run inside the backend image, e.g.
 - `--from <step>` re-runs one step and everything after it, serially, in the
   listed order — the repair path.
 - `--institution <code>` re-runs only that institution's layer (repository
-  harvest, enrichment, OpenAIRE, stats, participation, flags, authors).
+  harvest, CERIF enrichment, enrichment, OpenAIRE, stats, participation,
+  flags, author-edge backfill, authors).
   Global steps are skipped — the shared layer is already in place.
 
 ## What the harvests build
 
 | Job | Source | Produces |
 |---|---|---|
-| `harvest_journals` | OpenAlex | The journal universe (~177k rows), ISSNs, topics, OA status |
+| `harvest_journals` | OpenAlex | The journal universe (~177k rows), ISSNs, topics, OA status. Default route is credit-free (deal seed + singleton delta for missing journals); `--refresh` re-fetches every stored journal via free singleton GETs to pick up upstream corrections (counts fields), `--sweep-all` costs credits and is a rare manual operation |
 | `harvest_publishers` | OpenAlex | Publisher lineage: `journals.publisher_canonical` groups sub-brands (e.g. IEEE Communications Society) under their root publisher |
 | `scrape_openaccess_nl` | openaccess.nl | Deal pages: narrative, conditions, participation text |
 | `ingest_jct` | cOAlition S JCT public dump | ESAC agreements + journal lists |
@@ -114,7 +120,10 @@ Useful variants (run inside the backend image, e.g.
 | `harvest_openaire` | OpenAIRE Graph | Institution works matched by DOI |
 | `harvest_stats` | all of the above | Per-journal, per-year statistics |
 | `backfill_flags` | register + stats | Curation flags, browse visibility |
+| `backfill_pure_authors` | stored CERIF publication records | The `pure-authors` step: full-replaces each work's pure authorship edges (`work_pure_authors`) from the latest stored record; runs after `openalex-works`, before author-id resolution, so it also covers works whose CERIF record predated author extraction |
+| `import_pure_export` | Pure backend export file (`--file PATH`) | Manual ops import: stores the export's records verbatim as `work_cerif_full`. The OAI stream truncates author identity; run this before/with the `pure-authors` backfill so author lists are full (backfill and entity mining prefer `work_cerif_full` per uuid) |
 | `ingest_authors` | external canonical-works DB (`JB_UT_METADATA_DSN` / `external_works_dsn`) | Per-institution author roster: identity, faculty/research group/org derivation, work edges (skips cleanly without a DSN) |
+| `harvest_people_utwente` | people.utwente.nl directory (its own JSON-RPC search endpoint) | Per-author people profile: portrait, canonical name, email, org list, org edges resolved onto `pure_orgs` (`people_utwente_person_orgs`, gap-fill evidence like `pure_person_orgs`), and the profile's research.utwente.nl portal link as the match oracle. Runs 20 author pipelines in flight (`--concurrency`), so the confirmed roster takes roughly 30-45 minutes; external — keep it out of the daily wave. Outcomes are stamped in batches of 50, so re-runs only see new authors (`--retry-missed` / `--refresh` re-open old ones) |
 | `embed_journals` | stats-built text | Journal embeddings for similar-journals |
 
 ### The deal register
@@ -193,6 +202,76 @@ column on the row — the env var will not propagate on its own:
 UPDATE institutions SET openaire_org_id = 'openorgs____::...'
 WHERE code = 'ut' AND openaire_org_id IS NULL;
 ```
+
+## Daily refresh wave
+
+Harvested data goes stale, and rerunning the pipeline one job at a time is
+easy to get wrong. `backend/scripts/refresh_wave.sh` runs the repeating set
+of harvest and derivation jobs as one sequence, in the order that matters.
+Every job in it is idempotent, so rerunning the whole wave or any stage is
+safe. Run it right after the daily OpenAlex credit reset (00:00 UTC):
+
+```bash
+cd backend
+bash scripts/refresh_wave.sh
+```
+
+The script prints the remaining daily credit budget before the first stage,
+because the credit-priced stages must run while that budget is fresh. On
+2026-11-07 a manually ordered wave spent about seven hours of the fresh
+budget on the then credit-priced oa colors step. The funder harvest after it
+crashed five seconds in, and the wave's exit gate stopped the remaining
+stages. The wave encodes both lessons. Credit-priced stages run at the top,
+while the budget is fresh. A failing stage names itself and stops the wave,
+and `--from` resumes past the stages that already completed.
+
+The stages, in order:
+
+1. `harvest_stats` and `resolve_author_ids`. Both touch credit-priced
+   OpenAlex works filters. Both also check `openalex_credits_remaining()`
+   before spending credits, and at a zero budget each skips cleanly and
+   notes the skip in its stats output.
+2. `harvest_oa_colors`, `build_openalex_works`, and `backfill_pure_authors`.
+   The three derive from locally stored data and make no API calls. oa
+   colors reads only locally held works today, so it spends no credits.
+3. The funder backfills. `harvest_work_funders` fetches each work by DOI as
+   a free single-entity GET, and it commits per chunk. An interrupted run
+   therefore resumes as a rerun. `harvest_openalex_funders` fetches full
+   funder payloads only for ids the table lacks. `harvest_openaire_funders`
+   pulls the curated funder canon from the OpenAIRE graph.
+4. `harvest_publishers`. It resolves journal host organizations in
+   credit-priced 50-id pipe-filter batches. Results cache in
+   `openalex_publishers`, so only a fresh install pays for the full
+   ~16k-host sweep once.
+5. `embed_journals` last. It re-embeds journals from the stats-built text,
+   and on CPU it is the slow step of the wave, at about 45 minutes for a
+   full run.
+
+A failed stage prints `wave: <stage> failed` and the wave exits with code 1.
+Fix the cause and resume without rerunning completed stages. `--from STAGE`
+starts at the named stage and runs it and everything after it; stage names
+match the `backend/jobs/` script names, and an unknown name exits with code
+2 and prints the valid list:
+
+```bash
+bash scripts/refresh_wave.sh --from harvest_openalex_funders
+```
+
+Each stage prints a stats summary as JSON to stdout when it finishes, and
+tracebacks go to stderr. Five stages also record runs in the `harvest_runs`
+table, which the admin panel's run history lists: `harvest_stats`,
+`resolve_author_ids`, `harvest_oa_colors`, `harvest_work_funders`, and
+`embed_journals`. The wave keeps no log file of its own, so pipe the output
+through `tee` when you want a record:
+
+```bash
+bash scripts/refresh_wave.sh 2>&1 | tee wave.log
+```
+
+`harvest_stats` and `backfill_pure_authors` cover the default institution
+only. `resolve_author_ids` and `build_openalex_works` cover every active
+institution. On a multi-institution deployment, run the first pair with
+`--institution <code>` for each additional institute after the wave.
 
 ## Maintenance
 

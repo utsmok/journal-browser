@@ -76,6 +76,36 @@ export function adminDelete(path: string, token: string): Promise<void> {
   return adminFetch<void>(path, token, { method: "DELETE" });
 }
 
+/** POST /admin/work-identities/bulk: local types until the generated
+ * contract regenerates (api-types.ts is not hand-edited). */
+export type WorkIdentityBulkUpdate = {
+  source_pk: string;
+  status: "confirmed" | "missing" | "candidate";
+  note?: string | null;
+};
+
+export type WorkIdentityBulkIn = {
+  institution_id: number;
+  source: string;
+  reviewer: string;
+  updates: WorkIdentityBulkUpdate[];
+};
+
+export type WorkIdentityBulkOut = {
+  confirmed: number;
+  missing: number;
+  reopened: number;
+  unchanged: number;
+  errors: { source_pk: string; error: string }[];
+};
+
+export function bulkWorkIdentities(
+  token: string,
+  body: WorkIdentityBulkIn,
+): Promise<WorkIdentityBulkOut> {
+  return adminPost<WorkIdentityBulkOut>("/work-identities/bulk", token, body);
+}
+
 /** Session-cached admin token plus a setter that persists/removes it. */
 export function useAdminToken(): [string | null, (token: string | null) => void] {
   const [token, setToken] = useState<string | null>(null);
@@ -132,11 +162,26 @@ export type FeedbackAdmin = Schemas["FeedbackAdminOut"];
 /** GET/PUT /admin/author-identities: one resolution row for review. */
 export type AuthorIdentityAdmin = Schemas["AuthorIdentityAdminOut"];
 
+/** GET /admin/author-identities is now an offset page (total = unpaginated count). */
+export type AuthorIdentityPage = Schemas["AuthorIdentityPageOut"];
+
 /** GET/PUT /admin/work-identities: one cross-source work link for review. */
 export type WorkIdentityAdmin = Schemas["WorkIdentityAdminOut"];
+
+/** GET /admin/work-identities is now an offset page (total = unpaginated count). */
+export type WorkIdentityPage = Schemas["WorkIdentityPageOut"];
 
 /** GET /admin/status-changes: one audited admin status flip. */
 export type StatusChange = Schemas["StatusChangeOut"];
 
 /** GET /admin/summary: dashboard counters for the overview page. */
 export type AdminSummary = Schemas["AdminSummaryOut"];
+
+/** GET /admin/usage/summary: usage dashboard rollup over a trailing window. */
+export type UsageSummary = Schemas["UsageSummaryOut"];
+
+/** GET /admin/usage/events: one offset page of raw usage events. */
+export type UsageEventsPage = Schemas["UsageEventsPageOut"];
+
+/** GET /admin/external-author/{id}: stored OpenAlex profile + recent works. */
+export type StoredExternalAuthor = Schemas["AdminExternalAuthorOut"];

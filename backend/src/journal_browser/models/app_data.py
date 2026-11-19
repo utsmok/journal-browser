@@ -3,6 +3,7 @@ from typing import Any
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     Index,
     Integer,
@@ -10,7 +11,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
+from sqlalchemy.dialects.postgresql import INET, JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, _tstamp
@@ -19,8 +20,8 @@ from .base import Base, _tstamp
 class CacheEpoch(Base):
     """One-row harvest counter; in-process caches key on bumped_at so any
     harvest step invalidates them across processes (services/search.py,
-    services/publishers.py). Bumped by run_harvest and the denorm
-    refreshes."""
+    services/publishers.py). Bumped when any harvest run closes
+    (IngestSession.finish_run) and by the denorm refreshes."""
 
     __tablename__ = "cache_epoch"
 
@@ -153,3 +154,68 @@ class StatusChangeLog(Base):
     changed_at: Mapped[datetime] = _tstamp()
 
     __table_args__ = (Index("ix_status_changes_table_time", "table_name", "changed_at"),)
+
+
+class UsageEvent(Base):
+    """One anonymous client activity event (page view, search, or error).
+
+    Written by POST /api/v1/usage/events from the frontend tracker; length
+    caps live in the endpoint's pydantic models, not the columns. `ip` and
+    `user_agent` are server-filled per batch; `country` is backfilled by
+    jobs/enrich_usage_geo.py.
+    """
+
+    __tablename__ = "usage_events"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    ts: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    )
+    session_id: Mapped[str] = mapped_column(Text, nullable=False)
+    # page_view | search | error
+    event_type: Mapped[str] = mapped_column(Text, nullable=False)
+    path: Mapped[str] = mapped_column(Text, nullable=False)
+    # page_view dwell time
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    query: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # True when this search row is a default browse load (no query text);
+    # the server forces query to NULL whenever this is set.
+    is_browse: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    results_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # journals | funders | authors | publishers | orgunits
+    search_scope: Mapped[str | None] = mapped_column(Text, nullable=True)
+    filters: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    ref_type: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ref_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # js_error | unhandled_rejection | api_status
+    source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    referrer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ip: Mapped[str | None] = mapped_column(INET, nullable=True)
+    country: Mapped[str | None] = mapped_column(Text, nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tz: Mapped[str | None] = mapped_column(Text, nullable=True)
+    locale: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ('page_view', 'search', 'error')", name="ck_usage_event_type"
+        ),
+        CheckConstraint(
+            "search_scope IN ('journals', 'funders', 'authors', 'publishers', 'orgunits')",
+            name="ck_usage_search_scope",
+        ),
+        CheckConstraint(
+            "ref_type IN ('journal', 'funder', 'author', 'orgunit', 'publisher')",
+            name="ck_usage_ref_type",
+        ),
+        CheckConstraint("(ref_type IS NULL) = (ref_id IS NULL)", name="ck_usage_ref_pair"),
+        CheckConstraint(
+            "source IN ('js_error', 'unhandled_rejection', 'api_status')", name="ck_usage_source"
+        ),
+        Index("ix_usage_events_ts", "ts"),
+        Index("ix_usage_events_type_ts", "event_type", "ts"),
+        Index("ix_usage_events_session", "session_id"),
+    )

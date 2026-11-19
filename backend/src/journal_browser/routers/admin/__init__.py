@@ -24,6 +24,7 @@ from . import (
     feedback_admin,
     runs,
     settings_admin,
+    usage_admin,
     work_identity_admin,
 )
 
@@ -41,3 +42,4 @@ router.include_router(docs_admin.router)
 router.include_router(authors_admin.router)
 router.include_router(work_identity_admin.router)
 router.include_router(audit_admin.router)
+router.include_router(usage_admin.router)

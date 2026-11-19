@@ -7,8 +7,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...harvest.common import cache_epoch
 from ...models import Journal
+from ...vocab import GreenOa
+from .. import funder_fit as funder_fit_mod
 from ..cache import FACET_CACHE, cache_get, cache_put
+from .classify import OA_TYPES
 from .query import base_query
+
+
+def oa_facet(counts: dict[str, int] | None) -> dict[str, int]:
+    """oa_type counts in display order (most open first, the OaType member
+    order); values the filtered set never observed stay absent."""
+    src = counts or {}
+    return {t.value: src[t.value] for t in OA_TYPES if src.get(t.value)}
 
 
 async def facet_counts(
@@ -26,6 +36,13 @@ async def facet_counts(
     has_apc: bool | None = None,
     has_works: bool | None = None,
     oa_types: list[str] | None = None,
+    green_oa: GreenOa | str | None = None,
+    pub_type: str | None = None,
+    languages: list[str] | None = None,
+    funder_struct: dict[str, Any] | None = None,
+    funder_fit_value: str | None = None,
+    year_from: int | None = None,
+    year_to: int | None = None,
 ) -> tuple[dict[str, dict[str, int]], int]:
     """Facet counts over the query-filtered set. Each facet's own filter is
     excluded so a chip shows what selecting it would yield; all other active
@@ -51,8 +68,13 @@ async def facet_counts(
             has_apc is not None,
             has_works is not None,
             oa_types,
+            green_oa,
+            pub_type,
+            languages,
             deal != "any",
             search_in != "all",
+            funder_struct is not None,
+            funder_fit_value is not None,
         ]
     )
     # The ignore-list and the harvest epoch shape the counts; either change
@@ -61,11 +83,16 @@ async def facet_counts(
     # (tests/test_admin_deals.py) live.
     from journal_browser.services import search
 
+    # An active publication-year range joins the key (inactive: (None, None)
+    # leaves the landing-view key untouched); the router clamps both bounds
+    # to the institution window, so the pair fully identifies the counts.
     cache_key = (
         "facets",
         institution_id,
         hash(tuple(sorted(search.get_settings().ignored_issns))),
         await cache_epoch(session),
+        year_from,
+        year_to,
     )
     if cacheable:
         hit = cache_get(FACET_CACHE, cache_key, 86400)
@@ -84,6 +111,15 @@ async def facet_counts(
         "has_apc": has_apc,
         "has_works": has_works,
         "oa_types": oa_types,
+        "green_oa": green_oa,
+        "pub_type": pub_type,
+        "languages": languages,
+        # Funder-fit tier column only for a structured funder (text-only
+        # funders get no facet: every journal is untiered).
+        "funder_fit": funder_fit_mod.policy_structured(funder_struct),
+        "funder_fit_value": funder_fit_value,
+        "year_from": year_from,
+        "year_to": year_to,
     }
 
     def base_sub(**override: Any) -> Any:
@@ -149,6 +185,8 @@ async def facet_counts(
             base,
             func.count().over(partition_by=base.c.oa_type).label("oa_n"),
             func.count().over(partition_by=base.c.publisher_name).label("pub_n"),
+            func.count().over(partition_by=base.c.pub_type).label("pt_n"),
+            func.count().over(partition_by=base.c.language).label("lang_n"),
         )
         .select_from(base)
         .subquery()
@@ -167,9 +205,23 @@ async def facet_counts(
                 func.count().filter(counted.c.apc_any).label("apc_true"),
                 func.count().filter(counted.c.works > 0).label("works_true"),
                 func.jsonb_object_agg(counted.c.oa_type, counted.c.oa_n).label("oa_type_counts"),
+                func.jsonb_object_agg(counted.c.pub_type, counted.c.pt_n)
+                .filter(counted.c.pub_type.is_not(None))
+                .label("pub_type_counts"),
+                func.jsonb_object_agg(counted.c.language, counted.c.lang_n)
+                .filter(counted.c.language.is_not(None))
+                .label("language_counts"),
                 func.jsonb_object_agg(counted.c.publisher_name, counted.c.pub_n)
                 .filter(counted.c.publisher_name.is_not(None))
                 .label("publisher_counts"),
+                func.count()
+                .filter(counted.c.green_oa == GreenOa.SUBMITTED)
+                .label("green_submitted"),
+                func.count().filter(counted.c.green_oa == GreenOa.ACCEPTED).label("green_accepted"),
+                func.count()
+                .filter(counted.c.green_oa == GreenOa.PUBLISHED)
+                .label("green_published"),
+                func.count().filter(counted.c.green_oa == GreenOa.NONE).label("green_none"),
             ).select_from(counted)
         )
     ).one()
@@ -196,7 +248,21 @@ async def facet_counts(
         },
         "apc": {"true": apc_true, "false": apc_false},
         "works": {"true": works_true, "false": works_false},
-        "oa_type": dict(row.oa_type_counts or {}),
+        "oa_type": oa_facet(row.oa_type_counts),
+        # Venue type distribution, sorted by count then name like publisher.
+        "pub_type": dict(
+            sorted((row.pub_type_counts or {}).items(), key=lambda kv: (-kv[1], kv[0]))
+        ),
+        # Language distribution, sorted by count then code like pub_type.
+        "language": dict(
+            sorted((row.language_counts or {}).items(), key=lambda kv: (-kv[1], kv[0]))
+        ),
+        "green_oa": {
+            "submitted": int(row.green_submitted or 0),
+            "accepted": int(row.green_accepted or 0),
+            "published": int(row.green_published or 0),
+            "none": int(row.green_none or 0),
+        },
         # Payload bound: top 15 by count, then name (matches the old SQL LIMIT).
         "publisher": dict(
             sorted((row.publisher_counts or {}).items(), key=lambda kv: (-kv[1], kv[0]))[:15]
@@ -241,7 +307,41 @@ async def facet_counts(
                 select(func.jsonb_object_agg(counted_ot.c.oa_type, counted_ot.c.n))
             )
         ).scalar_one()
-        facets["oa_type"] = dict(counts or {})
+        facets["oa_type"] = oa_facet(counts)
+    if pub_type:
+        pt = base_sub(pub_type=None)
+        counted_pt = (
+            select(pt, func.count().over(partition_by=pt.c.pub_type).label("n"))
+            .select_from(pt)
+            .subquery()
+        )
+        counts = (
+            await session.execute(
+                select(
+                    func.jsonb_object_agg(counted_pt.c.pub_type, counted_pt.c.n).filter(
+                        counted_pt.c.pub_type.is_not(None)
+                    )
+                )
+            )
+        ).scalar_one()
+        facets["pub_type"] = dict(sorted((counts or {}).items(), key=lambda kv: (-kv[1], kv[0])))
+    if languages:
+        lt = base_sub(languages=None)
+        counted_lt = (
+            select(lt, func.count().over(partition_by=lt.c.language).label("n"))
+            .select_from(lt)
+            .subquery()
+        )
+        counts = (
+            await session.execute(
+                select(
+                    func.jsonb_object_agg(counted_lt.c.language, counted_lt.c.n).filter(
+                        counted_lt.c.language.is_not(None)
+                    )
+                )
+            )
+        ).scalar_one()
+        facets["language"] = dict(sorted((counts or {}).items(), key=lambda kv: (-kv[1], kv[0])))
     if topic:
         tp = variant_sub("topic")
         facets["topic"] = await _topic_facet(tp)
@@ -273,6 +373,34 @@ async def facet_counts(
         wk = variant_sub("has_works")
         wk_total, (wk_true,) = await _flag_counts(wk, wk.c.works > 0)
         facets["works"] = {"true": wk_true, "false": wk_total - wk_true}
+    if green_oa:
+        g = variant_sub("green_oa")
+        _g_total, (g_s, g_a, g_p, g_n) = await _flag_counts(
+            g,
+            g.c.green_oa == GreenOa.SUBMITTED,
+            g.c.green_oa == GreenOa.ACCEPTED,
+            g.c.green_oa == GreenOa.PUBLISHED,
+            g.c.green_oa == GreenOa.NONE,
+        )
+        facets["green_oa"] = {"submitted": g_s, "accepted": g_a, "published": g_p, "none": g_n}
+    if defaults["funder_fit"]:
+        # Funder_fit has an own filter like any facet: chip counts must
+        # reflect what selecting a tier would yield, so an active tier
+        # recomputes on a variant without it; otherwise the base counts
+        # are final. Either way one dedicated pass keeps the shared
+        # aggregate untouched.
+        ff = base_sub(**({"funder_fit_value": None} if funder_fit_value else {}))
+        counted_ff = (
+            select(ff, func.count().over(partition_by=ff.c.funder_fit).label("n"))
+            .select_from(ff)
+            .subquery()
+        )
+        counts = (
+            await session.execute(
+                select(func.jsonb_object_agg(counted_ff.c.funder_fit, counted_ff.c.n))
+            )
+        ).scalar_one()
+        facets["funder_fit"] = dict(counts or {})
     if cacheable:
         cache_put(FACET_CACHE, cache_key, (facets, total))
     return facets, total

@@ -1,7 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import * as React from "react";
@@ -9,6 +10,14 @@ import * as React from "react";
 import { DealBadge, OaStatusChip, OaTypeBadge } from "@/components/badges";
 import { CardPager } from "@/components/card-pager";
 import { CollapsibleCard } from "@/components/collapsible-card";
+import {
+  doiHref,
+  External,
+  GapEntryTableRows,
+  WorkLinks,
+  WorkTypeCell,
+} from "@/components/gap-entries";
+import { GapCsvButton } from "@/components/gap-csv-button";
 import { OaTrend } from "@/components/oa-trend";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -21,6 +30,7 @@ import {
 } from "@/components/ui/table";
 import { DetailSkeleton, ErrorPanel } from "@/components/states";
 import { useInstitution } from "@/hooks/use-institution";
+import { useYearRange, yearQuery } from "@/hooks/use-year-filter";
 import {
   errorMessage,
   fetchAuthor,
@@ -28,36 +38,8 @@ import {
   type AuthorSimilarJournal,
   type StatsYear,
 } from "@/lib/api";
+import { entriesTotal, toGapEntries } from "@/lib/gap-entries";
 import { cn } from "@/lib/utils";
-
-function External({
-  href,
-  children,
-  className,
-}: {
-  href: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={cn(
-        "inline-flex items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline",
-        className,
-      )}
-    >
-      {children} <ExternalLink aria-hidden className="size-3.5 shrink-0" />
-    </a>
-  );
-}
-
-function doiHref(doi: string | null): string | null {
-  if (!doi) return null;
-  return /^https?:\/\//.test(doi) ? doi : `https://doi.org/${doi}`;
-}
 
 /** href for "Back to search": the last search this tab ran, else this
  * university's search home (never the global landing). */
@@ -105,12 +87,13 @@ function useSectionSpy(ids: string[]) {
 
 function SectionNav({ sections }: { sections: { id: string; label: string }[] }) {
   const active = useSectionSpy(sections.map((s) => s.id));
+  const t = useTranslations("authors");
   // Muted-foreground/primary-text both fail 4.5:1 on the navy bar, so this
   // nav speaks in white and separates the active item with weight+underline.
   const backHref = useLastSearchHref();
   return (
     <nav
-      aria-label="Page sections"
+      aria-label={t("detail.navLabel")}
       className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--secondary)] text-[var(--secondary-foreground)]"
     >
       <div className="mx-auto flex max-w-screen-2xl items-center gap-3 overflow-x-auto px-4 py-2">
@@ -118,10 +101,12 @@ function SectionNav({ sections }: { sections: { id: string; label: string }[] })
           href={backHref}
           className="inline-flex shrink-0 items-center gap-1 text-sm text-white/80 hover:text-white"
         >
-          <ArrowLeft aria-hidden className="size-4" /> Back to search
+          <ArrowLeft aria-hidden className="size-4" /> {t("detail.backToSearch")}
         </Link>
         <span aria-hidden className="h-4 w-px shrink-0 bg-[var(--border)]" />
-        <ul className="flex min-w-0 items-center gap-1">
+        {/* Wrap instead of a single clipped line: long section lists stay
+            fully reachable on narrow screens. */}
+        <ul className="flex min-w-0 flex-wrap items-center gap-1">
           {sections.map((s) => (
             <li key={s.id}>
               <a
@@ -146,8 +131,12 @@ function SectionNav({ sections }: { sections: { id: string; label: string }[] })
   );
 }
 
+/** Chip cloud cap before the "+N more" expander. */
+const TOPICS_LIMIT = 8;
+
 /** One candidate venue: journal link, access + deal badges, similarity %. */
 function SimilarRow({ inst, s }: { inst: string; s: AuthorSimilarJournal }) {
+  const t = useTranslations("authors");
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm first:pt-0 last:pb-0">
       <Link
@@ -160,9 +149,9 @@ function SimilarRow({ inst, s }: { inst: string; s: AuthorSimilarJournal }) {
       {s.deal_covered && <DealBadge covered />}
       <span
         className="ml-auto text-xs tabular-nums text-[var(--muted-foreground)]"
-        title="Similarity to this author's publishing profile"
+        title={t("detail.matchScoreTitle")}
       >
-        {(s.score * 100).toFixed(1)}% match
+        {t("detail.matchScore", { score: (s.score * 100).toFixed(1) })}
       </span>
     </li>
   );
@@ -186,13 +175,16 @@ function toStatsYear(oa_by_year: AuthorProfile["oa_by_year"]): StatsYear[] {
 }
 
 export default function AuthorPage() {
+  const t = useTranslations("authors");
+  const tc = useTranslations("common");
   const params = useParams<{ authorId: string }>();
   const inst = useInstitution();
   const authorId = params?.authorId ? decodeURIComponent(params.authorId) : undefined;
   const backHref = useLastSearchHref();
+  const { year_from, year_to } = useYearRange();
   const { data, isPending, isError, error } = useQuery({
-    queryKey: ["author", inst, authorId ?? ""],
-    queryFn: () => fetchAuthor(inst, authorId ?? ""),
+    queryKey: ["author", inst, authorId ?? "", year_from ?? null, year_to ?? null],
+    queryFn: () => fetchAuthor(inst, authorId ?? "", { year_from, year_to }),
     enabled: Boolean(authorId),
   });
 
@@ -200,31 +192,42 @@ export default function AuthorPage() {
   const PAGE_SIZE = 20;
   const [journalPage, setJournalPage] = React.useState(1);
   const [workPage, setWorkPage] = React.useState(1);
+  const [allTopics, setAllTopics] = React.useState(false);
   React.useEffect(() => {
     setJournalPage(1);
     setWorkPage(1);
+    setAllTopics(false);
   }, [authorId]);
 
   if (isPending) return <DetailSkeleton />;
-  if (isError || !data) return <ErrorPanel message={errorMessage(error)} backHref={backHref} />;
+  if (isError || !data) return <ErrorPanel message={errorMessage(tc, error)} backHref={backHref} />;
 
   const { author, oa_by_year, journals, topics, similar, alternatives, works } = data;
   const journalPages = Math.max(1, Math.ceil(journals.length / PAGE_SIZE));
   const workPages = Math.max(1, Math.ceil(works.length / PAGE_SIZE));
   const journalRows = journals.slice((journalPage - 1) * PAGE_SIZE, journalPage * PAGE_SIZE);
   const workRows = works.slice((workPage - 1) * PAGE_SIZE, workPage * PAGE_SIZE);
-  const trendStats = toStatsYear(oa_by_year);
+  const trendStats = toStatsYear(oa_by_year).filter(
+    (s) =>
+      (year_from === undefined || s.year >= year_from) &&
+      (year_to === undefined || s.year <= year_to),
+  );
+  const gapEntries = toGapEntries(data.openalex_only.items);
+  const gapShownTotal = entriesTotal(data.openalex_only);
   const hasSimilar =
     similar.all.length > 0 || similar.deals.length > 0 || similar.diamond.length > 0;
 
   // One nav entry per rendered section, in DOM order.
   const sections = [
-    ...(trendStats.length > 0 ? [{ id: "oa-over-time", label: "Open access over time" }] : []),
-    ...(journals.length > 0 ? [{ id: "journals", label: "Where they publish" }] : []),
-    ...(topics.length > 0 ? [{ id: "topics", label: "Topics" }] : []),
-    ...(hasSimilar ? [{ id: "next", label: "Where to publish next" }] : []),
-    ...(alternatives.length > 0 ? [{ id: "alternatives", label: "Alternatives" }] : []),
-    ...(works.length > 0 ? [{ id: "publications", label: "Publications" }] : []),
+    ...(trendStats.length > 0 ? [{ id: "oa-over-time", label: t("sections.oaOverTime") }] : []),
+    ...(journals.length > 0 ? [{ id: "journals", label: t("sections.journals") }] : []),
+    ...(topics.length > 0 ? [{ id: "topics", label: t("sections.topics") }] : []),
+    ...(hasSimilar ? [{ id: "next", label: t("sections.publishNext") }] : []),
+    ...(alternatives.length > 0 ? [{ id: "alternatives", label: t("sections.alternatives") }] : []),
+    ...(works.length > 0 ? [{ id: "publications", label: t("sections.publications") }] : []),
+    ...(data.openalex_only.available
+      ? [{ id: "openalex-only", label: t("sections.notInPure") }]
+      : []),
   ];
 
   return (
@@ -232,7 +235,27 @@ export default function AuthorPage() {
       <SectionNav sections={sections} />
       <div className="mx-auto max-w-screen-2xl px-4 py-10">
         <header className="mb-8">
-          <h1 className="text-3xl font-bold">{author.name}</h1>
+          <div className="flex items-center gap-4">
+            {author.people?.has_photo && (
+              // eslint-disable-next-line @next/next/no-img-element -- same-origin API bytes, no optimization pipeline wanted
+              <img
+                src={`/api/v1/${inst}/authors/${encodeURIComponent(authorId ?? "")}/avatar`}
+                alt={author.name}
+                width={72}
+                height={72}
+                className="size-[72px] shrink-0 rounded-full object-cover"
+              />
+            )}
+            <div>
+              <h1 className="text-3xl font-bold">{author.name}</h1>
+              {author.people?.canonical_name &&
+                author.people.canonical_name.toLowerCase() !== author.name.toLowerCase() && (
+                  <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                    {author.people.canonical_name}
+                  </p>
+                )}
+            </div>
+          </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {author.faculty && (
               <Badge variant="muted" className="font-normal">
@@ -250,11 +273,21 @@ export default function AuthorPage() {
               </Badge>
             )}
             <span className="text-sm text-[var(--muted-foreground)]">
-              {author.n_works.toLocaleString("en")} {author.n_works === 1 ? "work" : "works"}
+              {t("worksCount", { count: author.n_works })}
             </span>
           </div>
-          {(author.orcid || author.openalex_author_id || author.openaire_person_id) && (
+          {(author.orcid ||
+            author.openalex_author_id ||
+            author.openaire_person_id ||
+            author.people ||
+            author.research_portal_url) && (
             <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+              {author.people && (
+                <External href={author.people.url}>{t("detail.peoplePage")}</External>
+              )}
+              {author.research_portal_url && (
+                <External href={author.research_portal_url}>{t("detail.researchPortal")}</External>
+              )}
               {author.orcid && (
                 <External href={`https://orcid.org/${author.orcid}`}>ORCID</External>
               )}
@@ -276,20 +309,24 @@ export default function AuthorPage() {
 
         <div className="space-y-6">
           {trendStats.length > 0 && (
-            <CollapsibleCard id="oa-over-time" title="Open access over time">
+            <CollapsibleCard id="oa-over-time" title={t("sections.oaOverTime")}>
               <OaTrend stats={trendStats} />
             </CollapsibleCard>
           )}
 
           {journals.length > 0 && (
-            <CollapsibleCard id="journals" title="Where they publish" contentClassName="text-sm">
+            <CollapsibleCard
+              id="journals"
+              title={t("sections.journals")}
+              contentClassName="text-sm"
+            >
               <Table>
-                <caption className="sr-only">Journals this author publishes in</caption>
+                <caption className="sr-only">{t("tables.journalsCaption")}</caption>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Journal</TableHead>
-                    <TableHead className="text-right">Works</TableHead>
-                    <TableHead>Access</TableHead>
+                    <TableHead>{t("tables.colJournal")}</TableHead>
+                    <TableHead className="text-right">{t("tables.colWorks")}</TableHead>
+                    <TableHead>{t("tables.colAccess")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -319,38 +356,54 @@ export default function AuthorPage() {
                   pages={journalPages}
                   total={journals.length}
                   onPage={setJournalPage}
-                  label="journals"
+                  label={t("detail.pagerJournals")}
                 />
               )}
             </CollapsibleCard>
           )}
 
           {topics.length > 0 && (
-            <CollapsibleCard id="topics" title="Topics" contentClassName="flex flex-wrap gap-1.5">
-              {topics.map((t) => (
+            <CollapsibleCard
+              id="topics"
+              title={t("sections.topics")}
+              contentClassName="flex flex-wrap items-center gap-1.5"
+            >
+              {(allTopics ? topics : topics.slice(0, TOPICS_LIMIT)).map((topic) => (
                 <Badge
-                  key={t.name}
+                  key={topic.name}
                   variant="muted"
                   className="font-normal normal-case"
-                  title={`${t.n.toLocaleString("en")} ${t.n === 1 ? "work" : "works"}`}
+                  title={t("worksCount", { count: topic.n })}
                 >
-                  {t.name}
+                  {topic.name}
                 </Badge>
               ))}
+              {topics.length > TOPICS_LIMIT && (
+                <button
+                  type="button"
+                  className="text-sm text-[var(--muted-foreground)] underline-offset-2 hover:underline"
+                  aria-expanded={allTopics}
+                  onClick={() => setAllTopics((v) => !v)}
+                >
+                  {allTopics
+                    ? t("detail.showLess")
+                    : t("detail.showMore", { count: topics.length - TOPICS_LIMIT })}
+                </button>
+              )}
             </CollapsibleCard>
           )}
 
           {hasSimilar && (
             <CollapsibleCard
               id="next"
-              title="Where to publish next"
+              title={t("sections.publishNext")}
               contentClassName="space-y-5 text-sm"
             >
               {(
                 [
-                  { key: "all", heading: "Most similar to their journals" },
-                  { key: "deals", heading: "Similar with a deal" },
-                  { key: "diamond", heading: "Diamond options" },
+                  { key: "all", heading: t("similar.mostSimilar") },
+                  { key: "deals", heading: t("similar.dealCovered") },
+                  { key: "diamond", heading: t("similar.diamond") },
                 ] as const
               ).map(
                 (g) =>
@@ -371,12 +424,11 @@ export default function AuthorPage() {
           {alternatives.length > 0 && (
             <CollapsibleCard
               id="alternatives"
-              title="Alternatives for paywalled venues"
+              title={t("cards.alternatives")}
               contentClassName="space-y-5 text-sm"
               description={
                 <p className="text-sm text-[var(--muted-foreground)]">
-                  Journals where this author publishes paywalled, with open access venues covering
-                  the same territory.
+                  {t("cards.alternativesIntro")}
                 </p>
               }
             >
@@ -390,7 +442,7 @@ export default function AuthorPage() {
                       {alt.title || alt.issn_l}
                     </Link>
                     <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
-                      {alt.n_works.toLocaleString("en")} {alt.n_works === 1 ? "work" : "works"}
+                      {t("worksCount", { count: alt.n_works })}
                     </span>
                   </div>
                   <ul className="mt-1 divide-y divide-[var(--border)]">
@@ -404,34 +456,46 @@ export default function AuthorPage() {
           )}
 
           {works.length > 0 && (
-            <CollapsibleCard id="publications" title="Publications" contentClassName="text-sm">
+            <CollapsibleCard
+              id="publications"
+              title={t("sections.publications")}
+              contentClassName="text-sm"
+              description={
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                  {data.openalex_only_count != null && (
+                    <p className="text-sm text-[var(--muted-foreground)]">
+                      {t("cards.publicationsIntro", {
+                        count: data.openalex_only_count,
+                        section: t("sections.notInPure"),
+                      })}
+                    </p>
+                  )}
+                  <GapCsvButton
+                    href={`/api/v1/${inst}/authors/${encodeURIComponent(author.pure_uuid)}/works.csv?scope=canon${yearQuery("&", year_from, year_to)}`}
+                  />
+                </div>
+              }
+            >
               <Table>
-                <caption className="sr-only">This author&apos;s publications</caption>
+                <caption className="sr-only">{t("tables.worksCaption")}</caption>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Year</TableHead>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Journal</TableHead>
-                    <TableHead>Access</TableHead>
+                    <TableHead>{t("tables.colYear")}</TableHead>
+                    <TableHead>{t("tables.colTitle")}</TableHead>
+                    <TableHead>{t("tables.colVenue")}</TableHead>
+                    <TableHead>{t("tables.colType")}</TableHead>
+                    <TableHead>{t("tables.colAccess")}</TableHead>
+                    <TableHead>{t("tables.colLinks")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {workRows.map((w, idx) => {
-                    const href = doiHref(w.doi);
+                    const href = doiHref(w.doi) ?? w.pure_url ?? w.openalex_url;
                     return (
                       <TableRow key={w.pure_uuid ?? w.doi ?? `oa-${idx}`}>
                         <TableCell className="whitespace-nowrap tabular-nums">{w.year}</TableCell>
                         <TableCell className="min-w-0 font-medium">
                           {href ? <External href={href}>{w.title}</External> : w.title}
-                          {!w.in_pure && (
-                            <Badge
-                              variant="outline"
-                              className="ml-2 font-normal text-[11px] text-[var(--muted-foreground)]"
-                              title="Attributed by OpenAlex only; not in the university's Pure research information system"
-                            >
-                              OpenAlex only
-                            </Badge>
-                          )}
                         </TableCell>
                         <TableCell>
                           {w.journal_issn_l ? (
@@ -441,12 +505,24 @@ export default function AuthorPage() {
                             >
                               {w.journal_title || w.journal_issn_l}
                             </Link>
+                          ) : w.journal_title ? (
+                            <span>{w.journal_title}</span>
                           ) : (
                             <span className="text-[var(--muted-foreground)]">—</span>
                           )}
                         </TableCell>
                         <TableCell>
-                          <OaStatusChip status={w.oa_status} />
+                          <WorkTypeCell workType={w.work_type} />
+                        </TableCell>
+                        <TableCell>
+                          <OaStatusChip status={w.oa_status} source={w.oa_status_source} />
+                        </TableCell>
+                        <TableCell>
+                          <WorkLinks
+                            doi={w.doi}
+                            openalexUrl={w.openalex_url}
+                            pureUrl={w.pure_url}
+                          />
                         </TableCell>
                       </TableRow>
                     );
@@ -459,13 +535,58 @@ export default function AuthorPage() {
                   pages={workPages}
                   total={works.length}
                   onPage={setWorkPage}
-                  label="publications"
+                  label={t("detail.pagerPublications")}
                 />
               )}
               {works.length >= 200 && (
                 <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-                  Showing the 200 most recent publications.
+                  {t("cards.publicationsCapped", { count: 200 })}
                 </p>
+              )}
+            </CollapsibleCard>
+          )}
+
+          {data.openalex_only.available && (
+            <CollapsibleCard
+              id="openalex-only"
+              title={t("cards.notInPure")}
+              description={
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                  <p className="text-sm text-[var(--muted-foreground)]">
+                    {t("gap.found", { count: data.openalex_only.total })}{" "}
+                    {t("gap.missing", { count: data.openalex_only.likely_missing })}
+                    {gapShownTotal > gapEntries.length &&
+                      ` ${t("gap.showing", { count: gapEntries.length })}`}
+                  </p>
+                  {data.openalex_only.total > 0 && (
+                    <GapCsvButton
+                      href={`/api/v1/${inst}/authors/${encodeURIComponent(author.pure_uuid)}/works.csv?scope=missed${yearQuery("&", year_from, year_to)}`}
+                    />
+                  )}
+                </div>
+              }
+              contentClassName="text-sm"
+            >
+              {data.openalex_only.total === 0 ? (
+                <p className="text-[var(--muted-foreground)]">{t("gap.none")}</p>
+              ) : (
+                <Table>
+                  <caption className="sr-only">{t("tables.gapCaption")}</caption>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t("tables.colYear")}</TableHead>
+                      <TableHead>{t("tables.colTitle")}</TableHead>
+                      <TableHead>{t("tables.colVenue")}</TableHead>
+                      <TableHead>{t("tables.colPublisher")}</TableHead>
+                      <TableHead>{t("tables.colType")}</TableHead>
+                      <TableHead>{t("tables.colAccess")}</TableHead>
+                      <TableHead>{t("tables.colLinks")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <GapEntryTableRows entries={gapEntries} inst={inst} />
+                  </TableBody>
+                </Table>
               )}
             </CollapsibleCard>
           )}

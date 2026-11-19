@@ -8,12 +8,16 @@ pattern: one cached per-institution snapshot of unit aggregates
 in Python over the name-keyed rows; per-item topic distributions stay a
 query-time GROUP BY for exactly the paged units. Unit membership is the
 non-empty grouping column; works/APC/deal rollups bound to the
-institution's data window."""
+institution's data window. An explicit publication-year range recomputes
+the works-derived columns (works, deal-covered works, authors with
+in-range work) at query time — same edge population and author gates as
+the snapshot, data window replaced by the clamped range — while the
+roster and attribute columns stay snapshot."""
 
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import func, select, text
+from sqlalchemy import Numeric, case, cast, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
@@ -27,6 +31,7 @@ from ..models import (
     JournalFlags,
     Work,
 )
+from .authorship import aids_gap_predicate, author_ids_openalex_only, chapter_rollup
 from .cache import SNAPSHOT_CACHE, SNAPSHOT_TTL, cache_get, cache_put
 from .search import _oa_type
 from .works_query import (
@@ -36,13 +41,19 @@ from .works_query import (
     strata_match,
     unit_author_join,
     unit_work_join,
+    work_type_not_excluded,
     work_window,
+    work_year_window,
 )
 
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 100
 JOURNAL_CAP = 15
 AUTHOR_CAP = 50
+#: OA statuses counting toward the top-authors diamond+gold share, and the
+#: minimum counted works before an author is ranked by that share.
+DIAMOND_GOLD = ("diamond", "gold")
+AUTHOR_SHARE_MIN_WORKS = 4
 DEAL_USAGE_CAP = 8
 TOPICS_PER_ITEM = 3
 TOPICS_PER_DETAIL = 5
@@ -121,6 +132,7 @@ def _unit_rows(institution: Institution, level: str) -> Any:
             Work.institution_id == iid,
             Work.retired_at.is_(None),
             *work_window(institution),
+            work_type_not_excluded(Work.work_type),
         ]
         if dois_only:
             conds.append(Work.doi_normalized.is_not(None))
@@ -284,6 +296,87 @@ async def _snapshot(session: AsyncSession, institution: Institution) -> dict[str
     return snap
 
 
+def _scoped_unit_rows(institution: Institution, level: str, year_range: tuple[int, int]) -> Any:
+    """Year-scoped works aggregates per unit: the snapshot's edge
+    population (`_unit_rows`' `_edges` — same joins, author gates, and
+    retired-at gate) with the data window replaced by the clamped
+    publication-year range. Counts stay distinct-per-unit like the
+    snapshot's deal rollup; the flags join is outer so journals without a
+    flags row still fill n_works/n_authors."""
+    iid = institution.id
+    require_confirmed = institution.require_confirmed_affiliation
+    key = _unit_key(level)
+    edges = (
+        select(
+            key.label("name"),
+            Work.pure_uuid.label("work_uuid"),
+            Author.pure_uuid.label("author_uuid"),
+            JournalFlags.deal_covered.label("deal_covered"),
+        )
+        .select_from(Author)
+        .join(AuthorWork, unit_author_join(iid))
+        .join(Work, unit_work_join(iid))
+        .outerjoin(
+            JournalFlags,
+            (JournalFlags.institution_id == iid) & (JournalFlags.issn_l == Work.journal_issn_l),
+        )
+        .where(
+            *_author_base(iid, require_confirmed),
+            key.is_not(None),
+            key != "",
+            Work.retired_at.is_(None),
+            *work_year_window(institution, year_range),
+            work_type_not_excluded(Work.work_type),
+        )
+        .subquery()
+    )
+    return (
+        select(
+            edges.c.name.label("name"),
+            func.count(func.distinct(edges.c.work_uuid)).label("n_works"),
+            func.count(func.distinct(edges.c.work_uuid))
+            .filter(edges.c.deal_covered.is_(True))
+            .label("deal_works"),
+            func.count(func.distinct(edges.c.author_uuid)).label("n_authors"),
+        )
+        .group_by(edges.c.name)
+        .subquery()
+    )
+
+
+async def _scoped_units(
+    session: AsyncSession,
+    institution: Institution,
+    level: str,
+    year_range: tuple[int, int],
+    units: dict[str, _Unit],
+) -> dict[str, _Unit]:
+    """The snapshot roster with the works-derived columns recomputed inside
+    the clamped range; attribute columns (faculty, group count, APC
+    rollups) keep the snapshot values and units without in-range works
+    stay listed at zero (the authors-list convention)."""
+    scoped = {
+        r.name: r
+        for r in (
+            await session.execute(select(_scoped_unit_rows(institution, level, year_range)))
+        ).all()
+    }
+    out: dict[str, _Unit] = {}
+    for name, u in units.items():
+        r = scoped.get(name)
+        out[name] = _Unit(
+            name=name,
+            faculty=u.faculty,
+            n_authors=int(r.n_authors) if r else 0,
+            n_works=int(r.n_works) if r else 0,
+            n_groups=u.n_groups,
+            deal_works=int(r.deal_works) if r else 0,
+            apc_euro_total=u.apc_euro_total,
+            apc_n=u.apc_n,
+        )
+    return out
+
+
 def _order_units(sort: str, q: str | None) -> tuple[Any, str]:
     """(sort key over _Unit rows, natural direction). SQL convention: head
     direction, ties broken by (lower(name), name) ascending."""
@@ -362,14 +455,26 @@ async def search_orgunits(
     offset: int = 0,
     limit: int = DEFAULT_LIMIT,
     include_facets: bool = True,
+    year_range: tuple[int, int] | None = None,
 ) -> dict[str, Any]:
     """Unit roster for one institution: total is the filter match count,
     items the offset/limit page of the sorted matches (default sort
     relevance-with-q, else works desc). Serves from the cached unit
-    snapshot; only the page's topic distributions hit the database."""
+    snapshot; only the page's topic distributions hit the database.
+
+    With an active publication-year range the works-derived columns
+    (n_works, deal_works, n_authors = members with >=1 in-range work)
+    come from `_scoped_units` instead of the snapshot, so the works
+    strata filter, size/uses_deals facets, authors|works|deal_works sorts
+    and total evaluate the scoped columns; the faculty facet and the
+    attribute columns stay snapshot. Without a range nothing changes:
+    byte-identical snapshot serving, cache untouched."""
     require_confirmed = institution.require_confirmed_affiliation
     snapshot = await _snapshot(session, institution)
-    matches = list(snapshot.get(level, {}).values())
+    units = snapshot.get(level, {})
+    if year_range is not None:
+        units = await _scoped_units(session, institution, level, year_range, units)
+    matches = list(units.values())
 
     wanted_faculty = {f.lower() for f in faculty} if faculty and level == "group" else None
     if wanted_faculty is not None:
@@ -399,26 +504,47 @@ async def search_orgunits(
 
     facets: dict[str, dict[str, int]] = {}
     if include_facets:
-        facets = _snapshot_facets(
-            list(snapshot.get(level, {}).values()), level, wanted_faculty, works, uses_deals
-        )
+        facets = _snapshot_facets(list(units.values()), level, wanted_faculty, works, uses_deals)
     return {"level": level, "items": items, "total": int(total), "facets": facets}
 
 
 async def orgunit_detail(
-    session: AsyncSession, institution: Institution, level: str, name: str
+    session: AsyncSession,
+    institution: Institution,
+    level: str,
+    name: str,
+    year_range: tuple[int, int] | None = None,
+    sort: str = "share",
 ) -> dict[str, Any] | None:
-    """Full unit bundle; None = unknown unit (404 upstream)."""
+    """Full unit bundle; None = unknown unit (404 upstream). An explicit
+    publication-year range narrows the works-derived sections — the unit
+    header (works/deal/authors counts via the _scoped_units merge), the
+    venue works counts, the member authors' in-range works counts, the
+    deal-usage work set and the CRIS-gap card (same scoping as the groups
+    list); per-year rows (works_by_year) keep the data window, the unit's
+    APC rollups stay snapshot, and the deal-usage euro follows the
+    narrowed work set (journal attributes stay unfiltered). `sort` orders
+    the member authors card: 'share' ranks by the diamond/gold OA share
+    (default; authors below AUTHOR_SHARE_MIN_WORKS counted works rank
+    last, share None), 'works' by works count; AUTHOR_CAP cuts after the
+    chosen ordering."""
     iid = institution.id
     require_confirmed = institution.require_confirmed_affiliation
     unit = (await _snapshot(session, institution)).get(level, {}).get(name)
     if unit is None:
         return None
+    if year_range is not None:
+        # Works-derived header counts recomputed inside the range (the
+        # list's merge, applied to the one unit); attribute columns and
+        # the APC rollups stay snapshot.
+        unit = (await _scoped_units(session, institution, level, year_range, {name: unit}))[name]
 
     topics_by_unit = await _unit_topics(
         session, iid, level, require_confirmed, [name], TOPICS_PER_DETAIL
     )
-    topics = topics_by_unit[name]
+    # Units whose members all lack a primary topic have no query rows at
+    # all, so the key is simply absent (KeyError was a 500).
+    topics = topics_by_unit.get(name, [])
 
     groups = None
     if level == "faculty":
@@ -430,6 +556,7 @@ async def orgunit_detail(
             sort="works",
             limit=MAX_LIMIT,
             include_facets=False,
+            year_range=year_range,
         )
         groups = child["items"]
 
@@ -439,7 +566,7 @@ async def orgunit_detail(
     # admin ignore-list removes venues just like the author profile.
     ignored = get_settings().ignored_issns
     flags = (
-        select(JournalFlags.issn_l, JournalFlags.deal_covered)
+        select(JournalFlags.issn_l, JournalFlags.deal_covered, JournalFlags.openaire_diamond)
         .where(JournalFlags.institution_id == iid)
         .subquery()
     )
@@ -450,7 +577,7 @@ async def orgunit_detail(
                 Journal.title.label("title"),
                 func.count(func.distinct(Work.pure_uuid)).label("n_works"),
                 flags.c.deal_covered,
-                _oa_type(flags.c.deal_covered).label("oa_type"),
+                _oa_type(flags.c.deal_covered, flags.c.openaire_diamond).label("oa_type"),
                 Journal.latest_quartile.label("quartile"),
             )
             .select_from(Author)
@@ -467,7 +594,8 @@ async def orgunit_detail(
             .where(
                 *membership,
                 Work.retired_at.is_(None),
-                *work_window(institution),
+                *work_year_window(institution, year_range),
+                work_type_not_excluded(Work.work_type),
                 *([Journal.issn_l.not_in(sorted(set(ignored)))] if ignored else []),
             )
             .group_by(
@@ -477,25 +605,90 @@ async def orgunit_detail(
                 Journal.is_in_doaj,
                 Journal.latest_quartile,
                 flags.c.deal_covered,
+                flags.c.openaire_diamond,
             )
             .order_by(func.count(func.distinct(Work.pure_uuid)).desc(), Work.journal_issn_l)
             .limit(JOURNAL_CAP)
         )
     ).all()
 
-    author_rows = (
-        await session.execute(
+    # Member rows: the denormalized n_works answers by default; an active
+    # range recomputes it from the stored work edges (the authors-list
+    # convention, same aggregation as search_authors' scoped subquery —
+    # edge population, confirmed gate unchanged). The diamond/gold count
+    # has no snapshot column, so it always comes from those same edges in
+    # this one statement: inside the range when one is active, else from
+    # the edge population the snapshot count mirrors exactly (edges to
+    # retired or excluded-type works are never stored).
+    dg_count = func.count().filter(Work.oa_status.in_(DIAMOND_GOLD)).label("dg")
+    edge_counts = None
+    if year_range is not None:
+        lo, hi = year_range
+        edge_counts = (
             select(
-                Author.pure_uuid,
-                Author.name,
-                Author.n_works,
-                Author.orcid,
-                Author.primary_topic,
+                AuthorWork.author_pure_uuid.label("author_pure_uuid"),
+                func.count().label("n"),
+                dg_count,
             )
-            .where(*membership)
-            .order_by(Author.n_works.desc(), func.lower(Author.name), Author.pure_uuid)
-            .limit(AUTHOR_CAP)
+            .select_from(AuthorWork)
+            .join(Work, unit_work_join(iid))
+            .where(
+                AuthorWork.institution_id == iid,
+                Work.year.between(lo, hi),
+                work_type_not_excluded(Work.work_type),
+            )
+            .group_by(AuthorWork.author_pure_uuid)
+            .subquery()
         )
+    else:
+        edge_counts = (
+            select(
+                AuthorWork.author_pure_uuid.label("author_pure_uuid"),
+                dg_count,
+            )
+            .select_from(AuthorWork)
+            .join(Work, unit_work_join(iid))
+            .where(
+                AuthorWork.institution_id == iid,
+                work_type_not_excluded(Work.work_type),
+            )
+            .group_by(AuthorWork.author_pure_uuid)
+            .subquery()
+        )
+    n_col = func.coalesce(edge_counts.c.n, 0) if year_range is not None else Author.n_works
+    share = case(
+        (
+            n_col >= AUTHOR_SHARE_MIN_WORKS,
+            cast(func.coalesce(edge_counts.c.dg, 0), Numeric) / n_col,
+        ),
+        else_=None,
+    ).label("oa_diamond_gold_share")
+    author_stmt = select(
+        Author.pure_uuid,
+        Author.name,
+        n_col.label("n_works"),
+        Author.orcid,
+        Author.primary_topic,
+        share,
+    ).where(*membership)
+    author_stmt = author_stmt.outerjoin(
+        edge_counts, edge_counts.c.author_pure_uuid == Author.pure_uuid
+    )
+    # share: share desc (authors below the minimum rank last via the NULL
+    # and the works tiebreakers); works: the previous works-desc ordering.
+    # The cap applies after the chosen ordering, so the card's toggle
+    # refetches with the other sort key.
+    if sort == "works":
+        author_order = (n_col.desc(), func.lower(Author.name), Author.pure_uuid)
+    else:
+        author_order = (
+            share.desc().nulls_last(),
+            n_col.desc(),
+            func.lower(Author.name),
+            Author.pure_uuid,
+        )
+    author_rows = (
+        await session.execute(author_stmt.order_by(*author_order).limit(AUTHOR_CAP))
     ).all()
 
     year_rows = (
@@ -514,6 +707,7 @@ async def orgunit_detail(
                 *membership,
                 Work.retired_at.is_(None),
                 *work_window(institution),
+                work_type_not_excluded(Work.work_type),
             )
             .group_by(Work.year, Work.oa_status)
         )
@@ -538,6 +732,9 @@ async def orgunit_detail(
 
     # Deal-covered output grouped by agreement, falling back to the
     # journal's publisher when the evidence carries no agreement label.
+    # An active range narrows the work set (n_works and the euro sum both
+    # describe the in-range works; the best-period evidence join itself is
+    # unchanged).
     unit_works = (
         select(
             Work.pure_uuid.label("work_uuid"),
@@ -557,7 +754,8 @@ async def orgunit_detail(
         .where(
             *membership,
             Work.retired_at.is_(None),
-            *work_window(institution),
+            *work_year_window(institution, year_range),
+            work_type_not_excluded(Work.work_type),
         )
         .subquery()
     )
@@ -606,6 +804,11 @@ async def orgunit_detail(
         )
     ).all()
 
+    # Member authors' resolved OpenAlex A-ids (uncapped, unlike
+    # author_rows) drive the CRIS-gap query.
+    aid_rows = (await session.execute(select(Author.openalex_ids).where(*membership))).all()
+    member_aids = [aid for (ids,) in aid_rows for aid in (ids or [])]
+
     return {
         "unit": _item(unit, level, topics),
         "groups": groups,
@@ -627,10 +830,19 @@ async def orgunit_detail(
                 "n_works": r.n_works,
                 "orcid": r.orcid,
                 "primary_topic": r.primary_topic,
+                "oa_diamond_gold_share": r.oa_diamond_gold_share,
             }
             for r in author_rows
         ],
         "works_by_year": works_by_year,
+        "openalex_only": await author_ids_openalex_only(
+            session, institution, member_aids, year_range
+        ),
+        # Chapter rollup over the gap card's exact population (member
+        # authors' store rows missing from Pure), before the item cap.
+        "chapter_rollup": await chapter_rollup(
+            session, institution, aids_gap_predicate(institution, member_aids, year_range)
+        ),
         "deal_usage": [
             {"label": r.label, "n_works": int(r.n_works), "euro": float(r.euro)} for r in usage_rows
         ],

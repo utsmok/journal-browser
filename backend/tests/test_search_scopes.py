@@ -38,6 +38,7 @@ async def api(client, db_engine):
                     "1111-1111",
                     title="Bioinformatics Quarterly",
                     search_text="Bioinformatics Quarterly",
+                    language="en",
                 ),
                 # Topic fixture.
                 journal_factory(
@@ -45,6 +46,7 @@ async def api(client, db_engine):
                     title="Quantum Studies",
                     topics=[{"display_name": "Quantum Chemistry"}],
                     search_text="Quantum Studies",
+                    language="en",
                 ),
                 # OA-type fixtures.
                 journal_factory(
@@ -57,6 +59,7 @@ async def api(client, db_engine):
                     doaj_in_doaj=True,
                     doaj_has_apc=False,
                     search_text=None,
+                    language="nl",
                 ),
                 # DOAJ canon gold: DOAJ itself declares an APC.
                 journal_factory(
@@ -156,14 +159,19 @@ async def api(client, db_engine):
                     search_text="Priced Journal",
                 ),
                 # NULL-twoyr pagination fixtures: no summary_stats at all.
+                # They double as the semantic-search fixtures: the only
+                # journals with vectors (near and far from the patched
+                # query vector).
                 journal_factory(
                     "1717-1717",
                     title="Metricless Alpha",
+                    embedding=_vec(0),
                     search_text="Metricless Alpha Journal",
                 ),
                 journal_factory(
                     "1818-1818",
                     title="Metricless Beta",
+                    embedding=_vec(1),
                     search_text="Metricless Beta Journal",
                 ),
                 journal_factory(
@@ -269,6 +277,14 @@ async def api(client, db_engine):
 
 def _issns(body: dict) -> set[str]:
     return {i["issn_l"] for i in body["items"]}
+
+
+DIM = 384
+
+
+def _vec(i: int) -> list[float]:
+    """Unit basis vector: distance 0 to itself, 1 (orthogonal) to the others."""
+    return [1.0 if j == i else 0.0 for j in range(DIM)]
 
 
 @requires_db
@@ -585,6 +601,36 @@ async def test_oa_type_facet_filter(api):
 
 
 @requires_db
+async def test_oa_type_facet_ordered_most_open_first(api):
+    """Feedback 2026-11-05: the OA-type facet renders most open first
+    (diamond ... subscription), not in jsonb's arbitrary key order."""
+    facets = (await api.get("/api/v1/ut/journals")).json()["facets"]["oa_type"]
+    order = ["diamond", "gold", "hybrid", "generic", "subscription"]
+    assert list(facets) == [k for k in order if k in facets]
+    # The fixture corpus observes every value, so the order is total here.
+    assert list(facets) == order
+
+
+@requires_db
+async def test_language_facet_and_filter(api):
+    """Feedback 2026-11-05: filter journals by their (modal work) language."""
+    body = (await api.get("/api/v1/ut/journals")).json()
+    assert body["facets"]["language"] == {"en": 2, "nl": 1}
+
+    # The filter narrows the list; its facet drops its own filter so every
+    # observed language stays visible with counts under the remaining set.
+    r = (await api.get("/api/v1/ut/journals", params={"language": "nl"})).json()
+    assert _issns(r) == {"4444-4444"}
+    assert r["items"][0]["language"] == "nl"
+    assert r["facets"]["language"] == {"en": 2, "nl": 1}
+
+    # Comma multi-select ORs; unknown codes match nothing.
+    r = (await api.get("/api/v1/ut/journals", params={"language": "en,nl"})).json()
+    assert _issns(r) == {"1111-1111", "2222-2222", "4444-4444"}
+    assert (await api.get("/api/v1/ut/journals", params={"language": "xx"})).json()["total"] == 0
+
+
+@requires_db
 async def test_proceedings_exclusion(api):
     body = (await api.get("/api/v1/ut/journals", params={"limit": 100})).json()
     issns = _issns(body)
@@ -617,9 +663,13 @@ async def test_similar_journals(api):
         "quartile",
         "is_oa",
         "deal_covered",
+        "deal_cap_reached",
         "works",
         "shared_topics",
     }
+    # No fixture journal here is deal-covered, so False proves the flag
+    # flows through SimilarJournalItem.
+    assert items[0]["deal_cap_reached"] is False
     # Fixture journals carry no UT works and no deal, so the teaser cuts are
     # empty and every item lands in "all" only.
     assert bundle["institution"] == []
@@ -628,3 +678,19 @@ async def test_similar_journals(api):
     # Unknown journal -> 404.
     r = await api.get("/api/v1/ut/journals/0000-0000/similar")
     assert r.status_code == 404
+
+
+@requires_db
+async def test_semantic_search_distance_cap(api, monkeypatch):
+    """Semantic search serves only journals within the 0.32 cosine-distance
+    cap: the near vector lands in total and items, the far one (distance 1)
+    stays out of both."""
+    from journal_browser.services import embeddings
+
+    monkeypatch.setattr(embeddings, "encode_query", lambda q: _vec(0))
+    r = await api.get("/api/v1/ut/journals/semantic-search", params={"q": "open science"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] == 1
+    assert [i["issn_l"] for i in body["items"]] == ["1717-1717"]
+    assert body["next_cursor"] is None

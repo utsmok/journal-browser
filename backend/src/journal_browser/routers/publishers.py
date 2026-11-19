@@ -3,6 +3,7 @@
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BeforeValidator
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,10 +13,15 @@ from ..schemas import (
     DealDiscrepancyRow,
     DealOut,
     JournalListItem,
+    OpenalexOnly,
+    PartsRollup,
     PublisherDetailResponse,
     PublisherSearchResponse,
+    UTAuthorship,
 )
+from ..services import exports
 from ..services import publishers as publishers_service
+from ..services.works_query import clamped_year_range
 from ..vocab import OaType
 
 router = APIRouter(prefix="/publishers", tags=["publishers"])
@@ -43,6 +49,13 @@ QuartileFilter = Annotated[
     BeforeValidator(_split),
     Query(max_length=20),
 ]
+#: Pipe-joined work-parts multi-select for the CRIS-gap card (422 on
+#: unknown values).
+PartsFilter = Annotated[
+    list[Literal["standalone", "chapter", "part"]] | None,
+    BeforeValidator(_split),
+    Query(max_length=30),
+]
 
 
 @router.get("", response_model=PublisherSearchResponse)
@@ -64,6 +77,24 @@ async def search_publishers(
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = publishers_service.DEFAULT_LIMIT,
     include_facets: bool = True,
+    year_from: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range start (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    year_to: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range end (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
 ) -> PublisherSearchResponse:
     # Pipe-joined multi-selects, OR'd within a dimension, AND'd across
     # dimensions. Values validate at the boundary (422); size stays a
@@ -89,15 +120,80 @@ async def search_publishers(
         offset=offset,
         limit=limit,
         include_facets=include_facets,
+        years=clamped_year_range(institution, year_from, year_to),
     )
     return PublisherSearchResponse(**result)
 
 
+# Before the {name:path} detail route: the path converter would otherwise
+# swallow the export suffix.
+@router.get("/{name:path}/openalex-only.csv")
+async def publisher_openalex_only_csv(
+    name: str,
+    session: SessionDep,
+    institution: InstitutionDep,
+    year_from: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range start (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    year_to: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range end (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    parts: PartsFilter = None,
+) -> StreamingResponse:
+    """Uncapped CSV of the publisher group's CRIS-gap (OpenAlex-only) list."""
+    return await exports.publisher_openalex_only_csv(
+        session,
+        institution,
+        name,
+        year_range=clamped_year_range(institution, year_from, year_to),
+        parts=list(parts) if parts else None,
+    )
+
+
 @router.get("/{name:path}", response_model=PublisherDetailResponse)
 async def publisher_detail(
-    name: str, session: SessionDep, institution: InstitutionDep
+    name: str,
+    session: SessionDep,
+    institution: InstitutionDep,
+    year_from: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range start (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    year_to: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range end (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    parts: PartsFilter = None,
 ) -> PublisherDetailResponse:
-    detail = await publishers_service.publisher_detail(session, institution, name)
+    detail = await publishers_service.publisher_detail(
+        session,
+        institution,
+        name,
+        years=clamped_year_range(institution, year_from, year_to),
+        parts=list(parts) if parts else None,
+    )
     if detail is None:
         raise HTTPException(status_code=404, detail="publisher not found")
     return PublisherDetailResponse(
@@ -114,4 +210,7 @@ async def publisher_detail(
         deal_discrepancies=[DealDiscrepancyRow(**row) for row in detail["deal_discrepancies"]],
         n_discrepancies=detail["n_discrepancies"],
         works_by_year=detail["works_by_year"],
+        ut_authorship=UTAuthorship(**detail["ut_authorship"]),
+        openalex_only=OpenalexOnly(**detail["openalex_only"]),
+        chapter_rollup=PartsRollup(**detail["chapter_rollup"]),
     )

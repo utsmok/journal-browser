@@ -1,13 +1,13 @@
-# Journal Browser overview
+# Open Journal Browser overview
 
-Journal Browser is a public search tool that helps researchers find where to
+Open Journal Browser is a public search tool that helps researchers find where to
 publish. It shows which journals are covered by open-access deals, what
 publishing in them costs, how their institution uses those journals, and what
 the journals are about. It replaces the WUR-hosted [Open Access Journal
 Browser](https://library.wur.nl/WebQuery/utbrowser) and runs on openly
 available data only.
 
-![Journal Browser — institution home with search, facets, and results](images/web-home.png)
+![Open Journal Browser — institution home with search, facets, and results](images/web-home.png)
 
 ## What it does
 

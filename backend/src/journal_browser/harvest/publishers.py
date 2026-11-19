@@ -19,8 +19,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
+from ..ingest import bump_cache_epoch
 from ..models import OpenalexPublisher, SourceRecord
-from .common import bump_cache_epoch
 from .openalex_journals import _payload_dict
 
 logger = logging.getLogger(__name__)

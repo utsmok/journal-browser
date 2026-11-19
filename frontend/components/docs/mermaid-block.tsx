@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 
 /**
@@ -11,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
  * pre block.
  */
 export function MermaidBlock({ code }: { code: string }) {
+  const t = useTranslations("docs");
   const ref = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
 
@@ -47,9 +49,7 @@ export function MermaidBlock({ code }: { code: string }) {
         <pre className="overflow-x-auto rounded-[var(--radius)] bg-[var(--muted)] p-4 font-mono text-sm">
           {code}
         </pre>
-        <p className="text-xs text-[var(--muted-foreground)]">
-          Diagram could not be rendered; showing the mermaid source.
-        </p>
+        <p className="text-xs text-[var(--muted-foreground)]">{t("mermaid.renderFailed")}</p>
       </div>
     );
   }

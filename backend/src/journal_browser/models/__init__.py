@@ -6,17 +6,42 @@ Landing store (ut-metadata pattern): verbatim payloads in `source_records`
 store; `manual_overrides` survives every re-ingestion.
 """
 
-from .app_data import CacheEpoch, DocEdit, Feedback, Limitation, ManualOverride, StatusChangeLog
+from .app_data import (
+    CacheEpoch,
+    DocEdit,
+    Feedback,
+    Limitation,
+    ManualOverride,
+    StatusChangeLog,
+    UsageEvent,
+)
 from .authors import Author, AuthorWork
 from .base import Base, _tstamp
 from .deals import Deal, DealInstitution, DealJournal
 from .evidence import ApcEvidence, InstitutionTrend, InstitutionWorksStats, JournalApcAggregate
 from .harvest import HarvestRun, HarvestState, RawFile, SourceRecord
+from .jisc import (
+    FunderLink,
+    JiscFunder,
+    JiscFunderGroup,
+    JiscPolicy,
+    JiscPublication,
+    JiscPublisher,
+    JiscRepository,
+)
 from .journals import Journal, JournalFlags, ScimagojrMetric
-from .openalex import AuthorIdentity, OpenalexWork
+from .openaire import OpenaireFunder, OpenaireFunderStream
+from .openalex import (
+    AuthorIdentity,
+    OpenalexFunder,
+    OpenalexWork,
+    OpenalexWorkAuthor,
+    OpenalexWorkParent,
+)
+from .people import PeopleUtwentePerson, PeopleUtwentePersonOrg
 from .pure import PureOrg, PureOrgParent, PurePerson, PurePersonOrg, WorkPureAuthor
 from .reference import Institution, IssnMap, OpenalexPublisher, Publisher
-from .works import WORK_IDENTITY_UQ, Work, WorkIdentity
+from .works import WORK_IDENTITY_UQ, OpenaireWorkFacts, Work, WorkFunder, WorkIdentity
 
 __all__ = [
     "WORK_IDENTITY_UQ",
@@ -31,19 +56,34 @@ __all__ = [
     "DealJournal",
     "DocEdit",
     "Feedback",
+    "FunderLink",
     "HarvestRun",
     "HarvestState",
     "Institution",
     "InstitutionTrend",
     "InstitutionWorksStats",
     "IssnMap",
+    "JiscFunder",
+    "JiscFunderGroup",
+    "JiscPolicy",
+    "JiscPublication",
+    "JiscPublisher",
+    "JiscRepository",
     "Journal",
     "JournalApcAggregate",
     "JournalFlags",
     "Limitation",
     "ManualOverride",
+    "OpenaireFunder",
+    "OpenaireFunderStream",
+    "OpenaireWorkFacts",
+    "OpenalexFunder",
     "OpenalexPublisher",
     "OpenalexWork",
+    "OpenalexWorkAuthor",
+    "OpenalexWorkParent",
+    "PeopleUtwentePerson",
+    "PeopleUtwentePersonOrg",
     "Publisher",
     "PureOrg",
     "PureOrgParent",
@@ -53,7 +93,9 @@ __all__ = [
     "ScimagojrMetric",
     "SourceRecord",
     "StatusChangeLog",
+    "UsageEvent",
     "Work",
+    "WorkFunder",
     "WorkIdentity",
     "WorkPureAuthor",
     "_tstamp",

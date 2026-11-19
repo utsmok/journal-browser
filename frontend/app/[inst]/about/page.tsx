@@ -1,10 +1,12 @@
 "use client";
 
 import { ExternalLink, Github } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useState } from "react";
 
 import { SourceNote } from "@/components/source-note";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { useFreshness, useLimitations } from "@/hooks/use-api";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { errorMessage } from "@/lib/api";
@@ -12,7 +14,8 @@ import { errorMessage } from "@/lib/api";
 type SourceInfo = {
   name: string;
   url: string;
-  role: string;
+  /** Key of the role description in the "about" messages under "sources.". */
+  roleKey: string;
   table?: string;
   harvest?: string;
 };
@@ -22,61 +25,69 @@ const SOURCES: SourceInfo[] = [
     name: "Pure",
     // Real portal URL comes from settings at render time (site.researchPortalUrl).
     url: "",
-    role: "Institution publication counts per journal. Pure is the primary figure, and the OpenAlex count below is its cross-check.",
+    roleKey: "pure",
     table: "institution_works_stats",
   },
   {
     name: "OpenAlex",
     url: "https://openalex.org",
-    role: "Journal records, open access status, citation metrics, and the cross-check on institution publication counts.",
+    roleKey: "openalex",
     table: "journals",
   },
   {
     name: "DOAJ",
     url: "https://doaj.org",
-    role: "The authoritative registry for gold and diamond open access: whether a journal charges an APC decides gold vs diamond, and its journal URL is the canon homepage. Harvested from DOAJ's full journal CSV.",
+    roleKey: "doaj",
     table: "doaj",
   },
   {
     name: "OpenAIRE",
     url: "https://openaire.eu",
-    role: "Alternative records and open access links for individual institutional works.",
+    roleKey: "openaire",
     harvest: "openaire",
   },
   {
     name: "Crossref",
     url: "https://www.crossref.org",
-    role: "DOI metadata used to match institutional works to their journal.",
+    roleKey: "crossref",
     harvest: "crossref",
   },
   {
     name: "openaccess.nl",
     url: "https://www.openaccess.nl/en/publishing/publisher-deals",
-    role: "Deal terms, conditions, and workflow descriptions.",
+    roleKey: "openaccessNl",
     harvest: "openaccess.nl",
   },
   {
     name: "JCT",
     url: "https://journalcheckertool.org/transformative-agreements/",
-    role: "Transformative agreement journal lists, one input used to build the register.",
+    roleKey: "jct",
     harvest: "jct",
   },
   {
     name: "OpenAPC",
     url: "https://github.com/OpenAPC/openapc-de",
-    role: "APC price aggregates and per-article cost evidence.",
+    roleKey: "openapc",
     table: "apc_evidence",
+  },
+  {
+    name: "Jisc Open Policy Finder",
+    url: "https://openpolicyfinder.jisc.ac.uk",
+    roleKey: "jiscOpf",
+    harvest: "jisc_opf",
   },
   {
     name: "Scimago",
     url: "https://www.scimagojr.com",
-    role: "SJR indicator, best quartile, and SJR h-index.",
+    roleKey: "scimago",
     table: "scimagojr_metrics",
   },
 ];
 
-function fmt(value: unknown) {
-  if (value === null || value === undefined) return "unknown";
+/** Dates render with a fixed locale; unknown values fall back to the label
+ * the caller passes in from the about messages. */
+function fmt(value: unknown, unknownLabel: string) {
+  if (value === null || value === undefined) return unknownLabel;
   if (typeof value === "string" && /^\d{4}/.test(value))
     return new Date(value).toLocaleDateString("en", {
       year: "numeric",
@@ -86,7 +97,13 @@ function fmt(value: unknown) {
   return String(value);
 }
 
+function ExternalIcon() {
+  return <ExternalLink aria-hidden className="size-3" />;
+}
+
 export default function AboutPage() {
+  const t = useTranslations("about");
+  const tc = useTranslations("common");
   const site = useSiteMeta();
   const freshnessQuery = useFreshness();
   const limitationsQuery = useLimitations();
@@ -94,6 +111,13 @@ export default function AboutPage() {
   const limitations = limitationsQuery.data;
 
   const tables = (freshness?.tables ?? {}) as Record<string, unknown>;
+  // Latest first; collapsed to the recent tail so the public page stays a
+  // summary, not a pipeline log.
+  const [showAllRuns, setShowAllRuns] = useState(false);
+  const harvestRows = [...(freshness?.harvests ?? [])].sort((a, b) =>
+    (b.finished_at ?? "").localeCompare(a.finished_at ?? ""),
+  );
+  const shownHarvests = showAllRuns ? harvestRows : harvestRows.slice(0, 10);
 
   function stamp(info: SourceInfo) {
     if (info.table) return tables[info.table];
@@ -104,51 +128,73 @@ export default function AboutPage() {
     return runs.at(-1) ?? null;
   }
 
+  const ror = freshness?.ror ?? null;
+  const institution = freshness?.institution ?? site.name;
+  const rorId = ror ? ror.replace(/^https?:\/\/ror\.org\//, "") : null;
+  const rorHref = ror ? (/^https?:\/\//.test(ror) ? ror : `https://ror.org/${ror}`) : null;
+
   return (
     <div className="mx-auto max-w-screen-2xl space-y-10 px-4 py-10">
       <header>
-        <h1 className="mb-2 text-3xl font-bold">About this browser</h1>
-        <p className="max-w-2xl text-[var(--muted-foreground)]">
-          A journal browser for <strong>{freshness?.institution ?? site.name}</strong>
-          {freshness?.ror && (
-            <>
-              {" "}
-              (
-              <a
-                href={
-                  /^https?:\/\//.test(freshness.ror)
-                    ? freshness.ror
-                    : `https://ror.org/${freshness.ror}`
-                }
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[var(--primary-text)] hover:underline"
-              >
-                ROR {freshness.ror.replace(/^https?:\/\/ror\.org\//, "")}
-              </a>
-              )
-            </>
-          )}
-          : find where to publish, what a deal covers, and how much it costs.
-        </p>
+        <h1 className="mb-2 text-3xl font-bold">{t("page.heading")}</h1>
+        <div className="max-w-prose space-y-3">
+          <p>
+            {rorId && rorHref
+              ? t.rich("page.introLeadRor", {
+                  institution,
+                  rorId,
+                  bold: (chunk) => <strong>{chunk}</strong>,
+                  link: (chunk) => (
+                    <a
+                      href={rorHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[var(--primary-text)] hover:underline"
+                    >
+                      {chunk}
+                    </a>
+                  ),
+                })
+              : t.rich("page.introLead", {
+                  institution,
+                  bold: (chunk) => <strong>{chunk}</strong>,
+                })}{" "}
+            {t("page.introPurpose")}
+          </p>
+          <p className="text-[var(--muted-foreground)]">
+            {t.rich("page.introLegacy", {
+              link: (chunk) => (
+                <a
+                  href="https://library.wur.nl/WebQuery/utbrowser?q=*"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[var(--primary-text)] underline-offset-2 hover:underline"
+                >
+                  {chunk}
+                </a>
+              ),
+            })}{" "}
+            {t("page.introPolicy")}
+          </p>
+        </div>
       </header>
       {(freshness?.degraded?.length ?? 0) > 0 && (
         <div
           role="alert"
           className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm"
         >
-          <p className="font-semibold text-amber-600 dark:text-amber-400">
-            Some data sources are currently degraded
-          </p>
+          <p className="font-semibold text-amber-600 dark:text-amber-400">{t("degraded.title")}</p>
           <ul className="mt-2 space-y-1 text-[var(--muted-foreground)]">
             {(freshness?.degraded ?? []).map((d) => (
               <li key={d.source}>
-                <strong>{d.source}</strong>: {d.detail} (since{" "}
-                {new Date(d.since).toLocaleString("en", {
-                  dateStyle: "medium",
-                  timeStyle: "short",
+                <strong>{d.source}</strong>:{" "}
+                {t("degraded.item", {
+                  detail: d.detail,
+                  time: new Date(d.since).toLocaleString("en", {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  }),
                 })}
-                )
               </li>
             ))}
           </ul>
@@ -157,7 +203,7 @@ export default function AboutPage() {
 
       {(freshnessQuery.isError || limitationsQuery.isError) && (
         <p aria-live="polite" className="text-sm text-[var(--destructive)]">
-          {errorMessage(freshnessQuery.isError ? freshnessQuery.error : limitationsQuery.error)}{" "}
+          {errorMessage(tc, freshnessQuery.isError ? freshnessQuery.error : limitationsQuery.error)}{" "}
           <button
             type="button"
             onClick={() => {
@@ -166,87 +212,63 @@ export default function AboutPage() {
             }}
             className="underline underline-offset-2 hover:no-underline"
           >
-            Retry
+            {t("page.retry")}
           </button>
         </p>
       )}
 
       <section>
-        <Card>
-          <CardContent className="space-y-3 pt-6 text-sm">
-            <p>
-              This browser is a modernisation of the{" "}
-              <a
-                href="https://library.wur.nl/WebQuery/utbrowser?q=*"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[var(--primary-text)] underline-offset-2 hover:underline"
-              >
-                WUR journal browser
-              </a>
-              , rebuilt on fully open data, released as open source, and easy to self-host.
-            </p>
-            <p>
-              The code is open source under the Apache-2.0 license and available on{" "}
-              <a
-                href="https://github.com/utsmok/journal-browser"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline"
-              >
-                <Github aria-hidden className="size-4" />
-                GitHub
-              </a>
-              {site.adminContact ? ". Technical questions? Contact the admin, " : ". "}
-              {site.adminContact && (
-                <a
-                  href={`mailto:${site.adminContact}`}
-                  className="text-[var(--primary-text)] underline-offset-2 hover:underline"
-                >
-                  {site.adminContact}
-                </a>
-              )}{" "}
-              For open access policy questions, see the library links in the footer.
-            </p>
-          </CardContent>
-        </Card>
-      </section>
-
-      <section>
-        <h2 className="mb-3 text-xl font-bold">Data sources</h2>
+        <h2 className="mb-3 text-xl font-bold">{t("sources.heading")}</h2>
         <Card>
           <CardContent className="pt-6">
-            <ul className="space-y-3 text-sm">
-              {SOURCES.map((info) => (
-                <li
-                  key={info.name}
-                  className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[var(--border)] pb-3 last:border-0 last:pb-0"
-                >
-                  <span>
-                    <a
-                      href={info.url || site.researchPortalUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-0.5 font-semibold text-[var(--primary-text)] hover:underline"
-                    >
-                      {info.name} <ExternalLink aria-hidden className="size-3" />
-                    </a>
-                    <span className="block text-xs text-[var(--muted-foreground)]">
-                      {info.role}
-                    </span>
-                  </span>
-                  <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
-                    Latest data: {freshnessQuery.isPending ? "…" : fmt(stamp(info))}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <caption className="sr-only">{t("sources.tableCaption")}</caption>
+                <thead>
+                  <tr className="text-left text-xs text-[var(--muted-foreground)]">
+                    <th scope="col" className="py-1 pr-4 font-medium">
+                      {t("sources.columnSource")}
+                    </th>
+                    <th scope="col" className="py-1 pr-4 font-medium">
+                      {t("sources.columnProvides")}
+                    </th>
+                    <th scope="col" className="py-1 font-medium">
+                      {t("sources.columnLatest")}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {SOURCES.map((info) => (
+                    <tr key={info.name} className="border-t border-[var(--border)] align-top">
+                      <td className="py-2 pr-4 whitespace-nowrap">
+                        <a
+                          href={info.url || site.researchPortalUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-0.5 font-semibold text-[var(--primary-text)] hover:underline"
+                        >
+                          {info.name} <ExternalIcon />
+                        </a>
+                      </td>
+                      <td className="py-2 pr-4 text-[var(--muted-foreground)]">
+                        {t(`sources.${info.roleKey}`)}
+                      </td>
+                      <td className="py-2 text-xs whitespace-nowrap tabular-nums text-[var(--muted-foreground)]">
+                        {freshnessQuery.isPending ? "…" : fmt(stamp(info), t("page.unknownValue"))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <p className="mt-4 max-w-prose text-xs text-[var(--muted-foreground)]">
-              Harvest jobs run when the library refreshes the data, and per-run status is listed
-              below. The deal register is maintained by hand, so a re-ingest can never overwrite
-              reviewed deal information. Publication statistics cover works published in{" "}
-              {site.windowStart === undefined ? "the institution's data window" : site.windowStart}{" "}
-              or later, and the search lists journals with more than 3 publications in that window.
+              {t("sources.footnote")}{" "}
+              {t("sources.statsWindow", {
+                window:
+                  site.windowStart === undefined
+                    ? t("sources.statsWindowFallback")
+                    : site.windowStart,
+              })}
             </p>
           </CardContent>
         </Card>
@@ -254,25 +276,22 @@ export default function AboutPage() {
 
       {freshness && freshness.harvests.length > 0 && (
         <section>
-          <h2 className="mb-3 text-xl font-bold">Harvest runs</h2>
+          <h2 className="mb-3 text-xl font-bold">{t("harvests.heading")}</h2>
           <Card>
             <CardContent className="overflow-x-auto pt-6">
               <table className="w-full text-xs">
-                <caption className="sr-only">
-                  Most recent harvest runs per source, entity, and filter set, with status and
-                  finish time
-                </caption>
+                <caption className="sr-only">{t("harvests.tableCaption")}</caption>
                 <thead>
                   <tr className="text-left text-[var(--muted-foreground)]">
-                    <th className="py-1 pr-3 font-medium">Source</th>
-                    <th className="py-1 pr-3 font-medium">Entity</th>
-                    <th className="py-1 pr-3 font-medium">Filter set</th>
-                    <th className="py-1 pr-3 font-medium">Status</th>
-                    <th className="py-1 font-medium">Finished</th>
+                    <th className="py-1 pr-3 font-medium">{t("harvests.columnSource")}</th>
+                    <th className="py-1 pr-3 font-medium">{t("harvests.columnEntity")}</th>
+                    <th className="py-1 pr-3 font-medium">{t("harvests.columnFilters")}</th>
+                    <th className="py-1 pr-3 font-medium">{t("harvests.columnStatus")}</th>
+                    <th className="py-1 font-medium">{t("harvests.columnFinished")}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {freshness.harvests.map((h, i) => {
+                  {shownHarvests.map((h, i) => {
                     const url = SOURCES.find(
                       (s) => s.name.toLowerCase() === h.source.toLowerCase(),
                     )?.url;
@@ -301,15 +320,28 @@ export default function AboutPage() {
                             {h.status ?? "—"}
                           </Badge>
                         </td>
-                        <td className="py-1.5 tabular-nums">{fmt(h.finished_at)}</td>
+                        <td className="py-1.5 tabular-nums">
+                          {fmt(h.finished_at, t("page.unknownValue"))}
+                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
               <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-                Rows for deal sources are historical. The deal register has been maintained by hand
-                since October 2026.
+                {t("harvests.footnote")}
+                {harvestRows.length > shownHarvests.length && (
+                  <>
+                    {" "}
+                    <button
+                      type="button"
+                      onClick={() => setShowAllRuns(true)}
+                      className="font-medium text-[var(--primary-text)] underline underline-offset-2 hover:no-underline"
+                    >
+                      {t("harvests.showAll", { count: harvestRows.length })}
+                    </button>
+                  </>
+                )}
               </p>
             </CardContent>
           </Card>
@@ -317,47 +349,79 @@ export default function AboutPage() {
       )}
 
       <section>
-        <h2 className="mb-1 text-xl font-bold">Data limitations</h2>
-        <p className="mb-3 text-sm text-[var(--muted-foreground)]">
-          Every number in this browser shows its source. This registry lists the caveats behind the
-          sources, and each entry links to the data provider.
+        <h2 className="mb-3 text-xl font-bold">{t("licences.heading")}</h2>
+        <ul className="grid max-w-prose gap-x-10 gap-y-2 text-sm sm:grid-cols-2">
+          <li>
+            {t.rich("licences.code", {
+              link: (chunk) => (
+                <a
+                  href="https://github.com/utsmok/journal-browser"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline"
+                >
+                  <Github aria-hidden className="size-4" /> {chunk}
+                </a>
+              ),
+            })}
+          </li>
+          <li>
+            {t.rich("licences.policyFinder", {
+              link: (chunk) => (
+                <a
+                  href="https://openpolicyfinder.jisc.ac.uk"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-0.5 text-[var(--primary-text)] underline-offset-2 hover:underline"
+                >
+                  {chunk} <ExternalIcon />
+                </a>
+              ),
+            })}
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2 className="mb-1 text-xl font-bold">{t("limitations.heading")}</h2>
+        <p className="mb-4 max-w-prose text-sm text-[var(--muted-foreground)]">
+          {t("limitations.intro")}
         </p>
-        <div className="grid gap-4 md:grid-cols-2">
-          {(limitations ?? []).length === 0 && !limitationsQuery.isPending ? (
-            <p className="text-sm text-[var(--muted-foreground)]">No limitations registered.</p>
-          ) : null}
-          {(limitations ?? []).map((l) => (
-            <Card key={l.code}>
-              <CardHeader className="pb-3">
-                <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-                  {l.code}
+        {(limitations ?? []).length === 0 && !limitationsQuery.isPending ? (
+          <p className="text-sm text-[var(--muted-foreground)]">{t("limitations.empty")}</p>
+        ) : (
+          <ul className="grid gap-x-10 gap-y-5 md:grid-cols-2">
+            {(limitations ?? []).map((l) => (
+              <li key={l.code} className="text-sm">
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <span className="font-mono text-xs font-semibold">{l.code}</span>
                   <Badge
                     variant={l.severity === "warning" ? "default" : "muted"}
                     className="uppercase"
                   >
                     {l.severity}
                   </Badge>
-                </CardTitle>
-                <p className="text-xs text-[var(--muted-foreground)]">
-                  {l.source}, {l.scope}
+                  <span className="text-xs text-[var(--muted-foreground)]">
+                    {l.source} · {l.scope}
+                  </span>
+                </div>
+                <p className="mt-1">
+                  {l.hint}
+                  {l.url && (
+                    <a
+                      href={l.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ml-2 inline-flex items-center gap-0.5 text-[var(--primary-text)] hover:underline"
+                    >
+                      {t("limitations.moreInfo")} <ExternalIcon />
+                    </a>
+                  )}
                 </p>
-              </CardHeader>
-              <CardContent className="text-sm">
-                {l.hint}
-                {l.url && (
-                  <a
-                    href={l.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="ml-2 inline-flex items-center gap-0.5 text-[var(--primary-text)] hover:underline"
-                  >
-                    More info <ExternalLink aria-hidden className="size-3" />
-                  </a>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+              </li>
+            ))}
+          </ul>
+        )}
         <div className="mt-4">
           <SourceNote
             source="Limitation registry"
@@ -367,44 +431,57 @@ export default function AboutPage() {
       </section>
 
       <section>
-        <h2 className="mb-3 text-xl font-bold">Contact</h2>
-        <Card>
-          <CardContent className="pt-6 text-sm">
-            <p className="mb-2 text-[var(--muted-foreground)]">
-              Questions about open access publishing at {site.name}? The library can help.
+        <h2 className="mb-3 text-xl font-bold">{t("contact.heading")}</h2>
+        <div className="max-w-prose space-y-2 text-sm">
+          <p className="text-[var(--muted-foreground)]">
+            {t("contact.intro", { institution: site.name })}
+          </p>
+          <ul className="flex flex-wrap gap-x-6 gap-y-1">
+            <li>
+              <a
+                href={site.libraryUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-0.5 text-[var(--primary-text)] hover:underline"
+              >
+                {t("contact.libraryLink", { institution: site.name })} <ExternalIcon />
+              </a>
+            </li>
+            <li>
+              <a
+                href={site.oaGuideUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-0.5 text-[var(--primary-text)] hover:underline"
+              >
+                {t("contact.guideLink")} <ExternalIcon />
+              </a>
+            </li>
+            <li>
+              <a
+                href={`mailto:${site.supportEmail}`}
+                className="text-[var(--primary-text)] hover:underline"
+              >
+                {site.supportEmail}
+              </a>
+            </li>
+          </ul>
+          {site.adminContact && (
+            <p className="text-[var(--muted-foreground)]">
+              {t.rich("contact.adminIntro", {
+                email: site.adminContact,
+                link: (chunk) => (
+                  <a
+                    href={`mailto:${site.adminContact}`}
+                    className="text-[var(--primary-text)] underline-offset-2 hover:underline"
+                  >
+                    {chunk}
+                  </a>
+                ),
+              })}
             </p>
-            <ul className="flex flex-wrap gap-x-6 gap-y-1">
-              <li>
-                <a
-                  href={site.libraryUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-0.5 text-[var(--primary-text)] hover:underline"
-                >
-                  {site.name} Library <ExternalLink aria-hidden className="size-3" />
-                </a>
-              </li>
-              <li>
-                <a
-                  href={site.oaGuideUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-0.5 text-[var(--primary-text)] hover:underline"
-                >
-                  Open Access publishing guide <ExternalLink aria-hidden className="size-3" />
-                </a>
-              </li>
-              <li>
-                <a
-                  href={`mailto:${site.supportEmail}`}
-                  className="text-[var(--primary-text)] hover:underline"
-                >
-                  {site.supportEmail}
-                </a>
-              </li>
-            </ul>
-          </CardContent>
-        </Card>
+          )}
+        </div>
       </section>
     </div>
   );

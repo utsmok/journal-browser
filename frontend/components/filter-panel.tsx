@@ -1,15 +1,29 @@
+"use client";
+
 import { ChevronDown } from "lucide-react";
 import type { ReactNode } from "react";
+import { useTranslations } from "next-intl";
 
 import { ACCESS_TEXT, DealGlyph, LockIcon, QuartileGlyph } from "@/components/badges";
 import { useSiteMeta } from "@/hooks/use-site-meta";
+import { PUB_TYPE_LABELS } from "@/lib/search-config";
 
-const OA_TYPE_LABELS: Record<string, string> = {
-  gold: "Gold OA",
-  diamond: "Diamond OA",
-  generic: "OA (model unknown)",
-  hybrid: "Hybrid",
-  subscription: "Subscription (closed)",
+/** Minimal shape of next-intl's `t` used by the facet helpers. */
+type Translator = (key: string, values?: Record<string, string | number>) => string;
+
+const OA_TYPE_LABEL_KEYS: Record<string, string> = {
+  gold: "facets.oaTypeGold",
+  diamond: "facets.oaTypeDiamond",
+  generic: "facets.oaTypeGeneric",
+  hybrid: "facets.oaTypeHybrid",
+  subscription: "facets.oaTypeSubscription",
+};
+
+const GREEN_OA_LABEL_KEYS: Record<string, string> = {
+  submitted: "facets.greenOaSubmitted",
+  accepted: "facets.greenOaAccepted",
+  published: "facets.greenOaPublished",
+  none: "facets.greenOaNone",
 };
 
 export type FacetValue = { value: string; count?: number; label?: string };
@@ -25,8 +39,15 @@ type FilterSelection = {
   publisher: string;
   hasApc: string | null;
   hasWorks: string | null;
+  greenOa: string | null;
+  /** Funder-fit tier; only selectable when a funder is picked. */
+  funderFit: string;
   /** Multi-select: values OR together (single-select groups do not). */
   oaTypes: string[];
+  /** OpenAlex venue type ("journal", "book series", ...). */
+  pubType: string;
+  /** Modal journal language (ISO 639-1 code). */
+  language: string;
 };
 
 export type FacetGroupDef = {
@@ -202,6 +223,9 @@ function facetLook(key: string, value: string): { icon: ReactNode; tint: string 
     case "has_works:true":
     case "has_works:false":
       return { icon: <WorksGlyph />, tint: value === "true" ? TINTS.brand : TINTS.slate };
+    // Positive green-OA values ride the default icon-less brand look, like topic/publisher.
+    case "green_oa:none":
+      return { icon: null, tint: TINTS.slate };
     default:
       // The deal facet's negative value is backend-defined; anything that is
       // not "covered" is a no-deal option.
@@ -215,72 +239,87 @@ function facetLook(key: string, value: string): { icon: ReactNode; tint: string 
   }
 }
 
-/** How each facet group behaves; shown as hover text on the group header. */
-const GROUP_HINTS: Record<string, string> = {
-  oa: "Is the journal open access as a whole (any OA type)? One choice; click it again to clear.",
-  oa_type:
-    "How the journal makes content open access. You can combine several types; click a selected type to remove it.",
-  doaj: "Is the journal listed in DOAJ, the quality-controlled open access directory? One choice; click it again to clear.",
-  quartile:
-    "SCImago impact quartile of the journal in its subject category. One choice; click it again to clear.",
-  has_apc:
-    "Is any APC known for this journal — a list price (OpenAlex) or costs reported to OpenAPC? One choice; click it again to clear.",
-  topic: "OpenAlex topic of the journal's works. One choice; click it again to clear.",
-  publisher: "The journal's publisher. One choice; click it again to clear.",
-};
-
-/** Definitions per facet option, shown as hover text on the control. */
-const FACET_TITLES: Record<string, string> = {
-  "oa:true": "The journal is fully or partly open access.",
-  "oa:false": "Subscription journal with no open access.",
-  "oa_type:gold": "Every article is published open access on the journal's own site.",
-  "oa_type:diamond": "Fully open access journal without fees for readers or authors.",
-  "oa_type:hybrid": "Subscription journal where individual articles can be made open access.",
-  "oa_type:generic":
-    "Open access journal whose business model could not be determined: it is open access, but no source shows whether it charges authors.",
-  "oa_type:subscription": "No open access; reading the published version requires a subscription.",
-  "doaj:true":
-    "Listed in DOAJ, the Directory of Open Access Journals, a quality-controlled registry for open access journals.",
-  "doaj:false": "Not listed in DOAJ; hybrid and subscription journals usually are not.",
-  "quartile:Q1": "Top 25% of its SCImago subject category by citation metrics.",
-  "quartile:Q2": "Second quarter (25-50%) of its SCImago subject category.",
-  "quartile:Q3": "Third quarter (50-75%) of its SCImago subject category.",
-  "quartile:Q4": "Last quarter (75%) of its SCImago subject category by citation metrics.",
-  "has_apc:true":
-    "APCs are known for this journal: a list price (OpenAlex) or costs reported to OpenAPC.",
-  "has_apc:false": "No APC is known for this journal from either source.",
+/** How each facet group behaves; shown as hover text on the group header.
+ * Groups without an entry render no hover text. */
+const GROUP_HINT_KEYS: Record<string, string> = {
+  pub_type: "facets.hintVenueType",
+  oa: "facets.hintOpenAccess",
+  oa_type: "facets.hintOaType",
+  doaj: "facets.hintDoaj",
+  quartile: "facets.hintQuartile",
+  has_apc: "facets.hintApc",
+  green_oa: "facets.hintGreenOa",
+  topic: "facets.hintTopic",
+  publisher: "facets.hintPublisher",
 };
 
 /** Hints that name the institution or window, resolved per render. */
-function groupHint(key: string, name: string, windowStart: number | undefined) {
-  if (key === "deal")
-    return `Does a ${name} open access deal cover APCs in this journal? One choice; click it again to clear.`;
-  if (key === "has_works")
-    return `Has ${name} published in this journal${
-      windowStart === undefined ? "" : ` (${windowStart} onwards)`
-    }? One choice; click it again to clear.`;
-  return GROUP_HINTS[key];
+function groupHint(
+  t: Translator,
+  key: string,
+  name: string,
+  windowStart: number | undefined,
+): string | undefined {
+  if (key === "deal") return t("facets.hintDeal", { name });
+  if (key === "has_works") {
+    return windowStart === undefined
+      ? t("facets.hintInstWorks", { name })
+      : t("facets.hintInstWorksSince", { name, windowStart: String(windowStart) });
+  }
+  const hintKey = GROUP_HINT_KEYS[key];
+  return hintKey ? t(hintKey) : undefined;
 }
 
+/** Definitions per facet option, shown as hover text on the control. */
+const FACET_TITLE_KEYS: Record<string, string> = {
+  "pub_type:journal": "facets.titleVenueTypeJournal",
+  "pub_type:book series": "facets.titleVenueTypeBookSeries",
+  "pub_type:conference": "facets.titleVenueTypeConference",
+  "pub_type:ebook platform": "facets.titleVenueTypeEbookPlatform",
+  "pub_type:repository": "facets.titleVenueTypeRepository",
+  "oa:true": "facets.titleOaYes",
+  "oa:false": "facets.titleOaNo",
+  "oa_type:gold": "facets.titleOaTypeGold",
+  "oa_type:diamond": "facets.titleOaTypeDiamond",
+  "oa_type:hybrid": "facets.titleOaTypeHybrid",
+  "oa_type:generic": "facets.titleOaTypeGeneric",
+  "oa_type:subscription": "facets.titleOaTypeSubscription",
+  "doaj:true": "facets.titleDoajYes",
+  "doaj:false": "facets.titleDoajNo",
+  "quartile:Q1": "facets.titleQuartileQ1",
+  "quartile:Q2": "facets.titleQuartileQ2",
+  "quartile:Q3": "facets.titleQuartileQ3",
+  "quartile:Q4": "facets.titleQuartileQ4",
+  "has_apc:true": "facets.titleApcKnown",
+  "has_apc:false": "facets.titleApcUnknown",
+  "green_oa:submitted": "facets.titleGreenOaSubmitted",
+  "green_oa:accepted": "facets.titleGreenOaAccepted",
+  "green_oa:published": "facets.titleGreenOaPublished",
+  "green_oa:none": "facets.titleGreenOaNone",
+};
+
 function facetTitle(
+  t: Translator,
   key: string,
   value: string,
   name: string,
   short: string,
   windowStart: number | undefined,
-) {
+): string | undefined {
   const k = `${key}:${value}`;
-  if (k === "deal:covered")
-    return `APCs for corresponding ${short} authors are covered, fully or partly, by a deal.`;
-  if (k === "has_works:true")
-    return `${name} has at least one publication in this journal${
-      windowStart === undefined ? "" : ` since ${windowStart}`
-    }.`;
-  if (k === "has_works:false")
-    return `No known ${name} publications in this journal${
-      windowStart === undefined ? "" : ` since ${windowStart}`
-    }.`;
-  return FACET_TITLES[k];
+  if (k === "deal:covered") return t("facets.titleDealCovered", { short });
+  if (k === "has_works:true") {
+    return windowStart === undefined
+      ? t("facets.titleInstWorksYes", { name })
+      : t("facets.titleInstWorksYesSince", { name, windowStart: String(windowStart) });
+  }
+  if (k === "has_works:false") {
+    return windowStart === undefined
+      ? t("facets.titleInstWorksNo", { name })
+      : t("facets.titleInstWorksNoSince", { name, windowStart: String(windowStart) });
+  }
+  const titleKey = FACET_TITLE_KEYS[k];
+  return titleKey ? t(titleKey) : undefined;
 }
 
 function FacetGroup({
@@ -293,6 +332,7 @@ function FacetGroup({
   variant: "chips" | "rows";
 }) {
   const site = useSiteMeta();
+  const t = useTranslations("common");
   const { key, label, values, activeValues, defaultOpen } = group;
   const chips = variant === "chips";
   const focus =
@@ -308,9 +348,14 @@ function FacetGroup({
 
   return (
     // open never changes value, so React leaves the native toggle alone.
-    <details open={defaultOpen} className="group" role="group" aria-label={`Filter by ${label}`}>
+    <details
+      open={defaultOpen}
+      className="group"
+      role="group"
+      aria-label={t("facets.filterBy", { label })}
+    >
       <summary
-        title={groupHint(key, site.name, site.windowStart)}
+        title={groupHint(t, key, site.name, site.windowStart)}
         className={`${focus} flex cursor-pointer select-none list-none items-center justify-between gap-2 rounded py-1.5 text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] [&::-webkit-details-marker]:hidden`}
       >
         <span>{label}</span>
@@ -378,7 +423,7 @@ function FacetGroup({
             </>
           );
           const optionTitle =
-            facetTitle(key, f.value, site.name, site.short, site.windowStart) ??
+            facetTitle(t, key, f.value, site.name, site.short, site.windowStart) ??
             (f.value.length > 24 ? f.value : undefined);
           return zero ? (
             <span key={f.value} aria-disabled="true" title={optionTitle} className={className}>
@@ -437,93 +482,141 @@ export function FilterPanel({
   variant: "chips" | "rows";
 }) {
   const site = useSiteMeta();
+  const t = useTranslations("common");
+  const ts = useTranslations("search");
   const topicValues = topValues(facets.topic, selection.topic);
   const publisherValues = topValues(facets.publisher, selection.publisher);
 
   const groups: FacetGroupDef[] = [
     {
+      key: "pub_type",
+      label: t("facets.groupVenueType"),
+      defaultOpen: true,
+      values: topValues(facets.pub_type, selection.pubType).map((v) => ({
+        ...v,
+        label: PUB_TYPE_LABELS[v.value] ? ts(PUB_TYPE_LABELS[v.value]) : v.value,
+      })),
+      activeValues: selection.pubType ? [selection.pubType] : [],
+    },
+    {
       key: "deal",
-      label: "Deal",
+      label: t("facets.groupDeal"),
       defaultOpen: true,
       values: Object.entries(facets.deal_coverage ?? {}).map(([value, count]) => ({
         value,
         count,
-        label: value === "covered" ? "Covered by a deal" : "No deal",
+        label: value === "covered" ? t("facets.dealCovered") : t("facets.dealNone"),
       })),
       activeValues: selection.deal ? [selection.deal] : [],
     },
     {
       key: "oa",
-      label: "Open access",
+      label: t("facets.groupOpenAccess"),
       defaultOpen: true,
       values: Object.entries(facets.oa ?? {}).map(([value, count]) => ({
         value,
         count,
-        label: value === "true" ? "OA journal" : "Not OA",
+        label: value === "true" ? t("facets.oaYes") : t("facets.oaNo"),
       })),
       activeValues: selection.oa !== null ? [selection.oa] : [],
     },
     {
       key: "oa_type",
-      label: "OA type",
+      label: t("facets.groupOaType"),
       defaultOpen: true,
-      values: ["gold", "diamond", "generic", "hybrid", "subscription"].map((v) => ({
+      values: ["diamond", "gold", "hybrid", "generic", "subscription"].map((v) => ({
         value: v,
         count: facets.oa_type?.[v] ?? 0,
-        label: OA_TYPE_LABELS[v] ?? v,
+        label: OA_TYPE_LABEL_KEYS[v] ? t(OA_TYPE_LABEL_KEYS[v]) : v,
       })),
-      // Multi-select: this group ORs its values; the caller keeps every
+      // Multi-select: this group ORs values; the caller keeps every
       // active value instead of clearing the group on re-click.
       activeValues: selection.oaTypes,
     },
     {
+      key: "language",
+      label: t("facets.groupLanguage"),
+      defaultOpen: true,
+      values: topValues(facets.language, selection.language).map((v) => ({
+        ...v,
+        label: ts.has(`languages.${v.value}`) ? ts(`languages.${v.value}`) : v.value,
+      })),
+      activeValues: selection.language ? [selection.language] : [],
+    },
+    {
       key: "doaj",
-      label: "DOAJ",
+      label: t("facets.groupDoaj"),
       defaultOpen: true,
       values: Object.entries(facets.doaj ?? {}).map(([value, count]) => ({
         value,
         count,
-        label: value === "true" ? "In DOAJ" : "Not in DOAJ",
+        label: value === "true" ? t("facets.doajYes") : t("facets.doajNo"),
       })),
       activeValues: selection.doaj !== null ? [selection.doaj] : [],
     },
     {
-      key: "quartile",
-      label: "Quartile",
-      defaultOpen: true,
-      values: ["Q1", "Q2", "Q3", "Q4"].map((q) => ({
-        value: q,
-        count: facets.quartile?.[q] ?? 0,
-      })),
-      activeValues: selection.quartile ? [selection.quartile] : [],
-    },
-    {
       key: "has_apc",
-      label: "APC",
+      label: t("facets.groupApc"),
       defaultOpen: true,
       values: Object.entries(facets.apc ?? {}).map(([value, count]) => ({
         value,
         count,
-        label: value === "true" ? "APC data known" : "No APC data",
+        label: value === "true" ? t("facets.apcKnown") : t("facets.apcUnknown"),
       })),
       activeValues: selection.hasApc !== null ? [selection.hasApc] : [],
     },
     {
+      key: "green_oa",
+      label: t("facets.groupGreenOa"),
+      defaultOpen: true,
+      values: ["submitted", "accepted", "published", "none"].map((v) => ({
+        value: v,
+        count: facets.green_oa?.[v] ?? 0,
+        label: GREEN_OA_LABEL_KEYS[v] ? t(GREEN_OA_LABEL_KEYS[v]) : v,
+      })),
+      activeValues: selection.greenOa ? [selection.greenOa] : [],
+    },
+    {
       key: "has_works",
-      label: `${site.short} works`,
+      label: t("facets.groupInstWorks", { short: site.short }),
       defaultOpen: true,
       values: Object.entries(facets.works ?? {}).map(([value, count]) => ({
         value,
         count,
-        label: value === "true" ? `Has ${site.short} works` : `No ${site.short} works`,
+        label:
+          value === "true"
+            ? t("facets.instWorksYes", { short: site.short })
+            : t("facets.instWorksNo", { short: site.short }),
       })),
       activeValues: selection.hasWorks !== null ? [selection.hasWorks] : [],
     },
+    // Only rendered when a funder is selected and its policy is structured
+    // (the backend omits the facet otherwise).
+    ...(facets.funder_fit
+      ? [
+          {
+            key: "funder_fit",
+            label: t("facets.groupFunderFit"),
+            defaultOpen: true,
+            values: ["compliant", "check", "no"].map((v) => ({
+              value: v,
+              count: facets.funder_fit?.[v] ?? 0,
+              label:
+                v === "compliant"
+                  ? t("facets.funderFitCompliant")
+                  : v === "check"
+                    ? t("facets.funderFitCheck")
+                    : t("facets.funderFitNo"),
+            })),
+            activeValues: selection.funderFit ? [selection.funderFit] : [],
+          },
+        ]
+      : []),
     ...(topicValues.length > 0
       ? [
           {
             key: "topic",
-            label: "Topic",
+            label: t("facets.groupTopic"),
             defaultOpen: false,
             values: topicValues,
             activeValues: selection.topic ? [selection.topic] : [],
@@ -534,13 +627,25 @@ export function FilterPanel({
       ? [
           {
             key: "publisher",
-            label: "Publisher",
+            label: t("facets.groupPublisher"),
             defaultOpen: false,
             values: publisherValues,
             activeValues: selection.publisher ? [selection.publisher] : [],
           },
         ]
       : []),
+    // Quartile sits last: it is the least decision-relevant facet and the
+    // list reads better with it at the bottom of both panel variants.
+    {
+      key: "quartile",
+      label: t("facets.groupQuartile"),
+      defaultOpen: true,
+      values: ["Q1", "Q2", "Q3", "Q4"].map((q) => ({
+        value: q,
+        count: facets.quartile?.[q] ?? 0,
+      })),
+      activeValues: selection.quartile ? [selection.quartile] : [],
+    },
   ];
 
   return <FacetGroupList groups={groups} onToggle={onToggle} variant={variant} />;

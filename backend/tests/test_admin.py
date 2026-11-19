@@ -1,11 +1,13 @@
 """Admin panel API: password gate, run listing, flagged deals, settings."""
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from conftest import requires_db
+from conftest import pair_rows, requires_db
 from journal_browser.config import get_settings, reset_settings_cache
 from journal_browser.models import (
     Author,
@@ -16,7 +18,9 @@ from journal_browser.models import (
     HarvestRun,
     Institution,
     Journal,
+    OpenalexWork,
     Publisher,
+    SourceRecord,
     StatusChangeLog,
     Work,
     WorkIdentity,
@@ -230,7 +234,7 @@ async def test_feedback_limit_rejects_nonpositive(admin_api):
 @requires_db
 async def test_institution_put_rejects_null_nonnullable(admin_api):
     headers = await _login(admin_api)
-    for key in ("name", "data_window_start", "data_window_end", "active"):
+    for key in ("name", "data_window_start", "active"):
         r = await admin_api.put("/api/v1/admin/institutions/ut", headers=headers, json={key: None})
         assert r.status_code == 422, key
     # A nullable field still clears on explicit null.
@@ -239,6 +243,41 @@ async def test_institution_put_rejects_null_nonnullable(admin_api):
     )
     assert r.status_code == 200
     assert r.json()["admin_contact"] is None
+
+
+@requires_db
+async def test_institution_put_window_end_zero_and_null_mean_open(admin_api, db_engine):
+    """0 (the compose/.env default) and explicit null both store NULL."""
+    headers = await _login(admin_api)
+    r = await admin_api.put(
+        "/api/v1/admin/institutions/ut", headers=headers, json={"data_window_end": 0}
+    )
+    assert r.status_code == 200
+    assert r.json()["data_window_end"] is None
+    r = await admin_api.put(
+        "/api/v1/admin/institutions/ut",
+        headers=headers,
+        json={"data_window_start": 2024, "data_window_end": 2025},
+    )
+    assert r.json()["data_window_end"] == 2025
+    # Absent key leaves the stored value untouched.
+    r = await admin_api.put(
+        "/api/v1/admin/institutions/ut", headers=headers, json={"name": "University of Twente"}
+    )
+    assert r.status_code == 200
+    assert r.json()["data_window_end"] == 2025
+    # Explicit null clears the column again — really NULL in the DB.
+    r = await admin_api.put(
+        "/api/v1/admin/institutions/ut", headers=headers, json={"data_window_end": None}
+    )
+    assert r.status_code == 200
+    assert r.json()["data_window_end"] is None
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with maker() as session:
+        inst = (
+            await session.execute(select(Institution).where(Institution.code == "ut"))
+        ).scalar_one()
+        assert inst.data_window_end is None
 
 
 @requires_db
@@ -274,7 +313,8 @@ async def test_author_identities_list_and_flip(admin_api, db_engine):
         "/api/v1/admin/author-identities", params={"status": "candidate"}, headers=headers
     )
     assert r.status_code == 200
-    row = next(row for row in r.json() if row["author_pure_uuid"] == "p-review")
+    rows = r.json()["items"]
+    row = next(row for row in rows if row["author_pure_uuid"] == "p-review")
     assert row["author_name"] == "Review Me"
     assert row["institution_code"] == "ut"
 
@@ -413,7 +453,7 @@ async def test_work_identities_list_flip_and_audit(admin_api, db_engine):
         await session.commit()
 
     headers = await _login(admin_api)
-    rows = (await admin_api.get("/api/v1/admin/work-identities", headers=headers)).json()
+    rows = (await admin_api.get("/api/v1/admin/work-identities", headers=headers)).json()["items"]
     assert len(rows) == 1
     assert rows[0]["work_title"] == "A local work"
     assert rows[0]["institution_code"] == "ut"
@@ -459,6 +499,212 @@ async def test_work_identities_list_flip_and_audit(admin_api, db_engine):
         assert len(changes) == 1
         assert changes[0].old_value == "missing"
         assert changes[0].new_value == "candidate"
+
+
+@requires_db
+async def test_work_identities_bulk_decisions(admin_api, db_engine):
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with maker() as session:
+        inst_id = (await session.execute(select(Institution.id).limit(1))).scalar_one()
+        run_id = (await session.execute(select(HarvestRun.id).limit(1))).scalar_one()
+        session.add(
+            Work(
+                institution_id=inst_id,
+                pure_uuid="w-bulk",
+                title="A bulk work",
+                norm_title="a bulk work",
+                year=2025,
+                first_seen_run=run_id,
+                last_seen_run=run_id,
+            )
+        )
+        for pk in ("doi:10.1/a", "doi:10.1/b", "doi:10.1/c"):
+            session.add(
+                WorkIdentity(
+                    institution_id=inst_id,
+                    source="openalex",
+                    source_pk=pk,
+                    work_id="w-bulk",
+                    matched_by="trgm:0.82",
+                    confidence=0.9,
+                    status="candidate",
+                )
+            )
+        await session.commit()
+
+    headers = await _login(admin_api)
+    body = {
+        "institution_id": inst_id,
+        "source": "openalex",
+        "reviewer": "bulk-sam",
+        "updates": [
+            {"source_pk": "doi:10.1/a", "status": "confirmed", "note": "safe band"},
+            {"source_pk": "doi:10.1/b", "status": "confirmed"},
+            {"source_pk": "doi:10.1/c", "status": "missing"},
+            # Unknown row: reported in errors, batch still applies.
+            {"source_pk": "doi:10.1/none", "status": "confirmed"},
+        ],
+    }
+    r = await admin_api.post("/api/v1/admin/work-identities/bulk", headers=headers, json=body)
+    assert r.status_code == 200
+    assert r.json()["confirmed"] == 2
+    assert r.json()["missing"] == 1
+    assert r.json()["errors"] == [
+        {
+            "source_pk": "doi:10.1/none",
+            "error": "work identity row not found: doi:10.1/none",
+        }
+    ]
+    assert r.json()["reopened"] == 0 and r.json()["unchanged"] == 0
+
+    async with maker() as session:
+        statuses = dict(
+            (
+                await session.execute(
+                    select(WorkIdentity.source_pk, WorkIdentity.status).where(
+                        WorkIdentity.source == "openalex"
+                    )
+                )
+            ).all()
+        )
+        assert statuses == {
+            "doi:10.1/a": "confirmed",
+            "doi:10.1/b": "confirmed",
+            "doi:10.1/c": "missing",
+        }
+        changes = (
+            (
+                await session.execute(
+                    select(StatusChangeLog)
+                    .where(StatusChangeLog.table_name == "work_identity")
+                    .order_by(StatusChangeLog.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(changes) == 3
+        assert [(c.old_value, c.new_value) for c in changes] == [
+            ("candidate", "confirmed"),
+            ("candidate", "confirmed"),
+            ("candidate", "missing"),
+        ]
+        assert {c.changed_by for c in changes} == {"bulk-sam"}
+        assert changes[0].note == "safe band"
+
+    # Invalid status words fail validation before anything is applied.
+    r = await admin_api.post(
+        "/api/v1/admin/work-identities/bulk",
+        headers=headers,
+        json={**body, "updates": [{"source_pk": "doi:10.1/a", "status": "maybe"}]},
+    )
+    assert r.status_code == 422
+
+
+@requires_db
+async def test_author_identities_paging_envelope(admin_api, db_engine):
+    """total reflects all filtered rows; offset pages through without overlap."""
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with maker() as session:
+        inst_id = (await session.execute(select(Institution.id).limit(1))).scalar_one()
+        base = datetime(2026, 1, 1, tzinfo=UTC)
+        for i in range(5):
+            session.add(
+                AuthorIdentity(
+                    institution_id=inst_id,
+                    author_pure_uuid=f"p-page-{i}",
+                    source="openalex",
+                    external_id=f"a-{i}",
+                    # Even rows confirmed, odd rows candidate: filter below.
+                    status="candidate" if i % 2 else "confirmed",
+                    method="initials",
+                    n_works=1,
+                    evidence={},
+                    # Distinct stamps pin the newest-first order.
+                    updated_at=base + timedelta(minutes=i),
+                )
+            )
+        await session.commit()
+
+    headers = await _login(admin_api)
+
+    async def page(**params):
+        r = await admin_api.get("/api/v1/admin/author-identities", params=params, headers=headers)
+        assert r.status_code == 200
+        return r.json()
+
+    first = await page(limit=2)
+    assert (first["total"], first["offset"]) == (5, 0)
+    assert len(first["items"]) == 2
+
+    second = await page(limit=2, offset=2)
+    assert (second["total"], second["offset"]) == (5, 2)
+    tail = await page(limit=2, offset=4)
+    assert len(tail["items"]) == 1
+    everything = {it["author_pure_uuid"] for it in first["items"] + second["items"] + tail["items"]}
+    assert len(everything) == 5
+
+    # Filters apply to the total, not just the items.
+    filtered = await page(status="candidate", limit=1)
+    assert filtered["total"] == 2
+    assert {it["status"] for it in filtered["items"]} == {"candidate"}
+
+    r = await admin_api.get(
+        "/api/v1/admin/author-identities", params={"offset": -1}, headers=headers
+    )
+    assert r.status_code == 422
+
+
+@requires_db
+async def test_work_identities_paging_envelope(admin_api, db_engine):
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with maker() as session:
+        inst_id = (await session.execute(select(Institution.id).limit(1))).scalar_one()
+        run_id = (await session.execute(select(HarvestRun.id).limit(1))).scalar_one()
+        for i in range(4):
+            session.add(
+                Work(
+                    institution_id=inst_id,
+                    pure_uuid=f"w-{i}",
+                    title=f"Work {i}",
+                    norm_title=f"work {i}",
+                    year=2025,
+                    first_seen_run=run_id,
+                    last_seen_run=run_id,
+                )
+            )
+            session.add(
+                WorkIdentity(
+                    institution_id=inst_id,
+                    # Two openalex rows, two pure rows: filter below.
+                    source="openalex" if i < 2 else "pure",
+                    source_pk=f"doi:10.9/{i}",
+                    work_id=f"w-{i}",
+                    matched_by="doi",
+                    status="missing",
+                )
+            )
+        await session.commit()
+
+    headers = await _login(admin_api)
+
+    async def page(**params):
+        r = await admin_api.get("/api/v1/admin/work-identities", params=params, headers=headers)
+        assert r.status_code == 200
+        return r.json()
+
+    first = await page(limit=3)
+    assert (first["total"], first["offset"]) == (4, 0)
+    assert len(first["items"]) == 3
+    rest = await page(limit=3, offset=3)
+    assert (rest["total"], rest["offset"]) == (4, 3)
+    assert len(rest["items"]) == 1
+    seen = {it["source_pk"] for it in first["items"] + rest["items"]}
+    assert len(seen) == 4
+
+    filtered = await page(source="openalex", limit=1)
+    assert filtered["total"] == 2
+    assert {it["source"] for it in filtered["items"]} == {"openalex"}
 
 
 @requires_db
@@ -574,3 +820,129 @@ async def test_admin_summary_counts(admin_api, db_engine):
     assert body["work_identity_candidates"] == 1
     assert body["last_run"]["source"] == "openalex"
     assert body["last_run"]["status"] == "running"
+
+
+@requires_db
+async def test_admin_summary_institution_scope(admin_api, db_engine):
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with maker() as session:
+        ut_id = (
+            await session.execute(select(Institution.id).where(Institution.code == "ut"))
+        ).scalar_one()
+        session.add(Institution(name="Other University", code="rug", active=True))
+        session.add(
+            HarvestRun(
+                source="openalex",
+                entity_type="work",
+                status="failed",
+                institution_id=ut_id,
+                config_fingerprint="x",
+            )
+        )
+        session.add(
+            HarvestRun(
+                source="reconcile", entity_type="deal", status="completed", config_fingerprint="x"
+            )
+        )
+        session.add(
+            AuthorIdentity(
+                institution_id=ut_id,
+                author_pure_uuid="p-scope",
+                source="openalex",
+                external_id="a-scope",
+                status="candidate",
+            )
+        )
+        await session.commit()
+
+    headers = await _login(admin_api)
+    body = (await admin_api.get("/api/v1/admin/summary", headers=headers)).json()
+    assert body["failed_runs_24h"] == 1
+    assert body["author_identity_candidates"] == 1
+    # Global last run is the unscoped rug run (inserted last).
+    assert body["last_run"]["institution_code"] is None
+    assert body["last_run"]["status"] == "completed"
+    # Flagged deals and feedback stay instance-global.
+    assert body["flagged_deals"] == 1
+    assert body["open_feedback"] == 0
+
+    scoped = (await admin_api.get("/api/v1/admin/summary?institution=ut", headers=headers)).json()
+    assert scoped["failed_runs_24h"] == 1
+    assert scoped["running_runs"] == 0
+    assert scoped["author_identity_candidates"] == 1
+    assert scoped["work_identity_candidates"] == 0
+    assert scoped["last_run"]["institution_code"] == "ut"
+    assert scoped["last_run"]["status"] == "failed"
+    assert scoped["flagged_deals"] == 1
+
+    rug = (await admin_api.get("/api/v1/admin/summary?institution=rug", headers=headers)).json()
+    assert rug["failed_runs_24h"] == 0
+    assert rug["author_identity_candidates"] == 0
+    assert rug["last_run"] is None
+    assert rug["flagged_deals"] == 1
+
+    r = await admin_api.get("/api/v1/admin/summary?institution=nope", headers=headers)
+    assert r.status_code == 404
+
+
+@requires_db
+async def test_external_author_served_from_source_records(admin_api, db_engine):
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with maker() as session:
+        ut_id = (
+            await session.execute(select(Institution.id).where(Institution.code == "ut"))
+        ).scalar_one()
+        run_id = (await session.execute(select(HarvestRun.id).limit(1))).scalar_one()
+        session.add(
+            SourceRecord(
+                source="openalex",
+                entity_type="authors",
+                source_pk="A123",
+                payload={
+                    "id": "https://openalex.org/A123",
+                    "display_name": "Jane Doe",
+                    "works_count": 7,
+                    "orcid": "https://orcid.org/0000-0000-0000-0001",
+                },
+                content_hash="h1",
+                harvest_run_id=run_id,
+            )
+        )
+        admin_works = [
+            OpenalexWork(
+                institution_id=ut_id,
+                w_id="W1",
+                title="One",
+                year=2024,
+                doi_normalized="10.1/one",
+                authorships=[{"a": "A123", "n": "Jane Doe", "o": None}],
+            ),
+            OpenalexWork(
+                institution_id=ut_id,
+                w_id="W2",
+                title="Two",
+                year=2023,
+                doi_normalized=None,
+                authorships=[{"a": "A999", "n": "Other", "o": None}],
+            ),
+        ]
+        session.add_all(admin_works)
+        session.add_all(pair_rows(*admin_works))
+        await session.commit()
+
+    headers = await _login(admin_api)
+    r = await admin_api.get("/api/v1/admin/external-author/A123", headers=headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["source_pk"] == "A123"
+    assert body["author"]["display_name"] == "Jane Doe"
+    assert [work["w_id"] for work in body["works"]] == ["W1"]
+    assert body["works"][0]["doi"] == "10.1/one"
+
+    scoped = await admin_api.get(
+        "/api/v1/admin/external-author/A123?institution=ut", headers=headers
+    )
+    assert scoped.status_code == 200
+
+    r = await admin_api.get("/api/v1/admin/external-author/A404", headers=headers)
+    assert r.status_code == 404

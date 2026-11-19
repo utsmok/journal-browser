@@ -5,7 +5,9 @@ per-institution journal_flags rows (works_count, deal_covered,
 works_window_plus, browse_excluded). One idempotent statement per column.
 Call the matching refresh at the end of any job that changes the underlying
 rows:
-- refresh_institution_stats   after stats writes (jobs/harvest_stats.py)
+- refresh_institution_stats   after stats writes (jobs/harvest_stats.py,
+                              the pure full sweep in jobs/harvest_pure.py,
+                              admin window edits)
 - refresh_quartiles           after scimago ingest (jobs/ingest_scimagojr.py)
 - refresh_deal_flags          after deal-register changes (curation)
 - refresh_apcs                after OpenAPC ingest
@@ -16,8 +18,8 @@ The SQL lives here so the alembic backfill and the jobs share one source.
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..ingest import bump_cache_epoch
 from ..models import Institution
-from .common import bump_cache_epoch
 
 # Decision 16 (docs/decisions.md): proceedings-like titles with no deal and
 # no institution works are hidden from browse. Recomputed wholesale so deal
@@ -52,22 +54,20 @@ MATERIALIZE_SQL = text(
     """
 )
 
-# Pure-canonical primary per year (phase 10): one row per (issn_l, year),
-# the pure_canon row when the year has one. The LEFT JOIN supplies 0 for
-# journals without stats rows (the former reset statement's job) so one
-# guarded write replaces two full-table rewrites.
+# The card counts the canonical (Pure) corpus only — the same population the
+# works tab serves. openalex_institution_filter rows stay in the table for
+# the OA split; letting them fill years the canon pass has no row for is what
+# made the card show 1112 where the tab showed 1018 (LNCS, 2026-11-08). The
+# LEFT JOIN supplies 0 for journals without canon stats rows (the former
+# reset statement's job) so one guarded write replaces two full-table rewrites.
 WORKS_COUNT_SQL = text(
     """
     UPDATE journal_flags f SET works_count = coalesce(s.n, 0)
     FROM journals j
     LEFT JOIN (
         SELECT issn_l, sum(works_count) AS n
-        FROM (
-            SELECT DISTINCT ON (issn_l, year) issn_l, year, works_count
-            FROM institution_works_stats
-            WHERE institution_id = :iid
-            ORDER BY issn_l, year, (source = 'pure_canon') DESC
-        ) per_year
+        FROM institution_works_stats
+        WHERE institution_id = :iid AND source = 'pure_canon'
         GROUP BY issn_l
     ) s ON s.issn_l = j.issn_l
     WHERE f.issn_l = j.issn_l AND f.institution_id = :iid
@@ -165,6 +165,101 @@ DEAL_FLAGS_SQL = text(
     """
 )
 
+# A deal counts cap-reached when its cap_usage has an entry for the latest
+# entry year whose used >= total; without cap_usage data a deal is never
+# cap-reached (never stamp without data). The flag is true only when EVERY
+# effective covering deal is cap-reached.
+DEAL_CAP_REACHED_SQL = text(
+    """
+    UPDATE journal_flags f SET deal_cap_reached =
+        f.deal_covered AND NOT EXISTS (
+            SELECT 1
+            FROM deal_journals dj
+            JOIN deals d ON d.id = dj.deal_id
+            JOIN deal_institutions di ON di.deal_id = d.id
+                 AND di.institution_id = f.institution_id
+            WHERE dj.issn_l = f.issn_l
+              AND d.status = 'current'
+              AND NOT dj.excluded
+              AND dj.institution_id IS NOT DISTINCT FROM
+                  (CASE WHEN di.journal_override THEN di.institution_id ELSE NULL END)
+              AND NOT (
+                  d.cap_usage IS NOT NULL
+                  AND EXISTS (
+                      SELECT 1
+                      FROM jsonb_array_elements(d.cap_usage) e
+                      WHERE (e->>'year')::int = (
+                                SELECT max((x->>'year')::int)
+                                FROM jsonb_array_elements(d.cap_usage) x
+                            )
+                        AND e->>'used' IS NOT NULL
+                        AND (e->>'used')::int >= (e->>'total')::int
+                  )
+              )
+        )
+    WHERE f.institution_id = :iid
+      AND f.deal_cap_reached IS DISTINCT FROM (
+          f.deal_covered AND NOT EXISTS (
+            SELECT 1
+            FROM deal_journals dj
+            JOIN deals d ON d.id = dj.deal_id
+            JOIN deal_institutions di ON di.deal_id = d.id
+                 AND di.institution_id = f.institution_id
+            WHERE dj.issn_l = f.issn_l
+              AND d.status = 'current'
+              AND NOT dj.excluded
+              AND dj.institution_id IS NOT DISTINCT FROM
+                  (CASE WHEN di.journal_override THEN di.institution_id ELSE NULL END)
+              AND NOT (
+                  d.cap_usage IS NOT NULL
+                  AND EXISTS (
+                      SELECT 1
+                      FROM jsonb_array_elements(d.cap_usage) e
+                      WHERE (e->>'year')::int = (
+                                SELECT max((x->>'year')::int)
+                                FROM jsonb_array_elements(d.cap_usage) x
+                            )
+                        AND e->>'used' IS NOT NULL
+                        AND (e->>'used')::int >= (e->>'total')::int
+                  )
+              )
+        )
+      )
+    """
+)
+
+
+# Diamond evidence from the OpenAIRE facts store: the journal carries at
+# least one non-retired work whose OpenAIRE record says isInDiamondJournal.
+# Second evidence source beside DOAJ in search/classify (2026-11-13).
+OPENAIRE_DIAMOND_SQL = text(
+    """
+    UPDATE journal_flags f SET openaire_diamond = EXISTS (
+        SELECT 1
+        FROM openaire_work_facts oaf
+        JOIN works w
+          ON w.institution_id = oaf.institution_id
+         AND w.pure_uuid = oaf.pure_uuid
+        WHERE oaf.institution_id = f.institution_id
+          AND oaf.diamond
+          AND w.journal_issn_l = f.issn_l
+          AND w.retired_at IS NULL
+    )
+    WHERE f.institution_id = :iid
+      AND f.openaire_diamond IS DISTINCT FROM EXISTS (
+        SELECT 1
+        FROM openaire_work_facts oaf
+        JOIN works w
+          ON w.institution_id = oaf.institution_id
+         AND w.pure_uuid = oaf.pure_uuid
+        WHERE oaf.institution_id = f.institution_id
+          AND oaf.diamond
+          AND w.journal_issn_l = f.issn_l
+          AND w.retired_at IS NULL
+      )
+    """
+)
+
 
 async def refresh_institution_stats(session: AsyncSession, institution: Institution) -> None:
     """Recompute one institution's works_count + window cutoff + exclusion.
@@ -180,6 +275,7 @@ async def refresh_institution_stats(session: AsyncSession, institution: Institut
         WORKS_WINDOW_SQL, {"iid": iid, "ws": institution.data_window_start, "we": window_end}
     )
     await session.execute(DEAL_FLAGS_SQL, {"iid": iid})
+    await session.execute(OPENAIRE_DIAMOND_SQL, {"iid": iid})
     await session.execute(BROWSE_EXCLUDED_SQL, {"iid": iid})
     await bump_cache_epoch(session)
 
@@ -201,5 +297,6 @@ async def refresh_deal_flags(session: AsyncSession, institution_id: int) -> None
     """Recompute one institution's effective coverage + browse exclusion."""
     await session.execute(MATERIALIZE_SQL, {"iid": institution_id})
     await session.execute(DEAL_FLAGS_SQL, {"iid": institution_id})
+    await session.execute(DEAL_CAP_REACHED_SQL, {"iid": institution_id})
     await session.execute(BROWSE_EXCLUDED_SQL, {"iid": institution_id})
     await bump_cache_epoch(session)

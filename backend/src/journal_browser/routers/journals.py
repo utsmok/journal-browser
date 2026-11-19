@@ -3,6 +3,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BeforeValidator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,8 +17,10 @@ from ..models import (
     DealInstitution,
     DealJournal,
     InstitutionWorksStats,
+    JiscFunder,
     Journal,
     JournalApcAggregate,
+    JournalFlags,
     Publisher,
     ScimagojrMetric,
 )
@@ -26,22 +29,29 @@ from ..schemas import (
     ApcEvidenceOut,
     Attribution,
     DealOut,
+    FunderFitOut,
+    GreenOaPolicy,
+    GreenOaRoute,
     InstitutionMetrics,
     JournalDetailResponse,
     JournalListItem,
     JournalSearchResponse,
     OpenaireInfo,
     OpenalexInfo,
+    OpenalexOnly,
     ScimagojrOut,
     SimilarJournalItem,
     SimilarJournalsBundle,
     StatsYear,
+    UTAuthorship,
     WorksPage,
 )
-from ..services import detail_enrichment, work_sources
+from ..services import authorship, detail_enrichment, exports, repo_links
 from ..services import search as search_service
 from ..services.deal_coverage import deal_institution_join, dj_scope
-from ..vocab import OaType
+from ..services.funder_fit import JournalFacts, compute_funder_fit
+from ..services.works_query import clamped_year_range
+from ..vocab import GreenOa, OaType
 from .deals import DEAL_FIELDS
 
 router = APIRouter(prefix="/journals", tags=["journals"])
@@ -67,6 +77,17 @@ OaTypeFilter = Annotated[list[OaType] | None, BeforeValidator(_split_csv), Query
 def _is_ignored(issn_l: str) -> bool:
     """Admin ignore-list: an ignored journal is treated as nonexistent."""
     return issn_l.upper() in set(get_settings().ignored_issns)
+
+
+async def _funder_policy(session: AsyncSession, funder_id: int | None) -> dict | None:
+    """Selected funder's verbatim publications_policy; 404 on a bad id,
+    None when no funder is selected."""
+    if funder_id is None:
+        return None
+    row = await session.get(JiscFunder, funder_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"funder {funder_id} not found")
+    return row.publications_policy
 
 
 #: Per-field source attribution (structural; caveat codes resolve against
@@ -112,6 +133,11 @@ ATTRIBUTION = {
         url="https://www.scimagojr.com",
         caveat_codes=["scimagojr-lag"],
     ),
+    "green_oa": Attribution(
+        source="Jisc Open Policy Finder",
+        url="https://openpolicyfinder.jisc.ac.uk",
+        caveat_codes=["jisc-policy-currency", "jisc-cc-by-nc-nd"],
+    ),
 }
 
 
@@ -142,6 +168,15 @@ async def search_journals(
     has_apc: bool | None = None,
     has_works: bool | None = None,
     oa_type: OaTypeFilter = None,
+    green_oa: GreenOa | None = None,
+    pub_type: Annotated[str | None, Query(max_length=40)] = None,
+    language: Annotated[
+        str | None,
+        Query(
+            max_length=60,
+            description="Comma-separated ISO 639-1 codes; unknown values match nothing",
+        ),
+    ] = None,
     sort: Annotated[
         str,
         Query(
@@ -152,9 +187,33 @@ async def search_journals(
     cursor: Annotated[str | None, Query(max_length=512, pattern=r"^[A-Za-z0-9_-]*={0,2}$")] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     include_facets: bool = True,
+    funder: Annotated[int | None, Query(description="Jisc OPF funder id")] = None,
+    funder_fit: Annotated[
+        str | None, Query(pattern="^(compliant|check|no)$", description="Funder-fit tier filter")
+    ] = None,
+    year_from: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range start (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    year_to: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range end (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
 ) -> JournalSearchResponse:
     # oa_type is a comma-separated multi-select, OR'd together server-side;
     # values validate against OaType at the boundary (422).
+    funder_policy = await _funder_policy(session, funder)
+    year_range = clamped_year_range(institution, year_from, year_to)
     result = await search_service.search_journals(
         session,
         institution_id=institution.id,
@@ -169,11 +228,18 @@ async def search_journals(
         has_apc=has_apc,
         has_works=has_works,
         oa_types=list(oa_type) if oa_type else None,
+        green_oa=green_oa,
+        pub_type=pub_type,
+        languages=_split_csv(language),
         sort=sort,
         dir=dir,
         cursor=cursor,
         limit=limit,
         include_facets=include_facets,
+        funder_struct=funder_policy,
+        funder_fit=funder_fit if funder_policy is not None else None,
+        year_from=year_range[0] if year_range else None,
+        year_to=year_range[1] if year_range else None,
     )
     return JournalSearchResponse(
         items=[_to_list_item(item) for item in result["items"]],
@@ -222,25 +288,106 @@ async def journal_works(
     institution: InstitutionDep,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=50)] = 20,
+    year_from: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range start (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    year_to: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range end (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
 ) -> WorksPage:
     known = await session.scalar(select(Journal.issn_l).where(Journal.issn_l == issn_l.upper()))
     if known is None or _is_ignored(known):
         raise HTTPException(status_code=404, detail="journal not found")
-    ut_rows = await work_sources.works_for_journal(session, institution, known)
     return WorksPage(
         **await detail_enrichment.list_works(
-            session, known, institution, page, page_size, ut_rows=ut_rows
+            session,
+            known,
+            institution,
+            page,
+            page_size,
+            year_range=clamped_year_range(institution, year_from, year_to),
         )
+    )
+
+
+@router.get("/{issn_l}/openalex-only.csv")
+async def journal_openalex_only_csv(
+    issn_l: str,
+    session: SessionDep,
+    institution: InstitutionDep,
+    year_from: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range start (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    year_to: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range end (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+) -> StreamingResponse:
+    """Uncapped CSV of the journal's CRIS-gap (OpenAlex-only) list."""
+    return await exports.journal_openalex_only_csv(
+        session,
+        institution,
+        issn_l,
+        year_range=clamped_year_range(institution, year_from, year_to),
     )
 
 
 @router.get("/{issn_l}", response_model=JournalDetailResponse)
 async def journal_detail(
-    issn_l: str, session: SessionDep, institution: InstitutionDep
+    issn_l: str,
+    session: SessionDep,
+    institution: InstitutionDep,
+    funder: Annotated[int | None, Query(description="Jisc OPF funder id")] = None,
+    year_from: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range start (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    year_to: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range end (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
 ) -> JournalDetailResponse:
     journal = await session.scalar(select(Journal).where(Journal.issn_l == issn_l.upper()))
     if journal is None or _is_ignored(journal.issn_l):
         raise HTTPException(status_code=404, detail="journal not found")
+    # Works-derived detail sections (UT authorship, OpenAIRE matches, the
+    # canonical institution metrics, the CRIS gap) narrow to the range; the
+    # venue registry aggregates (OpenAlex venue metrics, SJR, deals, APC
+    # evidence) stay window/attribute-based.
+    year_range = clamped_year_range(institution, year_from, year_to)
 
     # Publisher registry links (Open Access NL deals profile), keyed by the
     # same canonical grouping the publisher directory uses.
@@ -275,6 +422,17 @@ async def journal_detail(
     ).all()
     deals = [d for d, _name in deal_rows]
     publisher_names = {d.id: name for d, name in deal_rows}
+    # Reads the denormalized flags (harvest.denorm) shared with the search list.
+    flags_row = (
+        await session.execute(
+            select(JournalFlags.deal_cap_reached, JournalFlags.openaire_diamond).where(
+                JournalFlags.institution_id == institution.id,
+                JournalFlags.issn_l == journal.issn_l,
+            )
+        )
+    ).one_or_none()
+    deal_cap_reached = bool(flags_row.deal_cap_reached) if flags_row else False
+    openaire_diamond = bool(flags_row.openaire_diamond) if flags_row else False
     # Phase 10: pure_canon is the primary works count; the OpenAlex
     # institution-filter rows keep the OA split and stay visible as the
     # labeled cross-check (decision 13-style honesty about sources).
@@ -365,7 +523,59 @@ async def journal_detail(
 
     summary_stats = journal.summary_stats or {}
     openalex_info = await detail_enrichment.openalex_info(session, journal.issn_l)
-    ut_rows = await work_sources.works_for_journal(session, institution, journal.issn_l)
+    # Jisc Open Policy Finder green-OA bundle; null when never swept
+    # (jisc_policy NULL, DOAJ tri-state convention).
+    policy = journal.jisc_policy
+    routes = {
+        version: GreenOaRoute(**route)
+        for version, route in ((policy.get("routes") or {}) if policy else {}).items()
+    }
+    green_oa = (
+        GreenOaPolicy(
+            in_opf=journal.jisc_in_opf is True,
+            oa_prohibited=policy.get("open_access_prohibited"),
+            routes=routes,
+            internal_moniker=policy.get("internal_moniker"),
+            urls=policy.get("urls") or [],
+            repository_links=await repo_links.repository_links(
+                session, {name for route in routes.values() for name in route.repositories}
+            ),
+            policy_uri=policy.get("policy_uri"),
+            harvested_at=journal.jisc_harvested_at,
+        )
+        if policy is not None
+        else None
+    )
+    # The oa_type feeds both the list item and the optional funder fit.
+    oa_type_val = search_service.oa_type_value(
+        journal.is_in_doaj,
+        journal.is_oa,
+        bool(aggregates)
+        or journal.latest_apc_euro is not None
+        or bool(journal.apc_prices)
+        or journal.doaj_has_apc is True,
+        bool(deals),
+        journal.oa_status_observed,
+        doaj_in_doaj=journal.doaj_in_doaj,
+        doaj_has_apc=journal.doaj_has_apc,
+        openaire_diamond=openaire_diamond,
+    )
+    funder_policy = await _funder_policy(session, funder)
+    funder_fit = None
+    if funder_policy is not None:
+        fit = compute_funder_fit(
+            funder_policy,
+            JournalFacts(
+                oa_type=oa_type_val.value if hasattr(oa_type_val, "value") else oa_type_val,
+                prohibited=journal.jisc_oa_prohibited,
+                sa_submitted=journal.jisc_allows_sa_submitted,
+                sa_accepted=journal.jisc_allows_sa_accepted,
+                sa_published=journal.jisc_allows_sa_published,
+                deal_covered=bool(deals),
+                publisher_name=journal.publisher_name,
+            ),
+        )
+        funder_fit = FunderFitOut(status=fit.status, reasons=fit.reasons)
     return JournalDetailResponse(
         journal=JournalListItem(
             issn_l=journal.issn_l,
@@ -377,21 +587,11 @@ async def journal_detail(
             in_scimago=journal.in_scimago,
             last_active_year=journal.last_active_year,
             deal_covered=bool(deals),
+            deal_cap_reached=deal_cap_reached,
             works=sum(s.works_count for s in stats),
             quartile=sjr_rows[-1].best_quartile if sjr_rows else None,
             twoyr_mean_citedness=summary_stats.get("two_yr_mean_citedness"),
-            oa_type=search_service.oa_type_value(
-                journal.is_in_doaj,
-                journal.is_oa,
-                bool(aggregates)
-                or journal.latest_apc_euro is not None
-                or bool(journal.apc_prices)
-                or journal.doaj_has_apc is True,
-                bool(deals),
-                journal.oa_status_observed,
-                doaj_in_doaj=journal.doaj_in_doaj,
-                doaj_has_apc=journal.doaj_has_apc,
-            ),
+            oa_type=oa_type_val,
         ),
         stats_totals=stats_totals,
         issns=journal.issns or [],
@@ -444,13 +644,25 @@ async def journal_detail(
         apc_evidence=[ApcEvidenceOut.model_validate(e) for e in evidence],
         openalex=OpenalexInfo(**openalex_info) if openalex_info else None,
         openaire=OpenaireInfo(
-            matched_works=await detail_enrichment.openaire_matched(
-                session, journal.issn_l, institution.id
+            **await detail_enrichment.openaire_info(
+                session, institution, journal.issn_l, year_range
             )
         ),
+        green_oa=green_oa,
+        funder_fit=funder_fit,
         institution_metrics=InstitutionMetrics(
             **await detail_enrichment.institution_metrics(
-                session, journal.issn_l, institution, ut_rows
+                session, journal.issn_l, institution, year_range
+            )
+        ),
+        ut_authorship=UTAuthorship(
+            **await authorship.venue_authorship(
+                session, institution, issn_l=journal.issn_l, year_range=year_range
+            )
+        ),
+        openalex_only=OpenalexOnly(
+            **await authorship.venue_openalex_only(
+                session, institution, issn_l=journal.issn_l, year_range=year_range
             )
         ),
         attribution={

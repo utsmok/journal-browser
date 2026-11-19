@@ -7,6 +7,7 @@ from journal_browser.harvest.authors import (
     SourceData,
     augment_faculty,
     augment_institute,
+    augment_research_group,
     author_id_index,
     build_edge_map,
     canonical_confirmed,
@@ -416,3 +417,30 @@ async def test_ingest_idempotent(db, institution_factory):
     assert final["a-uuid"].primary_topic == "Chemistry"  # single venue, 1 work
     assert final["b-uuid"].n_works == 1
     assert final["b-uuid"].last_pub_year == 2022
+
+
+def test_augment_faculty_people_arm():
+    """The people-pages arm (uuid-verified profile orgs) fills faculty the
+    same way the portal arm does when native CERIF resolves nothing."""
+    data = _data()
+    author = {"pure_uuid": "b-uuid", "orcid": "0000-0002-1234"}
+    data.person_orcids = {"0000-0002-1234": 11}
+    data.people_person_orgs = {11: [2]}
+    assert augment_faculty(author, data) == TNW
+
+
+def test_augment_institute_people_arm():
+    data = _data()
+    data.institute_orgs = {4}
+    author = {"pure_uuid": "b-uuid"}
+    data.person_by_pure = {"b-uuid": 11}
+    data.people_person_orgs = {11: [4]}
+    assert augment_institute(author, data) == "Delft University of Technology"
+
+
+def test_augment_research_group_people_arm():
+    data = _data()
+    author = {"pure_uuid": "b-uuid"}
+    data.person_by_pure = {"b-uuid": 11}
+    data.people_person_orgs = {11: [3]}
+    assert augment_research_group(author, data) == DEPT

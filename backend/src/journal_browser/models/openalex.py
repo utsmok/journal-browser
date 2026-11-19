@@ -21,7 +21,7 @@ from sqlalchemy import (
     Text,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, _tstamp
@@ -49,6 +49,13 @@ class OpenalexWork(Base):
     oa_status: Mapped[str | None] = mapped_column(Text, nullable=True)
     venue_issn_l: Mapped[str | None] = mapped_column(Text, nullable=True)
     venue_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # OpenAlex work language (ISO 639-1); feeds the modal journals.language.
+    language: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # OpenAlex primary-location source type (journal, repository,
+    # conference, ...); gap queries drop repository rows — a repository
+    # copy is not evidence a work is missing from Pure, and the
+    # institution's own research information system is repository-typed.
+    source_type: Mapped[str | None] = mapped_column(Text, nullable=True)
     authorships: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'")
     )
@@ -57,6 +64,21 @@ class OpenalexWork(Base):
     is_retracted: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     # Provenance tag of the feeding harvest (works_stats / author:<n>).
     source: Mapped[str] = mapped_column(Text, nullable=False, server_default="works_stats")
+    # OpenAlex work parts (Graph v12, 2026-11-15): parent works of this
+    # work (chapter of a book, figure of a paper) in compact form
+    # [{id: bare W-id, name: display name, rel: relationship}]. is_part
+    # drives the standalone/chapter/part serving filter. Payloads
+    # harvested before v12 carry no parent_works; jobs/backfill_parts.py
+    # fills those rows per DOI and stamps parts_checked_at.
+    parent_works: Mapped[list[Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'")
+    )
+    is_part: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    # When the parts backfill fetched this row's DOI (regardless of
+    # outcome); NULL marks the backfill's pending queue.
+    parts_checked_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
     updated_at: Mapped[datetime] = _tstamp()
 
     __table_args__ = (
@@ -86,6 +108,51 @@ class OpenalexWork(Base):
             postgresql_where=text("year IS NOT NULL"),
         ),
     )
+
+
+class OpenalexWorkAuthor(Base):
+    """One attribution edge of the institution's store rows: work `w_id`
+    names OpenAlex author `author_id` (lower-cased bare A-id, from the
+    authorships projection; rebuilt with the store, full-replace per
+    institution).
+
+    Replaces the author_aids array probe: faculty-sized units carry
+    ~1,200 author ids, the overlap matched most of the store so the
+    planner skipped the GIN and the per-row && compare spent ~45 s on
+    the EEMCS org-unit gap query. The author-first PK turns attribution
+    into one indexed probe set (unit: author_id IN (...); work-joined
+    EXISTS probes decorrelate into the same semi-join).
+    """
+
+    __tablename__ = "openalex_work_authors"
+
+    institution_id: Mapped[int] = mapped_column(
+        ForeignKey("institutions.id", ondelete="CASCADE"), primary_key=True
+    )
+    author_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    w_id: Mapped[str] = mapped_column(Text, primary_key=True)
+
+
+class OpenalexWorkParent(Base):
+    """One parent work (OpenAlex part-of) named by the institution's store
+    rows: jobs/backfill_parts.py registers every distinct parent_works
+    W-id and fills title/doi/work_type with one free single-entity GET.
+    The fetched row is authoritative (the children's parent_works `name`
+    is the pre-fetch fallback). Pure registration is derived at query
+    time (EXISTS on doi_normalized against the works table) — a parent
+    without a DOI cannot match and counts as unregistered.
+    """
+
+    __tablename__ = "openalex_work_parents"
+
+    institution_id: Mapped[int] = mapped_column(
+        ForeignKey("institutions.id", ondelete="CASCADE"), primary_key=True
+    )
+    parent_w_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    doi_normalized: Mapped[str | None] = mapped_column(Text, nullable=True)
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    work_type: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = _tstamp()
 
 
 class AuthorIdentity(Base):
@@ -125,7 +192,10 @@ class AuthorIdentity(Base):
             "status IN ('confirmed', 'candidate', 'rejected')",
             name="ck_author_identities_status",
         ),
-        CheckConstraint("source IN ('openalex', 'openaire')", name="ck_author_identities_source"),
+        CheckConstraint(
+            "source IN ('openalex', 'openaire', 'people')",
+            name="ck_author_identities_source",
+        ),
         Index(
             "ix_author_identities_inst_author",
             "institution_id",
@@ -137,3 +207,25 @@ class AuthorIdentity(Base):
             "status",
         ),
     )
+
+
+class OpenalexFunder(Base):
+    """OpenAlex funder canon (jobs/harvest_openalex_funders.py).
+
+    ror is the bare lowercase ROR id ("04ad7pn51"), fundref the bare
+    FundRef number ("100009795") so jisc_funders/openaire_funders join
+    directly.
+    """
+
+    __tablename__ = "openalex_funders"
+
+    openalex_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    ror: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fundref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    display_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    country_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    grant_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    works_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cited_by_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    updated_at: Mapped[datetime] = _tstamp()

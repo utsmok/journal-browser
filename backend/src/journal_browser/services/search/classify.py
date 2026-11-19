@@ -25,6 +25,9 @@ _CHARGED = or_(
 )
 #: DOAJ-listed with an explicit no-APC declaration: diamond, per DOAJ canon.
 _DOAJ_DIAMOND = and_(Journal.doaj_in_doaj.is_(True), Journal.doaj_has_apc.is_(False))
+#: OpenAIRE isInDiamondJournal on any of the journal's works (denormalized
+#: to journal_flags.openaire_diamond, harvest/denorm.py): the second
+#: diamond evidence source beside DOAJ (2026-11-13).
 #: Venue color observed from recent works (harvest/journal_oa.py) when the
 #: only evidence is the bare is_oa flag; bronze/closed/green stay NULL
 #: (no OA color) so the case falls through to deal/subscription instead of
@@ -41,13 +44,15 @@ _OBSERVED = case(
 #: Per-journal OA type (owner-approved 2026-10-28; supersedes 2026-10-23).
 #: DOAJ is the gold/diamond canon: its has_apc declaration (with observed
 #: prices as corroboration) splits gold from diamond; a DOAJ-listed venue
-#: without charges is diamond. An OA venue with no model evidence at all is
-#: "generic" instead of an overeager diamond. Per-work oa_status outside
-#: the sample is deliberately unused.
-def _oa_type(deal_covered: Any) -> Any:
+#: without charges is diamond. OpenAIRE isInDiamondJournal (journal_flags.
+#: openaire_diamond) is the second diamond evidence source (2026-11-13).
+#: An OA venue with no model evidence at all is "generic" instead of an
+#: overeager diamond. Per-work oa_status outside the sample is
+#: deliberately unused.
+def _oa_type(deal_covered: Any, openaire_diamond: Any) -> Any:
     return case(
         (and_(_OA_EVIDENCE, _CHARGED), OaType.GOLD),
-        (_DOAJ_DIAMOND, OaType.DIAMOND),
+        (or_(_DOAJ_DIAMOND, openaire_diamond.is_(True)), OaType.DIAMOND),
         (_OBSERVED.is_not(None), _OBSERVED),
         (deal_covered.is_(True), OaType.HYBRID),
         (_OA_EVIDENCE, OaType.GENERIC),
@@ -68,14 +73,16 @@ def oa_type_value(
     observed: str | None = None,
     doaj_in_doaj: bool | None = None,
     doaj_has_apc: bool | None = None,
+    openaire_diamond: bool = False,
 ) -> str:
     """Python mirror of the OA_TYPE SQL case, for the detail endpoint.
     doaj_has_apc=True is charge evidence on its own, exactly like the SQL
-    _CHARGED clause."""
+    _CHARGED clause; openaire_diamond is the second diamond evidence
+    source beside the DOAJ declaration."""
     oa_evidence = bool(is_in_doaj) or bool(is_oa) or bool(doaj_in_doaj)
     if oa_evidence and (has_charges or doaj_has_apc is True):
         return OaType.GOLD
-    if doaj_in_doaj and doaj_has_apc is False:
+    if (doaj_in_doaj and doaj_has_apc is False) or openaire_diamond:
         return OaType.DIAMOND
     if observed in (OaType.GOLD, OaType.DIAMOND, OaType.HYBRID):
         return OaType(observed)

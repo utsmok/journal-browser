@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import { Button } from "@/components/ui/button";
 
 /** Compact numbered pagination window: first, last and current ± 1 with gaps. */
@@ -23,24 +25,30 @@ export function CardPager({
   total,
   onPage,
   isFetching = false,
-  label = "items",
+  label,
 }: {
   page: number;
   pages: number;
   total: number;
   onPage: (page: number) => void;
   isFetching?: boolean;
+  /** Name of the paged items, e.g. "publications"; defaults to "items". */
   label?: string;
 }) {
+  const t = useTranslations("common");
+  const itemsLabel = label ?? t("cardPager.itemsLabel");
   return (
-    <nav className="flex flex-wrap items-center gap-1 text-xs" aria-label={`${label} pages`}>
+    <nav
+      className="flex flex-wrap items-center gap-1 text-xs"
+      aria-label={t("cardPager.navAriaLabel", { label: itemsLabel })}
+    >
       <Button
         variant="outline"
         size="sm"
         disabled={page <= 1 || isFetching}
         onClick={() => onPage(Math.max(1, page - 1))}
       >
-        ‹ Prev
+        {t("cardPager.prev")}
       </Button>
       {pageWindow(page, pages).map((p, i) =>
         p === "…" ? (
@@ -66,10 +74,10 @@ export function CardPager({
         disabled={page >= pages || isFetching}
         onClick={() => onPage(Math.min(pages, page + 1))}
       >
-        Next ›
+        {t("cardPager.next")}
       </Button>
       <span className="ml-2 text-[var(--muted-foreground)]">
-        {total.toLocaleString("en")} {label}
+        {t("cardPager.total", { total: total.toLocaleString("en"), label: itemsLabel })}
       </span>
     </nav>
   );

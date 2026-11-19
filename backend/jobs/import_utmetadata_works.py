@@ -24,13 +24,13 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
-from journal_browser.harvest.common import resolve_institution
+from journal_browser.harvest.common import normalize_doi, resolve_institution
 from journal_browser.harvest.denorm import refresh_institution_stats
 from journal_browser.harvest.institution_stats import write_pure_canon_stats
 from journal_browser.harvest.pure import _norm_title
 from journal_browser.ingest import IngestSession
 from journal_browser.models import Institution, Journal, Work
-from journal_browser.services.ut_metadata import _get_engine, normalize_doi
+from journal_browser.services.ut_metadata import _get_engine
 
 BATCH = 1000
 

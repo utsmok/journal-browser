@@ -1,4 +1,4 @@
-# AGENTS.md — Journal Browser
+# AGENTS.md — Open Journal Browser
 
 Agent-facing guide. Human-facing docs: README.md (quick start) and
 DEPLOYMENT.md (configuration reference, harvest internals, operations).
@@ -15,8 +15,6 @@ DEPLOYMENT.md (configuration reference, harvest internals, operations).
 - `docs/` — mostly a gitignored content volume (two files are tracked).
   `docs/data-pipeline/OVERVIEW.md` documents the harvest architecture;
   `docs/multi-institute.md` covers the shared-core multi-institution design.
-- `plans/` — local-only (untracked) implementation plans; absent on fresh
-  clones.
 
 ## Commands
 
@@ -41,15 +39,21 @@ All commands run from the repo root unless noted.
 ## Test setup
 
 - Tests need Postgres at `localhost:5433` (user `journal`, password
-  `journal`): `docker compose up -d db`. `tests/conftest.py` creates a
-  unique throwaway database per process; `JB_SKIP_DB_TESTS=1` skips DB
-  tests explicitly.
+  `journal`). On the live host that is the standalone `jb-test-pg`
+  container (`docker start jb-test-pg`); elsewhere run
+  `docker run -d --name jb-test-pg -p 127.0.0.1:5433:5432 -e POSTGRES_USER=journal
+  -e POSTGRES_PASSWORD=journal journal-browser-db` (the pgvector image from
+  `db/Dockerfile`). Do not use `docker compose up -d db` for tests: on the
+  live host it is the production database on 5434. `tests/conftest.py`
+  creates a unique throwaway database per process; `JB_SKIP_DB_TESTS=1`
+  skips DB tests explicitly.
 - `pytest -m "not live"` is the CI default; `-m live` hits real network
   APIs and must be run deliberately.
 - CI (`.github/workflows/ci.yml`) runs: ruff check + format, ty, alembic
-  upgrade, pytest, the openapi drift check, eslint, biome format:check, and
-  `next build`. The `deps-hygiene` job (deptry + depcheck) reports unused
-  or unlisted dependencies and is advisory: it never blocks a merge.
+  upgrade, pytest, the openapi drift check, eslint, biome format:check, the
+  vitest suite (`npm run test`), and `next build`. The `deps-hygiene` job
+  (deptry + depcheck) reports unused or unlisted dependencies and is
+  advisory: it never blocks a merge.
 - Logging: `logging_setup.configure_logging()` runs at app start; every
   request gets an `X-Request-ID` (honored inbound, echoed out) that lands
   on every log line, and credential-looking substrings are redacted.
@@ -84,24 +88,39 @@ fails if the committed file drifted.
   integration ships.
 - Harvest jobs are idempotent and fail by naming their step. Shared query/
   facet/cache logic lives in `backend/src/journal_browser/services/` — do
-  not copy it between routers (see plans 005/006).
+  not copy it between routers.
 - Deliberately rejected ideas (do not re-audit): zod at the API boundary,
   Redis caching, pg enums, JSONB→relational migration, feature-first
-  directory reorganization — see "Findings considered and rejected" in
-  plans/README.md.
+  directory reorganization.
 
 ## Working rules
 
 - `uv` in `backend/`, `npm` in `frontend/`; never bare `python`/`pip`.
 - Read before edit; keep the suite green; run the verify commands before
   reporting done.
-- When executing a plan from `plans/`: read the plan fully first, honor its
-  STOP conditions, run every verify line, and update the status row in
-  `plans/README.md` when done.
-- The compose project `journal-browser` (ports 3000/8000) is a LIVE
-  deployment: never restart, redeploy, or write to it. The live
-  `journalbrowser` database is read-only for agents — SELECT ok, never DDL.
-  Tests use their own throwaway databases; test stacks go on free ports
-  (`compose.test.yml`: db 5533, backend 8001).
+- Audit reports live in the gitignored `.audit/` folder
+  (`.audit/2026-11-10/REPORT.md` is the latest full audit).
+- The live deployment runs on this host, the media VM `192.168.2.153`
+  (Proxmox LXC 101 "media", hostname `media`), since 2026-11-06. Since
+  2026-11-09 the agent also runs on that same host, so reach the stack
+  directly with local `docker`/`docker compose` — never via SSH or
+  tailscale (the old `ssh dockeruser@100.120.223.117` route from the
+  workstation is obsolete). Ports: frontend published on **3001**, backend
+  on `127.0.0.1:8001`, db on `127.0.0.1:5434` (see `compose.override.yml`
+  — 3000/8000 are taken by linkwarden/portainer on this host). Query the
+  live db as `docker exec journal-browser-db-1 psql -U journal -d
+  journalbrowser`. Agents may redeploy the live stack after committing:
+  `docker compose up -d --build` from the repo root (the one-shot
+  `bootstrap` service applies pending migrations, then exits in seconds on
+  a populated DB), then check `docker compose ps` health and the public
+  site. Do not `down -v`, delete volumes, or run harvests against live
+  without asking. Data writes to the live `journalbrowser` database need
+  explicit user approval; SELECT is always fine, schema changes only via
+  migrations shipped by a redeploy. Public ingress is Caddy on the Proxmox host `192.168.2.122`
+  (`/home/root/Caddyfile`), reverse-proxying `journalbrowser.samuelmok.cc`
+  to `192.168.2.153:3001`. The local containers here are the live
+  deployment; there is no separate workstation copy.
+- Tests use their own throwaway databases; test stacks go on free ports
+  (`compose.test.yml`: db 5533, backend 8201, frontend 3201; QA: 3100/8100).
 - `JB_SKIP_EMBEDDING_WARMUP=1` skips the ~130 MB ONNX model preload on app
   import (offline schema dumps, CI). Leave unset in deployments.

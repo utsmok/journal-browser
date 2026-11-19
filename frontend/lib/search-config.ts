@@ -1,14 +1,14 @@
 import type { OrgUnitSearchSort, PublisherSearchSort, SearchIn, SortKey } from "@/lib/api";
 
-export const SORTS: { value: SortKey; label: string }[] = [
-  { value: "relevance", label: "Relevance" },
-  { value: "title", label: "Title A–Z" },
-  { value: "publisher", label: "Publisher A–Z" },
-  { value: "institution_works", label: "Institution works" },
-  { value: "quartile", label: "Quartile" },
-  { value: "topic", label: "Topic A–Z" },
-  { value: "apc", label: "APC (high–low)" },
-  { value: "2yr_mean_citedness", label: "2-year mean citedness" },
+export const SORTS: { value: SortKey; labelKey: string }[] = [
+  { value: "relevance", labelKey: "sorts.relevance" },
+  { value: "title", labelKey: "sorts.title" },
+  { value: "publisher", labelKey: "sorts.publisher" },
+  { value: "institution_works", labelKey: "sorts.institutionWorks" },
+  { value: "quartile", labelKey: "sorts.quartile" },
+  { value: "topic", labelKey: "sorts.topic" },
+  { value: "apc", labelKey: "sorts.apc" },
+  { value: "2yr_mean_citedness", labelKey: "sorts.meanCitedness" },
 ];
 
 // Sortable columns: backend key + natural direction. The header button
@@ -47,9 +47,19 @@ export const ORGUNIT_COLUMN_SORTS: Record<
   deal_works: { key: "deal_works", natural: "desc" },
 };
 
-export const SEARCH_IN_OPTIONS: { value: SearchIn; label: string }[] = [
-  { value: "all", label: "Everything" },
-  { value: "title", label: "Title" },
-  { value: "publisher", label: "Publisher" },
-  { value: "topic", label: "Topic" },
+export const SEARCH_IN_OPTIONS: { value: SearchIn; labelKey: string }[] = [
+  { value: "all", labelKey: "searchIn.all" },
+  { value: "title", labelKey: "searchIn.title" },
+  { value: "publisher", labelKey: "searchIn.publisher" },
+  { value: "topic", labelKey: "searchIn.topic" },
 ];
+
+/** Message keys (search.pubTypes) for OpenAlex venue types (pub_type);
+ * unmapped values (future OpenAlex types) show raw. */
+export const PUB_TYPE_LABELS: Record<string, string> = {
+  journal: "pubTypes.journal",
+  "book series": "pubTypes.bookSeries",
+  conference: "pubTypes.conference",
+  "ebook platform": "pubTypes.ebookPlatform",
+  repository: "pubTypes.repository",
+};

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { AdminError, adminGet } from "@/lib/admin";
 
@@ -16,6 +17,11 @@ import { AdminError, adminGet } from "@/lib/admin";
  * top. Form-style surfaces (deal editor, login) keep their own state
  * machines — their shapes differ enough that forcing them onto this hook
  * would trade duplication for indirection.
+ *
+ * `onUnauthorized` is read through a ref on purpose: callers pass inline
+ * arrows, and putting it in refresh's dependency list made every fetch's
+ * state update mint a new callback, re-run the effect, and refetch — an
+ * unbounded request loop (223 calls in 4s on the old page).
  */
 export function useAdminResource<T>(
   path: string,
@@ -23,9 +29,14 @@ export function useAdminResource<T>(
   onUnauthorized: () => void,
   label?: string,
 ) {
+  const t = useTranslations("admin");
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const unauthorizedRef = useRef(onUnauthorized);
+  useEffect(() => {
+    unauthorizedRef.current = onUnauthorized;
+  });
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -35,16 +46,19 @@ export function useAdminResource<T>(
       setError(null);
     } catch (err) {
       if (err instanceof AdminError && err.status === 401) {
-        onUnauthorized();
+        unauthorizedRef.current();
         return;
       }
       setError(
-        `Could not load ${label ?? path.split("?")[0]} (${err instanceof Error ? err.message : err}).`,
+        t("loadFailed", {
+          label: label ?? path.split("?")[0],
+          message: err instanceof Error ? err.message : String(err),
+        }),
       );
     } finally {
       setLoading(false);
     }
-  }, [path, token, onUnauthorized, label]);
+  }, [path, token, label, t]);
 
   useEffect(() => {
     void refresh();

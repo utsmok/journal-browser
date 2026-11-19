@@ -1,6 +1,6 @@
 # How to contribute
 
-Journal Browser is a solo-maintained project, so the contribution rules live in one place and stay short. This page is the entry point; the pages under `how-to-contribute/` expand each topic.
+Open Journal Browser is a solo-maintained project, so the contribution rules live in one place and stay short. This page is the entry point; the pages under `how-to-contribute/` expand each topic.
 
 ## Read AGENTS.md first
 

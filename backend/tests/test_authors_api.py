@@ -224,6 +224,8 @@ async def test_profile_shape(authors_api):
         "similar",
         "alternatives",
         "works",
+        "openalex_only",
+        "openalex_only_count",
     }
     author = body["author"]
     assert author["orgs"] == ["Quantum Transport in Matter", "University of Twente"]
@@ -289,10 +291,59 @@ async def test_profile_works_sorted_and_joined(authors_api):
 
 
 @requires_db
+async def test_profile_works_links(authors_api, db):
+    """Pure works items expose verification links: a DOI matched to the
+    institution's openalex_works store yields the OpenAlex record URL
+    (lowest w_id wins deterministically), a DOI-less work yields no
+    OpenAlex link; the Pure record URL rides on the institution's
+    research portal URL."""
+    from sqlalchemy import select, update
+
+    from journal_browser.models import Institution, OpenalexWork
+
+    await db.execute(
+        update(Institution)
+        .where(Institution.code == "ut")
+        .values(research_portal_url="https://research.utwente.nl")
+    )
+    await db.execute(
+        update(Work)
+        .where(Work.pure_uuid == "w-2024")
+        .values(doi_normalized="10.1000/local", work_type="info:eu-repo/semantics/bookPart")
+    )
+    await db.commit()
+
+    iid = (await db.execute(select(Institution.id).where(Institution.code == "ut"))).scalar_one()
+    # Two store rows share w-2024's DOI: the lowest w_id must win.
+    db.add_all(
+        [
+            OpenalexWork(institution_id=iid, w_id="W-900002", doi_normalized="10.1000/local"),
+            OpenalexWork(institution_id=iid, w_id="W-900001", doi_normalized="10.1000/local"),
+        ]
+    )
+    await db.commit()
+
+    body = (await authors_api.get("/api/v1/ut/authors/alice-uuid")).json()
+    by_uuid = {w["pure_uuid"]: w for w in body["works"]}
+    matched = by_uuid["w-2024"]
+    assert matched["doi"] == "10.1000/local"
+    assert matched["work_type"] == "info:eu-repo/semantics/bookPart"
+    assert matched["openalex_url"] == "https://openalex.org/W-900001"
+    assert matched["pure_url"] == "https://research.utwente.nl/en/publications/w-2024"
+    # No DOI on the work: no OpenAlex link, Pure record link still there.
+    doi_less = by_uuid["w-2023a"]
+    assert doi_less["doi"] is None
+    assert doi_less["openalex_url"] is None
+    assert doi_less["pure_url"] == "https://research.utwente.nl/en/publications/w-2023a"
+    assert doi_less["work_type"] is None
+
+
+@requires_db
 async def test_profile_openalex_only_merge(authors_api, db, monkeypatch):
-    """OpenAlex-attributed works absent from Pure append after the local
-    ones with in_pure False; window, excluded-type, and DOI-duplicate gates
-    drop the rest."""
+    """OpenAlex-attributed works absent from Pure live in the profile's
+    openalex_only section (never truncated by the works cap); window,
+    excluded-type, and DOI-duplicate gates drop the rest, and the works
+    list stays Pure-canon only."""
     from sqlalchemy import update
 
     await db.execute(
@@ -361,20 +412,28 @@ async def test_profile_openalex_only_merge(authors_api, db, monkeypatch):
     monkeypatch.setattr("journal_browser.services.authors.openalex_only_works_for_author", _fake)
     body = (await authors_api.get("/api/v1/ut/authors/alice-uuid")).json()
     works = body["works"]
-    assert [w["pure_uuid"] for w in works if w["in_pure"]] == [
-        "w-2024",
-        "w-2023a",
-        "w-2023b",
-        "w-2021",
-    ]
-    merged = [w for w in works if not w["in_pure"]]
-    assert [(w["title"], w["doi"]) for w in merged] == [
+    # the works list is the Pure canon only — no merged rows ride along
+    assert [w["pure_uuid"] for w in works] == ["w-2024", "w-2023a", "w-2023b", "w-2021"]
+    assert all(w["in_pure"] for w in works)
+    section = body["openalex_only"]
+    assert section["available"] is True
+    assert section["total"] == 2
+    assert body["openalex_only_count"] == 2
+    missed = section["items"]
+    assert [(w["title"], w["doi"]) for w in missed] == [
         ("Only OA", "10.1000/oa-only"),
         ("No Doi", None),
     ]
-    assert merged[0]["oa_status"] == "unknown"
-    assert merged[0]["journal_title"] == "Outside Journal"
-    assert merged[0]["journal_issn_l"] == "9999-9991"
+    assert missed[0]["pure_uuid"] is None
+    assert missed[0]["in_pure"] is False
+    assert missed[0]["oa_status"] == "unknown"
+    assert missed[0]["work_type"] is None
+    assert missed[0]["journal_title"] == "Outside Journal"
+    assert missed[0]["journal_issn_l"] == "9999-9991"
+    # fake rows carry no W-id/authorships: identity + attribution degrade
+    assert missed[0]["openalex_id"] is None
+    assert missed[0]["openalex_url"] is None
+    assert missed[0]["ut_authors"] == []
 
 
 @requires_db
@@ -388,10 +447,11 @@ async def test_require_confirmed_affiliation_toggle(authors_api, db):
 
     from journal_browser.models import Institution
 
-    # Default on: Bob (unconfirmed) is hidden from search but his profile
-    # endpoint stays reachable.
+    # Default on: Bob (unconfirmed) is hidden from the roster, but a name
+    # hit falls back to the ungated pass; his profile endpoint stays
+    # reachable.
     body = (await authors_api.get("/api/v1/ut/authors", params={"q": "bob"})).json()
-    assert body["total"] == 0 and body["items"] == []
+    assert body["total"] == 1 and body["items"][0]["confirmed"] is False
     assert (await authors_api.get("/api/v1/ut/authors/bob-uuid")).status_code == 200
 
     await db.execute(
@@ -419,6 +479,24 @@ async def test_require_confirmed_affiliation_toggle(authors_api, db):
         "2025-2026": 1,
         "none": 1,
     }
+
+
+@requires_db
+async def test_search_confirmed_gate_fallback(authors_api):
+    """Gate on: a q matching only unconfirmed authors falls back to the
+    ungated pass (total, items, facets); a q matching confirmed authors
+    keeps the gate."""
+    body = (await authors_api.get("/api/v1/ut/authors", params={"q": "noaffiliation"})).json()
+    assert body["total"] == 1
+    (item,) = body["items"]
+    assert item["pure_uuid"] == "bob-uuid" and item["confirmed"] is False
+    # Facets describe the returned set: Bob alone.
+    assert {f["value"]: f["count"] for f in body["facets"]["works"]} == {"50+": 1}
+    assert {f["value"]: f["count"] for f in body["facets"]["last_pub"]} == {"2025-2026": 1}
+
+    body = (await authors_api.get("/api/v1/ut/authors", params={"q": "navigator"})).json()
+    assert body["total"] == 1
+    assert [i["pure_uuid"] for i in body["items"]] == ["carol-uuid"]
 
 
 @requires_db
@@ -562,3 +640,113 @@ async def test_sort_keys_and_offset_paging(authors_api):
     # Unknown sort key: 422 (Literal validation); negative offset too.
     assert (await authors_api.get("/api/v1/ut/authors", params={"sort": "nope"})).status_code == 422
     assert (await authors_api.get("/api/v1/ut/authors", params={"offset": -1})).status_code == 422
+
+
+@requires_db
+async def test_profile_people_and_avatar(authors_api, db):
+    """people.utwente profile: matched rows serve the profile section and
+    the avatar endpoint; candidates stay hidden until an admin confirms
+    the source='people' identity row."""
+    from sqlalchemy import select
+
+    from journal_browser.models import (
+        AuthorIdentity,
+        Institution,
+        PeopleUtwentePerson,
+        PurePerson,
+    )
+
+    ut = (await db.execute(select(Institution).where(Institution.code == "ut"))).scalar_one()
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 16
+    # people rows FK onto pure_persons (the roster), like pure_person_orgs.
+    db.add_all(
+        [
+            PurePerson(institution_id=ut.id, uuid=uuid, name=name, payload={})
+            for uuid, name in (
+                ("alice-uuid", "Alice Author"),
+                ("carol-uuid", "Carol Navigator"),
+                ("dan-uuid", "Dan D"),
+            )
+        ]
+    )
+    # No relationship() between the mappers: flush the roster first or
+    # the people-row FK inserts run ahead of it.
+    await db.flush()
+    db.add_all(
+        [
+            PeopleUtwentePerson(
+                institution_id=ut.id,
+                person_uuid="alice-uuid",
+                status="matched",
+                slug="alice.author",
+                canonical_name="dr. Alice Author (ALiCe)",
+                email="a.author@utwente.nl",
+                orgs=[{"name": "Faculty of Science and Technology", "abbr": "TNW"}],
+                faculty_abbr="TNW",
+                portal_person_url="https://research.utwente.nl/en/persons/alice-uuid",
+                photo_url="https://people.utwente.nl/.wh/ea/uc/x/alice.avif",
+                photo_media_type="image/png",
+                photo_bytes=png,
+            ),
+            # Candidate without an identity decision: never served.
+            PeopleUtwentePerson(
+                institution_id=ut.id,
+                person_uuid="carol-uuid",
+                status="candidate",
+                slug="carol.navigator",
+                canonical_name="Carol Navigator",
+                orgs=[],
+                portal_person_url=None,
+            ),
+            # Candidate promoted by an admin: served despite status.
+            PeopleUtwentePerson(
+                institution_id=ut.id,
+                person_uuid="dan-uuid",
+                status="candidate",
+                slug="dan.d",
+                canonical_name="Dan D",
+                orgs=[],
+                portal_person_url=None,
+                photo_media_type="image/png",
+                photo_bytes=png,
+            ),
+            AuthorIdentity(
+                institution_id=ut.id,
+                author_pure_uuid="dan-uuid",
+                source="people",
+                external_id="dan.d",
+                status="confirmed",
+                method="name",
+                confidence=0.9,
+            ),
+        ]
+    )
+    await db.commit()
+
+    author = (await authors_api.get("/api/v1/ut/authors/alice-uuid")).json()["author"]
+    assert author["people"] == {
+        "slug": "alice.author",
+        "url": "https://people.utwente.nl/alice.author",
+        "canonical_name": "dr. Alice Author (ALiCe)",
+        "email": "a.author@utwente.nl",
+        "orgs": ["Faculty of Science and Technology"],
+        "faculty_abbr": "TNW",
+        "has_photo": True,
+    }
+    assert author["research_portal_url"] == ("https://research.utwente.nl/en/persons/alice-uuid")
+    avatar = await authors_api.get("/api/v1/ut/authors/alice-uuid/avatar")
+    assert avatar.status_code == 200
+    assert avatar.content == png
+    assert avatar.headers["content-type"] == "image/png"
+
+    # Candidate rows are invisible until confirmed; a missed row serves
+    # nothing and unknown authors 404.
+    carol_body = (await authors_api.get("/api/v1/ut/authors/carol-uuid")).json()
+    assert carol_body["author"]["people"] is None
+    assert (await authors_api.get("/api/v1/ut/authors/carol-uuid/avatar")).status_code == 404
+    dan = (await authors_api.get("/api/v1/ut/authors/dan-uuid")).json()["author"]
+    assert dan["people"]["slug"] == "dan.d"
+    assert dan["people"]["has_photo"] is True
+    # dan has no people portal url and no portal bindings: constructed
+    # url falls away, None.
+    assert dan["research_portal_url"] is None

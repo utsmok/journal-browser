@@ -20,8 +20,8 @@ environments:
       full_dump: backups/live-pre-author-path-2026-10-31.dump
       fixtures: backend/scripts/seed_fixtures.py
   live-readonly:
-    url: http://localhost:3000
-    api_url: http://localhost:8000
+    url: http://127.0.0.1:3001
+    api_url: http://127.0.0.1:8001
     restrictions:
       - read-only GET flows only; this is the production deployment
       - never POST feedback (writes the live database)
@@ -98,10 +98,10 @@ feature_flags:
   provider: none
   dashboard_url: ''
   how_to_override: >
-    JB_ENABLE_JOURNAL_CITATIONS and JB_ENABLE_JISC env vars flow through
+    JB_ENABLE_JOURNAL_CITATIONS env var flows through
     backend/src/journal_browser/settings_schema.py and the admin settings
-    overlay. Scaffolds stay OFF by design (backend/tests/test_scaffolds.py);
-    QA must treat them as OFF and flag any run where they are on.
+    overlay. The scaffold stays OFF by design (backend/tests/test_scaffolds.py);
+    QA must treat it as OFF and flag any run where it is on.
 
 integrations: {}
 

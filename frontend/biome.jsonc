@@ -12,7 +12,9 @@
       "!**/.next/**",
       "!**/node_modules/**",
       "!**/tsconfig.tsbuildinfo",
-      "!**/lib/api-types.ts"
+      "!**/lib/api-types.ts",
+      // Generated snapshot (backend/scripts/dump_harvest_plan.py); not source.
+      "!**/lib/data-pipeline-plan.json"
     ]
   },
   "formatter": {

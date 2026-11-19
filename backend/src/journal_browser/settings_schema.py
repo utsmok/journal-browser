@@ -171,11 +171,12 @@ SETTINGS_REGISTRY: list[FieldDef] = [
         "Citation feature scaffold; stays off until explicitly enabled.",
     ),
     _f(
-        "enable_jisc",
+        "enable_usage_tracking",
         "global",
         "bool",
-        "JISC integration",
-        "JISC feature scaffold; stays off until explicitly enabled.",
+        "Usage tracking",
+        "Anonymous usage-event intake (paths, searches, dwell, client errors); "
+        "off = batches are accepted and dropped.",
     ),
     # ── Institution-backed (institutions table, PUT /admin/institutions/{code})
     _f(

@@ -4,6 +4,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import * as React from "react";
 
 import { useInstitution } from "./use-institution";
+import { trackSearch } from "@/lib/usage/tracker";
 import {
   apiGet,
   fetchOrgUnit,
@@ -12,15 +13,20 @@ import {
   fetchPublishers,
   type DealOut,
   type FreshnessResponse,
+  type FunderDetailResponse,
+  type FunderSearchResponse,
   type JournalDetailResponse,
   type JournalSearchParams,
   type JournalSearchResponse,
   type LimitationOut,
+  type OrgUnitAuthorSort,
   type OrgUnitLevel,
   type OrgUnitSearchParams,
+  type PublisherPartsFilter,
   type PublisherSearchParams,
   type SimilarJournalsBundle,
   type WorksPage,
+  type YearParams,
 } from "@/lib/api";
 import type { InstitutionDirectoryEntry } from "@/lib/admin";
 
@@ -40,6 +46,8 @@ const qk = {
   publisher: (i: string, name: string) => ["publisher", i, name] as const,
   orgunits: (i: string, params: OrgUnitSearchParams) => ["orgunits", i, params] as const,
   orgunit: (i: string, level: OrgUnitLevel, name: string) => ["orgunit", i, level, name] as const,
+  funders: (i: string, q: string) => ["funders", i, q] as const,
+  funder: (i: string, id: number) => ["funder", i, id] as const,
 };
 
 /**
@@ -58,6 +66,33 @@ function useFetchEpoch(params: JournalSearchParams) {
   return epoch;
 }
 
+/** Filter keys stored on a usage search event; paging/sort keys dropped. */
+const FILTER_KEYS = [
+  "search_in",
+  "deal",
+  "oa",
+  "doaj",
+  "quartile",
+  "publisher",
+  "has_apc",
+  "has_works",
+  "topic",
+  "oa_type",
+  "pub_type",
+  "language",
+  "green_oa",
+  "funder",
+  "funder_fit",
+] as const;
+
+function usageFilters(params: JournalSearchParams): Record<string, unknown> | undefined {
+  const out: Record<string, unknown> = {};
+  for (const key of FILTER_KEYS) {
+    if (params[key] !== undefined) out[key] = params[key];
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 export function useJournals(params: JournalSearchParams, semantic?: boolean) {
   const inst = useInstitution();
   const epoch = useFetchEpoch(params);
@@ -65,6 +100,7 @@ export function useJournals(params: JournalSearchParams, semantic?: boolean) {
     queryKey: [...qk.journals(inst, params), semantic ? "semantic" : "fts"] as const,
     queryFn: async () => {
       const at = epoch.current;
+      const startedAt = Date.now();
       const data = semantic
         ? // Free-text "journals like this description": embeddings, not FTS.
           // Filter/sort params do not apply to the vector ranking, but the
@@ -78,6 +114,14 @@ export function useJournals(params: JournalSearchParams, semantic?: boolean) {
             ...params,
           });
       if (at !== epoch.current) throw new Error("stale fetch discarded");
+      trackSearch({
+        query: params.q ?? "",
+        results_count: data.total,
+        duration_ms: Date.now() - startedAt,
+        search_scope: "journals",
+        // Filter/sort params do not apply to the semantic ranking.
+        filters: semantic ? undefined : usageFilters(params),
+      });
       return data;
     },
     placeholderData: keepPreviousData,
@@ -110,11 +154,21 @@ export function useFacets(
   });
 }
 
-export function useJournal(issnL: string | undefined) {
+export function useJournal(issnL: string | undefined, funderId?: number, years?: YearParams) {
   const inst = useInstitution();
   return useQuery({
-    queryKey: qk.journal(inst, issnL ?? ""),
-    queryFn: () => apiGet<JournalDetailResponse>(`/${inst}/journals/${issnL}`),
+    queryKey: [
+      ...qk.journal(inst, issnL ?? ""),
+      funderId ?? null,
+      years?.year_from ?? null,
+      years?.year_to ?? null,
+    ] as const,
+    queryFn: () =>
+      apiGet<JournalDetailResponse>(`/${inst}/journals/${issnL}`, {
+        funder: funderId,
+        year_from: years?.year_from,
+        year_to: years?.year_to,
+      }),
     enabled: Boolean(issnL),
   });
 }
@@ -137,13 +191,24 @@ export function useSimilar(issnL: string | undefined) {
 
 /**
  * Institution works for a journal (OpenAlex). The section renders its
- * empty state on error, so failures stay quiet.
+ * empty state on error, so failures stay quiet. The year lens, when set,
+ * scopes the list and joins the cache key.
  */
-export function useJournalWorks(issnL: string | undefined, page: number) {
+export function useJournalWorks(issnL: string | undefined, page: number, years?: YearParams) {
   const inst = useInstitution();
   return useQuery({
-    queryKey: qk.works(inst, issnL ?? "", page),
-    queryFn: () => apiGet<WorksPage>(`/${inst}/journals/${issnL}/works`, { page, page_size: 20 }),
+    queryKey: [
+      ...qk.works(inst, issnL ?? "", page),
+      years?.year_from ?? null,
+      years?.year_to ?? null,
+    ] as const,
+    queryFn: () =>
+      apiGet<WorksPage>(`/${inst}/journals/${issnL}/works`, {
+        page,
+        page_size: 20,
+        year_from: years?.year_from,
+        year_to: years?.year_to,
+      }),
     enabled: Boolean(issnL),
     placeholderData: keepPreviousData,
     retry: false,
@@ -200,11 +265,25 @@ export function usePublishers(params: PublisherSearchParams) {
   });
 }
 
-export function usePublisher(name: string | undefined) {
+/**
+ * Publisher detail bundle. The year lens, when set, scopes the works
+ * numbers (header sum + journal table) and joins the cache key; the
+ * gap-card parts filter joins it too.
+ */
+export function usePublisher(
+  name: string | undefined,
+  years?: YearParams,
+  parts?: PublisherPartsFilter,
+) {
   const inst = useInstitution();
   return useQuery({
-    queryKey: qk.publisher(inst, name ?? ""),
-    queryFn: () => fetchPublisher(inst, name ?? ""),
+    queryKey: [
+      ...qk.publisher(inst, name ?? ""),
+      years?.year_from ?? null,
+      years?.year_to ?? null,
+      parts ?? null,
+    ] as const,
+    queryFn: () => fetchPublisher(inst, name ?? "", years, parts),
     enabled: Boolean(name),
   });
 }
@@ -219,11 +298,76 @@ export function useOrgUnits(params: OrgUnitSearchParams) {
   });
 }
 
-export function useOrgUnit(level: OrgUnitLevel | undefined, name: string | undefined) {
+export function useOrgUnit(
+  level: OrgUnitLevel | undefined,
+  name: string | undefined,
+  years?: YearParams,
+  sort?: OrgUnitAuthorSort,
+) {
   const inst = useInstitution();
   return useQuery({
-    queryKey: qk.orgunit(inst, level ?? "faculty", name ?? ""),
-    queryFn: () => fetchOrgUnit(inst, level ?? "faculty", name ?? ""),
+    queryKey: [
+      ...qk.orgunit(inst, level ?? "faculty", name ?? ""),
+      years?.year_from ?? null,
+      years?.year_to ?? null,
+      sort ?? "share",
+    ] as const,
+    queryFn: () => fetchOrgUnit(inst, level ?? "faculty", name ?? "", years, sort),
     enabled: Boolean(level && name),
+  });
+}
+
+/** Funder picker suggestions: name-substring search over the Jisc OPF
+ * canon (~200 rows, server-filtered). Disabled until 2 chars. */
+export function useFunders(q: string | undefined, enabled: boolean) {
+  const inst = useInstitution();
+  return useQuery({
+    queryKey: qk.funders(inst, q ?? ""),
+    queryFn: () => apiGet<FunderSearchResponse>(`/${inst}/funders`, { q, limit: 10 }),
+    enabled: enabled && Boolean(q && q.trim().length >= 2) && inst !== "",
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Funder directory listing: paged over the whole canon with no
+ * minimum query length (the picker hook above requires 2 chars). */
+export function useFunderDirectory(q: string, offset: number, limit: number) {
+  const inst = useInstitution();
+  return useQuery({
+    queryKey: [...qk.funders(inst, q), offset, limit] as const,
+    queryFn: async () => {
+      const startedAt = Date.now();
+      const data = await apiGet<FunderSearchResponse>(`/${inst}/funders`, {
+        q: q || undefined,
+        offset,
+        limit,
+      });
+      trackSearch({
+        query: q,
+        results_count: data.total,
+        duration_ms: Date.now() - startedAt,
+        search_scope: "funders",
+      });
+      return data;
+    },
+    enabled: inst !== "",
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useFunder(id: number | undefined, years?: YearParams) {
+  const inst = useInstitution();
+  return useQuery({
+    queryKey: [
+      ...qk.funder(inst, id ?? 0),
+      years?.year_from ?? null,
+      years?.year_to ?? null,
+    ] as const,
+    queryFn: () =>
+      apiGet<FunderDetailResponse>(`/${inst}/funders/${id}`, {
+        year_from: years?.year_from,
+        year_to: years?.year_to,
+      }),
+    enabled: Boolean(id) && inst !== "",
   });
 }

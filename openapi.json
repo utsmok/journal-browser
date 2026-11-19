@@ -170,8 +170,27 @@
           "admin"
         ],
         "summary": "Admin Summary",
-        "description": "Counters for the admin dashboard: pipeline health and open work.\n\nOne cheap set of aggregate queries so the overview page needs one call\ninstead of four list fetches.",
+        "description": "Counters for the admin dashboard: pipeline health and open work.\n\nOne cheap set of aggregate queries so the overview page needs one call\ninstead of four list fetches. With `institution`, the run/candidate/\nlast-run counters scope to that institution; flagged deals and feedback\nstay instance-global (deals span institutions via participations).",
         "operationId": "admin_summary_api_v1_admin_summary_get",
+        "parameters": [
+          {
+            "name": "institution",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Institution"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -179,6 +198,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AdminSummaryOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -854,7 +883,7 @@
           "admin"
         ],
         "summary": "List Author Identities",
-        "description": "Identity rows, newest activity first, with the local author name.",
+        "description": "Identity rows, newest activity first, with the local author name.\n\nServer-paged via offset/limit; total is the full filtered count.",
         "operationId": "list_author_identities_api_v1_admin_author_identities_get",
         "parameters": [
           {
@@ -892,6 +921,17 @@
             "description": "institution code"
           },
           {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -910,11 +950,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AuthorIdentityAdminOut"
-                  },
-                  "title": "Response List Author Identities Api V1 Admin Author Identities Get"
+                  "$ref": "#/components/schemas/AuthorIdentityPageOut"
                 }
               }
             }
@@ -972,13 +1008,73 @@
         }
       }
     },
+    "/api/v1/admin/external-author/{external_id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Stored External Author",
+        "description": "The harvest's stored OpenAlex author profile + recent works.\n\nThe review drawer reads the verbatim source_records payload (the listing\nsweep lands every institutional author profile there) plus a recent-works\nsample from the openalex_works projection \u2014 no live API call. 404 when\nthis id was never swept; the UI falls back to an OpenAlex link.",
+        "operationId": "stored_external_author_api_v1_admin_external_author__external_id__get",
+        "parameters": [
+          {
+            "name": "external_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "External Id"
+            }
+          },
+          {
+            "name": "institution",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Institution"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminExternalAuthorOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/work-identities": {
       "get": {
         "tags": [
           "admin"
         ],
         "summary": "List Work Identities",
-        "description": "Identity rows, newest activity first, with the work title.",
+        "description": "Identity rows, newest activity first, with the work title.\n\nServer-paged via offset/limit; total is the full filtered count.",
         "operationId": "list_work_identities_api_v1_admin_work_identities_get",
         "parameters": [
           {
@@ -1032,6 +1128,17 @@
             }
           },
           {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -1050,11 +1157,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/WorkIdentityAdminOut"
-                  },
-                  "title": "Response List Work Identities Api V1 Admin Work Identities Get"
+                  "$ref": "#/components/schemas/WorkIdentityPageOut"
                 }
               }
             }
@@ -1095,6 +1198,48 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkIdentityAdminOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/work-identities/bulk": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Bulk Work Identity Decisions",
+        "description": "Apply one reviewer's decisions to many work-identity rows.\n\nOne transaction: each row that exists gets the same audited flip the\nPUT does; unknown rows land in `errors` without aborting the batch.\nAn unexpected database error rolls the whole batch back.",
+        "operationId": "bulk_work_identity_decisions_api_v1_admin_work_identities_bulk_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkIdentityBulkIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkIdentityBulkOut"
                 }
               }
             }
@@ -1162,6 +1307,136 @@
                     "$ref": "#/components/schemas/StatusChangeOut"
                   },
                   "title": "Response List Status Changes Api V1 Admin Status Changes Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/usage/summary": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Usage Summary",
+        "operationId": "usage_summary_api_v1_admin_usage_summary_get",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 30,
+              "title": "Days"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageSummaryOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/usage/events": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Usage Events",
+        "operationId": "usage_events_api_v1_admin_usage_events_get",
+        "parameters": [
+          {
+            "name": "event_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "page_view",
+                    "search",
+                    "error"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Type"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 30,
+              "title": "Days"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageEventsPageOut"
                 }
               }
             }
@@ -1273,6 +1548,40 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/usage/events": {
+      "post": {
+        "tags": [
+          "usage"
+        ],
+        "summary": "Create Events",
+        "operationId": "create_events_api_v1_usage_events_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UsageBatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -1479,6 +1788,58 @@
             }
           },
           {
+            "name": "green_oa",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/GreenOa"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Green Oa"
+            }
+          },
+          {
+            "name": "pub_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 40
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pub Type"
+            }
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 60
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated ISO 639-1 codes; unknown values match nothing",
+              "title": "Language"
+            },
+            "description": "Comma-separated ISO 639-1 codes; unknown values match nothing"
+          },
+          {
             "name": "sort",
             "in": "query",
             "required": false,
@@ -1545,6 +1906,83 @@
               "default": true,
               "title": "Include Facets"
             }
+          },
+          {
+            "name": "funder",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Jisc OPF funder id",
+              "title": "Funder"
+            },
+            "description": "Jisc OPF funder id"
+          },
+          {
+            "name": "funder_fit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(compliant|check|no)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Funder-fit tier filter",
+              "title": "Funder Fit"
+            },
+            "description": "Funder-fit tier filter"
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
           }
         ],
         "responses": {
@@ -1754,6 +2192,46 @@
               "default": 20,
               "title": "Page Size"
             }
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
           }
         ],
         "responses": {
@@ -1764,6 +2242,96 @@
                 "schema": {
                   "$ref": "#/components/schemas/WorksPage"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/journals/{issn_l}/openalex-only.csv": {
+      "get": {
+        "tags": [
+          "journals"
+        ],
+        "summary": "Journal Openalex Only Csv",
+        "description": "Uncapped CSV of the journal's CRIS-gap (OpenAlex-only) list.",
+        "operationId": "journal_openalex_only_csv_api_v1__institution_code__journals__issn_l__openalex_only_csv_get",
+        "parameters": [
+          {
+            "name": "issn_l",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Issn L"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -1805,6 +2373,64 @@
               "type": "string",
               "title": "Institution Code"
             }
+          },
+          {
+            "name": "funder",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Jisc OPF funder id",
+              "title": "Funder"
+            },
+            "description": "Jisc OPF funder id"
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
           }
         ],
         "responses": {
@@ -1814,6 +2440,219 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/JournalDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/funders": {
+      "get": {
+        "tags": [
+          "funders"
+        ],
+        "summary": "Search Funders",
+        "operationId": "search_funders_api_v1__institution_code__funders_get",
+        "parameters": [
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FunderSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/funders/{funder_id}": {
+      "get": {
+        "tags": [
+          "funders"
+        ],
+        "summary": "Funder Detail",
+        "operationId": "funder_detail_api_v1__institution_code__funders__funder_id__get",
+        "parameters": [
+          {
+            "name": "funder_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Funder Id"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FunderDetailResponse"
                 }
               }
             }
@@ -2007,6 +2846,46 @@
               "default": 0,
               "title": "Offset"
             }
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
           }
         ],
         "responses": {
@@ -2058,6 +2937,46 @@
               "type": "string",
               "title": "Institution Code"
             }
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
           }
         ],
         "responses": {
@@ -2068,6 +2987,156 @@
                 "schema": {
                   "$ref": "#/components/schemas/AuthorProfileResponse"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/authors/{pure_uuid}/avatar": {
+      "get": {
+        "tags": [
+          "authors"
+        ],
+        "summary": "Author Avatar",
+        "description": "The author's people.utwente.nl portrait: uuid-verified matches\n(or admin-confirmed candidates) only; 404 otherwise.",
+        "operationId": "author_avatar_api_v1__institution_code__authors__pure_uuid__avatar_get",
+        "parameters": [
+          {
+            "name": "pure_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pure Uuid"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/authors/{pure_uuid}/works.csv": {
+      "get": {
+        "tags": [
+          "authors"
+        ],
+        "summary": "Author Works Csv",
+        "description": "Uncapped CSV of the author's works: scope=missed (default) serves\nthe openalex-only list, scope=canon the Pure works; 400 otherwise.",
+        "operationId": "author_works_csv_api_v1__institution_code__authors__pure_uuid__works_csv_get",
+        "parameters": [
+          {
+            "name": "pure_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pure Uuid"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "missed",
+              "title": "Scope"
+            }
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -2313,6 +3382,46 @@
               "default": true,
               "title": "Include Facets"
             }
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
           }
         ],
         "responses": {
@@ -2323,6 +3432,121 @@
                 "schema": {
                   "$ref": "#/components/schemas/PublisherSearchResponse"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/publishers/{name}/openalex-only.csv": {
+      "get": {
+        "tags": [
+          "publishers"
+        ],
+        "summary": "Publisher Openalex Only Csv",
+        "description": "Uncapped CSV of the publisher group's CRIS-gap (OpenAlex-only) list.",
+        "operationId": "publisher_openalex_only_csv_api_v1__institution_code__publishers__name__openalex_only_csv_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "parts",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "standalone",
+                      "chapter",
+                      "part"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 30,
+              "title": "Parts"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -2363,6 +3587,71 @@
             "schema": {
               "type": "string",
               "title": "Institution Code"
+            }
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "parts",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "standalone",
+                      "chapter",
+                      "part"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 30,
+              "title": "Parts"
             }
           }
         ],
@@ -2555,6 +3844,46 @@
               "default": true,
               "title": "Include Facets"
             }
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
           }
         ],
         "responses": {
@@ -2606,6 +3935,62 @@
               "type": "string",
               "title": "Institution Code"
             }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "share",
+                "works"
+              ],
+              "type": "string",
+              "description": "Top-authors ordering: share = share of the author's counted works published diamond/gold OA (authors with fewer than 4 counted works unranked, share null), works = works count",
+              "default": "share",
+              "title": "Sort"
+            },
+            "description": "Top-authors ordering: share = share of the author's counted works published diamond/gold OA (authors with fewer than 4 counted works unranked, share null), works = works count"
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
           }
         ],
         "responses": {
@@ -2657,6 +4042,62 @@
               "type": "string",
               "title": "Institution Code"
             }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "share",
+                "works"
+              ],
+              "type": "string",
+              "description": "Top-authors ordering: share = share of the author's counted works published diamond/gold OA (authors with fewer than 4 counted works unranked, share null), works = works count",
+              "default": "share",
+              "title": "Sort"
+            },
+            "description": "Top-authors ordering: share = share of the author's counted works published diamond/gold OA (authors with fewer than 4 counted works unranked, share null), works = works count"
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
           }
         ],
         "responses": {
@@ -2708,6 +4149,62 @@
               "type": "string",
               "title": "Institution Code"
             }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "share",
+                "works"
+              ],
+              "type": "string",
+              "description": "Top-authors ordering: share = share of the author's counted works published diamond/gold OA (authors with fewer than 4 counted works unranked, share null), works = works count",
+              "default": "share",
+              "title": "Sort"
+            },
+            "description": "Top-authors ordering: share = share of the author's counted works published diamond/gold OA (authors with fewer than 4 counted works unranked, share null), works = works count"
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
           }
         ],
         "responses": {
@@ -3072,6 +4569,20 @@
             ],
             "title": "Cap Text"
           },
+          "cap_usage": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CapUsageEntry"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap Usage"
+          },
           "summary": {
             "anyOf": [
               {
@@ -3299,6 +4810,20 @@
             ],
             "title": "Cap Text"
           },
+          "cap_usage": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CapUsageEntry"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap Usage"
+          },
           "summary": {
             "anyOf": [
               {
@@ -3369,6 +4894,109 @@
           "curation_resolved_reason"
         ],
         "title": "AdminDealOut"
+      },
+      "AdminExternalAuthorOut": {
+        "properties": {
+          "source_pk": {
+            "type": "string",
+            "title": "Source Pk"
+          },
+          "harvested_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harvested At"
+          },
+          "author": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Author"
+          },
+          "works": {
+            "items": {
+              "$ref": "#/components/schemas/AdminExternalWorkOut"
+            },
+            "type": "array",
+            "title": "Works"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_pk",
+          "harvested_at",
+          "author",
+          "works"
+        ],
+        "title": "AdminExternalAuthorOut",
+        "description": "Stored OpenAlex author profile (source_records) + recent works.\n\nServes the identity review drawer from the harvest's verbatim payloads\ninstead of the live API."
+      },
+      "AdminExternalWorkOut": {
+        "properties": {
+          "w_id": {
+            "type": "string",
+            "title": "W Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue"
+          }
+        },
+        "type": "object",
+        "required": [
+          "w_id",
+          "title",
+          "year",
+          "doi",
+          "venue"
+        ],
+        "title": "AdminExternalWorkOut",
+        "description": "One recent OpenAlex work of a candidate author, from the projection."
       },
       "AdminInstitutionOut": {
         "properties": {
@@ -4084,6 +5712,33 @@
         "title": "AuthorIdentityAdminOut",
         "description": "One identity-cascade row for the admin review list."
       },
+      "AuthorIdentityPageOut": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "default": 0
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuthorIdentityAdminOut"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "items"
+        ],
+        "title": "AuthorIdentityPageOut",
+        "description": "Paged identity-cascade review queue (total is the unpaginated count)."
+      },
       "AuthorItem": {
         "properties": {
           "pure_uuid": {
@@ -4217,6 +5872,455 @@
         ],
         "title": "AuthorJournalRow"
       },
+      "AuthorOpenalexOnly": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "entries_total": {
+            "type": "integer",
+            "title": "Entries Total",
+            "default": 0
+          },
+          "items": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/AuthorOpenalexOnlySingle"
+                },
+                {
+                  "$ref": "#/components/schemas/AuthorOpenalexOnlyGroup"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "kind",
+                "mapping": {
+                  "group": "#/components/schemas/AuthorOpenalexOnlyGroup",
+                  "single": "#/components/schemas/AuthorOpenalexOnlySingle"
+                }
+              }
+            },
+            "type": "array",
+            "title": "Items",
+            "default": []
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "default": true
+          },
+          "likely_missing": {
+            "type": "integer",
+            "title": "Likely Missing",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "AuthorOpenalexOnly",
+        "description": "The author's OpenAlex-only works as their own section: total is\nexact, items hold the grouped entries (missing parts under their main\nwork), safety-capped at the entry level; entries_total counts entries\nbefore the cap."
+      },
+      "AuthorOpenalexOnlyGroup": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "group",
+            "title": "Kind",
+            "default": "group"
+          },
+          "parent": {
+            "$ref": "#/components/schemas/GapGroupParent"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/AuthorOpenalexOnlyWork"
+            },
+            "type": "array",
+            "title": "Parts",
+            "default": []
+          },
+          "parts_total": {
+            "type": "integer",
+            "title": "Parts Total",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "parent"
+        ],
+        "title": "AuthorOpenalexOnlyGroup",
+        "description": "One main work with its missing parts (only missing works are\nlisted); the parent itself may well be registered."
+      },
+      "AuthorOpenalexOnlySingle": {
+        "properties": {
+          "pure_uuid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Uuid"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "oa_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Status"
+          },
+          "work_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Type"
+          },
+          "journal_issn_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Issn L"
+          },
+          "journal_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Title"
+          },
+          "publisher_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Name"
+          },
+          "openalex_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Id"
+          },
+          "openalex_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Url"
+          },
+          "in_pure": {
+            "type": "boolean",
+            "title": "In Pure",
+            "default": false
+          },
+          "ut_authors": {
+            "items": {
+              "$ref": "#/components/schemas/UtAuthorAttribution"
+            },
+            "type": "array",
+            "title": "Ut Authors",
+            "default": []
+          },
+          "parent_works": {
+            "items": {
+              "$ref": "#/components/schemas/WorkParent"
+            },
+            "type": "array",
+            "title": "Parent Works",
+            "default": []
+          },
+          "is_part": {
+            "type": "boolean",
+            "title": "Is Part",
+            "default": false
+          },
+          "pure_match": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "doi_in_pure",
+                  "parent_book_in_pure",
+                  "same_title_in_pure"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Match"
+          },
+          "pure_match_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Match Url"
+          },
+          "kind": {
+            "type": "string",
+            "const": "single",
+            "title": "Kind",
+            "default": "single"
+          }
+        },
+        "type": "object",
+        "title": "AuthorOpenalexOnlySingle",
+        "description": "One standalone gap work (no parent works): all work-row fields at\nthe top level."
+      },
+      "AuthorOpenalexOnlyWork": {
+        "properties": {
+          "pure_uuid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Uuid"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "oa_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Status"
+          },
+          "work_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Type"
+          },
+          "journal_issn_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Issn L"
+          },
+          "journal_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Title"
+          },
+          "publisher_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Name"
+          },
+          "openalex_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Id"
+          },
+          "openalex_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Url"
+          },
+          "in_pure": {
+            "type": "boolean",
+            "title": "In Pure",
+            "default": false
+          },
+          "ut_authors": {
+            "items": {
+              "$ref": "#/components/schemas/UtAuthorAttribution"
+            },
+            "type": "array",
+            "title": "Ut Authors",
+            "default": []
+          },
+          "parent_works": {
+            "items": {
+              "$ref": "#/components/schemas/WorkParent"
+            },
+            "type": "array",
+            "title": "Parent Works",
+            "default": []
+          },
+          "is_part": {
+            "type": "boolean",
+            "title": "Is Part",
+            "default": false
+          },
+          "pure_match": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "doi_in_pure",
+                  "parent_book_in_pure",
+                  "same_title_in_pure"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Match"
+          },
+          "pure_match_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Match Url"
+          }
+        },
+        "type": "object",
+        "title": "AuthorOpenalexOnlyWork",
+        "description": "One OpenAlex-only (missed) work in the author page's dedicated\nsection: same gates the merged works list used to apply, but the list\nis the section's own \u2014 never truncated by the works cap."
+      },
       "AuthorOut": {
         "properties": {
           "pure_uuid": {
@@ -4314,6 +6418,27 @@
           "n_works": {
             "type": "integer",
             "title": "N Works"
+          },
+          "people": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthorPeopleProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "research_portal_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Portal Url"
           }
         },
         "type": "object",
@@ -4331,6 +6456,74 @@
           "n_works"
         ],
         "title": "AuthorOut"
+      },
+      "AuthorPeopleProfile": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "canonical_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "orgs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Orgs"
+          },
+          "faculty_abbr": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Faculty Abbr"
+          },
+          "has_photo": {
+            "type": "boolean",
+            "title": "Has Photo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "url",
+          "canonical_name",
+          "email",
+          "orgs",
+          "faculty_abbr",
+          "has_photo"
+        ],
+        "title": "AuthorPeopleProfile",
+        "description": "people.utwente.nl profile linked to the author: uuid-verified via\nthe profile's research.utwente.nl portal link, or an admin-promoted\nname match. has_photo gates the avatar endpoint URL."
       },
       "AuthorProfileResponse": {
         "properties": {
@@ -4374,6 +6567,27 @@
             },
             "type": "array",
             "title": "Works"
+          },
+          "openalex_only": {
+            "$ref": "#/components/schemas/AuthorOpenalexOnly",
+            "default": {
+              "total": 0,
+              "entries_total": 0,
+              "items": [],
+              "available": true,
+              "likely_missing": 0
+            }
+          },
+          "openalex_only_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Only Count"
           }
         },
         "type": "object",
@@ -4568,6 +6782,17 @@
             ],
             "title": "Oa Status"
           },
+          "work_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Type"
+          },
           "journal_issn_l": {
             "anyOf": [
               {
@@ -4590,10 +6815,41 @@
             ],
             "title": "Journal Title"
           },
+          "pure_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Url"
+          },
+          "openalex_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Url"
+          },
           "in_pure": {
             "type": "boolean",
             "title": "In Pure",
             "default": true
+          },
+          "oa_status_source": {
+            "type": "string",
+            "enum": [
+              "openalex",
+              "pure"
+            ],
+            "title": "Oa Status Source",
+            "default": "openalex"
           }
         },
         "type": "object",
@@ -4696,6 +6952,141 @@
         "type": "object",
         "title": "CanonicalOa",
         "description": "ut-metadata oa_status distribution over a journal's works."
+      },
+      "CapUsageEntry": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "maximum": 2100.0,
+            "minimum": 1900.0,
+            "title": "Year"
+          },
+          "pool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pool"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total"
+          },
+          "used": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Used"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "total"
+        ],
+        "title": "CapUsageEntry",
+        "description": "One contract year's publisher-reported APC cap usage (admin-entered\nfrom library email updates; the harvest never rewrites it)."
+      },
+      "ChapterBook": {
+        "properties": {
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "chapters": {
+            "type": "integer",
+            "title": "Chapters"
+          },
+          "sample": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sample",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "chapters"
+        ],
+        "title": "ChapterBook",
+        "description": "One parent book of the parts rollup: a distinct volume parent of\nthe page's chapter-kind gap works, with its chapter count and up to\n3 sample chapter titles."
+      },
+      "ClientInfo": {
+        "properties": {
+          "tz": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tz"
+          },
+          "locale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locale"
+          }
+        },
+        "type": "object",
+        "title": "ClientInfo"
       },
       "CreateFeedbackIn": {
         "properties": {
@@ -5161,6 +7552,20 @@
             ],
             "title": "Per Year Oa Counts"
           },
+          "cap_usage": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CapUsageEntry"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap Usage"
+          },
           "needs_curation": {
             "type": "boolean",
             "title": "Needs Curation"
@@ -5193,6 +7598,16 @@
           "journal_count": {
             "type": "integer",
             "title": "Journal Count",
+            "default": 0
+          },
+          "apc_euro_total": {
+            "type": "number",
+            "title": "Apc Euro Total",
+            "default": 0.0
+          },
+          "apc_n": {
+            "type": "integer",
+            "title": "Apc N",
             "default": 0
           }
         },
@@ -5327,6 +7742,20 @@
               }
             ],
             "title": "Cap Text"
+          },
+          "cap_usage": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CapUsageEntry"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap Usage"
           },
           "summary": {
             "anyOf": [
@@ -5579,6 +8008,77 @@
           "edits"
         ],
         "title": "DocMetaOut"
+      },
+      "ErrorIn": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "error",
+            "title": "Type"
+          },
+          "session_id": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Session Id"
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 512,
+            "title": "Path"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "js_error",
+              "unhandled_rejection",
+              "api_status"
+            ],
+            "title": "Source"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "session_id",
+          "path",
+          "source"
+        ],
+        "title": "ErrorIn"
       },
       "FeedbackAdminOut": {
         "properties": {
@@ -6065,6 +8565,644 @@
         "title": "FreshnessResponse",
         "description": "Config comes from the institution row; unset optional fields are\nNone rather than global defaults."
       },
+      "FunderDetailResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "ror": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ror"
+          },
+          "fundref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fundref"
+          },
+          "openalex_funder_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Funder Id"
+          },
+          "policy_structured": {
+            "type": "boolean",
+            "title": "Policy Structured",
+            "default": false
+          },
+          "n_ut_works": {
+            "type": "integer",
+            "title": "N Ut Works",
+            "default": 0
+          },
+          "publications_policy": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publications Policy"
+          },
+          "data_archiving_policy": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Archiving Policy"
+          },
+          "openaire": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FunderOpenaireBlock"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "top_journals": {
+            "items": {
+              "$ref": "#/components/schemas/FunderTopJournal"
+            },
+            "type": "array",
+            "title": "Top Journals",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "country",
+          "url",
+          "ror",
+          "fundref"
+        ],
+        "title": "FunderDetailResponse"
+      },
+      "FunderFitOut": {
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "compliant",
+                  "check",
+                  "no"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "FunderFitOut",
+        "description": "How well one journal satisfies the selected funder's OA policy.\n\nstatus None = the funder's policy is text-only, no tier derivable."
+      },
+      "FunderListItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "ror": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ror"
+          },
+          "fundref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fundref"
+          },
+          "openalex_funder_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Funder Id"
+          },
+          "policy_structured": {
+            "type": "boolean",
+            "title": "Policy Structured",
+            "default": false
+          },
+          "n_ut_works": {
+            "type": "integer",
+            "title": "N Ut Works",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "country",
+          "url",
+          "ror",
+          "fundref"
+        ],
+        "title": "FunderListItem"
+      },
+      "FunderOpenaireBlock": {
+        "properties": {
+          "openaire_id": {
+            "type": "string",
+            "title": "Openaire Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "short_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Name"
+          },
+          "jurisdiction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jurisdiction"
+          },
+          "website_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Website Url"
+          },
+          "streams": {
+            "items": {
+              "$ref": "#/components/schemas/FunderOpenaireStream"
+            },
+            "type": "array",
+            "title": "Streams",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "openaire_id"
+        ],
+        "title": "FunderOpenaireBlock",
+        "description": "OpenAIRE graph identity for the same funder (canon-linked via ROR)."
+      },
+      "FunderOpenaireStream": {
+        "properties": {
+          "level0_id": {
+            "type": "string",
+            "title": "Level0 Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "n_projects": {
+            "type": "integer",
+            "title": "N Projects"
+          }
+        },
+        "type": "object",
+        "required": [
+          "level0_id",
+          "n_projects"
+        ],
+        "title": "FunderOpenaireStream",
+        "description": "One funding level-0 stream with its OpenAIRE project count."
+      },
+      "FunderSearchResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FunderListItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "FunderSearchResponse"
+      },
+      "FunderTopJournal": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "issn_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issn L"
+          },
+          "n_works": {
+            "type": "integer",
+            "title": "N Works"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "issn_l",
+          "n_works"
+        ],
+        "title": "FunderTopJournal"
+      },
+      "GapGroupParent": {
+        "properties": {
+          "w_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "W Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "work_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Type"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "pure_registered": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Registered"
+          }
+        },
+        "type": "object",
+        "title": "GapGroupParent",
+        "description": "The main work a group entry's missing parts belong to: the parts'\nprimary parent (the first rel=volume parent among a part's\nparent_works, else the first listed parent). name comes from the\nparts' parent_works (registry title when the registry row has one);\nwork_type/doi/pure_registered are null without an openalex_work_parents\nrow (parts backfill pending). pure_registered is derived live from the\nworks table and false includes no-DOI parents."
+      },
+      "GreenOa": {
+        "type": "string",
+        "enum": [
+          "submitted",
+          "accepted",
+          "published",
+          "none"
+        ],
+        "title": "GreenOa",
+        "description": "Best green (self-archiving) route per Jisc Open Policy Finder\n(journals.jisc_allows_sa_* / jisc_in_opf; search filter + facet\nvocabulary). \"none\" = swept but no route permitted (or OA prohibited\noutright); never-swept journals land in no bucket."
+      },
+      "GreenOaPolicy": {
+        "properties": {
+          "in_opf": {
+            "type": "boolean",
+            "title": "In Opf"
+          },
+          "oa_prohibited": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Prohibited"
+          },
+          "routes": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/GreenOaRoute"
+            },
+            "type": "object",
+            "title": "Routes",
+            "default": {}
+          },
+          "internal_moniker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Internal Moniker"
+          },
+          "urls": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Urls",
+            "default": []
+          },
+          "repository_links": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Repository Links",
+            "default": {}
+          },
+          "policy_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Uri"
+          },
+          "harvested_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harvested At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "in_opf"
+        ],
+        "title": "GreenOaPolicy",
+        "description": "Jisc Open Policy Finder green-OA policy bundle (journals.jisc_policy\ndisplay object + stamp columns); null when the journal was never swept."
+      },
+      "GreenOaRoute": {
+        "properties": {
+          "locations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Locations",
+            "default": []
+          },
+          "repositories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Repositories",
+            "default": []
+          },
+          "licenses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Licenses",
+            "default": []
+          },
+          "embargo_months": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embargo Months"
+          },
+          "conditions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Conditions",
+            "default": []
+          },
+          "additional_oa_fee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additional Oa Fee"
+          }
+        },
+        "type": "object",
+        "title": "GreenOaRoute",
+        "description": "One self-archiving route (per article version) as aggregated by the\nJisc normalizer from publisher_policy[].permitted_oa."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -6497,7 +9635,7 @@
         "additionalProperties": false,
         "type": "object",
         "title": "InstitutionUpdate",
-        "description": "PATCH-shaped PUT body: absent fields are untouched, explicit null\nclears nullable columns, and the four non-nullable fields reject null."
+        "description": "PATCH-shaped PUT body: absent fields are untouched, explicit null\nclears nullable columns, and the three non-nullable fields reject null."
       },
       "JournalDetailResponse": {
         "properties": {
@@ -6667,17 +9805,44 @@
           "openaire": {
             "$ref": "#/components/schemas/OpenaireInfo",
             "default": {
-              "matched_works": 0
+              "matched_works": 0,
+              "with_fulltext": 0,
+              "with_usage": 0,
+              "diamond_works": 0,
+              "oa_color_total": 0,
+              "oa_color_disagree": 0,
+              "top_fos": [],
+              "top_funders": []
             }
           },
+          "green_oa": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GreenOaPolicy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "funder_fit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FunderFitOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "institution_metrics": {
-            "$ref": "#/components/schemas/InstitutionMetrics",
-            "default": {
-              "openalex_matched": 0,
-              "fwci_n": 0,
-              "retracted": 0,
-              "cited_total": 0
-            }
+            "$ref": "#/components/schemas/InstitutionMetrics"
+          },
+          "ut_authorship": {
+            "$ref": "#/components/schemas/UTAuthorship"
+          },
+          "openalex_only": {
+            "$ref": "#/components/schemas/OpenalexOnly"
           },
           "attribution": {
             "additionalProperties": {
@@ -6690,7 +9855,10 @@
         },
         "type": "object",
         "required": [
-          "journal"
+          "journal",
+          "institution_metrics",
+          "ut_authorship",
+          "openalex_only"
         ],
         "title": "JournalDetailResponse"
       },
@@ -6776,6 +9944,11 @@
             "title": "Deal Covered",
             "default": false
           },
+          "deal_cap_reached": {
+            "type": "boolean",
+            "title": "Deal Cap Reached",
+            "default": false
+          },
           "works": {
             "type": "integer",
             "title": "Works",
@@ -6806,6 +9979,28 @@
           "oa_type": {
             "$ref": "#/components/schemas/OaType",
             "default": "subscription"
+          },
+          "pub_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pub Type"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
           },
           "primary_topic": {
             "anyOf": [
@@ -6880,6 +10075,16 @@
             "type": "array",
             "title": "Apc Stats",
             "default": []
+          },
+          "funder_fit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FunderFitOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -7001,14 +10206,109 @@
       "OaType": {
         "type": "string",
         "enum": [
-          "gold",
           "diamond",
-          "generic",
+          "gold",
           "hybrid",
+          "generic",
           "subscription"
         ],
         "title": "OaType",
-        "description": "Journal-level OA classification (journals.oa_type; services/search.py\nSQL case + Python mirror, search filter vocabulary)."
+        "description": "Journal-level OA classification (journals.oa_type; services/search.py\nSQL case + Python mirror, search filter vocabulary).\n\nMember order is the facet display order (most open first); every\noa_type facet/composition dict iterates OA_TYPES, so do not reorder\nalphabetically."
+      },
+      "OpenaireFactsOut": {
+        "properties": {
+          "views": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Views"
+          },
+          "downloads": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Downloads"
+          },
+          "oa_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Url"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
+          },
+          "oa_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Color"
+          },
+          "diamond": {
+            "type": "boolean",
+            "title": "Diamond",
+            "default": false
+          },
+          "embargo_end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embargo End"
+          },
+          "fos": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Fos",
+            "default": []
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/OpenaireProjectOut"
+            },
+            "type": "array",
+            "title": "Projects",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "OpenaireFactsOut",
+        "description": "OpenAIRE-derived facts for one work (openaire_work_facts row)."
       },
       "OpenaireInfo": {
         "properties": {
@@ -7016,10 +10316,139 @@
             "type": "integer",
             "title": "Matched Works",
             "default": 0
+          },
+          "with_fulltext": {
+            "type": "integer",
+            "title": "With Fulltext",
+            "default": 0
+          },
+          "with_usage": {
+            "type": "integer",
+            "title": "With Usage",
+            "default": 0
+          },
+          "diamond_works": {
+            "type": "integer",
+            "title": "Diamond Works",
+            "default": 0
+          },
+          "oa_color_total": {
+            "type": "integer",
+            "title": "Oa Color Total",
+            "default": 0
+          },
+          "oa_color_disagree": {
+            "type": "integer",
+            "title": "Oa Color Disagree",
+            "default": 0
+          },
+          "top_fos": {
+            "items": {
+              "$ref": "#/components/schemas/OpenaireTopFos"
+            },
+            "type": "array",
+            "title": "Top Fos",
+            "default": []
+          },
+          "top_funders": {
+            "items": {
+              "$ref": "#/components/schemas/OpenaireTopFunder"
+            },
+            "type": "array",
+            "title": "Top Funders",
+            "default": []
           }
         },
         "type": "object",
-        "title": "OpenaireInfo"
+        "title": "OpenaireInfo",
+        "description": "OpenAIRE cross-check for one journal, over the confirmed-identity\nfacts store (openaire_work_facts)."
+      },
+      "OpenaireProjectOut": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "funder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Funder"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "acronym": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acronym"
+          }
+        },
+        "type": "object",
+        "title": "OpenaireProjectOut",
+        "description": "One project linked to the work by OpenAIRE (fields may be null)."
+      },
+      "OpenaireTopFos": {
+        "properties": {
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "works": {
+            "type": "integer",
+            "title": "Works"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subject",
+          "works"
+        ],
+        "title": "OpenaireTopFos"
+      },
+      "OpenaireTopFunder": {
+        "properties": {
+          "funder": {
+            "type": "string",
+            "title": "Funder"
+          },
+          "works": {
+            "type": "integer",
+            "title": "Works"
+          }
+        },
+        "type": "object",
+        "required": [
+          "funder",
+          "works"
+        ],
+        "title": "OpenaireTopFunder"
       },
       "OpenalexInfo": {
         "properties": {
@@ -7112,6 +10541,491 @@
         "type": "object",
         "title": "OpenalexInfo",
         "description": "Venue-level OpenAlex source object (topics sorted count desc, nulls last)."
+      },
+      "OpenalexOnly": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "entries_total": {
+            "type": "integer",
+            "title": "Entries Total",
+            "default": 0
+          },
+          "items": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/OpenalexOnlySingle"
+                },
+                {
+                  "$ref": "#/components/schemas/OpenalexOnlyGroup"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "kind",
+                "mapping": {
+                  "group": "#/components/schemas/OpenalexOnlyGroup",
+                  "single": "#/components/schemas/OpenalexOnlySingle"
+                }
+              }
+            },
+            "type": "array",
+            "title": "Items",
+            "default": []
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "OpenalexOnly",
+        "description": "OpenAlex store works attributed to the venue or to the unit's\nmember authors whose DOI matches no Pure work \u2014 candidates missing\nfrom the CRIS. items holds the grouped entries (missing parts\ncollected under their main work), capped; total counts works and\nentries_total counts entries (before the cap), both exact.\navailable=False when the openalex_works projection never ran\n(frontend hides the card)."
+      },
+      "OpenalexOnlyAuthor": {
+        "properties": {
+          "openalex_id": {
+            "type": "string",
+            "title": "Openalex Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "orcid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orcid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "openalex_id"
+        ],
+        "title": "OpenalexOnlyAuthor",
+        "description": "One compact OpenAlex authorship of a gap work ({a, n, o})."
+      },
+      "OpenalexOnlyGroup": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "group",
+            "title": "Kind",
+            "default": "group"
+          },
+          "parent": {
+            "$ref": "#/components/schemas/GapGroupParent"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/OpenalexOnlyWork"
+            },
+            "type": "array",
+            "title": "Parts",
+            "default": []
+          },
+          "parts_total": {
+            "type": "integer",
+            "title": "Parts Total",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "parent"
+        ],
+        "title": "OpenalexOnlyGroup",
+        "description": "One main work with its missing parts. A group exists when any part\nof the work is missing from Pure; parts hold only those missing works\n(registered parts never enter the gap set) and the parent itself may\nwell be registered (pure_registered true)."
+      },
+      "OpenalexOnlySingle": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "oa_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Status"
+          },
+          "work_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Type"
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue"
+          },
+          "openalex_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Id"
+          },
+          "openalex_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Url"
+          },
+          "authors": {
+            "items": {
+              "$ref": "#/components/schemas/OpenalexOnlyAuthor"
+            },
+            "type": "array",
+            "title": "Authors",
+            "default": []
+          },
+          "ut_authors": {
+            "items": {
+              "$ref": "#/components/schemas/UtAuthorAttribution"
+            },
+            "type": "array",
+            "title": "Ut Authors",
+            "default": []
+          },
+          "journal_issn_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Issn L"
+          },
+          "journal_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Title"
+          },
+          "publisher_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Name"
+          },
+          "parent_works": {
+            "items": {
+              "$ref": "#/components/schemas/WorkParent"
+            },
+            "type": "array",
+            "title": "Parent Works",
+            "default": []
+          },
+          "is_part": {
+            "type": "boolean",
+            "title": "Is Part",
+            "default": false
+          },
+          "pure_match": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "doi_in_pure",
+                  "parent_book_in_pure",
+                  "same_title_in_pure"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Match"
+          },
+          "pure_match_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Match Url"
+          },
+          "kind": {
+            "type": "string",
+            "const": "single",
+            "title": "Kind",
+            "default": "single"
+          }
+        },
+        "type": "object",
+        "title": "OpenalexOnlySingle",
+        "description": "One standalone gap work (no parent works): all work-row fields at\nthe top level."
+      },
+      "OpenalexOnlyWork": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "oa_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Status"
+          },
+          "work_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Type"
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue"
+          },
+          "openalex_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Id"
+          },
+          "openalex_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Url"
+          },
+          "authors": {
+            "items": {
+              "$ref": "#/components/schemas/OpenalexOnlyAuthor"
+            },
+            "type": "array",
+            "title": "Authors",
+            "default": []
+          },
+          "ut_authors": {
+            "items": {
+              "$ref": "#/components/schemas/UtAuthorAttribution"
+            },
+            "type": "array",
+            "title": "Ut Authors",
+            "default": []
+          },
+          "journal_issn_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Issn L"
+          },
+          "journal_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Title"
+          },
+          "publisher_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Name"
+          },
+          "parent_works": {
+            "items": {
+              "$ref": "#/components/schemas/WorkParent"
+            },
+            "type": "array",
+            "title": "Parent Works",
+            "default": []
+          },
+          "is_part": {
+            "type": "boolean",
+            "title": "Is Part",
+            "default": false
+          },
+          "pure_match": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "doi_in_pure",
+                  "parent_book_in_pure",
+                  "same_title_in_pure"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Match"
+          },
+          "pure_match_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pure Match Url"
+          }
+        },
+        "type": "object",
+        "title": "OpenalexOnlyWork"
       },
       "OpenalexTopicOut": {
         "properties": {
@@ -7235,6 +11149,17 @@
               }
             ],
             "title": "Primary Topic"
+          },
+          "oa_diamond_gold_share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Diamond Gold Share"
           }
         },
         "type": "object",
@@ -7297,11 +11222,19 @@
             "type": "array",
             "title": "Deal Usage",
             "default": []
+          },
+          "openalex_only": {
+            "$ref": "#/components/schemas/OpenalexOnly"
+          },
+          "chapter_rollup": {
+            "$ref": "#/components/schemas/PartsRollup"
           }
         },
         "type": "object",
         "required": [
-          "unit"
+          "unit",
+          "openalex_only",
+          "chapter_rollup"
         ],
         "title": "OrgUnitDetailResponse"
       },
@@ -7472,6 +11405,110 @@
         ],
         "title": "OrgUnitSearchResponse"
       },
+      "PageViewIn": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "page_view",
+            "title": "Type"
+          },
+          "session_id": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Session Id"
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 512,
+            "title": "Path"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "referrer": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referrer"
+          },
+          "ref_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "journal",
+                  "funder",
+                  "author",
+                  "orgunit",
+                  "publisher"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref Type"
+          },
+          "ref_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "session_id",
+          "path"
+        ],
+        "title": "PageViewIn"
+      },
+      "PartsRollup": {
+        "properties": {
+          "chapters_total": {
+            "type": "integer",
+            "title": "Chapters Total",
+            "default": 0
+          },
+          "books_total": {
+            "type": "integer",
+            "title": "Books Total",
+            "default": 0
+          },
+          "books": {
+            "items": {
+              "$ref": "#/components/schemas/ChapterBook"
+            },
+            "type": "array",
+            "title": "Books",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "PartsRollup",
+        "description": "Chapter/book rollup over the page's full openalex-only population\n(before the gap card's item cap): chapters_total counts chapter-kind\nworks (is_part with a rel=volume parent), books_total the distinct\nparents. books is the top 10 by chapter count."
+      },
       "PublisherApcSummary": {
         "properties": {
           "n_journals": {
@@ -7547,12 +11584,24 @@
             "type": "array",
             "title": "Works By Year",
             "default": []
+          },
+          "ut_authorship": {
+            "$ref": "#/components/schemas/UTAuthorship"
+          },
+          "openalex_only": {
+            "$ref": "#/components/schemas/OpenalexOnly"
+          },
+          "chapter_rollup": {
+            "$ref": "#/components/schemas/PartsRollup"
           }
         },
         "type": "object",
         "required": [
           "publisher",
-          "journals"
+          "journals",
+          "ut_authorship",
+          "openalex_only",
+          "chapter_rollup"
         ],
         "title": "PublisherDetailResponse"
       },
@@ -7568,6 +11617,17 @@
               }
             ],
             "title": "Openaccess Nl Slug"
+          },
+          "ror": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ror"
           }
         },
         "type": "object",
@@ -7715,6 +11775,90 @@
         ],
         "title": "ScimagojrOut"
       },
+      "SearchIn": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "search",
+            "title": "Type"
+          },
+          "session_id": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Session Id"
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 512,
+            "title": "Path"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          },
+          "is_browse": {
+            "type": "boolean",
+            "title": "Is Browse",
+            "default": false
+          },
+          "results_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Results Count"
+          },
+          "search_scope": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "journals",
+                  "funders",
+                  "authors",
+                  "publishers",
+                  "orgunits"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Scope"
+          },
+          "filters": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filters"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "session_id",
+          "path"
+        ],
+        "title": "SearchIn"
+      },
       "SettingsUpdate": {
         "properties": {
           "values": {
@@ -7793,6 +11937,11 @@
           "deal_covered": {
             "type": "boolean",
             "title": "Deal Covered"
+          },
+          "deal_cap_reached": {
+            "type": "boolean",
+            "title": "Deal Cap Reached",
+            "default": false
           },
           "works": {
             "type": "integer",
@@ -8005,6 +12154,752 @@
         ],
         "title": "TopicMassRow"
       },
+      "UTAuthorRow": {
+        "properties": {
+          "pure_uuid": {
+            "type": "string",
+            "title": "Pure Uuid"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "faculty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Faculty"
+          },
+          "research_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Group"
+          },
+          "works": {
+            "type": "integer",
+            "title": "Works"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pure_uuid",
+          "name",
+          "works"
+        ],
+        "title": "UTAuthorRow"
+      },
+      "UTAuthorship": {
+        "properties": {
+          "n_ut_works": {
+            "type": "integer",
+            "title": "N Ut Works",
+            "default": 0
+          },
+          "faculties": {
+            "items": {
+              "$ref": "#/components/schemas/UTBucket"
+            },
+            "type": "array",
+            "title": "Faculties",
+            "default": []
+          },
+          "research_groups": {
+            "items": {
+              "$ref": "#/components/schemas/UTBucket"
+            },
+            "type": "array",
+            "title": "Research Groups",
+            "default": []
+          },
+          "top_authors": {
+            "items": {
+              "$ref": "#/components/schemas/UTAuthorRow"
+            },
+            "type": "array",
+            "title": "Top Authors",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "UTAuthorship",
+        "description": "Who at this institution authors the venue's canonical works:\ndistinct works per faculty / research group and the top authors,\nover the same population the search card counts (so the numbers\nreconcile with journal_flags.works_count). n_ut_works counts rows\nwith at least one UT author edge; venue totals can exceed it."
+      },
+      "UTBucket": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "works": {
+            "type": "integer",
+            "title": "Works"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "works"
+        ],
+        "title": "UTBucket",
+        "description": "Distinct works attributed to one faculty or research group."
+      },
+      "UsageBatchIn": {
+        "properties": {
+          "client": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClientInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "events": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/PageViewIn"
+                },
+                {
+                  "$ref": "#/components/schemas/SearchIn"
+                },
+                {
+                  "$ref": "#/components/schemas/ErrorIn"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "type",
+                "mapping": {
+                  "error": "#/components/schemas/ErrorIn",
+                  "page_view": "#/components/schemas/PageViewIn",
+                  "search": "#/components/schemas/SearchIn"
+                }
+              }
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Events"
+          }
+        },
+        "type": "object",
+        "required": [
+          "events"
+        ],
+        "title": "UsageBatchIn"
+      },
+      "UsageCountryCount": {
+        "properties": {
+          "country": {
+            "type": "string",
+            "title": "Country"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "country",
+          "count"
+        ],
+        "title": "UsageCountryCount"
+      },
+      "UsageDayCount": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "title": "Date"
+          },
+          "page_view": {
+            "type": "integer",
+            "title": "Page View"
+          },
+          "search": {
+            "type": "integer",
+            "title": "Search"
+          },
+          "error": {
+            "type": "integer",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "page_view",
+          "search",
+          "error"
+        ],
+        "title": "UsageDayCount",
+        "description": "Per-day usage-event counts, one entry per calendar day."
+      },
+      "UsageErrorGroup": {
+        "properties": {
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "last_ts": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Ts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "status",
+          "message",
+          "count",
+          "last_ts"
+        ],
+        "title": "UsageErrorGroup"
+      },
+      "UsageEventOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "ts": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Ts"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          },
+          "is_browse": {
+            "type": "boolean",
+            "title": "Is Browse"
+          },
+          "results_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Results Count"
+          },
+          "search_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Scope"
+          },
+          "filters": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filters"
+          },
+          "ref_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref Type"
+          },
+          "ref_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref Id"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "referrer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referrer"
+          },
+          "ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "user_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Agent"
+          },
+          "tz": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tz"
+          },
+          "locale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locale"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "ts",
+          "event_type",
+          "path",
+          "duration_ms",
+          "query",
+          "is_browse",
+          "results_count",
+          "search_scope",
+          "filters",
+          "ref_type",
+          "ref_id",
+          "source",
+          "message",
+          "detail",
+          "status",
+          "referrer",
+          "ip",
+          "country",
+          "user_agent",
+          "tz",
+          "locale",
+          "session_id"
+        ],
+        "title": "UsageEventOut",
+        "description": "One raw usage event as stored (admin event list)."
+      },
+      "UsageEventsPageOut": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UsageEventOut"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "items"
+        ],
+        "title": "UsageEventsPageOut",
+        "description": "One offset page of the admin usage event list."
+      },
+      "UsageSearchSplit": {
+        "properties": {
+          "browse": {
+            "type": "integer",
+            "title": "Browse"
+          },
+          "queries": {
+            "type": "integer",
+            "title": "Queries"
+          }
+        },
+        "type": "object",
+        "required": [
+          "browse",
+          "queries"
+        ],
+        "title": "UsageSearchSplit",
+        "description": "Search events split into real queries vs default browse loads."
+      },
+      "UsageSummaryOut": {
+        "properties": {
+          "days": {
+            "type": "integer",
+            "title": "Days"
+          },
+          "totals": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Totals"
+          },
+          "searches": {
+            "$ref": "#/components/schemas/UsageSearchSplit"
+          },
+          "daily": {
+            "items": {
+              "$ref": "#/components/schemas/UsageDayCount"
+            },
+            "type": "array",
+            "title": "Daily"
+          },
+          "top_paths": {
+            "items": {
+              "$ref": "#/components/schemas/UsageTopPath"
+            },
+            "type": "array",
+            "title": "Top Paths"
+          },
+          "top_queries": {
+            "items": {
+              "$ref": "#/components/schemas/UsageTopQuery"
+            },
+            "type": "array",
+            "title": "Top Queries"
+          },
+          "top_refs": {
+            "items": {
+              "$ref": "#/components/schemas/UsageTopRef"
+            },
+            "type": "array",
+            "title": "Top Refs"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/UsageErrorGroup"
+            },
+            "type": "array",
+            "title": "Errors"
+          },
+          "countries": {
+            "items": {
+              "$ref": "#/components/schemas/UsageCountryCount"
+            },
+            "type": "array",
+            "title": "Countries"
+          },
+          "sessions": {
+            "type": "integer",
+            "title": "Sessions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "days",
+          "totals",
+          "searches",
+          "daily",
+          "top_paths",
+          "top_queries",
+          "top_refs",
+          "errors",
+          "countries",
+          "sessions"
+        ],
+        "title": "UsageSummaryOut",
+        "description": "Admin usage snapshot over the trailing `days` window."
+      },
+      "UsageTopPath": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "page_views": {
+            "type": "integer",
+            "title": "Page Views"
+          },
+          "avg_duration_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Duration Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "page_views",
+          "avg_duration_ms"
+        ],
+        "title": "UsageTopPath"
+      },
+      "UsageTopQuery": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "zero_share": {
+            "type": "number",
+            "title": "Zero Share"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query",
+          "count",
+          "zero_share"
+        ],
+        "title": "UsageTopQuery"
+      },
+      "UsageTopRef": {
+        "properties": {
+          "ref_type": {
+            "type": "string",
+            "title": "Ref Type"
+          },
+          "ref_id": {
+            "type": "string",
+            "title": "Ref Id"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ref_type",
+          "ref_id",
+          "count"
+        ],
+        "title": "UsageTopRef"
+      },
+      "UtAuthorAttribution": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "orcid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orcid"
+          },
+          "faculty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Faculty"
+          },
+          "research_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Group"
+          },
+          "institute": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institute"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "UtAuthorAttribution",
+        "description": "Roster author matched on a gap work's OpenAlex authorships."
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -8143,6 +13038,153 @@
         ],
         "title": "WorkIdentityAdminOut",
         "description": "One cross-source work-identity row for the admin review list.\n\nFlips are durable: every harvest write is on_conflict_do_nothing, so\nre-runs never overwrite an admin decision."
+      },
+      "WorkIdentityBulkIn": {
+        "properties": {
+          "institution_id": {
+            "type": "integer",
+            "title": "Institution Id"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "reviewer": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Reviewer"
+          },
+          "updates": {
+            "items": {
+              "$ref": "#/components/schemas/WorkIdentityBulkUpdate"
+            },
+            "type": "array",
+            "maxItems": 5000,
+            "title": "Updates"
+          }
+        },
+        "type": "object",
+        "required": [
+          "institution_id",
+          "source",
+          "reviewer",
+          "updates"
+        ],
+        "title": "WorkIdentityBulkIn",
+        "description": "POST /admin/work-identities/bulk: many rows, one reviewer, one source."
+      },
+      "WorkIdentityBulkOut": {
+        "properties": {
+          "confirmed": {
+            "type": "integer",
+            "title": "Confirmed"
+          },
+          "missing": {
+            "type": "integer",
+            "title": "Missing"
+          },
+          "reopened": {
+            "type": "integer",
+            "title": "Reopened"
+          },
+          "unchanged": {
+            "type": "integer",
+            "title": "Unchanged"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/WorkIdentityBulkRowError"
+            },
+            "type": "array",
+            "title": "Errors",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "confirmed",
+          "missing",
+          "reopened",
+          "unchanged"
+        ],
+        "title": "WorkIdentityBulkOut",
+        "description": "POST /admin/work-identities/bulk result: a tally plus per-row errors."
+      },
+      "WorkIdentityBulkRowError": {
+        "properties": {
+          "source_pk": {
+            "type": "string",
+            "title": "Source Pk"
+          },
+          "error": {
+            "type": "string",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_pk",
+          "error"
+        ],
+        "title": "WorkIdentityBulkRowError",
+        "description": "One bulk row that could not be applied (e.g. unknown source_pk)."
+      },
+      "WorkIdentityBulkUpdate": {
+        "properties": {
+          "source_pk": {
+            "type": "string",
+            "title": "Source Pk"
+          },
+          "status": {
+            "$ref": "#/components/schemas/WorkIdentityStatus"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_pk",
+          "status"
+        ],
+        "title": "WorkIdentityBulkUpdate",
+        "description": "One row decision inside a bulk work-identity request."
+      },
+      "WorkIdentityPageOut": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "default": 0
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WorkIdentityAdminOut"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "items"
+        ],
+        "title": "WorkIdentityPageOut",
+        "description": "Paged work-identity review queue (total is the unpaginated count)."
       },
       "WorkIdentityStatus": {
         "type": "string",
@@ -8333,10 +13375,107 @@
               }
             ],
             "title": "In Openalex"
+          },
+          "ut_authors": {
+            "items": {
+              "$ref": "#/components/schemas/WorkUtAuthor"
+            },
+            "type": "array",
+            "title": "Ut Authors",
+            "default": []
+          },
+          "ut_groups": {
+            "items": {
+              "$ref": "#/components/schemas/WorkUtGroup"
+            },
+            "type": "array",
+            "title": "Ut Groups",
+            "default": []
+          },
+          "openaire": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpenaireFactsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
         "title": "WorkItem"
+      },
+      "WorkParent": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "rel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rel"
+          }
+        },
+        "type": "object",
+        "title": "WorkParent",
+        "description": "One parent work of a store row (compact {id, name, rel}): id is\nthe bare OpenAlex W-id, rel one of volume/component/data-series/part\n(chapter of a book, figure of a paper, ...)."
+      },
+      "WorkUtAuthor": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "WorkUtAuthor"
+      },
+      "WorkUtGroup": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "WorkUtGroup"
       },
       "WorksPage": {
         "properties": {

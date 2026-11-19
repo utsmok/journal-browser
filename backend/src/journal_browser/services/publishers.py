@@ -14,14 +14,16 @@ quartiles, APC range) and explodes the topics jsonb into works-weighted
 topic mass (harvest.authors.topic_mass semantics) plus the topic label
 set. Filters, sorting, pagination and the drop-own-dimension facets then
 run in Python over the snapshot (facets module); the ~5-min TTL matches
-the facet cache in services/cache.py.
+the facet cache in services/cache.py. An active publication-year range
+serves a separately cached snapshot whose works counts swap to the
+year-scoped pure_canon stats sums (search.base_query convention).
 """
 
 import warnings
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import Numeric, case, func, select, text
+from sqlalchemy import Numeric, and_, case, func, or_, select, text
 from sqlalchemy import exc as sa_exc
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,10 +36,12 @@ from ..models import (
     DealJournal,
     Institution,
     InstitutionWorksStats,
+    JiscPublisher,
     Journal,
     JournalFlags,
     Publisher,
 )
+from .authorship import chapter_rollup, venue_authorship, venue_gap_predicate, venue_openalex_only
 from .cache import SNAPSHOT_CACHE, SNAPSHOT_TTL, cache_get, cache_put
 from .deal_coverage import deal_institution_join, dj_scope
 from .facets import passes, publisher_facets, publisher_predicates, publisher_topic_facet
@@ -85,37 +89,71 @@ class _Pub:
     members_lower: frozenset[str]
 
 
-def _snapshot_query(institution_id: int) -> Any:
+def _snapshot_query(institution_id: int, years: tuple[int, int] | None = None) -> Any:
     """One statement: browsable join -> per-publisher aggregates + topic
     mass (count-share weighted per journal, topic_mass semantics) + topic
-    label set, all over the same rows CTE."""
+    label set, all over the same rows CTE.
+
+    An explicit publication-year range (clamped by the caller) swaps the
+    denormalized per-journal works count for a year-scoped SUM over
+    institution_works_stats (same pure_canon-only population the flags
+    column mirrors, LEFT JOIN -> 0 without rows), like search.base_query.
+    The corpus cutoff (works_window_plus) and every journal attribute stay
+    unfiltered; everything downstream of `works` (n_works, works sort,
+    has_works facet, topic weighting) flows from the swap."""
     J, F = Journal, JournalFlags
     ignored = get_settings().ignored_issns
-    rows = (
-        select(
-            J.issn_l,
-            grouping_key().label("name"),
-            J.publisher_name.label("member"),
-            F.works_count.label("works"),
-            F.deal_covered.label("deal_covered"),
-            _oa_type(F.deal_covered).label("oa_type"),
-            J.latest_quartile.label("quartile"),
-            APC_SHOWN.label("apc_any"),
-            J.latest_apc_euro.label("apc_euro"),
-            J.topics,
+    # Year-scoped per-journal works; journals without in-range stats rows
+    # keep their zero (outer join), matching the denormalized column.
+    yearly = None
+    if years is not None:
+        yearly = (
+            select(
+                InstitutionWorksStats.issn_l.label("issn_l"),
+                func.sum(InstitutionWorksStats.works_count).label("works_count"),
+            )
+            .where(
+                InstitutionWorksStats.institution_id == institution_id,
+                InstitutionWorksStats.source == "pure_canon",
+                InstitutionWorksStats.year >= years[0],
+                InstitutionWorksStats.year <= years[1],
+            )
+            .group_by(InstitutionWorksStats.issn_l)
+            .subquery()
         )
-        .join(F, (F.institution_id == institution_id) & (F.issn_l == J.issn_l))
-        .where(
-            J.type == "journal",
-            J.issn_l.is_not(None),
-            F.works_window_plus > 3,
-            F.browse_excluded.is_not(True),
-            J.publisher_name.is_not(None),
-            J.publisher_name != "",
-            *([J.issn_l.not_in(sorted(set(ignored)))] if ignored else []),
-        )
-        .cte("rows")
+    works = (
+        func.coalesce(yearly.c.works_count, 0).label("works")
+        if yearly is not None
+        else F.works_count.label("works")
     )
+    query = select(
+        J.issn_l,
+        grouping_key().label("name"),
+        J.publisher_name.label("member"),
+        works,
+        F.deal_covered.label("deal_covered"),
+        _oa_type(F.deal_covered, F.openaire_diamond).label("oa_type"),
+        J.latest_quartile.label("quartile"),
+        APC_SHOWN.label("apc_any"),
+        J.latest_apc_euro.label("apc_euro"),
+        J.topics,
+    ).join(F, (F.institution_id == institution_id) & (F.issn_l == J.issn_l))
+    if yearly is not None:
+        query = query.outerjoin(yearly, yearly.c.issn_l == J.issn_l)
+    rows = query.where(
+        # Browsable cutoffs mirror search.base_query (owner decision
+        # 2026-11-04): journals above the window cutoff, plus other venue
+        # types with at least one institution work.
+        or_(
+            and_(J.type == "journal", F.works_window_plus > 3),
+            and_(J.type.is_not(None), J.type != "journal", F.works_count > 0),
+        ),
+        J.issn_l.is_not(None),
+        F.browse_excluded.is_not(True),
+        J.publisher_name.is_not(None),
+        J.publisher_name != "",
+        *([J.issn_l.not_in(sorted(set(ignored)))] if ignored else []),
+    ).cte("rows")
     agg = (
         select(
             rows.c.name,
@@ -253,13 +291,18 @@ def _snapshot_query(institution_id: int) -> Any:
     )
 
 
-async def _snapshot(session: AsyncSession, institution_id: int) -> dict[str, _Pub]:
+async def _snapshot(
+    session: AsyncSession, institution_id: int, years: tuple[int, int] | None = None
+) -> dict[str, _Pub]:
     """Publisher aggregation for one institution, cached until the next
-    harvest bump or 24h."""
+    harvest bump or 24h. An active publication-year range joins the key
+    (search.facets convention): the year-scoped swap runs at query time,
+    so year-scoped snapshots cache separately from the denormalized one."""
     cache_key = (
         institution_id,
         hash(tuple(sorted(get_settings().ignored_issns))),
         await cache_epoch(session),
+        years,
     )
     hit = cache_get(SNAPSHOT_CACHE, cache_key, SNAPSHOT_TTL)
     if hit is not None:
@@ -275,7 +318,7 @@ async def _snapshot(session: AsyncSession, institution_id: int) -> dict[str, _Pu
         # in memory instead of spilling at the 4MB default. SET LOCAL dies
         # with the request's transaction, so the pool is unaffected.
         await session.execute(text(f"SET LOCAL work_mem = '{SNAPSHOT_WORK_MEM}'"))
-        result = await session.execute(_snapshot_query(institution_id))
+        result = await session.execute(_snapshot_query(institution_id, years))
     for r in result.all():
         topics = sorted(
             ({"name": name, "n": float(n)} for name, n in (r.topics or {}).items()),
@@ -375,11 +418,15 @@ async def search_publishers(
     offset: int = 0,
     limit: int = DEFAULT_LIMIT,
     include_facets: bool = True,
+    years: tuple[int, int] | None = None,
 ) -> dict[str, Any]:
     """Publisher roster for one institution: total is the filter match count,
     items the offset/limit page of the sorted matches (default sort
-    relevance-with-q, else works desc)."""
-    snap = await _snapshot(session, institution_id)
+    relevance-with-q, else works desc). An active publication-year range
+    serves a snapshot whose works counts (n_works, works sort, has_works
+    facet, topic weighting) come from the clamped stats range; the roster
+    membership, journal counts and every other attribute stay unfiltered."""
+    snap = await _snapshot(session, institution_id, years)
     q = q.strip() if q and q.strip() else None
     q_lower = q.lower() if q else None
 
@@ -411,25 +458,85 @@ async def search_publishers(
     return {"items": items, "total": len(matches), "facets": facets}
 
 
+async def group_issns(session: AsyncSession, institution_id: int, name: str) -> list[str] | None:
+    """The browsable journal ISSN set under one canonical publisher key;
+    sub-brand names resolve through the snapshot like publisher_detail.
+    None = no browsable journal under this key (404 upstream)."""
+    snapshot = await _snapshot(session, institution_id)
+    if snapshot.get(name) is None:
+        group = next((g for g, p in snapshot.items() if name.lower() in p.members_lower), None)
+        if group is None:
+            return None
+        name = group
+    subq = (
+        base_query(institution_id=institution_id)
+        .where(
+            grouping_key() == name,
+            Journal.publisher_name.is_not(None),
+            Journal.publisher_name != "",
+        )
+        .subquery()
+    )
+    return [r.issn_l for r in (await session.execute(select(subq.c.issn_l))).all()]
+
+
 async def publisher_detail(
-    session: AsyncSession, institution: Institution, name: str
+    session: AsyncSession,
+    institution: Institution,
+    name: str,
+    years: tuple[int, int] | None = None,
+    parts: list[str] | None = None,
 ) -> dict[str, Any] | None:
     """Full publisher bundle; None = no browsable journal under this
     canonical key (404 upstream). Deals reuse the journal-detail
-    participation join."""
+    participation join. parts (pipe-joined standalone|chapter|part)
+    filters the CRIS-gap card's rows and total; the chapter rollup runs
+    over the same filtered population.
+
+    An active publication-year range serves the year-scoped snapshot
+    (search convention): the header's works sum and the journal table's
+    works column become the year-scoped pure_canon stats sums, while the
+    roster membership and every journal attribute stay unfiltered."""
     iid = institution.id
-    pub = (await _snapshot(session, iid)).get(name)
+    snapshot = await _snapshot(session, iid, years)
+    pub = snapshot.get(name)
     if pub is None:
-        return None
+        # Sub-brand name requested (e.g. "Cambridge University Press" groups
+        # under its OpenAlex lineage root "University of Cambridge"):
+        # resolve to the canonical group so the page exists.
+        for group_name, p in snapshot.items():
+            if name.lower() in p.members_lower:
+                name, pub = group_name, p
+                break
+        if pub is None:
+            return None
 
     # External registry refs for the detail header (Open Access NL profile
     # link); a missing Publishers row just leaves the slug None.
     slug = await session.scalar(select(Publisher.openaccess_nl_slug).where(Publisher.name == name))
+    # ROR registration url for the detail header. jisc_publishers has no
+    # fk to publishers: match by name, exact case first (Postgres sorts
+    # false before true), then case-insensitive; lowest id breaks ties.
+    ror = await session.scalar(
+        select(JiscPublisher.ror)
+        .where(
+            JiscPublisher.ror.is_not(None),
+            func.lower(JiscPublisher.name) == name.lower(),
+        )
+        .order_by(JiscPublisher.name != name, JiscPublisher.id)
+        .limit(1)
+    )
 
     # Same page assembly as search_journals (no facets, no cursor), scoped
     # to the canonical key so sub-brand publisher_names join the group.
+    # The year range swaps the works column for the year-scoped stats sum,
+    # exactly like the search (base_query convention).
     subq = (
-        base_query(institution_id=iid)
+        base_query(
+            institution_id=iid,
+            year_from=years[0] if years else None,
+            year_to=years[1] if years else None,
+        )
         .where(
             grouping_key() == name,
             Journal.publisher_name.is_not(None),
@@ -600,7 +707,7 @@ async def publisher_detail(
         "publisher": _item(
             pub,
             pub.topics[:TOPICS_PER_DETAIL],
-            external_ids={"openaccess_nl_slug": slug},
+            external_ids={"openaccess_nl_slug": slug, "ror": ror},
         ),
         "journals": journals,
         "deals": [(row["deal"], row["publisher_name"], row["n_covered"]) for row in deals],
@@ -614,4 +721,13 @@ async def publisher_detail(
         ],
         "n_discrepancies": len(latest),
         "works_by_year": works_by_year,
+        "ut_authorship": await venue_authorship(
+            session, institution, issns=issns, year_range=years
+        ),
+        "openalex_only": await venue_openalex_only(
+            session, institution, issns=issns, year_range=years, parts=parts
+        ),
+        "chapter_rollup": await chapter_rollup(
+            session, institution, venue_gap_predicate(institution, issns, years), parts=parts
+        ),
     }

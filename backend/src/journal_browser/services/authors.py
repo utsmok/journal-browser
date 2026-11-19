@@ -11,17 +11,41 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings, work_type_excluded
 from ..harvest.authors import topic_mass
-from ..models import Author, AuthorWork, Institution, Journal, JournalFlags, Work
+from ..harvest.common import normalize_doi
+from ..harvest.people_utwente import PEOPLE_BASE_URL
+from ..models import (
+    Author,
+    AuthorIdentity,
+    AuthorWork,
+    Institution,
+    Journal,
+    JournalFlags,
+    OpenalexWork,
+    PeopleUtwentePerson,
+    PurePersonOrg,
+    Work,
+    WorkPureAuthor,
+)
+from .authorship import (
+    OPENALEX_URL,
+    group_gap_entries,
+    journal_publisher_map,
+    tag_pure_matches,
+    ut_authors_for_authorships,
+    ut_roster_by_aids,
+)
 from .facets import author_facets
 from .search import _like, _oa_type, base_query
-from .ut_metadata import normalize_doi
-from .work_sources import openalex_only_works_for_author
+from .work_sources import authorships_by_wid, openalex_only_works_for_author
 from .works_query import (
     YEAR_BUCKETS,
     author_works_join,
     empty_year_buckets,
     strata_cond,
+    unit_work_join,
+    work_type_normalized,
     work_window,
+    work_year_window,
 )
 
 #: Search page + recommendation list sizes.
@@ -32,6 +56,12 @@ SIMILAR_FILTERED_LIMIT = 5
 ALTERNATIVE_JOURNALS = 5
 ALTERNATIVE_OPTIONS = 3
 WORKS_CAP = 200
+#: Safety cap for the openalex_only section's item list, mirroring the
+#: venue gap-list cap (authorship.GAP_ITEM_CAP): the UI renders "Showing
+#: N most recent" and links works.csv?scope=missed for the full list.
+#: total stays exact beyond the cap; enriching only the shown slice also
+#: keeps prolific authors (600+ missed works) fast to serve.
+OPENALEX_ONLY_CAP = 50
 
 # European diacritics folded to plain ASCII on both sides of author-name
 # search, so umlaut-free queries match umlauted names ("follmer" -> "Föllmer").
@@ -46,13 +76,13 @@ LAST_PUB_BUCKETS = ("2025-2026", "2022-2024", "2020-2021", "none")
 _LAST_PUB_BOUNDS = {"2025-2026": (2025, 2026), "2022-2024": (2022, 2024), "2020-2021": (2020, 2021)}
 
 
-def _last_pub_cond(values: list[str]) -> Any:
+def _last_pub_cond(column: Any, values: list[str]) -> Any:
     parts = []
     for value in values:
         if value == "none":
-            parts.append(Author.last_pub_year.is_(None))
+            parts.append(column.is_(None))
         elif bounds := _LAST_PUB_BOUNDS.get(value):
-            parts.append(Author.last_pub_year.between(*bounds))
+            parts.append(column.between(*bounds))
     return or_(*parts) if parts else false()
 
 
@@ -71,9 +101,15 @@ def _filter_conds(
     works: list[str] | None,
     last_pub: list[str] | None,
     topic: list[str] | None,
+    n_col: Any | None = None,
+    last_col: Any | None = None,
 ) -> dict[str, Any]:
     """One condition per active facet dimension; keyed so a facet's counts
-    can drop its own dimension while keeping all others."""
+    can drop its own dimension while keeping all others. n_col/last_col
+    override the works strata and last-pub columns (the year-scoped
+    aggregates when a publication-year range is active)."""
+    n_col = n_col if n_col is not None else Author.n_works
+    last_col = last_col if last_col is not None else Author.last_pub_year
     conds: dict[str, Any] = {}
     if faculty:
         conds["faculty"] = Author.faculty.in_(faculty)
@@ -82,9 +118,9 @@ def _filter_conds(
     if topic:
         conds["topic"] = Author.primary_topic.in_(topic)
     if works:
-        conds["works"] = strata_cond(Author.n_works, works)
+        conds["works"] = strata_cond(n_col, works)
     if last_pub:
-        conds["last_pub"] = _last_pub_cond(last_pub)
+        conds["last_pub"] = _last_pub_cond(last_col, last_pub)
     if has_orcid:
         conds["has_orcid"] = _has_orcid_cond(has_orcid)
     return conds
@@ -108,12 +144,23 @@ async def search_authors(
     topic: list[str] | None = None,
     sort: str = "works_desc",
     offset: int = 0,
+    year_range: tuple[int, int] | None = None,
 ) -> dict[str, Any]:
     """Author roster for one institution. total is the filter match count
     (the whole roster when nothing is set); items are the offset/limit page
     of the sorted matches. require_confirmed restricts the search list to
-    authors.confirmed; profile endpoints stay unfiltered. Facet counts and
-    total describe the filtered set, never the page."""
+    authors.confirmed; profile endpoints stay unfiltered. When the gate
+    empties a q search, the query reruns without it so a real (unconfirmed)
+    researcher stays findable; total, items and facets then all come from
+    the ungated pass. Facet counts and total describe the filtered set,
+    never the page.
+
+    With an active publication-year range, n_works / last_pub_year (payload,
+    sorts, strata and last-pub filters, facet buckets) become query-time
+    aggregates over the author's stored work edges inside the range instead
+    of the denormalized snapshot columns — the same edge population the
+    snapshot counts. Without a range nothing joins: the queries stay
+    byte-identical to the snapshot-serving path."""
     roster = await session.scalar(
         select(func.count()).select_from(Author).where(Author.institution_id == institution_id)
     )
@@ -131,15 +178,62 @@ async def search_authors(
             func.translate(func.lower(f"%{_like(qstr)}%"), _FOLD_SRC, _FOLD_DST),
             escape="\\",
         )
-    conds = _filter_conds(faculty, org, has_orcid, works, last_pub, topic)
+    # Year-scoped per-author aggregates over the stored work edges (the
+    # same population the snapshot counts, so the clamped full window
+    # reproduces the denormalized columns exactly); None = no range, no join.
+    scoped = None
+    if year_range is not None:
+        lo, hi = year_range
+        scoped = (
+            select(
+                AuthorWork.author_pure_uuid.label("author_pure_uuid"),
+                func.count().label("n"),
+                func.max(Work.year).label("last_year"),
+            )
+            .select_from(AuthorWork)
+            .join(Work, unit_work_join(institution_id))
+            .where(AuthorWork.institution_id == institution_id, Work.year.between(lo, hi))
+            .group_by(AuthorWork.author_pure_uuid)
+            .subquery()
+        )
+    n_col = func.coalesce(scoped.c.n, 0) if scoped is not None else Author.n_works
+    last_col = scoped.c.last_year if scoped is not None else Author.last_pub_year
+    conds = _filter_conds(
+        faculty, org, has_orcid, works, last_pub, topic, n_col=n_col, last_col=last_col
+    )
     query = select(Author).where(*base, *conds.values())
+    if scoped is not None:
+        query = query.outerjoin(scoped, scoped.c.author_pure_uuid == Author.pure_uuid)
     if q_cond is not None:
         query = query.where(q_cond)
-    total = await session.scalar(
+    total_stmt = (
         select(func.count())
         .select_from(Author)
         .where(*base, *conds.values(), *([q_cond] if q_cond is not None else []))
     )
+    if scoped is not None:
+        total_stmt = total_stmt.outerjoin(scoped, scoped.c.author_pure_uuid == Author.pure_uuid)
+    total = await session.scalar(total_stmt)
+    if total == 0 and require_confirmed and q_cond is not None:
+        # The gate hid every q match (e.g. Loorbach is real but unconfirmed):
+        # rerun the same query ungated so total, page and facets describe
+        # what the caller gets.
+        return await search_authors(
+            session,
+            institution_id,
+            q,
+            limit,
+            require_confirmed=False,
+            faculty=faculty,
+            org=org,
+            has_orcid=has_orcid,
+            works=works,
+            last_pub=last_pub,
+            topic=topic,
+            sort=sort,
+            offset=offset,
+            year_range=year_range,
+        )
     # Sort after filters; stable tiebreak by name, then pure_uuid. The q
     # prefix-rank boost only applies to the default works sort.
     if sort == "name_asc":
@@ -148,26 +242,40 @@ async def search_authors(
         order = (func.lower(Author.name).desc(), Author.pure_uuid)
     elif sort == "last_pub_desc":
         order = (
-            Author.last_pub_year.desc().nulls_last(),
+            last_col.desc().nulls_last(),
             func.lower(Author.name),
             Author.pure_uuid,
         )
     elif q_cond is not None:
         order = (
             case((Author.name.ilike(f"{_like(qstr)}%", escape="\\"), 1), else_=0).desc(),
-            Author.n_works.desc(),
+            n_col.desc(),
             func.lower(Author.name),
             Author.pure_uuid,
         )
     else:
-        order = (Author.n_works.desc(), func.lower(Author.name), Author.pure_uuid)
-    rows = (
-        (await session.execute(query.order_by(*order).offset(offset).limit(min(limit, MAX_LIMIT))))
-        .scalars()
-        .all()
-    )
+        order = (n_col.desc(), func.lower(Author.name), Author.pure_uuid)
+    stmt = query.order_by(*order).offset(offset).limit(min(limit, MAX_LIMIT))
+    if scoped is None:
+        rows = [
+            (a, a.n_works, a.last_pub_year) for a in (await session.execute(stmt)).scalars().all()
+        ]
+    else:
+        rows = [
+            (row[0], row.n_eff, row.last_eff)
+            for row in (
+                await session.execute(
+                    stmt.add_columns(
+                        n_col.label("n_eff"),
+                        last_col.label("last_eff"),
+                    )
+                )
+            ).all()
+        ]
     facet_base = list(base) + ([q_cond] if q_cond is not None else [])
-    facets = await author_facets(session, facet_base, conds)
+    facets = await author_facets(
+        session, facet_base, conds, scoped=scoped, n_col=n_col, last_col=last_col
+    )
     return {
         "enabled": True,
         "total": total,
@@ -180,13 +288,13 @@ async def search_authors(
                 "faculty": a.faculty,
                 "research_group": a.research_group,
                 "institute": a.institute,
-                "n_works": a.n_works,
+                "n_works": n,
                 "orcid": a.orcid,
                 "confirmed": a.confirmed,
-                "last_pub_year": a.last_pub_year,
+                "last_pub_year": last,
                 "primary_topic": a.primary_topic,
             }
-            for a in rows
+            for a, n, last in rows
         ],
         "facets": facets,
     }
@@ -202,7 +310,7 @@ async def _author_journals(
     iid = institution.id
     ignored = get_settings().ignored_issns
     flags = (
-        select(JournalFlags.issn_l, JournalFlags.deal_covered)
+        select(JournalFlags.issn_l, JournalFlags.deal_covered, JournalFlags.openaire_diamond)
         .where(JournalFlags.institution_id == iid)
         .subquery()
     )
@@ -212,7 +320,7 @@ async def _author_journals(
                 Work.journal_issn_l.label("issn_l"),
                 Journal.title.label("title"),
                 func.count().label("n_works"),
-                _oa_type(flags.c.deal_covered),
+                _oa_type(flags.c.deal_covered, flags.c.openaire_diamond),
             )
             .select_from(Work)
             .join(
@@ -233,6 +341,7 @@ async def _author_journals(
                 Journal.title,
                 Journal.is_in_doaj,
                 flags.c.deal_covered,
+                flags.c.openaire_diamond,
             )
             .order_by(func.count().desc(), Work.journal_issn_l)
         )
@@ -351,29 +460,56 @@ async def _similar_sections(
     return similar, alternatives
 
 
-async def _openalex_only_items(
-    session: AsyncSession, institution: Institution, author: Author, work_rows: Any
-) -> list[dict[str, Any]]:
-    """OpenAlex-attributed works the Pure population does not hold, as
-    profile work items with in_pure False, appended after the local ones.
+async def _openalex_only_section(
+    session: AsyncSession,
+    institution: Institution,
+    author: Author,
+    work_rows: Any,
+    year_range: tuple[int, int] | None = None,
+) -> tuple[dict[str, Any], int | None]:
+    """The profile's openalex_only section: OpenAlex-attributed works the
+    Pure population does not hold, as their own list — never truncated by
+    the works cap (that split-off fixes authors with >= 200 Pure works,
+    whose missed works used to render zero items while the count said
+    otherwise).
 
-    Quality gates keep the merge honest: the institution's publication-year
-    window applies, excluded work types (preprints/books) drop out, and a
-    DOI that matches a local work is skipped (same publication; the Pure
-    copy stays the display record). Unavailable source degrades to a
-    Pure-only page."""
+    Returns the section plus the exact gated count (None when the source
+    could not answer — the caller then leaves openalex_only_count unset
+    and the section degrades to available=False).
+
+    Quality gates keep the section honest: the institution's
+    publication-year window applies (an explicit clamped range replaces
+    the bounds), excluded work types (preprints/books)
+    drop out, and a DOI that matches a local work is skipped (same
+    publication; the Pure copy stays the display record). Survivors group
+    under their main works (the shared entry shape) and the cap applies
+    to entries; total/likely_missing stay work counts."""
     rows = await openalex_only_works_for_author(session, institution, author)
+    if rows is None:
+        return (
+            {"total": 0, "likely_missing": 0, "entries_total": 0, "items": [], "available": False},
+            None,
+        )
     if not rows:
-        return []
-    year_end = institution.data_window_end if institution.data_window_end is not None else 9999
+        return (
+            {"total": 0, "likely_missing": 0, "entries_total": 0, "items": [], "available": True},
+            0,
+        )
+    if year_range is not None:
+        year_start, year_end_bound = year_range
+    else:
+        year_start = institution.data_window_start
+        year_end_bound = (
+            institution.data_window_end if institution.data_window_end is not None else 9999
+        )
     seen_dois = {doi for row in work_rows if (doi := normalize_doi(row.doi_normalized))}
-    items: list[dict[str, Any]] = []
+    gated: list[dict[str, Any]] = []
     for row in sorted(
         rows,
         key=lambda r: (r["year"] is None, -(r["year"] or 0), (r["title"] or "").lower()),
     ):
         year = row["year"]
-        if year is None or not institution.data_window_start <= year <= year_end:
+        if year is None or not year_start <= year <= year_end_bound:
             continue
         if work_type_excluded(row["work_type"]):
             continue
@@ -382,26 +518,122 @@ async def _openalex_only_items(
             if doi in seen_dois:
                 continue
             seen_dois.add(doi)
-        items.append(
+        gated.append(
             {
-                "pure_uuid": None,
                 "title": row["title"] or "Untitled",
                 "year": year,
                 "doi": row["doi"],
                 "oa_status": row["oa_status"] or "unknown",
+                "work_type": row["work_type"],
                 "journal_issn_l": row["issn_l"],
                 "journal_title": row["venue_name"],
-                "in_pure": False,
+                "openalex_id": row.get("openalex_id"),
+                "authorships": row.get("authorships"),
+                # Work parts (OpenAlex, Nov 2026); the DSN path's rows
+                # lack them and default to []/False.
+                "parent_works": row.get("parent_works") or [],
+                "is_part": bool(row.get("is_part")),
             }
         )
-    return items[: max(WORKS_CAP - len(work_rows), 0)]
+    # Explain rows that are in fact in Pure: a DOI belonging to a Pure
+    # record outside the author's list (a book, or a record not linked to
+    # them), a chapter whose parent book is in Pure, or a same-title Pure
+    # record sharing the author. Tagged over the WHOLE gated list so the
+    # counts stay exact beyond the shown slice; untagged rows — the likely
+    # misses — carry pure_match=None. Every tag must share an author:
+    # this author themself.
+    await tag_pure_matches(
+        session,
+        institution,
+        gated,
+        [{author.pure_uuid}] * len(gated),
+        check_own_doi=True,
+    )
+    likely_missing = sum(1 for g in gated if g.get("pure_match") is None)
+    # total is the exact gated count; missing parts group under their main
+    # work and only the shown entries' parts get the authorships,
+    # publisher and roster enrichment (the bulk fetch stays scalar).
+    total = len(gated)
+    entries, entries_total = await group_gap_entries(session, institution, gated)
+    shown = entries[:OPENALEX_ONLY_CAP]
+    to_serve = [e for e in shown if e["kind"] == "single"]
+    to_serve += [p for e in shown if e["kind"] == "group" for p in e["parts"]]
+    need_ash = [d["openalex_id"] for d in to_serve if d.get("authorships") is None]
+    ash_map = await authorships_by_wid(session, institution, need_ash) if need_ash else {}
+    for d in to_serve:
+        if d.get("authorships") is None:
+            d["authorships"] = ash_map.get(d["openalex_id"]) or []
+    publishers = await journal_publisher_map(session, [d["journal_issn_l"] for d in to_serve])
+    roster = await ut_roster_by_aids(
+        session,
+        institution,
+        {
+            aid.lower()
+            for d in to_serve
+            for entry in d.get("authorships") or []
+            if (aid := str((entry or {}).get("a") or ""))
+        },
+    )
+    for d in to_serve:
+        authorships = d.pop("authorships")
+        w_id = d["openalex_id"]
+        d["pure_uuid"] = None
+        d["openalex_url"] = f"{OPENALEX_URL}/{w_id}" if w_id else None
+        d["publisher_name"] = publishers.get(d["journal_issn_l"])
+        d["in_pure"] = False
+        d["ut_authors"] = ut_authors_for_authorships(authorships, roster)
+    return {
+        "total": total,
+        "likely_missing": likely_missing,
+        "entries_total": entries_total,
+        "items": shown,
+        "available": True,
+    }, total
+
+
+async def author_avatar(
+    session: AsyncSession, institution: Institution, pure_uuid: str
+) -> tuple[bytes, str] | None:
+    """The author's people.utwente.nl portrait bytes + media type: served
+    for uuid-verified matches (or admin-confirmed candidates); None when
+    absent or unverified."""
+    iid = institution.id
+    people_row = await session.scalar(
+        select(PeopleUtwentePerson).where(
+            PeopleUtwentePerson.institution_id == iid,
+            PeopleUtwentePerson.person_uuid == pure_uuid,
+        )
+    )
+    if people_row is None or not people_row.slug or people_row.photo_bytes is None:
+        return None
+    if people_row.status != "matched":
+        confirmed = (
+            await session.scalar(
+                select(AuthorIdentity.author_pure_uuid).where(
+                    AuthorIdentity.institution_id == iid,
+                    AuthorIdentity.author_pure_uuid == pure_uuid,
+                    AuthorIdentity.source == "people",
+                    AuthorIdentity.status == "confirmed",
+                )
+            )
+            is not None
+        )
+        if not confirmed:
+            return None
+    return people_row.photo_bytes, people_row.photo_media_type or "application/octet-stream"
 
 
 async def author_profile(
-    session: AsyncSession, institution: Institution, pure_uuid: str
+    session: AsyncSession,
+    institution: Institution,
+    pure_uuid: str,
+    year_range: tuple[int, int] | None = None,
 ) -> dict[str, Any] | None:
     """Full profile bundle; None = unknown author (404 upstream). All
-    per-author work views are bounded to the institution's data window."""
+    per-author work views are bounded to the institution's data window,
+    or to the explicit publication-year range when one is active (the
+    journals list, suggestions and topics keep the window: journal
+    attributes stay unfiltered by the year range)."""
     iid = institution.id
     author = await session.scalar(
         select(Author).where(Author.institution_id == iid, Author.pure_uuid == pure_uuid)
@@ -409,11 +641,60 @@ async def author_profile(
     if author is None:
         return None
 
+    # people.utwente.nl profile: served when uuid-verified, or when the
+    # admin confirmed the (name-only) candidate identity row.
+    people_row = await session.scalar(
+        select(PeopleUtwentePerson).where(
+            PeopleUtwentePerson.institution_id == iid,
+            PeopleUtwentePerson.person_uuid == pure_uuid,
+        )
+    )
+    people_confirmed = people_row is not None and people_row.status == "matched"
+    if not people_confirmed and people_row is not None:
+        people_confirmed = (
+            await session.scalar(
+                select(AuthorIdentity.author_pure_uuid).where(
+                    AuthorIdentity.institution_id == iid,
+                    AuthorIdentity.author_pure_uuid == pure_uuid,
+                    AuthorIdentity.source == "people",
+                    AuthorIdentity.status == "confirmed",
+                )
+            )
+            is not None
+        )
+    people_section = None
+    research_portal_url = None
+    if people_row is not None and people_confirmed and people_row.slug:
+        people_section = {
+            "slug": people_row.slug,
+            "url": f"{PEOPLE_BASE_URL}{people_row.slug}",
+            "canonical_name": people_row.canonical_name,
+            "email": people_row.email,
+            "orgs": [o.get("name") for o in people_row.orgs or [] if o.get("name")],
+            "faculty_abbr": people_row.faculty_abbr,
+            "has_photo": people_row.photo_bytes is not None,
+        }
+        research_portal_url = people_row.portal_person_url
+    if research_portal_url is None:
+        # No people profile (or unverified): the portal page still exists
+        # when the portal persons listings carried this person.
+        has_portal_binding = (
+            await session.scalar(
+                select(PurePersonOrg.person_uuid).where(
+                    PurePersonOrg.institution_id == iid,
+                    PurePersonOrg.person_uuid == pure_uuid,
+                )
+            )
+            is not None
+        )
+        if has_portal_binding and institution.research_portal_url:
+            research_portal_url = f"{institution.research_portal_url}/en/persons/{pure_uuid}"
+
     work_join = author_works_join(iid, pure_uuid)
     in_window = (
         Work.institution_id == iid,
         Work.retired_at.is_(None),
-        *work_window(institution),
+        *work_year_window(institution, year_range),
     )
     work_rows = (
         await session.execute(
@@ -423,6 +704,7 @@ async def author_profile(
                 Work.year,
                 Work.doi_normalized,
                 Work.oa_status,
+                Work.work_type,
                 Work.journal_issn_l,
                 Journal.title.label("journal_title"),
             )
@@ -433,6 +715,62 @@ async def author_profile(
             .limit(WORKS_CAP)
         )
     ).all()
+
+    # The author's Pure books ride along in the works list. harvest drops
+    # author_works edges to book types, so the join above never sees them
+    # — but the records exist (linked via work_pure_authors) and belong on
+    # the page. They stay OUT of every count: n_works, oa_by_year and the
+    # journals table aggregate over the AuthorWork edges below, untouched.
+    book_rows = (
+        await session.execute(
+            select(
+                Work.pure_uuid,
+                Work.title,
+                Work.year,
+                Work.doi_normalized,
+                Work.oa_status,
+                Work.work_type,
+                Work.journal_issn_l,
+                Journal.title.label("journal_title"),
+            )
+            .join(
+                WorkPureAuthor,
+                (WorkPureAuthor.institution_id == iid)
+                & (WorkPureAuthor.work_pure_uuid == Work.pure_uuid),
+            )
+            .outerjoin(Journal, Journal.issn_l == Work.journal_issn_l)
+            .where(
+                Work.institution_id == iid,
+                Work.retired_at.is_(None),
+                *work_year_window(institution, year_range),
+                WorkPureAuthor.person_uuid == pure_uuid,
+                work_type_normalized(Work.work_type).in_(("book", "monograph")),
+            )
+            .order_by(Work.year.desc(), func.lower(Work.title))
+        )
+    ).all()
+    known_uuids = {row.pure_uuid for row in work_rows}
+    all_work_rows = sorted(
+        [*work_rows, *(r for r in book_rows if r.pure_uuid not in known_uuids)],
+        key=lambda r: (-(r.year or 0), (r.title or "").lower()),
+    )
+
+    # One batched OpenAlex store lookup for every DOI on the page: lowest
+    # w_id wins deterministically when several store rows share a DOI.
+    oa_ids_by_doi: dict[str, str] = {}
+    works_dois = sorted({row.doi_normalized for row in all_work_rows if row.doi_normalized})
+    if works_dois:
+        oa_rows = (
+            await session.execute(
+                select(OpenalexWork.doi_normalized, func.min(OpenalexWork.w_id).label("w_id"))
+                .where(
+                    OpenalexWork.institution_id == iid,
+                    OpenalexWork.doi_normalized.in_(works_dois),
+                )
+                .group_by(OpenalexWork.doi_normalized)
+            )
+        ).all()
+        oa_ids_by_doi = {row.doi_normalized: row.w_id for row in oa_rows}
 
     year_rows = (
         await session.execute(
@@ -484,6 +822,10 @@ async def author_profile(
         embeddings = {row.issn_l: row.embedding for row in emb_rows if row.embedding is not None}
     similar, alternatives = await _similar_sections(session, iid, journal_rows, embeddings)
 
+    openalex_section, openalex_only_count = await _openalex_only_section(
+        session, institution, author, work_rows, year_range
+    )
+
     return {
         "author": {
             "pure_uuid": author.pure_uuid,
@@ -497,6 +839,8 @@ async def author_profile(
             "institute": author.institute,
             "orgs": author.orgs or [],
             "n_works": author.n_works,
+            "people": people_section,
+            "research_portal_url": research_portal_url,
         },
         "oa_by_year": oa_by_year,
         "journals": [
@@ -518,11 +862,27 @@ async def author_profile(
                 "year": row.year,
                 "doi": row.doi_normalized,
                 "oa_status": row.oa_status,
+                "work_type": row.work_type,
                 "journal_issn_l": row.journal_issn_l,
                 "journal_title": row.journal_title,
+                "pure_url": (
+                    f"{institution.research_portal_url}/en/publications/{row.pure_uuid}"
+                    if institution.research_portal_url
+                    else None
+                ),
+                "openalex_url": (
+                    f"{OPENALEX_URL}/{oa_ids_by_doi[row.doi_normalized]}"
+                    if row.doi_normalized in oa_ids_by_doi
+                    else None
+                ),
                 "in_pure": True,
+                # The OpenAlex oa_status sync only overwrites DOI-matched
+                # rows; a green status on a DOI-less record is Pure's own
+                # access flag — the venue's OA model is unverified.
+                "oa_status_source": "pure" if row.doi_normalized is None else "openalex",
             }
-            for row in work_rows
-        ]
-        + await _openalex_only_items(session, institution, author, work_rows),
+            for row in all_work_rows
+        ],
+        "openalex_only": openalex_section,
+        "openalex_only_count": openalex_only_count,
     }

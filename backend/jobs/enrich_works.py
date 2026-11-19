@@ -21,12 +21,16 @@ from journal_browser.harvest.enrich import (
 )
 
 
-async def main(session, institution, limit: int | None, summary_only: bool) -> None:
+async def main(
+    session, institution, limit: int | None, summary_only: bool, refresh_matched: bool = False
+) -> None:
     if summary_only:
         print(json.dumps(await enrichment_summary(session), indent=1))
         return
     iid = institution.id
-    stats = {"openalex": await enrich_openalex(session, iid, limit)}
+    stats = {
+        "openalex": await enrich_openalex(session, iid, limit, refresh_matched=refresh_matched)
+    }
     await session.commit()
     stats["crossref"] = await enrich_crossref(session, iid, limit)
     await session.commit()
@@ -42,6 +46,11 @@ if __name__ == "__main__":
     parser.add_argument("--institution", default=None, help="institution code (default: env)")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--summary", action="store_true")
+    parser.add_argument(
+        "--refresh-matched",
+        action="store_true",
+        help="re-fetch every DOI work, not only journal-less ones",
+    )
     args = parser.parse_args()
 
     async def run() -> None:
@@ -53,6 +62,7 @@ if __name__ == "__main__":
                 await resolve_institution(session, args.institution),
                 args.limit,
                 args.summary,
+                args.refresh_matched,
             )
         await engine.dispose()
 

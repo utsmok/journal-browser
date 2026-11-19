@@ -1,4 +1,4 @@
-# Journal Browser (rebuild)
+# Open Journal Browser
 
 A public search tool that helps researchers find where to publish: which
 journals are covered by open access deals, what publishing there costs, how
@@ -80,6 +80,36 @@ every hosted university. `--from <step>` is the serial repair path;
 `--institution <code>` reruns one university's layer. Every job is
 idempotent; a failure names the step. See [DEPLOYMENT.md](DEPLOYMENT.md)
 for what each job builds and how the deal register is reconciled.
+
+## UI text and i18n
+
+All user-visible text lives in `frontend/messages/en/`, one JSON file per
+namespace (`home.json`, `journals.json`, `admin.json`, ...). The frontend
+uses next-intl: server components read strings with
+`getTranslations("namespace")`, client components with
+`useTranslations("namespace")`. Dynamic values use ICU placeholders:
+`"showingOf": "Showing {shown} of {total} journals."` called as
+`t("showingOf", { shown, total })`.
+
+To add or change UI copy, edit the message file for the page's namespace
+and the component that reads it. English strings are the source of truth;
+translations land later as `messages/<locale>/` files.
+
+## Usage tracking
+
+The app records anonymous usage events (page paths, searches with result
+counts, dwell time, client-side errors, and coarse audience info: IP ->
+country, user agent, timezone, locale). There are no cookies and no
+accounts — only a localStorage session id that rotates after 30 idle
+minutes. `backend/jobs/enrich_usage_geo.py` backfills the country column
+from IP addresses in batches (ip-api.com). Set
+`JB_ENABLE_USAGE_TRACKING=false` (env or the admin settings panel) to turn
+it off; the ingest endpoint then accepts and drops batches. Raw IPs are
+nulled after `JB_USAGE_RETENTION_DAYS` (default 90, `0` disables the
+nightly prune) by an in-app background job; countries and the events
+themselves stay. Searches with an empty query are stored as browse loads
+(`is_browse`), not as queries. Aggregates and the raw event feed are
+visible to admins at `/admin/usage` in the admin panel.
 
 ## License
 

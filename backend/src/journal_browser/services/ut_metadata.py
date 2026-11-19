@@ -1,14 +1,13 @@
-"""ut-metadata Postgres: canonical Twente publications.
+"""ut-metadata Postgres: canonical Twente publications (author pages).
 
 Second, read-only database (container ut-metadata-db-1, host 5434). Enabled
 by JB_UT_METADATA_DSN; empty DSN or an unreachable server degrades to
-"unavailable" (None) and every endpoint keeps its works_stats-only behavior.
+"unavailable" (None) and the author page keeps its Pure-only behavior.
+(The journal works tab no longer reads this database — it serves the
+works-table population; see services.detail_enrichment.)
 
-Data path for one journal (all names verified live 2026-10-23):
-    venue.issn_l
-      -> source_identity (entity_type='venues', canonical_id=venue.id)
-         source_pk is an upper-case S-id, work_venues stores it lower-cased
-      -> work_venues (source_s_id)
+Author openalex-only path (names verified live 2026-10-23):
+    work_authors (author_a_id)
       -> work (canonical works)
       -> merged_work_attrs (view; canonical_id = work.id) for the merged
          oa_status / cited_by_count / is_retracted attributes.
@@ -21,7 +20,6 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ..config import get_settings
-from ..harvest.common import normalize_doi
 from .source_health import record_degraded
 
 logger = logging.getLogger(__name__)
@@ -29,27 +27,6 @@ logger = logging.getLogger(__name__)
 #: oa_status values observed in merged_work_attrs; anything else (incl.
 #: NULL) lands in "unknown".
 OA_BUCKETS = ("gold", "hybrid", "green", "bronze", "diamond", "closed", "unknown")
-
-_WORKS_SQL = text(
-    """
-    SELECT DISTINCT
-        w.id,
-        coalesce(m.doi, w.doi) AS doi,
-        coalesce(m.title, m.canonical_display_name, w.display_name) AS title,
-        coalesce(m.publication_year, w.publication_year) AS year,
-        coalesce(m.work_type, w.work_type) AS work_type,
-        m.oa_status,
-        coalesce(m.cited_by_count, 0) AS cited_by_count,
-        m.is_retracted
-    FROM venue v
-    JOIN source_identity si
-      ON si.canonical_id = v.id AND si.entity_type = 'venues'
-    JOIN work_venues wv ON wv.source_s_id = lower(si.source_pk)
-    JOIN work w ON w.id = wv.work_id
-    LEFT JOIN merged_work_attrs m ON m.canonical_id = w.id
-    WHERE lower(v.issn_l) = lower(:issn_l)
-    """
-)
 
 _engines: dict[str, AsyncEngine] = {}
 
@@ -71,26 +48,6 @@ def _get_engine(dsn: str) -> AsyncEngine:
         )
         _engines[dsn] = engine
     return engine
-
-
-async def ut_works_for_journal(issn_l: str, dsn: str | None = None) -> list[dict[str, Any]] | None:
-    """Canonical UT works for the journal; None = not configured/unreachable.
-
-    The DSN parameter exists for tests; production always uses the setting.
-    """
-    if dsn is None:
-        dsn = get_settings().ut_metadata_dsn
-    if not dsn:
-        return None
-    try:
-        async with _get_engine(dsn).connect() as conn:
-            rows = (await conn.execute(_WORKS_SQL, {"issn_l": issn_l})).mappings().all()
-    except Exception:
-        logger.exception("ut-metadata query failed for %s; serving works_stats-only", issn_l)
-        record_degraded("ut-metadata", "works query failed; serving stats-only")
-        return None
-    # DISTINCT dedupes venue-identity overlap; key by id for safety.
-    return list({row["id"]: dict(row) for row in rows}.values())
 
 
 _AUTHOR_OPENALEX_ONLY_SQL = text(
@@ -159,61 +116,6 @@ def oa_buckets(rows: list[dict[str, Any]]) -> dict[str, int]:
     for row in rows:
         buckets[row["oa_status"] if row["oa_status"] in buckets else "unknown"] += 1
     return buckets
-
-
-def merge_work_lists(
-    ut_rows: list[dict[str, Any]], stats_items: list[dict[str, Any]]
-) -> list[dict[str, Any]]:
-    """Union of ut-metadata and works_stats work items, deduped by DOI.
-
-    DOI present in both: the ut-metadata row wins its own fields and is
-    enriched with the works_stats id/url/fwci/type/cited_by_count.
-    works_stats-only items pass through; ut-metadata rows without DOI (or
-    without a DOI match) are kept as-is.
-    """
-    by_doi = {
-        doi: item for item in stats_items if (doi := normalize_doi(item.get("doi"))) is not None
-    }
-    seen_dois: set[str] = set()
-    merged: list[dict[str, Any]] = []
-    for row in ut_rows:
-        doi = normalize_doi(row["doi"])
-        item: dict[str, Any]
-        if doi is not None and doi in by_doi:
-            stats = by_doi[doi]
-            seen_dois.add(doi)
-            item = {
-                "id": stats["id"],
-                "url": stats["url"],
-                "doi": row["doi"] or stats["doi"],
-                "title": row["title"] or stats["title"],
-                "year": row["year"] if row["year"] is not None else stats["year"],
-                "oa_status": row["oa_status"],
-                "fwci": stats["fwci"],
-                "cited_by_count": stats["cited_by_count"],
-                "is_retracted": row["is_retracted"],
-                "type": stats["type"],
-                "work_type": row["work_type"],
-                "in_openalex": True,
-            }
-        else:
-            item = {
-                "id": f"ut-{row['id']}",
-                "url": f"https://doi.org/{row['doi']}" if row["doi"] else None,
-                "doi": row["doi"],
-                "title": row["title"],
-                "year": row["year"],
-                "oa_status": row["oa_status"],
-                "fwci": None,
-                "cited_by_count": row["cited_by_count"] or 0,
-                "is_retracted": row["is_retracted"],
-                "type": None,
-                "work_type": row["work_type"],
-                "in_openalex": False,
-            }
-        merged.append(item)
-    merged.extend(item for item in stats_items if normalize_doi(item.get("doi")) not in seen_dois)
-    return merged
 
 
 def sort_work_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
