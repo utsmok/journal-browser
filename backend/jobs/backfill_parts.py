@@ -121,7 +121,8 @@ async def backfill_dois(
     # same upstream record, so no repeated lookups across institutions.
     institutions_by_doi: dict[str, set[int]] = {}
     for iid, doi in pending:
-        institutions_by_doi.setdefault(doi, set()).add(iid)
+        if doi is not None:
+            institutions_by_doi.setdefault(doi, set()).add(iid)
 
     client_kwargs: dict[str, Any] = {}
     if api_key := get_settings().openalex_api_key:
