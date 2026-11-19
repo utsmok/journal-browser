@@ -76,8 +76,10 @@ export function SectionNav({
         </Link>
         <span aria-hidden className="h-4 w-px shrink-0 bg-[var(--border)]" />
         {/* Wrap instead of a single clipped line: long section lists stay
-            fully reachable on narrow screens. */}
-        <ul className="flex min-w-0 flex-wrap items-center gap-1">
+            fully reachable on narrow screens. On phones the wrapped chips
+            filled the whole first viewport, so there a compact select
+            carries the same jump list. */}
+        <ul className="hidden min-w-0 flex-wrap items-center gap-1 sm:flex">
           {sections.map((s) => (
             <li key={s.id}>
               <a
@@ -98,6 +100,20 @@ export function SectionNav({
             </li>
           ))}
         </ul>
+        <select
+          aria-label={t("nav.sections")}
+          className="min-w-0 flex-1 rounded-[var(--radius)] border border-white/25 bg-white/10 px-1.5 py-1 text-xs text-white sm:hidden [&>option]:bg-[var(--card)] [&>option]:text-[var(--foreground)]"
+          value={active ?? sections[0]?.id}
+          onChange={(e) => {
+            document.getElementById(e.target.value)?.scrollIntoView({ behavior: "smooth" });
+          }}
+        >
+          {sections.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.label}
+            </option>
+          ))}
+        </select>
       </div>
     </nav>
   );

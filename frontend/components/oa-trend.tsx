@@ -39,9 +39,9 @@ export function OaTrend({ stats }: { stats: StatsYear[] }) {
           return (
             <div
               key={s.year}
-              className="flex h-full flex-1 flex-col items-center justify-end gap-1"
+              className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1 overflow-hidden"
             >
-              <span className="text-[11px] tabular-nums text-[var(--muted-foreground)]">
+              <span className="max-w-full overflow-hidden text-[11px] tabular-nums text-[var(--muted-foreground)]">
                 {count > 0 ? count : ""}
               </span>
               <div
@@ -68,7 +68,7 @@ export function OaTrend({ stats }: { stats: StatsYear[] }) {
                   );
                 })}
               </div>
-              <span className="text-[11px] tabular-nums text-[var(--muted-foreground)]">
+              <span className="max-w-full overflow-hidden text-[11px] tabular-nums text-[var(--muted-foreground)]">
                 {s.year}
                 {s.year === currentYear && <span title={t("trend.yearInProgress")}>*</span>}
               </span>
