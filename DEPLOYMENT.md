@@ -77,16 +77,25 @@ in citation links on journal pages. Set it in `.env` before the first
 | `JB_USAGE_RETENTION_DAYS` | Days usage events are kept before being nulled; `0` disables expiry | `90` |
 | Country lookups | `jobs/enrich_usage_geo.py` resolves visitor IPs locally against DB-IP's free Country Lite database (downloaded monthly into `landing/dbip/`). Country data by DB-IP.com, CC BY 4.0 (https://db-ip.com) | — |
 | `JB_IGNORED_ISSNS` | JSON list of ISSNs the browser treats as nonexistent on every journal surface | empty |
+| `JB_SOURCE_WAVE_CRON` | Cron schedule (UTC) for the weekly source wave, run by the `scheduler` service | `0 22 * * 0` (Sunday 22:00) |
 | `JB_REFRESH_WAVE_CRON` | Cron schedule (UTC) for the nightly harvest wave, run by the `scheduler` service | `30 1 * * *` |
 | `JB_BACKUP_CRON` | Cron schedule (UTC) for the nightly database backup | `0 4 * * *` |
 | `JB_BACKUP_KEEP` | Nightly dump archives kept in `./backups` | `7` |
 
 ## First boot
 
+`backend` waits for the one-shot `bootstrap` service, so a plain
+`docker compose up -d --build` blocks for the whole first harvest (1.5-2
+hours) before returning. Start the database and the bootstrap explicitly,
+follow the bootstrap log, then bring up the rest:
+
 ```bash
 cp .env.example .env   # then edit
-docker compose up -d --build
-docker compose logs -f bootstrap
+docker compose build backend        # builds the one image all three backend services share
+docker compose up -d db bootstrap
+docker compose logs -f bootstrap    # Ctrl-C any time; the pipeline keeps running
+# once the log shows the bootstrap summary:
+docker compose up -d
 ```
 
 Existing deployments that predate the `backend/state/` settings directory
@@ -158,7 +167,7 @@ wave (see "Daily refresh wave" below) repeats a subset of these stages.
 | `backfill_pure_authors` | stored CERIF publication records | The `pure-authors` step: full-replaces each work's pure authorship edges (`work_pure_authors`) from the latest stored record; runs after `openalex-works`, before author-id resolution, so it also covers works whose CERIF record predated author extraction |
 | `resolve_author_ids` | OpenAlex works listings + free singleton GETs | Author identity resolution (the cascade); budget-capped, self-skips at a zero budget, needs an API key for the cursor sweep |
 | `ingest_authors` | local stores by default (`author_source=local`; the `JB_UT_METADATA_DSN` canonical-works DB is an opt-in accelerator) | Per-institution author roster: identity, faculty/research group/org derivation, work edges; also fills `crossref_orcid` from the stored Crossref payloads — run `enrich_works` first for maximum coverage |
-| `harvest_work_funders` | OpenAlex (free single-entity GETs per DOI) | `work_funders`: grant lines per work |
+| `harvest_work_funders` | OpenAlex (free single-entity GETs per DOI, staleness-gated: only works whose last fetch is older than 30 days) | `work_funders`: grant lines per work |
 | `harvest_openalex_funders` | OpenAlex (free singleton GETs) | `openalex_funders` gap-filled from works-linked funder ids |
 | `harvest_openaire_funders` | OpenAIRE Graph | Curated funder canon pull |
 | `harvest_people_utwente` | people.utwente.nl directory (its own JSON-RPC search endpoint) | Per-author people profile: portrait, canonical name, email, org list, org edges resolved onto `pure_orgs` (`people_utwente_person_orgs`, gap-fill evidence like `pure_person_orgs`), and the profile's research.utwente.nl portal link as the match oracle. Runs 20 author pipelines in flight (`--concurrency`), so the confirmed roster takes roughly 30-45 minutes; external — keep it out of the daily wave. Outcomes are stamped in batches of 50, so re-runs only see new authors (`--retry-missed` / `--refresh` re-open old ones) |
@@ -194,13 +203,17 @@ the JCT/ESAC dump. Rules:
 - Deals that exist only on openaccess.nl (ACM, ACS, AUP, IOS Press, ...) are
   derived: participation is parsed from the page's conditions text, coverage
   is the publisher's journal corpus. A page whose list omits your institution
-  leaves the deal unlinked, and the purge drops it — that is correct
+  leaves the deal unlinked — that is correct
   behavior, not a bug (live case: Twente is not in the LWW 2024-2026
   agreement; Groningen is).
 - `reconcile` merges duplicate sources for one agreement (ESAC code aliases
   map to the openaccess.nl publisher name) and refreshes the search-side
   deal-coverage flags, so rerunning it after any register fix is safe and
-  self-contained.
+  self-contained. Publisher-pattern coverage re-derives on every run (the
+  insert is idempotent), so journals a publisher adds later join the deal;
+  a deal with hand-curated coverage rows (`source` `manual` or `jct`)
+  keeps its frozen list, and `ManualOverride` rows still win over any
+  re-harvest.
 - `ManualOverride` rows keep hand fixes winning over re-harvests. The
   curation report (`landing/reports/curation_report.html`) lists everything
   that needs a human.
@@ -226,17 +239,34 @@ its own works corpus, stats, and participation. Onboarding is one SQL
 statement plus one harvest run — no second stack, no extra ports:
 
 ```sql
--- The institutions table already lists every openaccess.nl participant
--- (inactive, no code); claim the row instead of inserting a new one.
+-- Precondition: the first boot has completed. The `institutions` table
+-- lists every openaccess.nl participant (inactive, no code) only after
+-- the deal ingests have run, so the row to claim does not exist on a
+-- fresh database.
+-- Match on the ROR id, not the name: display names differ between
+-- openaccess.nl and OpenAlex ("Rijksuniversiteit Groningen" vs
+-- "University of Groningen"), and the ROR is the stable identifier.
 UPDATE institutions SET
   code = 'rug', short_name = 'RUG', active = true,
-  ror = 'https://ror.org/012p63287',
   pure_oai_base_url = 'https://pure.rug.nl/ws/oai',
   openaire_org_id = 'openorgs____::81371ea94b1a09d3243e73d6ec3527ec',
   data_window_start = 2025, data_window_end = 2025,
   library_url = 'https://www.rug.nl/library',
   support_email = 'openaccess@rug.nl'
-WHERE name = 'Rijksuniversiteit Groningen';
+WHERE ror = 'https://ror.org/012p63287';
+
+-- Fallback when the row is absent (institution not on openaccess.nl, or
+-- the deal ingests have not run yet): insert it.
+INSERT INTO institutions
+  (name, ror, code, short_name, active, pure_oai_base_url, openaire_org_id,
+   data_window_start, data_window_end, library_url, support_email)
+SELECT 'University of Groningen', 'https://ror.org/012p63287', 'rug', 'RUG',
+       true, 'https://pure.rug.nl/ws/oai',
+       'openorgs____::81371ea94b1a09d3243e73d6ec3527ec',
+       2025, 2025, 'https://www.rug.nl/library', 'openaccess@rug.nl'
+WHERE NOT EXISTS (
+  SELECT 1 FROM institutions WHERE ror = 'https://ror.org/012p63287'
+);
 ```
 
 ```bash
@@ -286,22 +316,32 @@ and `--from` resumes past the stages that already completed.
 
 The stages, in order:
 
-1. `harvest_stats` and `resolve_author_ids`. Both touch credit-priced
-   OpenAlex works filters. Both also check `openalex_credits_remaining()`
-   before spending credits, and at a zero budget each skips cleanly and
-   notes the skip in its stats output.
-2. `ingest_authors`. A local projection right after identity resolution:
-   it publishes confirmed author identities to the served roster and makes
-   no API calls.
-3. `harvest_oa_colors`, `build_openalex_works`, and `backfill_pure_authors`.
-   The three derive from locally stored data and make no API calls. oa
-   colors reads only locally held works today, so it spends no credits.
-   `backfill_parts` follows the works rebuild in the same slot: free
-   single-entity GETs that fill the part-of chips for OpenAlex Graph v12
-   payloads, resumable and idempotent.
-4. The funder backfills. `harvest_work_funders` fetches each work by DOI as
-   a free single-entity GET, and it commits per chunk. An interrupted run
-   therefore resumes as a rerun. `harvest_openalex_funders` fetches full
+1. `harvest_stats`. It touches credit-priced OpenAlex works filters, runs
+   at the top while the budget is fresh, and checks
+   `openalex_credits_remaining()` before spending credits: at a zero
+   budget it skips cleanly and notes the skip in its stats output.
+2. `build_openalex_works` and `backfill_parts`. The store rebuild derives
+   from locally stored data, and `backfill_parts` follows it in the same
+   slot: free single-entity GETs that fill the part-of chips for OpenAlex
+   Graph v12 payloads, resumable and idempotent.
+3. `backfill_pure_authors`, then author resolution:
+   `resolve_author_ids` + `ingest_authors`. The resolver reads
+   `openalex_work_authors` and `work_pure_authors`, which the store
+   rebuild and the pure-authors backfill rewrite — running resolution
+   after them follows the bootstrap DAG instead of lagging one wave.
+   `resolve_author_ids` also self-gates on the credit budget like
+   `harvest_stats`. `ingest_authors` is a local projection right after
+   identity resolution: it publishes confirmed author identities to the
+   served roster and makes no API calls. `harvest_oa_colors` closes this
+   block: a local read of `works.oa_status`, which the store rebuild
+   re-synced in stage 2.
+4. The funder backfills. `harvest_work_funders` fetches works by DOI as
+   free single-entity GETs and commits per chunk, so an interrupted run
+   resumes as a rerun. It only re-fetches a work whose last funders fetch
+   is older than 30 days (`--ttl-days` / `JB_WORK_FUNDERS_TTL_DAYS`):
+   `work_funders.harvested_at` re-stamps on every fetch, so fresh works
+   skip the nightly sweep. Works OpenAlex reports without awards carry no
+   rows and stay in the sweep. `harvest_openalex_funders` fetches full
    funder payloads only for ids the table lacks. `harvest_openaire_funders`
    pulls the curated funder canon from the OpenAIRE graph.
 5. `harvest_publishers`. It resolves journal host organizations in
@@ -338,12 +378,56 @@ only. `resolve_author_ids` and `build_openalex_works` cover every active
 institution. On a multi-institution deployment, run the first pair with
 `--institution <code>` for each additional institute after the wave.
 
+## Weekly source wave
+
+The nightly wave only derives from stored data plus free OpenAlex
+endpoints. The sources that create works and coverage — Pure, the deal
+sources, OpenAPC, DOAJ, JISC — would otherwise run at bootstrap only, so a
+filled database freezes in steady state.
+`backend/scripts/source_wave.sh` refreshes them once a week, per active
+institution, in bootstrap DAG order:
+
+```bash
+cd backend
+bash scripts/source_wave.sh
+```
+
+Every job is idempotent, so rerunning the wave or any stage is safe, and
+`--from STAGE` resumes past completed stages (STAGE is a job name like
+`reconcile` or a per-institution step like `pure:rug`). A failing stage
+names itself and stops the wave, like the nightly wave. The stages:
+
+1. Global deal and reference sources, in bootstrap GLOBAL_STEPS order:
+   `scrape_openaccess_nl`, `ingest_jct`, `reconcile` (publisher-pattern
+   coverage re-derives here, so new journals join their deal),
+   `backfill_issn_l`, `ingest_openapc`, `harvest_doaj`, `harvest_jisc`.
+2. Per institution, in bootstrap INST_STEPS order: `harvest_pure`
+   (incremental current-year sweep), `harvest_pure --cerif`,
+   `harvest_pure_entities`, `enrich_works`, `harvest_openaire`,
+   `derive_openaire_facts`.
+3. `backfill_flags` once (works_2020_plus / last_active_year recompute over
+   the fresh corpus), then `harvest_stats --institution` per institution.
+
+Only free routes run here by design. The Pure sweep reads the institution's
+OAI endpoint, the deal sources are two scrapes plus local ingests, DOAJ and
+OpenAPC are CSV downloads, and JISC skips cleanly without
+`JB_JISC_API_KEY`. The one OpenAlex consumer, `harvest_stats`, self-gates
+on `openalex_credits_remaining()` and skips at a spent budget. Enrichment
+and the OpenAIRE match use free single-entity GETs.
+
+The `scheduler` service runs the wave Sunday 22:00 UTC (override with
+`JB_SOURCE_WAVE_CRON`), ahead of the Monday 01:30 nightly wave so both fit
+in one weekend night. A rerun of the wave is harmless any day.
+
 ## Nightly scheduler
 
 The `scheduler` service runs the same backend image as the API, with
 supercronic (v0.2.51, checksum-verified in `backend/Dockerfile`) executing
 `backend/scripts/crontab`:
 
+- `0 22 * * 0` — `backend/scripts/source_wave.sh`, the weekly source wave
+  (see above). All its stages are free routes or self-gating, so its time
+  only matters for staying ahead of the nightly wave.
 - `30 1 * * *` — `backend/scripts/refresh_wave.sh`, the daily refresh wave
   (see above). Starts just after the 00:00 UTC OpenAlex credit reset so
   the credit-priced stages run on a fresh budget; they self-skip at a
@@ -351,9 +435,10 @@ supercronic (v0.2.51, checksum-verified in `backend/Dockerfile`) executing
 - `0 4 * * *` — `backend/scripts/backup.sh`, the nightly database backup
   (see below).
 
-Both schedules are UTC and overridable from `.env` (`JB_REFRESH_WAVE_CRON`,
-`JB_BACKUP_CRON`); changing them needs a scheduler restart
-(`docker compose up -d scheduler`). Job output lands in the container log:
+All schedules are UTC and overridable from `.env` (`JB_SOURCE_WAVE_CRON`,
+`JB_REFRESH_WAVE_CRON`, `JB_BACKUP_CRON`); changing them needs a scheduler
+restart (`docker compose up -d scheduler`). Job output lands in the
+container log:
 
 ```bash
 docker compose logs scheduler
