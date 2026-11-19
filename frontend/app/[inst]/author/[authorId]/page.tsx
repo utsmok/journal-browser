@@ -115,6 +115,9 @@ function SectionNav({ sections }: { sections: { id: string; label: string }[] })
                 onClick={(e) => {
                   e.preventDefault();
                   document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth" });
+                  // Collapsed (default-closed) cards listen for this so a
+                  // nav jump never lands on a hidden section.
+                  window.dispatchEvent(new CustomEvent("jb-open-section", { detail: s.id }));
                 }}
                 className={cn(
                   "inline-block whitespace-nowrap rounded px-2 py-1 text-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white",
@@ -199,7 +202,12 @@ export default function AuthorPage() {
     setAllTopics(false);
   }, [authorId]);
 
-  if (isPending) return <DetailSkeleton />;
+  if (isPending)
+    return (
+      <DetailSkeleton
+        sections={[t("sections.oaOverTime"), t("sections.journals"), t("sections.publications")]}
+      />
+    );
   if (isError || !data) return <ErrorPanel message={errorMessage(tc, error)} backHref={backHref} />;
 
   const { author, oa_by_year, journals, topics, similar, alternatives, works } = data;

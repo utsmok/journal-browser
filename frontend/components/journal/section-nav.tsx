@@ -89,6 +89,9 @@ export function SectionNav({
                 onClick={(e) => {
                   e.preventDefault();
                   document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth" });
+                  // Collapsed (default-closed) cards listen for this so a
+                  // nav jump never lands on a hidden section.
+                  window.dispatchEvent(new CustomEvent("jb-open-section", { detail: s.id }));
                 }}
                 className={cn(
                   "inline-block whitespace-nowrap rounded px-2 py-1 text-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white",
@@ -106,6 +109,7 @@ export function SectionNav({
           value={active ?? sections[0]?.id}
           onChange={(e) => {
             document.getElementById(e.target.value)?.scrollIntoView({ behavior: "smooth" });
+            window.dispatchEvent(new CustomEvent("jb-open-section", { detail: e.target.value }));
           }}
         >
           {sections.map((s) => (

@@ -422,7 +422,13 @@ export default function PublisherPage() {
     setParts(undefined);
   }, [name]);
 
-  if (isPending) return <DetailSkeleton />;
+  if (isPending)
+    return (
+      <DetailSkeleton
+        title={name}
+        sections={[t("detail.oaOverTime"), t("detail.apcCosts"), t("detail.journals")]}
+      />
+    );
   if (isError || !data)
     return (
       <ErrorPanel

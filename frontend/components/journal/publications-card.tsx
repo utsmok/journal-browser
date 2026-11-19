@@ -71,6 +71,7 @@ export function PublicationsCard({
     <CollapsibleCard
       id="publications"
       title={t("publications.title", { short: site.short })}
+      defaultOpen={false}
       description={
         <p className="text-pretty text-sm text-[var(--muted-foreground)]">
           {t("publications.description", {
@@ -113,15 +114,16 @@ export function PublicationsCard({
                 : null,
             ].filter((part): part is string => part !== null);
             const licenseUrl = oa?.license?.startsWith("http") ? oa.license : null;
-            const funders = Array.from(
-              new Set(
-                (oa?.projects ?? []).flatMap((p) => {
-                  const name = p.funder ?? p.acronym ?? p.id;
-                  if (name == null) return [];
-                  return [p.code ? `${name} (${p.code})` : name];
-                }),
-              ),
-            );
+            // Grant codes read as noise inline ("NWO (10140254)"); the plain
+            // names render, codes survive in the hover text.
+            const funderNames: string[] = [];
+            const funderDetails: string[] = [];
+            for (const p of oa?.projects ?? []) {
+              const name = p.funder ?? p.acronym ?? p.id;
+              if (name == null) continue;
+              if (!funderNames.includes(name)) funderNames.push(name);
+              funderDetails.push(p.code ? `${name} (${p.code})` : name);
+            }
             return (
               <li
                 key={w.id}
@@ -201,7 +203,7 @@ export function PublicationsCard({
                     {t("publications.retracted")}
                   </Badge>
                 )}
-                {(w.ut_authors.length > 0 || w.ut_groups.length > 0 || funders.length > 0) && (
+                {(w.ut_authors.length > 0 || w.ut_groups.length > 0 || funderNames.length > 0) && (
                   <div className="w-full text-xs text-[var(--muted-foreground)]">
                     {w.ut_authors.length > 0 && (
                       <span>
@@ -229,11 +231,11 @@ export function PublicationsCard({
                         </Link>
                       </React.Fragment>
                     ))}
-                    {funders.length > 0 && (
+                    {funderNames.length > 0 && (
                       <>
                         {(w.ut_authors.length > 0 || w.ut_groups.length > 0) && " · "}
-                        <span>
-                          {t("publications.funders")} {funders.join(", ")}
+                        <span title={Array.from(new Set(funderDetails)).join(", ")}>
+                          {t("publications.funders")} {funderNames.join(", ")}
                         </span>
                       </>
                     )}

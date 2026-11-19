@@ -43,6 +43,20 @@ export function licenseLabel(license: string): string {
   return license.charAt(0).toUpperCase() + license.slice(1).replaceAll("_", " ");
 }
 
+/** Scraped link descriptions arrive as bare filenames or "Website"; give
+ * those a label that says what the document is. Returns null for labels
+ * that are already specific (render the scraped text then). */
+export function greenOaLinkLabel(
+  t: (key: string) => string,
+  description: string | null | undefined,
+): string | null {
+  const text = description?.trim() ?? "";
+  if (!text) return null;
+  if (/powerpoint|\.pptx?\b/i.test(text)) return t("greenOa.agreementSlides");
+  if (/^website$/i.test(text)) return t("greenOa.publisherOaPage");
+  return null;
+}
+
 export function locationPhrase(
   base: React.ReactNode,
   location: string,
@@ -144,7 +158,7 @@ export function GreenOaPanel({
         )}
         {greenOa.urls.map((u) => (
           <External key={u.url} href={u.url}>
-            {u.description || u.url}
+            {greenOaLinkLabel(t, u.description) || u.url}
           </External>
         ))}
         <SourceNote {...attribution} codes={attribution.caveat_codes} />

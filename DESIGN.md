@@ -31,6 +31,8 @@ colors:
   oa-generic-dark: "#a99af0"
   oa-gold: "#f4aa2a"
   oa-gold-dark: "#fbbf24"
+  oa-bronze: "#e11d48"
+  oa-bronze-dark: "#fb7185"
   oa-diamond: "#4fe4f8"
   oa-diamond-dark: "#67e8f9"
   oa-deal: "#047857"
@@ -320,8 +322,8 @@ color, focus is a 2px orange ring with offset.
   centered above the tagline); the monogram is the favicon
   (`app/icon.svg`, ink letters). Sizing keeps each mark's aspect ratio.
 - **Header and nav**: brand link in Montserrat 700 tracking-tight, scoped to
-  the institution prefix; nav links text-sm with hidden-overflow horizontal
-  scroll on phones.
+  the institution prefix; nav links text-sm that wrap to a second row on
+  phones instead of scrolling in a hidden-scrollbar row.
 - **Footer band**: contract navy, white text; institution links plus the
   GitHub source link, and a 0.75rem white/70 attribution line naming every
   upstream data source (OpenAlex, cOAlition S JCT, openaccess.nl, OpenAPC,

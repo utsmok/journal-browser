@@ -6,7 +6,7 @@
   "header": {
     "websiteLabel": "{title} (opens the journal website in a new tab)",
     "unknownPublisher": "Unknown publisher",
-    "imprint": "imprint: {name}",
+    "imprint": "Published by {name}",
     "homepage": "Journal homepage",
     "metadataSource": "Metadata: OpenAlex",
     "doajBadge": "DOAJ",
@@ -19,7 +19,7 @@
     "titleSuffixWindow": "{short}, {window}+",
     "titleSuffixShort": "{short}",
     "empty": "No publication statistics for this period yet.",
-    "totals": "{pure} {short} works in total{since} <pureLabel>(Pure)</pureLabel> · OpenAlex institution filter: <openalexLabel>{openalex} <crossLabel>(cross-check)</crossLabel></openalexLabel>.",
+    "totals": "{pure} works in our research system <pureLabel>(Pure)</pureLabel>{since} · OpenAlex independently lists <openalexLabel>{openalex}</openalexLabel>.",
     "totalsYears": "{pure} {short} works in {from} to {to} <pureLabel>(Pure)</pureLabel>."
   },
   "deal": {
@@ -52,7 +52,9 @@
     "embargo": "Embargo: after {count, plural, one {# month} other {# months}}.",
     "conditionsHeading": "Conditions",
     "empty": "No self-archiving route is listed for this journal.",
-    "jiscLink": "View on Jisc Open Policy Finder"
+    "jiscLink": "View on Jisc Open Policy Finder",
+    "agreementSlides": "Agreement slides (PPTX)",
+    "publisherOaPage": "Publisher OA page"
   },
   "greenVersions": {
     "submitted": "Submitted version",
@@ -115,7 +117,7 @@
     "percentMatch": "{percent}% match",
     "sharedTopics": "{count, plural, one {# shared topic} other {# shared topics}}",
     "embeddingNote": "(embedding similarity)",
-    "similarityTitle": "Embedding similarity between the journals' research profiles",
+    "similarityTitle": "Research-profile similarity from topic embeddings; 100% = identical profile",
     "showAll": "Show all {count} journals"
   },
   "topics": {
@@ -200,7 +202,7 @@
     "usageHint": "Matched publications for which OpenAIRE has recorded views or downloads.",
     "diamondLabel": "Diamond works",
     "diamondHint": "Matched publications in diamond open-access venues (no article processing charge), evidenced by the journal's entry in the OpenAIRE journal registry.",
-    "colorCheck": "The open-access color agrees with OpenAlex for {agree} of {total} publications; {disagree} disagree.",
+    "colorCheck": "OpenAIRE records a different open access status for {disagree} of {total} publications.",
     "funderWorks": "{count, plural, one {# work} other {# works}}"
   },
   "crisGaps": {

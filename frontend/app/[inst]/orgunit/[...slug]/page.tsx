@@ -183,7 +183,18 @@ export default function OrgUnitPage() {
         </div>
       </div>
     );
-  if (isPending) return <DetailSkeleton />;
+  if (isPending)
+    return (
+      <DetailSkeleton
+        title={name}
+        sections={[
+          t("detail.trendTitle"),
+          t("detail.groups.title"),
+          t("detail.authors.title"),
+          t("detail.journals.title"),
+        ]}
+      />
+    );
   if (isError || !data)
     return (
       <ErrorPanel

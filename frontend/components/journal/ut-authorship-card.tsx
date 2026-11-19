@@ -26,6 +26,7 @@ export function UtAuthorshipCard({ authorship, inst }: { authorship: UtAuthorshi
     <CollapsibleCard
       id="ut-authorship"
       title={t("utAuthorship.title")}
+      defaultOpen={false}
       description={
         <p className="text-sm text-[var(--muted-foreground)]">
           {t("utAuthorship.description", { count: authorship.n_ut_works })}

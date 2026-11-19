@@ -506,8 +506,15 @@ function JournalPageInner() {
                     </Link>
                   ))
                 : (allTopics ? topics : topics.slice(0, TOPICS_LIMIT)).map((topic) => (
-                    <Badge key={topic} variant="muted" className="font-normal normal-case">
-                      {topic}
+                    // Pure topic names carry a field code ("01 natural
+                    // sciences"); show the words, keep the code on hover.
+                    <Badge
+                      key={topic}
+                      variant="muted"
+                      className="font-normal normal-case"
+                      title={topic}
+                    >
+                      {topic.replace(/^\d+\s+/, "")}
                     </Badge>
                   ))}
               {(oaTopics.length > 0 ? oaTopics.length : topics.length) > TOPICS_LIMIT && (

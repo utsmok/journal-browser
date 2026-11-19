@@ -17,6 +17,7 @@ export function CollapsibleCard({
   className,
   contentClassName,
   children,
+  defaultOpen = true,
 }: {
   id: string;
   title: React.ReactNode;
@@ -24,8 +25,31 @@ export function CollapsibleCard({
   className?: string;
   contentClassName?: string;
   children: React.ReactNode;
+  /** False for long reference sections (author tables, publication lists)
+   * that sit below the decision content; the section nav still reaches
+   * them because a matching URL hash opens the card. */
+  defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = React.useState(true);
+  const [open, setOpen] = React.useState(defaultOpen);
+  // Deep links (#section-id from the section nav or a shared URL) must not
+  // land on a closed card: open when the hash matches, now and on change.
+  // The section nav also announces jumps as jb-open-section events, because
+  // it scrolls without changing the hash.
+  React.useEffect(() => {
+    const sync = () => {
+      if (window.location.hash === `#${id}`) setOpen(true);
+    };
+    const onJump = (event: Event) => {
+      if ((event as CustomEvent<string>).detail === id) setOpen(true);
+    };
+    sync();
+    window.addEventListener("hashchange", sync);
+    window.addEventListener("jb-open-section", onJump);
+    return () => {
+      window.removeEventListener("hashchange", sync);
+      window.removeEventListener("jb-open-section", onJump);
+    };
+  }, [id]);
   return (
     <Card id={id} className={cn("scroll-mt-16", className)}>
       <CardHeader>

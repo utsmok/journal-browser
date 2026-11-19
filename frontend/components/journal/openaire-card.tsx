@@ -25,6 +25,7 @@ export function OpenaireCard({
     <CollapsibleCard
       id="openaire"
       title={t("openaire.title")}
+      defaultOpen={false}
       description={
         <p className="text-sm text-[var(--muted-foreground)]">{t("openaire.description")}</p>
       }
