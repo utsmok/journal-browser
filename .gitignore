@@ -41,6 +41,9 @@ backups/
 # bind-mounted dir; it may hold secrets). Seeded from
 # backend/settings.yaml.example on first boot.
 backend/state/
+# Old overlay location, still ignored until existing deployments move the
+# file into backend/state/ (see DEPLOYMENT.md, First boot).
+backend/settings.yaml
 
 # Local operator override mirroring the live VM's ports (5434/8001/3001);
 # compose auto-merges this file, so it must not leak into other checkouts
