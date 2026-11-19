@@ -310,11 +310,12 @@ async def ensure_home_institution(session: AsyncSession) -> Institution:
 
 
 async def get_active_institutions(session: AsyncSession) -> list[Institution]:
-    """Hosted institutions (code + active), by code."""
+    """Hosted institutions (code + active), by id (the home institution
+    keeps the first slot)."""
     rows = await session.execute(
         select(Institution)
         .where(Institution.active.is_(True), Institution.code.is_not(None))
-        .order_by(Institution.code)
+        .order_by(Institution.id)
     )
     return list(rows.scalars().all())
 
