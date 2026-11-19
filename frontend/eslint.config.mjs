@@ -1,24 +1,23 @@
-import { dirname } from "path";
-import { fileURLToPath } from "url";
-import { FlatCompat } from "@eslint/eslintrc";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const compat = new FlatCompat({ baseDirectory: __dirname });
+import coreWebVitals from "eslint-config-next/core-web-vitals";
+import nextTypescript from "eslint-config-next/typescript";
 
 const eslintConfig = [
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  ...coreWebVitals,
+  ...nextTypescript,
   {
     rules: {
       "@typescript-eslint/no-unused-vars": [
         "error",
         { varsIgnorePattern: "^_", argsIgnorePattern: "^_" },
       ],
+      // react-hooks v7 (via eslint-config-next 16) added these rules; the
+      // existing effect-based data fetching predates them. Warnings only so
+      // the upgrade does not force a rewrite of fetching hooks.
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/refs": "warn",
+      "react-hooks/incompatible-library": "warn",
+      "react-hooks/static-components": "warn",
     },
-  },
-  {
-    ignores: [".next/**", "node_modules/**", "out/**", "next-env.d.ts"],
   },
 ];
 
