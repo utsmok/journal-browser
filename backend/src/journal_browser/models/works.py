@@ -44,6 +44,13 @@ class Work(Base):
     first_seen_run: Mapped[int] = mapped_column(ForeignKey("harvest_runs.id"), nullable=False)
     last_seen_run: Mapped[int] = mapped_column(ForeignKey("harvest_runs.id"), nullable=False)
     retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Per-work funders-fetch state (harvest.work_funders): when this
+    # work's OpenAlex awards were last fetched. Zero-award works carry no
+    # work_funders row, so without this stamp they would stay eligible
+    # forever and be re-fetched every nightly sweep (migration 0069).
+    funders_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     updated_at: Mapped[datetime] = _tstamp()
 
     __table_args__ = (

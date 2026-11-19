@@ -17,7 +17,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from aletheca import AlethecaClient
-from sqlalchemy import delete, func, select, text, tuple_
+from sqlalchemy import delete, func, or_, select, text, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -101,14 +101,15 @@ async def _prune(session: AsyncSession, works: Sequence[Any], rows: list[dict[st
 
 async def harvest_work_funders(session: AsyncSession, *, ttl_days: int = 30) -> dict[str, Any]:
     """Upsert work_funders from OpenAlex awards for works with a DOI whose
-    funders state is stale. A work counts as fresh when any of its
-    work_funders rows was harvested within ``ttl_days`` (the upsert
-    re-stamps ``harvested_at`` on every fetch); fresh works are skipped
-    instead of re-fetched each run. Works OpenAlex reports without awards
-    carry no rows and so stay eligible until a per-work check-state column
-    exists. Idempotent; stats name the sweep's shape. Fetched work payloads
-    land verbatim in source_records via IngestSession (deduped by content
-    hash, merged W-ids included)."""
+    funders state is stale. A work counts as fresh when its
+    ``works.funders_checked_at`` stamp is within ``ttl_days`` (migration
+    0069); fresh works are skipped instead of re-fetched each run. The
+    stamp lands per fetched chunk — zero-award works included, right
+    after their (empty) upsert/prune — so works OpenAlex reports without
+    awards leave the nightly sweep too. Works whose fetch errored stay
+    unstamped and retry next run. Idempotent; stats name the sweep's
+    shape. Fetched work payloads land verbatim in source_records via
+    IngestSession (deduped by content hash, merged W-ids included)."""
     stats: dict[str, Any] = {
         "works_with_doi": 0,
         "skipped_fresh": 0,
@@ -126,17 +127,10 @@ async def harvest_work_funders(session: AsyncSession, *, ttl_days: int = 30) -> 
         raise RuntimeError("work_funders harvest: zero works with a doi_normalized")
 
     cutoff = datetime.now(UTC) - timedelta(days=max(ttl_days, 0))
-    fresh = (
-        select(WorkFunder.institution_id, WorkFunder.pure_uuid)
-        .where(WorkFunder.harvested_at >= cutoff)
-        .subquery()
-    )
     result = await session.execute(
         select(Work.institution_id, Work.pure_uuid, Work.doi_normalized).where(
             Work.doi_normalized.is_not(None),
-            tuple_(Work.institution_id, Work.pure_uuid).not_in(
-                select(fresh.c.institution_id, fresh.c.pure_uuid)
-            ),
+            or_(Work.funders_checked_at.is_(None), Work.funders_checked_at < cutoff),
         )
     )
     works = result.all()
@@ -189,12 +183,24 @@ async def harvest_work_funders(session: AsyncSession, *, ttl_days: int = 30) -> 
                     rows.extend(work_rows)
 
             # Prune only works whose fetch succeeded: a transient error must
-            # not wipe known-good rows as "stopped resolving".
+            # not wipe known-good rows as "stopped resolving" — and those
+            # works keep no stamp, so the next run retries them. Succeeded
+            # works (zero-award works included) get stamped here and leave
+            # the sweep until the TTL expires.
             prunable = [w for w in batch if w.doi_normalized not in errored]
             try:
                 stats["rows_upserted"] += await _upsert(session, rows)
                 stats["pruned"] += await _prune(session, prunable, rows)
                 stats["matched_with_grants"] += matched
+                await session.execute(
+                    update(Work)
+                    .where(
+                        tuple_(Work.institution_id, Work.pure_uuid).in_(
+                            [(w.institution_id, w.pure_uuid) for w in prunable]
+                        )
+                    )
+                    .values(funders_checked_at=text("now()"))
+                )
                 await ingest.commit()
             except Exception as exc:
                 raise RuntimeError(f"upsert/prune: doi chunk {batch_no}: {exc}") from exc
