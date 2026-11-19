@@ -2,8 +2,8 @@
 
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Github } from "lucide-react";
 
+import { GithubIcon } from "@/components/github-icon";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 
 /** Footer with institution links from settings when scoped to an
@@ -48,7 +48,7 @@ export function SiteFooter() {
                   : { target: "_blank", rel: "noopener noreferrer" })}
                 className="inline-flex items-center gap-1 underline-offset-2 hover:underline"
               >
-                {l.icon === "github" && <Github aria-hidden className="size-4" />}
+                {l.icon === "github" && <GithubIcon className="size-4" />}
                 <span className={l.icon ? "sr-only" : undefined}>{l.label}</span>
               </a>
             </li>
