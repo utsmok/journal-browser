@@ -1,12 +1,18 @@
 # Supercronic crontab for the scheduler service (see docker-compose.yml).
-# Schedules in UTC; overridden at container start from JB_REFRESH_WAVE_CRON
-# and JB_BACKUP_CRON (defaults live here, overrides documented in
-# .env.example). Both jobs log to the container log: docker compose logs
-# scheduler. Changing a schedule needs a scheduler container restart.
+# Schedules in UTC; overridden at container start from JB_SOURCE_WAVE_CRON,
+# JB_REFRESH_WAVE_CRON and JB_BACKUP_CRON (defaults live here, overrides
+# documented in .env.example). Both jobs log to the container log:
+# docker compose logs scheduler. Changing a schedule needs a scheduler
+# container restart.
 #
 # The wave starts just after the 00:00 UTC OpenAlex credit reset; its
 # credit-priced stages self-skip when the budget is already spent.
 30 1 * * * /bin/sh /app/scripts/refresh_wave.sh
+# Weekly source wave: refreshes the primary + reference sources the nightly
+# wave never touches (Pure, deals, OpenAPC, DOAJ, JISC) per institution.
+# Sunday 22:00 UTC, ahead of the Monday nightly wave so both fit in one
+# weekend night; all stages are free routes or self-gating.
+0 22 * * 0 /bin/sh /app/scripts/source_wave.sh
 # Dump (~10 GB on a full instance) after the wave's priced stages are
 # normally done; backup.sh prunes to the newest JB_BACKUP_KEEP archives.
 0 4 * * * /bin/sh /app/scripts/backup.sh

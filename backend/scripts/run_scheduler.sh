@@ -10,6 +10,11 @@ src="${JB_CRONTAB:-/app/scripts/crontab}"
 rendered=/tmp/jb-crontab
 cp "$src" "$rendered"
 
+if [ -n "${JB_SOURCE_WAVE_CRON:-}" ]; then
+    sed -i "s#^.*\( /bin/sh /app/scripts/source_wave.sh\)#${JB_SOURCE_WAVE_CRON}\1#" "$rendered"
+    grep -Fq "${JB_SOURCE_WAVE_CRON} /bin/sh /app/scripts/source_wave.sh" "$rendered" ||
+        { echo "scheduler: failed to apply JB_SOURCE_WAVE_CRON"; exit 1; }
+fi
 if [ -n "${JB_REFRESH_WAVE_CRON:-}" ]; then
     sed -i "s#^.*\( /bin/sh /app/scripts/refresh_wave.sh\)#${JB_REFRESH_WAVE_CRON}\1#" "$rendered"
     grep -Fq "${JB_REFRESH_WAVE_CRON} /bin/sh /app/scripts/refresh_wave.sh" "$rendered" ||
