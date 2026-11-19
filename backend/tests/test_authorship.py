@@ -364,6 +364,7 @@ async def test_gaps_unavailable_without_store(db, institution_factory):
     await db.commit()
     async with async_sessionmaker(db.bind, expire_on_commit=False)() as session:
         inst = await session.get(type(ut), ut.id)
+        assert inst is not None
         out = await authorship.venue_openalex_only(session, inst, issn_l="1234-5678")
         assert out == {"total": 0, "entries_total": 0, "items": [], "available": False}
         unit = await authorship.author_ids_openalex_only(session, inst, ["a-x"])

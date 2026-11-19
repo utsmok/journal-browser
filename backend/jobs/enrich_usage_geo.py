@@ -80,7 +80,8 @@ def lookup_country(reader: maxminddb.Reader, ip: str) -> str | None:
         return None
     country = record.get("country")
     if isinstance(country, dict):
-        return country.get("iso_code")
+        code = country.get("iso_code")
+        return code if isinstance(code, str) else None
     return None
 
 

@@ -54,17 +54,17 @@ async def test_seed_deal_journals_lands_raw_payloads(db):
     )
     from journal_browser.models import Deal, DealJournal, HarvestRun, SourceRecord
 
-    payload = {
-        "id": "https://openalex.org/S1",
-        "issn_l": "0043-1354",
-        "display_name": "Seed J",
-        "apc_prices": [{"currency": "EUR", "price": 2500}],
-    }
-
     class FakeSources:
         async def batch_get(self, issns, field=None):
             # aletheca 0.4 parses batch_get responses into typed models.
-            return {issns[0]: Source(**payload)}
+            return {
+                issns[0]: Source(
+                    id="https://openalex.org/S1",
+                    issn_l="0043-1354",
+                    display_name="Seed J",
+                    apc_prices=[{"currency": "EUR", "price": 2500}],
+                )
+            }
 
     deal = Deal(status="current")
     db.add(deal)
@@ -83,7 +83,7 @@ async def test_seed_deal_journals_lands_raw_payloads(db):
                 SourceRecord.source == "openalex",
                 SourceRecord.entity_type == "sources",
                 # _payload_dict normalizes model dumps to bare OpenAlex ids.
-                SourceRecord.source_pk == openalex_id_to_pk(payload["id"]),
+                SourceRecord.source_pk == openalex_id_to_pk("https://openalex.org/S1"),
             )
         )
     ).scalar_one()

@@ -173,6 +173,7 @@ async def test_migration_prunes_to_active(mig_db):
     maker = async_sessionmaker(engine, expire_on_commit=False)
     async with maker() as session:
         inst = await session.scalar(select(Institution).where(Institution.code == "miga"))
+        assert inst is not None
         await refresh_institution_stats(session, inst)
         await refresh_deal_flags(session, inst.id)
         await session.commit()

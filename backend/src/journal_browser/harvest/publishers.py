@@ -11,11 +11,12 @@ own publisher_name.
 
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from aletheca import AlethecaClient
 from sqlalchemy import delete, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
@@ -135,7 +136,7 @@ async def _fetch(client: AlethecaClient, ids: list[str]) -> dict[str, dict[str, 
 async def backfill_canonical(session: AsyncSession) -> int:
     """Set journals.publisher_canonical from the latest source payload's
     host organization via the lineage cache; returns updated row count."""
-    result = await session.execute(BACKFILL_SQL)
+    result = cast(CursorResult[Any], await session.execute(BACKFILL_SQL))
     return result.rowcount or 0
 
 
@@ -147,11 +148,14 @@ async def harvest_publishers(session: AsyncSession) -> dict[str, int]:
     older than a week, so an upstream response that silently dropped ids
     cannot poison the cache forever."""
     # NULL-lineage rows past a week: drop them so they re-enter todo.
-    stale = await session.execute(
-        delete(OpenalexPublisher).where(
-            OpenalexPublisher.lineage.is_(None),
-            OpenalexPublisher.fetched_at < datetime.now(UTC) - timedelta(days=7),
-        )
+    stale = cast(
+        CursorResult[Any],
+        await session.execute(
+            delete(OpenalexPublisher).where(
+                OpenalexPublisher.lineage.is_(None),
+                OpenalexPublisher.fetched_at < datetime.now(UTC) - timedelta(days=7),
+            )
+        ),
     )
     retried = stale.rowcount or 0
     hosts = await distinct_host_orgs(session)
