@@ -15,7 +15,6 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.db import get_session
-from journal_browser.main import app
 from journal_browser.models import Base, Journal
 
 # Admin ops (CREATE/DROP DATABASE) go through the always-present maintenance
@@ -159,6 +158,11 @@ def pair_rows(*works):
 
 @pytest.fixture
 async def client(db_engine):
+    os.environ.setdefault(
+        "JB_SKIP_EMBEDDING_WARMUP", "1"
+    )  # offline tests: the ONNX model must never load at import time
+    from journal_browser.main import app
+
     maker = async_sessionmaker(db_engine, expire_on_commit=False)
 
     async def _override():
