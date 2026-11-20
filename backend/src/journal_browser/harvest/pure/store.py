@@ -2,7 +2,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import case, delete, select
+from sqlalchemy import case, delete, literal_column, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -76,12 +76,16 @@ async def upsert_work(
     # W-ids of the DOI. A Pure re-harvest must not downgrade it, so on
     # conflict keep the stored value whenever an OpenAlex row carries a
     # color for this DOI; Pure rights only fill works OpenAlex does not
-    # know (owner decision 2026-11-19).
+    # know (owner decision 2026-11-19). The EXISTS must correlate to the
+    # row being upserted: `excluded` is the INSERT's excluded pseudo-table,
+    # which SQLAlchemy can only render as a literal column reference here
+    # (stmt.excluded would compile as a `works AS excluded` alias and widen
+    # the match institution-wide).
     canon_keep = (
         select(OpenalexWork.w_id)
         .where(
             OpenalexWork.institution_id == institution_id,
-            OpenalexWork.doi_normalized == stmt.excluded.doi_normalized,
+            OpenalexWork.doi_normalized == literal_column("excluded.doi_normalized"),
             OpenalexWork.oa_status.is_not(None),
         )
         .exists()

@@ -1260,6 +1260,73 @@ async def test_pure_fills_color_without_openalex_row(db, institution_factory):
     assert stored == {"u2": "green"}
 
 
+@requires_db
+async def test_pure_canon_rule_is_per_doi(db, institution_factory):
+    """The keep-canon rule must correlate on the row's own DOI, not apply
+    institution-wide: work A (OpenAlex colour) keeps it while work B (no
+    OpenAlex row) takes the Pure rights upgrade in the same institution."""
+    from journal_browser.harvest.pure.store import upsert_work
+
+    ut = await institution_factory(code="ut")
+    run = await _run(db, "pure", "work", ut)
+    await upsert_work(
+        db,
+        _pure_payload("a1", "10.1000/aaa", "closedAccess"),
+        institution_id=ut.id,
+        year=2024,
+        run_id=run.id,
+    )
+    await upsert_work(
+        db,
+        _pure_payload("b1", "10.1000/bbb", "closedAccess"),
+        institution_id=ut.id,
+        year=2024,
+        run_id=run.id,
+    )
+    await db.commit()
+
+    # Only work A is DOI-matched in OpenAlex; the canon sync upgraded it.
+    await db.execute(
+        update(Work)
+        .where(Work.institution_id == ut.id, Work.pure_uuid == "a1")
+        .values(oa_status="gold")
+    )
+    db.add(
+        OpenalexWork(
+            institution_id=ut.id, w_id="W1", doi_normalized="10.1000/aaa", oa_status="gold"
+        )
+    )
+    await db.commit()
+
+    # One re-harvest sees both records: A's Pure rights are still closed
+    # (must keep the canon gold), B's rights upgrade to green (no canon
+    # row, so Pure is authoritative — the institution-wide bug kept it
+    # closed because A matched).
+    await upsert_work(
+        db,
+        _pure_payload("a1", "10.1000/aaa", "closedAccess"),
+        institution_id=ut.id,
+        year=2024,
+        run_id=run.id,
+    )
+    await upsert_work(
+        db,
+        _pure_payload("b1", "10.1000/bbb", "openAccess"),
+        institution_id=ut.id,
+        year=2024,
+        run_id=run.id,
+    )
+    await db.commit()
+    stored = dict(
+        (
+            await db.execute(
+                select(Work.pure_uuid, Work.oa_status).where(Work.institution_id == ut.id)
+            )
+        ).all()
+    )
+    assert stored == {"a1": "gold", "b1": "green"}
+
+
 # ── works.funders_checked_at sweep gate (folded from
 #    test_correct_funders_checked_at.py) ──────────────────────────────────
 
