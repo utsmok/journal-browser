@@ -540,3 +540,46 @@ async def test_manual_coverage_freezes_pattern_derivation(db):
         .all()
     )
     assert {r.issn for r in rows} == {"0001-0001", "0009-0009"}
+
+
+@requires_db
+async def test_pattern_deal_larger_than_bind_cap(db):
+    """A publisher corpus bigger than asyncpg's 32,767-bind cap (5 params
+    per row -> >6.5k journals) still derives: the INSERT ... SELECT never
+    sends the ISSN set as statement arguments."""
+    from sqlalchemy import insert
+
+    db.add(
+        Institution(
+            name="University of Twente", ror="https://ror.org/006hf6230", code="ut", active=True
+        )
+    )
+    deal_id = await _pattern_deal(db)
+    n = 7_000
+    await db.execute(
+        insert(Journal).values(
+            [
+                {
+                    "issn_l": f"{1000 + i:04d}-{i:04d}",
+                    "title": f"ACM Journal {i}",
+                    "publisher_name": ACM,
+                }
+                for i in range(n)
+            ]
+        )
+    )
+    await db.commit()
+
+    stats = await derive_nl_deal_coverage(db)
+    await db.commit()
+    assert stats["covered"] == 1
+    assert stats["pattern_journals"] == n
+
+    # Idempotent rerun joins nothing and counts nothing.
+    stats2 = await derive_nl_deal_coverage(db)
+    await db.commit()
+    assert stats2["pattern_journals"] == 0 and stats2["covered"] == 0
+    count = await db.scalar(
+        select(func.count()).select_from(DealJournal).where(DealJournal.deal_id == deal_id)
+    )
+    assert count == n

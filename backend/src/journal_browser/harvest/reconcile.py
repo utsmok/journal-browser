@@ -13,7 +13,7 @@ import re
 from datetime import UTC, datetime
 
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import func, or_, select, text, update
+from sqlalchemy import func, literal, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -265,29 +265,25 @@ async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
             deal.needs_curation_reason = None
         if curated is not None or not patterns:
             continue
-        journals = (
-            await session.execute(
-                select(Journal.issn_l, Journal.title).where(
-                    or_(*[Journal.publisher_name.ilike(p) for p in patterns]),
-                    Journal.issn_l.is_not(None),
-                )
-            )
-        ).all()
-        if not journals:
-            continue
+        # INSERT ... SELECT: the matching ISSN set never leaves SQL, so a
+        # publisher corpus larger than asyncpg's 32,767-bind cap (deal 2858
+        # carries >7k journals) cannot blow up a multi-row VALUES insert.
+        # on_conflict_do_nothing keeps the run idempotent and rowcount
+        # counts only newly joined rows.
         result = await session.execute(
             pg_insert(DealJournal)
-            .values(
-                [
-                    {
-                        "deal_id": deal.id,
-                        "issn": issn_l,
-                        "issn_l": issn_l,
-                        "journal_name": title,
-                        "source": "publisher-pattern",
-                    }
-                    for issn_l, title in journals
-                ]
+            .from_select(
+                ["deal_id", "issn", "issn_l", "journal_name", "source"],
+                select(
+                    literal(deal.id),
+                    Journal.issn_l,
+                    Journal.issn_l,
+                    Journal.title,
+                    literal("publisher-pattern"),
+                ).where(
+                    or_(*[Journal.publisher_name.ilike(p) for p in patterns]),
+                    Journal.issn_l.is_not(None),
+                ),
             )
             .on_conflict_do_nothing(
                 index_elements=["deal_id", "issn"],
