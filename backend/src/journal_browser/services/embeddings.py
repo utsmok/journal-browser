@@ -61,17 +61,20 @@ def embed_text(
     return " | ".join(parts) or None
 
 
-VECTOR_WARM_SEEDS = 40
-VECTOR_WARM_EF_SEARCH = 80
+VECTOR_WARM_SEEDS = 120
+VECTOR_WARM_EF_SEARCH = 200
 
 
 async def warm_journal_vector_index(session: AsyncSession, seeds: int = VECTOR_WARM_SEEDS) -> int:
     """Walk the journals HNSW graph at boot so early author pages don't
     pay cold random reads on the ~350 MB vector index. Seed vectors are
     sampled across the store (scattered table pages, cheap), each driving
-    one cosine search with the same ef_search the similar sections use;
-    everything runs in one transaction so the SET LOCAL holds. Returns
-    the number of searches run (0 = nothing embedded yet)."""
+    one cosine search with the same ef_search the search page uses; the
+    wider graph walk pages most of the index into shared buffers, so the
+    first real query costs ~0.1-0.6 s instead of tens of seconds of cold
+    random reads. Everything runs in one transaction so the SET LOCAL
+    holds. Returns the number of searches run (0 = nothing embedded
+    yet)."""
     seed_rows = (
         (
             await session.execute(
@@ -99,7 +102,7 @@ async def warm_journal_vector_index(session: AsyncSession, seeds: int = VECTOR_W
             select(Journal.issn_l)
             .where(Journal.embedding.is_not(None))
             .order_by(Journal.embedding.cosine_distance(vec))
-            .limit(8)
+            .limit(24)
         )
         ran += 1
     return ran

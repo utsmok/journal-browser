@@ -32,7 +32,16 @@ from ..models import (
     Work,
 )
 from .authorship import aids_gap_predicate, author_ids_openalex_only, chapter_rollup
-from .cache import SNAPSHOT_CACHE, SNAPSHOT_TTL, cache_get, cache_put
+from .cache import (
+    SNAPSHOT_CACHE,
+    SNAPSHOT_TTL,
+    SWR_CACHE,
+    cache_get,
+    cache_put,
+    swr_get,
+    swr_put,
+    swr_schedule,
+)
 from .search import _oa_type
 from .works_query import (
     WORKS_STRATA,
@@ -523,34 +532,69 @@ async def orgunit_detail(
     deal-usage work set and the CRIS-gap card (same scoping as the groups
     list); per-year rows (works_by_year) keep the data window, the unit's
     APC rollups stay snapshot, and the deal-usage euro follows the
-    narrowed work set (journal attributes stay unfiltered). `sort` orders
-    the member authors card: 'share' ranks by the diamond/gold OA share
-    (default; authors below AUTHOR_SHARE_MIN_WORKS counted works rank
-    last, share None), 'works' by works count; AUTHOR_CAP cuts after the
-    chosen ordering."""
+    narrowed work set (journal attributes stay unfiltered). Rebuilding
+    per-request costs several edge aggregates (~7 s live for a faculty
+    under harvest load). Served stale-while-revalidate: the bundle is
+    keyed on level + name + year range + sort, and a harvest epoch bump
+    serves the previous epoch's bundle while a background task rebuilds
+    with a fresh session — visitors never pay a rebuild they did not
+    cause. Unknown units are not cached.
+
+    `sort` orders the member authors card: 'share' ranks by the
+    diamond/gold OA share (default; authors below AUTHOR_SHARE_MIN_WORKS
+    counted works rank last, share None), 'works' by works count;
+    AUTHOR_CAP cuts after the chosen ordering."""
+    iid = institution.id
+    swr_key = ("unit_detail", iid, level, name, year_range, sort)
+    epoch = await cache_epoch(session)
+    fresh, bundle = swr_get(SWR_CACHE, swr_key, epoch)
+    if fresh:
+        return bundle
+    if bundle is not None:
+        # Stale: serve it, rebuild in the background on a fresh session
+        # (this request's session closes when the response is sent).
+        swr_schedule(SWR_CACHE, swr_key, _unit_bundle_factory(iid, level, name, year_range, sort))
+        return bundle
+    epoch, bundle = await _build_unit_bundle(
+        session, institution, level, name, year_range=year_range, sort=sort
+    )
+    if bundle is None:
+        return None
+    swr_put(SWR_CACHE, swr_key, epoch, bundle)
+    return bundle
+
+
+def _unit_bundle_factory(iid, level, name, year_range, sort):
+    async def _factory():
+        from sqlalchemy.ext.asyncio import async_sessionmaker
+
+        from ..db import get_engine
+
+        async with async_sessionmaker(get_engine(), expire_on_commit=False)() as session:
+            inst = (await session.scalars(select(Institution).where(Institution.id == iid))).one()
+            bundle = await _build_unit_bundle(
+                session, inst, level, name, year_range=year_range, sort=sort
+            )
+            return await cache_epoch(session), bundle
+
+    return _factory
+
+
+async def _build_unit_bundle(
+    session: AsyncSession,
+    institution: Institution,
+    level: str,
+    name: str,
+    *,
+    year_range: tuple[int, int] | None,
+    sort: str,
+) -> tuple[Any, dict[str, Any]]:
+    """The uncached unit bundle; returns (epoch, bundle)."""
     iid = institution.id
     require_confirmed = institution.require_confirmed_affiliation
     unit = (await _snapshot(session, institution)).get(level, {}).get(name)
     if unit is None:
-        return None
-    # The full bundle is read-mostly (unit roster, gap card, deal usage)
-    # and costs several edge aggregates per request (~7 s live for a
-    # faculty). The harvest epoch in the key invalidates on every
-    # harvest; the TTL only bounds memory (units per institution are
-    # few). An active year range, level, name and sort fully identify
-    # the response.
-    detail_key = (
-        "unit_detail",
-        iid,
-        await cache_epoch(session),
-        level,
-        name,
-        year_range,
-        sort,
-    )
-    hit = cache_get(SNAPSHOT_CACHE, detail_key, SNAPSHOT_TTL)
-    if hit is not None:
-        return hit
+        return await cache_epoch(session), None
     if year_range is not None:
         # Works-derived header counts recomputed inside the range (the
         # list's merge, applied to the one unit); attribute columns and
@@ -865,5 +909,4 @@ async def orgunit_detail(
             {"label": r.label, "n_works": int(r.n_works), "euro": float(r.euro)} for r in usage_rows
         ],
     }
-    cache_put(SNAPSHOT_CACHE, detail_key, bundle)
-    return bundle
+    return await cache_epoch(session), bundle

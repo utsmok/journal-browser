@@ -43,7 +43,16 @@ from ..models import (
     Publisher,
 )
 from .authorship import chapter_rollup, venue_authorship, venue_gap_predicate, venue_openalex_only
-from .cache import SNAPSHOT_CACHE, SNAPSHOT_TTL, cache_get, cache_put
+from .cache import (
+    SNAPSHOT_CACHE,
+    SNAPSHOT_TTL,
+    SWR_CACHE,
+    cache_get,
+    cache_put,
+    swr_get,
+    swr_put,
+    swr_schedule,
+)
 from .deal_coverage import deal_institution_join, dj_scope
 from .facets import passes, publisher_facets, publisher_predicates, publisher_topic_facet
 from .search import APC_SHOWN, OA_TYPES, _oa_type, _order, attach_apc_display, base_query
@@ -497,7 +506,53 @@ async def publisher_detail(
     An active publication-year range serves the year-scoped snapshot
     (search convention): the header's works sum and the journal table's
     works column become the year-scoped pure_canon stats sums, while the
-    roster membership and every journal attribute stay unfiltered."""
+    roster membership and every journal attribute stay unfiltered.
+
+    Like the unit bundle, the page is served stale-while-revalidate: a
+    harvest epoch bump serves the previous epoch's bundle while a
+    background task rebuilds with a fresh session, instead of every
+    visitor paying the multi-second cold build right after each wave."""
+    iid = institution.id
+    swr_key = ("publisher_detail", iid, name, years, tuple(parts or ()))
+    epoch = await cache_epoch(session)
+    fresh, bundle = swr_get(SWR_CACHE, swr_key, epoch)
+    if fresh:
+        return bundle
+    if bundle is not None:
+        swr_schedule(SWR_CACHE, swr_key, _publisher_bundle_factory(iid, name, years, parts))
+        return bundle
+    epoch, bundle = await _build_publisher_bundle(
+        session, institution, name, years=years, parts=parts
+    )
+    if bundle is None:
+        return None
+    swr_put(SWR_CACHE, swr_key, epoch, bundle)
+    return bundle
+
+
+def _publisher_bundle_factory(iid, name, years, parts):
+    async def _factory():
+        from sqlalchemy.ext.asyncio import async_sessionmaker
+
+        from ..db import get_engine
+
+        async with async_sessionmaker(get_engine(), expire_on_commit=False)() as session:
+            inst = (await session.scalars(select(Institution).where(Institution.id == iid))).one()
+            bundle = await _build_publisher_bundle(session, inst, name, years=years, parts=parts)
+            return await cache_epoch(session), bundle
+
+    return _factory
+
+
+async def _build_publisher_bundle(
+    session: AsyncSession,
+    institution: Institution,
+    name: str,
+    *,
+    years: tuple[int, int] | None,
+    parts: list[str] | None,
+) -> tuple[Any, dict[str, Any] | None]:
+    """The uncached publisher bundle; returns (epoch, bundle | None)."""
     iid = institution.id
     snapshot = await _snapshot(session, iid, years)
     pub = snapshot.get(name)
@@ -510,7 +565,7 @@ async def publisher_detail(
                 name, pub = group_name, p
                 break
         if pub is None:
-            return None
+            return await cache_epoch(session), None
 
     # External registry refs for the detail header (Open Access NL profile
     # link); a missing Publishers row just leaves the slug None.
@@ -712,7 +767,7 @@ async def publisher_detail(
             }
         )
 
-    return {
+    return await cache_epoch(session), {
         "publisher": _item(
             pub,
             pub.topics[:TOPICS_PER_DETAIL],
