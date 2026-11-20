@@ -591,6 +591,48 @@ async def test_reconcile_leaves_ambiguous_forks_flagged(db):
     assert await db.scalar(select(func.count()).select_from(Deal)) == 3
 
 
+@requires_db
+async def test_reconcile_retires_stale_archive_flags(db):
+    """Archive rows an earlier, wider pass auto-flagged are retired (only
+    that exact auto reason); other reasons and admin-overridden rows stay."""
+    pub = await _publisher(db, "Karger", slug="karger")
+    stale = await _deal(db, pub.id, openaccess_nl_url="https://oanl/karger-2019-2023")
+    stale.status = "archive"
+    stale.needs_curation = True
+    stale.needs_curation_reason = (
+        "no matching JCT agreement (local or non-Plan-S deal?)"  # _NO_JCT_REASON
+    )
+    other = await _deal(db, pub.id, openaccess_nl_url="https://oanl/karger-2020-2024")
+    other.status = "archive"
+    other.needs_curation = True
+    other.needs_curation_reason = "JCT data CSV is a duplicate of kar2026caul"
+    overridden = await _deal(db, pub.id, openaccess_nl_url="https://oanl/karger-2021-2025")
+    overridden.status = "archive"
+    overridden.needs_curation = True
+    overridden.needs_curation_reason = "no matching JCT agreement (local or non-Plan-S deal?)"
+    db.add(
+        ManualOverride(
+            table_name="deals",
+            row_key=str(overridden.id),
+            field="needs_curation",
+            value=False,
+            rationale="checked: archive, no action",
+            set_by="sam",
+        )
+    )
+    await db.commit()
+
+    stats = await reconcile_deals(db)
+    await db.commit()
+    assert stats["retired_archive_flags"] == 1
+    await db.refresh(stale)
+    assert stale.needs_curation is False and stale.needs_curation_reason is None
+    await db.refresh(other)
+    assert other.needs_curation is True  # a different reason stands
+    await db.refresh(overridden)
+    assert overridden.needs_curation is True  # admin-owned, untouched
+
+
 # ── NL deal coverage re-derive (folded from test_harvest2_reconcile_rederive.py)
 
 

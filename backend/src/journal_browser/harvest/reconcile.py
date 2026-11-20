@@ -98,6 +98,9 @@ def _canonical_name(code: str | None, publisher_name: str | None) -> str | None:
 _DUTCH_CONSORTIA = {"ukb", "surf", "nl"}
 _ESAC_SUFFIX_RE = re.compile(r"^[A-Za-z]+(\d{4})([A-Za-z]*)$")
 
+#: The auto-set curation marker for openaccess.nl deals with no JCT sheet.
+_NO_JCT_REASON = "no matching JCT agreement (local or non-Plan-S deal?)"
+
 
 def _dutch_esac(esac_id: str | None) -> bool:
     """True for national (Dutch-consortium) agreements: the only JCT
@@ -535,13 +538,30 @@ async def reconcile_deals(session: AsyncSession) -> dict[str, int]:
         if deal.id in protected:
             continue
         deal.needs_curation = True
-        deal.needs_curation_reason = "no matching JCT agreement (local or non-Plan-S deal?)"
+        deal.needs_curation_reason = _NO_JCT_REASON
+    # Rows an earlier, wider pass flagged despite being archive history:
+    # retire the auto-set flag (only that exact reason, never a row the
+    # admin overrode or a different reason stands on).
+    stale = [
+        d
+        for d in oanl_deals
+        if d.status == "archive" and d.needs_curation and d.needs_curation_reason == _NO_JCT_REASON
+    ]
+    protected = await _override_protected(session, [d.id for d in stale])
+    retired_archive_flags = 0
+    for deal in stale:
+        if deal.id in protected:
+            continue
+        deal.needs_curation = False
+        deal.needs_curation_reason = None
+        retired_archive_flags += 1
 
     stats = {
         "matched": matched,
         "unmatched_jct": unmatched_jct,
         "unmatched_oanl": len([d for d in candidates if d.id not in protected]),
         "merged_oanl": merged_oanl,
+        "retired_archive_flags": retired_archive_flags,
     }
     # Dutch-consortium merges whose member list omits institutions (UKB
     # joint deals do not always enumerate members): flag for review so
