@@ -217,6 +217,14 @@ async def _store_agreement(
     fetched_at: str,
 ) -> None:
     code, start_year, consortium = split_esac_id(agreement["esac_id"])
+    # Refresh this source's provenance entries; entries from other sources
+    # (owner curation docs, openaccess.nl merges) are history and stay.
+    existing = await session.scalar(select(Deal).where(Deal.esac_id == agreement["esac_id"]))
+    prior = [
+        entry
+        for entry in ((existing.provenance or []) if existing is not None else [])
+        if not (isinstance(entry, dict) and entry.get("source") == "jct")
+    ]
     values = {
         "publisher_id": await _upsert_publisher(session, code) if code else None,
         "esac_id": agreement["esac_id"],
@@ -228,6 +236,7 @@ async def _store_agreement(
         "jct_data_url": agreement["data_url"],
         "last_reviewed": _parse_date(agreement["last_reviewed"]),
         "provenance": [
+            *prior,
             {"source": "jct", "url": INDEX_URL, "fetched_at": fetched_at},
             {"source": "jct", "url": agreement["data_url"], "fetched_at": fetched_at},
         ],

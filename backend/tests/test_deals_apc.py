@@ -528,6 +528,24 @@ async def test_jct_store_agreement_and_idempotency(db):
     assert await db.scalar(select(func.count()).select_from(Institution)) == 2
     assert await db.scalar(select(func.count()).select_from(DealInstitution)) == 2
 
+    # A rerun refreshes the jct provenance entries and keeps entries from
+    # other sources (owner curation pointers survive a JCT refresh).
+    refreshed = "2026-11-20T00:00:00+00:00"
+    deal.provenance = [
+        {"source": "owner_curation", "date": "2026-10-22"},
+        {"source": "jct", "url": INDEX_URL, "fetched_at": fetched},
+        {"source": "jct", "url": agreement["data_url"], "fetched_at": fetched},
+    ]
+    await db.flush()
+    await _store_agreement(db, agreement, journals, institutions, refreshed)
+    await db.commit()
+    await db.refresh(deal)
+    assert deal.provenance == [
+        {"source": "owner_curation", "date": "2026-10-22"},
+        {"source": "jct", "url": INDEX_URL, "fetched_at": refreshed},
+        {"source": "jct", "url": agreement["data_url"], "fetched_at": refreshed},
+    ]
+
 
 # ── Coverage parity + cap-reached flags ────────────────────────────────────
 
