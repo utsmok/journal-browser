@@ -49,13 +49,6 @@ backend/settings.yaml
 # compose auto-merges this file, so it must not leak into other checkouts
 compose.override.yml
 
-# Wiki-video generation workspace: TTS models, narration audio, node
-# modules, and intermediate renders. Regenerable.
-.factory/video/
-
-# QA skill install questionnaire state; regenerates per machine
-.factory/skills/qa/.install-progress.yaml
-
 # Impeccable design-review artifacts
 .impeccable/
 

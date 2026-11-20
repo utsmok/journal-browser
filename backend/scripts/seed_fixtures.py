@@ -10,8 +10,7 @@ Usage (from backend/):
 The `embedding` vectors are synthetic 384-dim unit vectors. They make
 journal-to-journal similarity meaningful (fixture-to-fixture cosine), but
 they do NOT encode topics for the real query-embedding model, so semantic
-search rankings against them are not assertable -- see
-.factory/skills/qa-backend/SKILL.md flow 6.
+search rankings against them are not assertable.
 """
 
 import asyncio
