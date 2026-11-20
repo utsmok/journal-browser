@@ -60,6 +60,7 @@ in citation links on journal pages. Set it in `.env` before the first
 | `JB_PURE_OAI_BASE_URL` | Your repository's anonymous OAI-PMH endpoint (works data) | `https://ris.utwente.nl/ws/oai` |
 | `JB_OPENAIRE_ORG_ID` | OpenAIRE organization id (`openorgs____::...`). **Required**; unset = the OpenAIRE harvest is off. Not derivable from the ROR — look it up at `api.openaire.eu/graph/v1/organizations?legalName=<name>` | unset |
 | `OPENALEX_API_KEY` | Free OpenAlex key. Listing/cursor sweeps (institution stats, the author sweep, `--sweep-all`) refuse to start without it — keyless requests serve only the first cursor page | unset |
+| `JB_OPENALEX_RESERVE_USD` | Daily-budget floor in USD: OpenAlex stages stop cleanly, with a stats note, once the remaining budget falls below it (see `harvest.common.openalex_budget_ok`) | `0.25` |
 | `JB_JISC_API_KEY` | Jisc Open Policy Finder API key; without it the JISC sweep skips cleanly | unset |
 | `JB_CONTACT_EMAIL` | Polite-pool identification sent to OpenAlex. Set it in `.env`; an empty value sends anonymous requests | empty (the live deployment sets `s.f.abma@utwente.nl`) |
 | `JB_DATA_WINDOW_START` / `JB_DATA_WINDOW_END` | Inclusive publication-year window for the default institution's harvests. `END=0` = open (to now). A smaller window makes a deployment lighter (Groningen runs 2025/2025; additional institutions carry their window on their row) | `2020` / `0` |
@@ -144,7 +145,7 @@ wave (see "Daily refresh wave" below) repeats a subset of these stages.
 
 | Job | Source | Produces |
 |---|---|---|
-| `harvest_journals` | OpenAlex | The journal universe (~177k rows), ISSNs, topics, OA status. Default route is credit-free (deal seed + singleton delta for missing journals); `--refresh` re-fetches every stored journal via free singleton GETs to pick up upstream corrections (counts fields), `--sweep-all` costs credits and is a rare manual operation that requires an API key |
+| `harvest_journals` | OpenAlex | The journal universe (~177k rows), ISSNs, topics, OA status. Default route is credit-free (deal seed + singleton delta for missing journals; singleton GETs bill $0); `--refresh` re-fetches every stored journal via $0 singleton GETs to pick up upstream corrections (counts fields), `--sweep-all` costs credits ($0.0001 per page) and is a rare manual operation that requires an API key |
 | `harvest_publishers` | OpenAlex | Publisher lineage: `journals.publisher_canonical` groups sub-brands (e.g. IEEE Communications Society) under their root publisher. Ids absent from a response cache as NULL-lineage rows and are retried after a week. Credit-priced only on a fresh install |
 | `scrape_openaccess_nl` | openaccess.nl | Deal pages: narrative, conditions, participation text |
 | `ingest_jct` | cOAlition S JCT public dump | ESAC agreements + journal lists |
@@ -161,14 +162,14 @@ wave (see "Daily refresh wave" below) repeats a subset of these stages.
 | `enrich_works` | OpenAlex + Crossref | DOIs, types, citation counts per work; the Crossref rung lands the payloads the author ORCID corroboration reads |
 | `harvest_openaire` | OpenAIRE Graph | Institution works matched by DOI |
 | `derive_openaire_facts` | stored OpenAIRE products | Per-work facts row: diamond flag, usage, FOS, projects |
-| `harvest_stats` | all of the above | Per-journal, per-year statistics. Credit-priced works filter; self-skips at a zero budget |
+| `harvest_stats` | all of the above | Per-journal, per-year statistics. Credit-priced works filter ($0.0001 per page); stops cleanly below the budget reserve |
 | `build_openalex_works` | stored works-stats payloads | The normalized OpenAlex works store behind the works tab and the standalone author path |
-| `backfill_parts` | OpenAlex (free single-entity GETs) | Part-of chips for Graph v12 payloads; resumable and idempotent |
+| `backfill_parts` | OpenAlex ($0 single-entity GETs) | Part-of chips for Graph v12 payloads; resumable and idempotent |
 | `backfill_pure_authors` | stored CERIF publication records | The `pure-authors` step: full-replaces each work's pure authorship edges (`work_pure_authors`) from the latest stored record; runs after `openalex-works`, before author-id resolution, so it also covers works whose CERIF record predated author extraction |
-| `resolve_author_ids` | OpenAlex works listings + free singleton GETs | Author identity resolution (the cascade); budget-capped, self-skips at a zero budget, needs an API key for the cursor sweep |
+| `resolve_author_ids` | OpenAlex works listings + $0 singleton GETs | Author identity resolution (the cascade); budget-capped: stops below the reserve, needs an API key for the works listings |
 | `ingest_authors` | local stores by default (`author_source=local`; the `JB_UT_METADATA_DSN` canonical-works DB is an opt-in accelerator) | Per-institution author roster: identity, faculty/research group/org derivation, work edges; also fills `crossref_orcid` from the stored Crossref payloads — run `enrich_works` first for maximum coverage |
-| `harvest_work_funders` | OpenAlex (free single-entity GETs per DOI, staleness-gated: only works whose last fetch is older than 30 days) | `work_funders`: grant lines per work |
-| `harvest_openalex_funders` | OpenAlex (free singleton GETs) | `openalex_funders` gap-filled from works-linked funder ids |
+| `harvest_work_funders` | OpenAlex ($0 single-entity GETs per DOI, staleness-gated: only works whose last fetch is older than 30 days) | `work_funders`: grant lines per work |
+| `harvest_openalex_funders` | OpenAlex ($0 singleton GETs) | `openalex_funders` gap-filled from works-linked funder ids |
 | `harvest_openaire_funders` | OpenAIRE Graph | Curated funder canon pull |
 | `harvest_people_utwente` | people.utwente.nl directory (its own JSON-RPC search endpoint) | Per-author people profile: portrait, canonical name, email, org list, org edges resolved onto `pure_orgs` (`people_utwente_person_orgs`, gap-fill evidence like `pure_person_orgs`), and the profile's research.utwente.nl portal link as the match oracle. Runs 20 author pipelines in flight (`--concurrency`), so the confirmed roster takes roughly 30-45 minutes; external — keep it out of the daily wave. Outcomes are stamped in batches of 50, so re-runs only see new authors (`--retry-missed` / `--refresh` re-open old ones) |
 | `embed_journals` | stats-built text | Journal embeddings for similar-journals |
@@ -306,7 +307,14 @@ bash scripts/refresh_wave.sh
 ```
 
 The script prints the remaining daily credit budget before the first stage,
-because the credit-priced stages must run while that budget is fresh. On
+because the credit-priced stages must run while that budget is fresh. OpenAlex
+bills per request against the free key's $1/day budget, resetting at 00:00 UTC.
+Measured 2026-11-20 against the live key: singleton GETs (`/works/{id}`) bill
+$0, a list or filter page bills $0.0001, a search bills $0.001. Only list and
+search stages draw the budget. Every OpenAlex stage also checks
+`openalex_budget_ok()` before each chunk and stops cleanly, with a stats note,
+once the remaining budget falls below `JB_OPENALEX_RESERVE_USD` (default
+0.25). On
 2026-11-07 a manually ordered wave spent about seven hours of the fresh
 budget on the then credit-priced oa colors step. The funder harvest after it
 crashed five seconds in, and the wave's exit gate stopped the remaining
@@ -316,27 +324,28 @@ and `--from` resumes past the stages that already completed.
 
 The stages, in order:
 
-1. `harvest_stats`. It touches credit-priced OpenAlex works filters, runs
-   at the top while the budget is fresh, and checks
-   `openalex_credits_remaining()` before spending credits: at a zero
-   budget it skips cleanly and notes the skip in its stats output.
+1. `harvest_stats`. It touches credit-priced OpenAlex works filters
+   ($0.0001 per page), runs at the top while the budget is fresh, and
+   checks `openalex_budget_ok()` before each page: below the
+   `JB_OPENALEX_RESERVE_USD` reserve (default 0.25) it stops cleanly and
+   notes the stop in its stats output.
 2. `build_openalex_works` and `backfill_parts`. The store rebuild derives
    from locally stored data, and `backfill_parts` follows it in the same
-   slot: free single-entity GETs that fill the part-of chips for OpenAlex
+   slot: $0 single-entity GETs that fill the part-of chips for OpenAlex
    Graph v12 payloads, resumable and idempotent.
 3. `backfill_pure_authors`, then author resolution:
    `resolve_author_ids` + `ingest_authors`. The resolver reads
    `openalex_work_authors` and `work_pure_authors`, which the store
    rebuild and the pure-authors backfill rewrite — running resolution
    after them follows the bootstrap DAG instead of lagging one wave.
-   `resolve_author_ids` also self-gates on the credit budget like
+   `resolve_author_ids` also gates on the budget reserve like
    `harvest_stats`. `ingest_authors` is a local projection right after
    identity resolution: it publishes confirmed author identities to the
    served roster and makes no API calls. `harvest_oa_colors` closes this
    block: a local read of `works.oa_status`, which the store rebuild
    re-synced in stage 2.
 4. The funder backfills. `harvest_work_funders` fetches works by DOI as
-   free single-entity GETs and commits per chunk, so an interrupted run
+   $0 single-entity GETs and commits per chunk, so an interrupted run
    resumes as a rerun. It only re-fetches a work whose last funders fetch
    is older than 30 days (`--ttl-days` / `JB_WORK_FUNDERS_TTL_DAYS`):
    `work_funders.harvested_at` re-stamps on every fetch, so fresh works
@@ -345,7 +354,8 @@ The stages, in order:
    funder payloads only for ids the table lacks. `harvest_openaire_funders`
    pulls the curated funder canon from the OpenAIRE graph.
 5. `harvest_publishers`. It resolves journal host organizations in
-   credit-priced 50-id pipe-filter batches. Results cache in
+   credit-priced 50-id pipe-filter batches ($0.0001 per page), gated by
+   the budget reserve. Results cache in
    `openalex_publishers`, so only a fresh install pays for the full
    ~16k-host sweep once.
 6. `embed_journals` last. It re-embeds journals from the stats-built text,
@@ -380,8 +390,8 @@ institution. On a multi-institution deployment, run the first pair with
 
 ## Weekly source wave
 
-The nightly wave only derives from stored data plus free OpenAlex
-endpoints. The sources that create works and coverage — Pure, the deal
+The nightly wave only derives from stored data plus $0 OpenAlex
+singletons. The sources that create works and coverage — Pure, the deal
 sources, OpenAPC, DOAJ, JISC — would otherwise run at bootstrap only, so a
 filled database freezes in steady state.
 `backend/scripts/source_wave.sh` refreshes them once a week, per active
@@ -411,9 +421,9 @@ names itself and stops the wave, like the nightly wave. The stages:
 Only free routes run here by design. The Pure sweep reads the institution's
 OAI endpoint, the deal sources are two scrapes plus local ingests, DOAJ and
 OpenAPC are CSV downloads, and JISC skips cleanly without
-`JB_JISC_API_KEY`. The one OpenAlex consumer, `harvest_stats`, self-gates
-on `openalex_credits_remaining()` and skips at a spent budget. Enrichment
-and the OpenAIRE match use free single-entity GETs.
+`JB_JISC_API_KEY`. The one OpenAlex consumer, `harvest_stats`, gates on
+`openalex_budget_ok()` and stops below the budget reserve. Enrichment
+and the OpenAIRE match use $0 single-entity GETs.
 
 The `scheduler` service runs the wave Sunday 22:00 UTC (override with
 `JB_SOURCE_WAVE_CRON`), ahead of the Monday 01:30 nightly wave so both fit
@@ -430,8 +440,8 @@ supercronic (v0.2.51, checksum-verified in `backend/Dockerfile`) executing
   only matters for staying ahead of the nightly wave.
 - `30 1 * * *` — `backend/scripts/refresh_wave.sh`, the daily refresh wave
   (see above). Starts just after the 00:00 UTC OpenAlex credit reset so
-  the credit-priced stages run on a fresh budget; they self-skip at a
-  spent budget, so nothing breaks when the wave runs at another time.
+  the credit-priced stages run on a fresh budget; they stop at the
+  reserve, so nothing breaks when the wave runs at another time.
 - `0 4 * * *` — `backend/scripts/backup.sh`, the nightly database backup
   (see below).
 

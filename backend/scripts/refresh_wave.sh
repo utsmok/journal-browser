@@ -9,10 +9,12 @@
 # Credit-priced stages run first, while the budget is fresh: the 2026-11-07
 # wave burned ~7h of the fresh daily budget on the then credit-priced
 # oa-colors step, and a 5-second funder crash stopped the remaining stages
-# via the exit gate. harvest_stats and the resolve_author_ids sweep gate
-# themselves on openalex_credits_remaining() in harvest code and skip
-# cleanly at a zero budget; harvest_publishers only costs credits on a
-# fresh install, when its publisher cache is still empty.
+# via the exit gate. Measured 2026-11-20, singleton GETs bill $0; list
+# pages cost $0.0001 and searches $0.001, so only those stages draw the
+# budget. All OpenAlex stages gate on openalex_budget_ok() in harvest code
+# and stop cleanly once the remaining budget falls below the
+# JB_OPENALEX_RESERVE_USD reserve (default 0.25); harvest_publishers only
+# costs credits on a fresh install, when its publisher cache is still empty.
 #
 # A failing stage names itself and stops the wave. Resume past the completed
 # stages with --from STAGE, e.g.:
@@ -38,7 +40,7 @@ STAGES=(
   # Local derivation from stored data, no API calls; reads works.oa_status,
   # which build_openalex_works re-synced above.
   harvest_oa_colors
-  # Funder backfills: free single-entity GETs, then OpenAIRE.
+  # Funder backfills: $0 single-entity GETs, then OpenAIRE.
   harvest_work_funders
   harvest_openalex_funders
   harvest_openaire_funders
@@ -88,7 +90,7 @@ remaining = asyncio.run(openalex_credits_remaining())
 if remaining is None:
     print("unknown (rate-limit check failed; in-code gates stay open)")
 elif remaining <= 0:
-    print("0 USD (exhausted; priced stages self-skip, resets 00:00 UTC)")
+    print("0 USD (exhausted; priced stages stop at the reserve, resets 00:00 UTC)")
 else:
     print(f"{remaining:.2f} USD")
 ')" || { echo "wave: budget check failed"; exit 1; }

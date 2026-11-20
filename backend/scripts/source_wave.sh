@@ -3,8 +3,9 @@
 # nightly wave never touches, for every active institution, in bootstrap
 # DAG order.
 #
-# The nightly refresh_wave.sh only derives from stored data plus free
-# OpenAlex endpoints. The sources that create works and coverage (Pure,
+# The nightly refresh_wave.sh only derives from stored data plus $0 OpenAlex
+# singletons (list pages and searches cost credits). The sources that create
+# works and coverage (Pure,
 # openaccess.nl, JCT, OpenAPC, DOAJ, JISC) would otherwise run at bootstrap
 # only, so new publications and coverage flags never enter a filled
 # database. Every job here is idempotent, so rerunning the wave or any
@@ -14,8 +15,8 @@
 # institution's OAI endpoint, the deal sources are two scrapes plus local
 # ingests, DOAJ and OpenAPC are CSV downloads, and JISC is a keyed API that
 # skips cleanly without JB_JISC_API_KEY. The one OpenAlex consumer,
-# harvest_stats, gates itself on openalex_credits_remaining() and skips
-# cleanly at a spent budget.
+# harvest_stats, gates itself on openalex_budget_ok() and stops
+# cleanly once the remaining budget falls below the reserve.
 #
 # Scheduled Sunday 22:00 UTC (override with JB_SOURCE_WAVE_CRON in .env),
 # ahead of the Monday 01:30 nightly wave so both fit in one weekend night.
