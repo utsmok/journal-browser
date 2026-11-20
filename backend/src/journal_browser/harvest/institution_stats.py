@@ -21,7 +21,7 @@ from ..config import get_settings, work_type_excluded
 from ..ingest import IngestSession
 from ..models import Institution, InstitutionTrend, InstitutionWorksStats, Journal, Work
 from ..services.works_query import work_type_not_excluded
-from .common import OA_STATUSES, openalex_credits_remaining, require_openalex_key
+from .common import OA_STATUSES, openalex_budget_ok, require_openalex_key
 from .openalex_journals import resolve_institution_openalex_id
 
 logger = logging.getLogger(__name__)
@@ -51,13 +51,12 @@ async def harvest_institution_stats(
 ) -> dict[str, Any]:
     """One hosted institution's per-journal/year stats + trends from the
     OpenAlex works filter; window and ids come from the institution row."""
-    remaining = await openalex_credits_remaining()
-    if remaining is not None and remaining <= 0:
-        # The institution works filter listing is credit-priced; at a zero
-        # budget every page 429s and used to crash the wave. Skip and
-        # surface; run at the top of the post-reset wave instead.
-        logger.info("institution stats skipped: daily credit budget exhausted")
-        return {"skipped": "daily credit budget exhausted (resets 00:00 UTC)"}
+    skip_stats: dict[str, Any] = {}
+    if not await openalex_budget_ok("institution_stats", skip_stats):
+        skip_stats["skipped"] = (
+            "openalex budget below the reserve (JB_OPENALEX_RESERVE_USD, resets 00:00 UTC)"
+        )
+        return skip_stats
     settings = get_settings()
     # The institution works filter is a cursor-priced listing; without a
     # key it would serve one page and finish 'completed' with partial
@@ -93,6 +92,7 @@ async def harvest_institution_stats(
         # store: an identical payload re-harvested for another institution
         # dedupes here).
         parse_failures: list[tuple[dict[str, Any], Exception]] = []
+        stats_stopped = False
         async for item in client.works.iterate(
             page_size=PER_PAGE,
             filters={
@@ -137,13 +137,23 @@ async def harvest_institution_stats(
                     per_journal_year[(issn_l, year, status)] += 1
                 else:
                     unlinked += 1
+            # Page-sized budget check: the works filter is a list-class,
+            # credit-priced listing, so stop before spending the reserve.
+            if ingest.records_seen % PER_PAGE == 0 and not await openalex_budget_ok(
+                "institution_stats"
+            ):
+                stats_stopped = True
+                break
             if limit is not None and ingest.records_seen >= limit:
                 logger.info("Reached --limit %s", limit)
                 break
 
         for raw, exc in parse_failures:
             await ingest.record_parse_failure({"source_pk": raw.get("id"), "reason": str(exc)})
-        stats = await ingest.finish_run("completed", {"works_unlinked_to_journal": unlinked})
+        finish: dict[str, Any] = {"works_unlinked_to_journal": unlinked}
+        if stats_stopped:
+            finish["openalex_reserve_stop"] = 1
+        stats = await ingest.finish_run("completed", finish)
 
         await _write_journal_stats(session, institution.id, per_journal_year)
         corresponding = await _corresponding_counts(client, inst_id, institution)

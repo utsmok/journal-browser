@@ -2,8 +2,8 @@
 
 Every OpenAlex work carries its grants/awards inline (funder id, display
 name, award number), so no funder sweep or join is needed: fetch each
-work's DOI as a single-entity GET (free under OpenAlex's 2026-11 credit
-pricing, unlike the pipe-OR batch filter this replaced), project awards
+work's DOI as a single-entity GET ($0 on OpenAlex, measured 2026-11-20,
+unlike the pipe-OR batch filter this replaced), project awards
 into work_funders rows, and upsert. Idempotent: reruns refresh every
 touched row and prune rows for works whose awards changed or whose DOI
 stopped resolving. Committing per chunk follows the author_ids sweep
@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import get_settings
 from ..ingest import IngestSession
 from ..models import Work, WorkFunder
+from .common import openalex_budget_ok
 from .enrich import fetch_works_by_doi
 
 logger = logging.getLogger(__name__)
@@ -157,6 +158,8 @@ async def harvest_work_funders(session: AsyncSession, *, ttl_days: int = 30) -> 
     )
     async with AlethecaClient(**client_kwargs) as client:
         for at in range(0, len(works), WORK_CHUNK):
+            if not await openalex_budget_ok("work_funders", stats):
+                break
             batch = works[at : at + WORK_CHUNK]
             batch_no = at // WORK_CHUNK + 1
             # works in different institutions may share a DOI

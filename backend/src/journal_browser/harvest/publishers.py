@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import get_settings
 from ..ingest import bump_cache_epoch
 from ..models import OpenalexPublisher, SourceRecord
+from .common import openalex_budget_ok
 from .openalex_journals import _payload_dict
 
 logger = logging.getLogger(__name__)
@@ -174,6 +175,10 @@ async def harvest_publishers(session: AsyncSession) -> dict[str, int]:
         "retried_stale": retried,
     }
     if todo:
+        # Publisher lookups are pipe-filter batches: a list-class, credit-
+        # priced request, so the budget reserve gates each fetch round.
+        if not await openalex_budget_ok("publishers", stats):
+            return stats
         client_kwargs: dict[str, Any] = {}
         if api_key := get_settings().openalex_api_key:
             client_kwargs["api_key"] = api_key
@@ -185,7 +190,7 @@ async def harvest_publishers(session: AsyncSession) -> dict[str, int]:
                 None
             }
             need = sorted(roots - payloads.keys() - cache.keys())
-            if need:
+            if need and await openalex_budget_ok("publishers roots", stats):
                 payloads.update(await _fetch(client, need))
         names: dict[str, str | None] = dict(cache)
         names.update({pid: (p or {}).get("display_name") for pid, p in payloads.items()})

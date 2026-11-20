@@ -2,7 +2,7 @@
 
 Usage: uv run python jobs/harvest_openalex_funders.py [--refresh]
 
-Default: gap-fill works-linked funder ids the table lacks (free
+Default: gap-fill works-linked funder ids the table lacks ($0
 singleton GETs). --refresh re-fetches every stored funder instead, for
 upstream corrections such as the 2026-11 citation re-matcher.
 """

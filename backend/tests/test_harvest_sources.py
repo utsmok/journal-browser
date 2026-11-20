@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
+import aletheca
 import httpx
 import pytest
 from jobs.backfill_pure_authors import backfill_pure_work_authors
@@ -18,11 +19,13 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from conftest import journal_factory, requires_db
 from journal_browser.harvest import jisc_opf as jisc
-from journal_browser.harvest.common import HarvestDataError
+from journal_browser.harvest.common import HarvestDataError, openalex_budget_ok
 from journal_browser.harvest.denorm import MATERIALIZE_SQL
 from journal_browser.harvest.doaj import harvest_doaj
+from journal_browser.harvest.enrich import enrich_openalex
 from journal_browser.harvest.funders import _upsert as upsert_canon
 from journal_browser.harvest.funders import refresh_funder_links
+from journal_browser.harvest.institution_stats import harvest_institution_stats
 from journal_browser.harvest.jisc_normalize import normalize_jisc
 from journal_browser.harvest.openaccess_nl import _upsert_deal, _upsert_publisher, parse_deal_page
 from journal_browser.harvest.openaire_facts import derive_openaire_facts
@@ -1389,3 +1392,100 @@ async def test_work_funders_sweep_gate(db, institution_factory, monkeypatch):
     await db.execute(update(Work).values(funders_checked_at=datetime.now(UTC) - timedelta(days=31)))
     stats3 = await harvest_work_funders(db, ttl_days=30)
     assert stats3["works_attempted"] == 2
+
+
+# ── OpenAlex budget reserve gate ──────────────────────────────────────────
+
+
+@requires_db
+async def test_openalex_reserve_gate_stops_stage(db, institution_factory, monkeypatch):
+    """Below the reserve the stage stops cleanly: stats note, no client, no
+    run started. The remaining-budget helper is mocked, not HTTP."""
+    ut = await institution_factory(code="ut", data_window_start=2020)
+    await db.commit()
+
+    async def _low_remaining() -> float:
+        return 0.10  # below the 0.25 default reserve
+
+    monkeypatch.setattr("journal_browser.harvest.common.openalex_credits_remaining", _low_remaining)
+
+    class _NoClient:
+        def __init__(self, *a, **k):
+            raise AssertionError("client constructed despite exhausted budget")
+
+    monkeypatch.setattr("journal_browser.harvest.institution_stats.AlethecaClient", _NoClient)
+    assert await openalex_budget_ok("gate") is False
+
+    stats = await harvest_institution_stats(db, ut)
+    assert stats["openalex_reserve_stop"] == 1
+    assert "reserve" in stats["skipped"]
+
+    # A healthy budget keeps the gate open.
+    async def _healthy_remaining() -> float:
+        return 5.0
+
+    monkeypatch.setattr(
+        "journal_browser.harvest.common.openalex_credits_remaining", _healthy_remaining
+    )
+    assert await openalex_budget_ok("gate") is True
+
+
+@requires_db
+async def test_enrich_openalex_commits_per_chunk(db, institution_factory, monkeypatch):
+    """An interrupted enrich run keeps every completed chunk: works whose
+    fetch chunk committed stay enriched after a later chunk fails."""
+    ut = await institution_factory(code="ut", data_window_start=2020)
+    run = await _run(db, "pure", "works", ut)
+    for i in range(5):
+        _mk_work(db, ut, f"w-{i}", run, doi=f"10.0.0/{i}", title=f"w {i}")
+    await db.commit()
+
+    monkeypatch.setattr("journal_browser.harvest.enrich.FETCH_CHUNK", 2)
+
+    calls = {"n": 0}
+
+    async def _get(url: str):
+        calls["n"] += 1
+        if calls["n"] > 4:  # third chunk: every lookup fails
+            raise ValueError("openalex down")
+        doi = url.rsplit("/", 1)[-1]
+        return SimpleNamespace(
+            id=f"https://openalex.org/W-{doi}",
+            open_access=SimpleNamespace(oa_status="gold"),
+            primary_location=SimpleNamespace(source=SimpleNamespace(issn_l=None, issn=[])),
+            locations=[],
+            model_dump=lambda mode="json": {"id": f"https://openalex.org/W-{doi}"},
+        )
+
+    class _FakeClient:
+        def __init__(self, **_kw):
+            self.works = SimpleNamespace(get=_get)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(aletheca, "AlethecaClient", _FakeClient)
+
+    with pytest.raises(RuntimeError, match=r"openalex down"):
+        await enrich_openalex(db, ut.id)
+
+    enriched = dict((await db.execute(select(Work.pure_uuid, Work.oa_status))).all())
+    # Chunks 1 and 2 (w-0..w-3) persisted per chunk; the failed chunk lost
+    # only itself. Without per-chunk commits nothing would have persisted:
+    # the run never reached its final commit.
+    assert enriched["w-4"] is None
+    assert {k: v for k, v in enriched.items() if v} == {
+        "w-0": "gold",
+        "w-1": "gold",
+        "w-2": "gold",
+        "w-3": "gold",
+    }
+    confirmed = (
+        (await db.execute(select(WorkIdentity.source_pk).where(WorkIdentity.status == "confirmed")))
+        .scalars()
+        .all()
+    )
+    assert len(confirmed) == 4

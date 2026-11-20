@@ -399,6 +399,36 @@ async def openalex_credits_remaining() -> float | None:
         return None
 
 
+async def openalex_budget_ok(stage: str, stats: dict[str, Any] | None = None) -> bool:
+    """True while the daily OpenAlex budget clears the reserve.
+
+    OpenAlex-spending stages call this before each chunk and stop cleanly
+    when the remaining budget falls below JB_OPENALEX_RESERVE_USD (default
+    0.25): the reserve keeps the /rate-limit endpoint itself answerable and
+    leaves headroom instead of draining the day to zero. A failed check
+    (openalex_credits_remaining returns None) keeps the gate open, as with
+    a keyless install. Singleton GETs bill $0 (measured 2026-11-20); the
+    budget is drawn by list pages ($0.0001) and searches ($0.001), so the
+    gate mainly protects the priced stages and catches pricing drift.
+    Trips log a warning and set stats["openalex_reserve_stop"] = 1."""
+    remaining = await openalex_credits_remaining()
+    if remaining is None:
+        return True
+    reserve = get_settings().openalex_reserve_usd
+    if remaining >= reserve:
+        return True
+    logger.warning(
+        "openalex budget reserve hit: %s stops cleanly (remaining $%.4f "
+        "below the $%.2f reserve; budget resets 00:00 UTC)",
+        stage,
+        remaining,
+        reserve,
+    )
+    if stats is not None:
+        stats["openalex_reserve_stop"] = 1
+    return False
+
+
 async def paced_single_gets(
     get: Callable[[str], Awaitable[Any]],
     ids: list[str],
@@ -408,8 +438,10 @@ async def paced_single_gets(
 ) -> tuple[dict[str, Any | None], dict[str, Exception]]:
     """Free single-entity GETs paced to the OpenAlex tier cap.
 
-    Free singleton lookups work even with the credit budget at zero, so
-    gap-filling (journals, funders) never needs a listing sweep. Claims
+    Singleton lookups bill $0 (measured 2026-11-20, x-ratelimit-cost-usd:
+    0), so they work even with the credit budget at zero and gap-filling
+    (journals, funders) never needs a listing sweep; list pages cost
+    $0.0001 and searches $0.001 against the $1/day key budget. Claims
     each request's start slot synchronously before sleeping — assigning
     after the sleep lets every coroutine read the same stale slot and
     fire as an unspaced burst (see enrich.fetch_works_by_doi). 404s and

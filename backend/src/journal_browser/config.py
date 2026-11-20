@@ -86,6 +86,9 @@ class Settings(BaseSettings):
     openalex_api_key: str = Field(
         "", validation_alias=AliasChoices("JB_OPENALEX_API_KEY", "OPENALEX_API_KEY")
     )
+    # Daily USD floor for the OpenAlex budget: stages stop cleanly when the
+    # remaining budget falls below it (see harvest.common.openalex_budget_ok).
+    openalex_reserve_usd: float = 0.25
     contact_email: str = Field(
         "",
         validation_alias=AliasChoices("JB_CONTACT_EMAIL", "CONTACT_EMAIL"),

@@ -4,8 +4,9 @@ or all hosted ones.
 Gathers author profiles from stored work authorships (free singleton
 gap-fill), runs the work-anchored cascade over work_pure_authors x
 openalex_works, writes the author_identities review surface, enriches
-works for resolved authors (budget-capped, skipped at a zero credit
-budget) and re-projects the works store.
+works for resolved authors (budget-capped: stops cleanly once the
+remaining budget falls below the JB_OPENALEX_RESERVE_USD reserve)
+and re-projects the works store.
 
 uv run python jobs/resolve_author_ids.py [--institution rug]
        [--listing-limit N] [--no-sweeps]

@@ -2,14 +2,14 @@
 
 Works harvested before OpenAlex Graph v12 (2026-11-15) carry no
 parent_works in their stored payloads. Every unchecked DOI gets a
-single-entity GET (free under OpenAlex credit pricing) that fills
+single-entity GET ($0 on OpenAlex, measured 2026-11-20) that fills
 parent_works/is_part and stamps parts_checked_at, so re-runs skip
 checked rows. 404 misses count as checked (standalone); transient fetch
 errors leave their rows unchecked for the next run.
 
 After the DOI pass, every distinct parent W-id in the store's
 parent_works arrays is registered in openalex_work_parents (title, doi,
-type) with one free single-entity GET, paced like the DOI pass. 404
+type) with one $0 single-entity GET, paced like the DOI pass. 404
 parents are skipped (no row); other failures are logged, skipped, and
 retried by the next run.
 
@@ -39,6 +39,7 @@ from sqlalchemy.ext.asyncio import (
 from journal_browser.config import get_settings
 from journal_browser.harvest.common import (
     normalize_doi,
+    openalex_budget_ok,
     paced_single_gets,
     resolve_institution,
 )
@@ -131,6 +132,8 @@ async def backfill_dois(
         dois = sorted(institutions_by_doi)
         for at in range(0, len(dois), FETCH_CHUNK):
             chunk = dois[at : at + FETCH_CHUNK]
+            if not await openalex_budget_ok("backfill_parts", stats):
+                break
             found, errored, first_error = await fetch_works_by_doi(client, chunk, stats)
             if errored:
                 logger.warning(
@@ -215,6 +218,8 @@ async def backfill_parents(session: AsyncSession, institution_id: int | None) ->
         "parents_failed": 0,
     }
     if not pending:
+        return stats
+    if not await openalex_budget_ok("backfill_parts_parents", stats):
         return stats
 
     # One GET per parent W-id: every institution holding the parent gets

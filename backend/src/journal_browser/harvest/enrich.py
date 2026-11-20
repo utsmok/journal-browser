@@ -4,8 +4,9 @@ Ladder per docs/plan-pure-openaire-crossref.md, per work:
 
 1. OpenAlex (aletheca, one single-entity GET per DOI): confirms the DOI
    identity, fills oa_status, and supplies the journal via the work's
-   primary source. Single-entity calls are free under OpenAlex's 2026-11
-   credit pricing, unlike the 50-DOI pipe-OR batch filter this replaced.
+   primary source. Singleton GETs bill $0 (measured 2026-11-20:
+   x-ratelimit-cost-usd 0; list pages $0.0001, searches $0.001), unlike
+   the 50-DOI pipe-OR batch filter this replaced.
 2. Crossref (stavrophora, env-paced, polite pool): gap fill for DOIs OpenAlex
    does not know; supplies the journal ISSN list.
 3. Pure CERIF issn (already on the row from the OAI harvest).
@@ -31,13 +32,19 @@ from sqlalchemy import exists, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..harvest.common import canonical_oa_status, normalize_issn, resolve_issn_l
+from ..harvest.common import (
+    canonical_oa_status,
+    normalize_issn,
+    openalex_budget_ok,
+    resolve_issn_l,
+)
 from ..ingest import IngestSession
 from ..models import WORK_IDENTITY_UQ, Journal, Work, WorkIdentity
 
 logger = logging.getLogger(__name__)
 
-# Single-entity GETs are free on OpenAlex; keep starts spaced so a job's
+# Singleton GETs bill $0 on OpenAlex (measured 2026-11-20); keep starts
+# spaced so a job's
 # steady-state rate stays bounded (concurrency alone is latency-bound and
 # bursts past the tier caps: 10 in-flight at ~150 ms round-trip is
 # ~60 req/s). 0.08 s spacing ≈ 12 req/s per job, under the keyed free
@@ -65,7 +72,8 @@ def _chunk(items: list[str], size: int) -> list[list[str]]:
 async def fetch_works_by_doi(
     client: Any, dois: Sequence[str], stats: dict[str, int] | None = None
 ) -> tuple[dict[str, Any | None], set[str], Exception | None]:
-    """One single-entity GET per DOI (free on OpenAlex), bounded by a
+    """One single-entity GET per DOI ($0 on OpenAlex, measured
+    2026-11-20), bounded by a
     semaphore.
 
     Returns ({doi: Work-or-None}, errored_dois, first_error). None marks a
@@ -304,10 +312,12 @@ async def enrich_openalex(
     """Single-entity DOI lookups; confirm identities + resolve journals
     from OpenAlex.
 
-    OpenAlex's 2026-11 credit pricing keeps get-single-entity calls free
-    while list/filter calls cost credits, so each DOI gets its own GET
-    instead of a 50-DOI pipe filter (whose single malformed DOI used to
-    poison the whole batch). `refresh_matched` widens the selection from
+    Singleton GETs bill $0 while list/filter pages cost credits (measured
+    2026-11-20), so each DOI gets its own GET instead of a 50-DOI pipe
+    filter (whose single malformed DOI used to poison the whole batch).
+    Each fetch chunk checks the daily budget reserve first and the run
+    stops cleanly below it (stats note `openalex_reserve_stop`).
+    `refresh_matched` widens the selection from
     journal-less works to every DOI work of the institution."""
     from aletheca import AlethecaClient
 
@@ -337,6 +347,8 @@ async def enrich_openalex(
         dois = sorted(by_doi)
         for at in range(0, len(dois), FETCH_CHUNK):
             chunk = dois[at : at + FETCH_CHUNK]
+            if not await openalex_budget_ok("enrich_openalex", stats):
+                break
             found, errored, first_error = await fetch_works_by_doi(client, chunk, fetch_stats)
             if errored:
                 logger.warning(

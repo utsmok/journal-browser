@@ -3,11 +3,13 @@
 Usage: uv run python jobs/harvest_journals.py [--seed-deals-only] [--sweep-all] [--refresh]
 
 Default is the credit-free route: keyless deal seed + paced singleton
-delta for works-referenced journals missing from the table. --sweep-all
+delta for works-referenced journals missing from the table (singleton
+GETs bill $0; list pages cost $0.0001). --sweep-all
 runs the full listing sweep (costs credits) — a rare manual operation,
 not a per-refresh step. --refresh re-fetches every stored journal via
-free singleton GETs (for upstream corrections such as citation
-re-matches) instead of the delta.
+$0 singleton GETs (for upstream corrections such as citation
+re-matches) instead of the delta. All routes stop cleanly once the
+daily budget falls below the JB_OPENALEX_RESERVE_USD reserve.
 """
 
 import asyncio

@@ -14,10 +14,11 @@ candidates for the review queue. The authors ingest reads this table
 additively: confirmed rows feed authors.openalex_ids.
 
 Runs with no DSN; the only API spend is the budget-capped per-author
-works enrichment (50 batched A-ids per keyed call, skipped at a zero
-credit budget) covering authors whose OpenAlex profile lacks the
-institution. The author listing sweep is retired: author profiles are
-gathered from stored work authorships, with paced free single-entity
+works enrichment (50 batched A-ids per keyed call, stopping cleanly
+below the JB_OPENALEX_RESERVE_USD reserve) covering authors whose
+OpenAlex profile lacks the institution. The author listing sweep is
+retired: author profiles are
+gathered from stored work authorships, with paced $0 single-entity
 GETs filling gaps.
 """
 
@@ -53,7 +54,7 @@ from .author_cascade import (
     openalex_entries,
 )
 from .author_names import bare_orcid, decompose_parts
-from .common import openalex_credits_remaining, paced_single_gets, require_openalex_key
+from .common import openalex_budget_ok, paced_single_gets, require_openalex_key
 from .openalex_journals import openalex_id_to_pk, resolve_institution_openalex_id
 from .org_closure import load_org_tree
 
@@ -241,11 +242,10 @@ async def sweep_author_works(
     }
     if budget <= 0 or not a_ids:
         return stats
-    remaining = await openalex_credits_remaining()
-    if remaining is not None and remaining <= 0:
-        # Pipe-OR works filters cost credits; at a zero budget every call
-        # 429s and used to crash the whole resolve run. Skip and surface.
-        stats["skipped"] = "daily credit budget exhausted (resets 00:00 UTC)"
+    if not await openalex_budget_ok("sweep_author_works", stats):
+        # Pipe-OR works filters are list-class and cost credits; stop below
+        # the reserve instead of 429ing through the rest of the resolve run.
+        stats["skipped"] = "openalex budget below the reserve (resets 00:00 UTC)"
         logger.info("sweep_author_works skipped: %s", stats["skipped"])
         return stats
     # Cursor sweeps paginate only with a key; keyless, the sweep would
@@ -261,6 +261,8 @@ async def sweep_author_works(
 
     for n in range(0, len(ids), BATCH_SIZE):
         batch = ids[n : n + BATCH_SIZE]
+        if not await openalex_budget_ok("sweep_author_works", stats):
+            break
         stats["calls"] += 1
         await ingest.start_run(
             SOURCE,

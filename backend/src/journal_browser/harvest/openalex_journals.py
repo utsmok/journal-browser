@@ -22,6 +22,7 @@ from ..models import Institution, IssnMap, Journal, Publisher
 from .common import (
     issn_checksum_ok,
     normalize_issn,
+    openalex_budget_ok,
     paced_single_gets,
     require_openalex_key,
     upsert_issn_map,
@@ -296,6 +297,7 @@ async def sweep_all_sources(
 
     normalized = 0
     seen = 0
+    sweep_stopped = False
     page: list[tuple[str, dict[str, Any]]] = []
 
     parse_failures: list[tuple[dict[str, Any], Exception]] = []
@@ -323,6 +325,9 @@ async def sweep_all_sources(
             await ingest.ingest_records(page)
             normalized += await _upsert_journal_page(session, [p for _, p in page])
             page = []
+        if seen % PER_PAGE == 0 and not await openalex_budget_ok("harvest_journals --sweep-all"):
+            sweep_stopped = True
+            break
         if limit is not None and seen >= limit:
             logger.info("Reached --limit %s", limit)
             break
@@ -330,9 +335,10 @@ async def sweep_all_sources(
         await ingest.record_parse_failure({"source_pk": raw.get("id"), "reason": str(exc)})
     await ingest.ingest_records(page)
     pruned = await prune_orphan_issn_map(session)
-    stats = await ingest.finish_run(
-        "completed", {"journals_normalized": normalized, "issn_map_pruned": pruned}
-    )
+    finish: dict[str, Any] = {"journals_normalized": normalized, "issn_map_pruned": pruned}
+    if sweep_stopped:
+        finish["openalex_reserve_stop"] = 1
+    stats = await ingest.finish_run("completed", finish)
     await session.commit()
     return stats
 
@@ -377,6 +383,8 @@ async def harvest_journals_delta(
         "failed": 0,
     }
     if not todo:
+        return stats
+    if not await openalex_budget_ok("harvest_journals delta", stats):
         return stats
     ingest = IngestSession(session)
     await ingest.start_run(SOURCE, ENTITY_TYPE, "delta", {"route": "delta", "per_id": True})
@@ -442,6 +450,8 @@ async def refresh_existing_journals(session: AsyncSession, limit: int | None = N
     # chunk; reruns re-fetch everything anyway.
     chunk_size = 2_000
     for start in range(0, len(todo), chunk_size):
+        if not await openalex_budget_ok("harvest_journals --refresh", stats):
+            break
         chunk = todo[start : start + chunk_size]
         # A fresh client per chunk: one long-lived client's keepalive
         # sockets die during the between-chunk ingest gap (Cloudflare

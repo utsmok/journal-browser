@@ -25,7 +25,7 @@ from journal_browser.models import (
     WorkFunder,
 )
 
-from .common import paced_single_gets
+from .common import openalex_budget_ok, paced_single_gets
 from .openalex_journals import openalex_id_to_pk
 
 try:
@@ -145,6 +145,8 @@ async def refresh_openalex_funders(session: AsyncSession) -> dict[str, int]:
     # burst hangs on them (see refresh_existing_journals).
     chunk_size = 2_000
     for start in range(0, len(ids), chunk_size):
+        if not await openalex_budget_ok("openalex_funders refresh", stats):
+            break
         chunk = ids[start : start + chunk_size]
         async with AlethecaClient(**client_kwargs) as client:
             payloads, failed = await paced_single_gets(
@@ -205,6 +207,10 @@ async def harvest_openalex_funders(session: AsyncSession) -> dict[str, int]:
     stats["todo"] = len(todo)
     fetched: list[dict[str, Any]] = []
     if todo:
+        if not await openalex_budget_ok("openalex_funders backfill", stats):
+            stats["funder_links"] = await refresh_funder_links(session)
+            logger.info("harvest_openalex_funders: %s", stats)
+            return stats
         client_kwargs: dict[str, Any] = {}
         if api_key := get_settings().openalex_api_key:
             client_kwargs["api_key"] = api_key

@@ -619,15 +619,14 @@ def test_resolve_root_ladder(orgs, parents, institution, expected):
 
 @requires_db
 async def test_stats_skipped_at_zero_budget(db, institution_factory, monkeypatch):
-    """The works-filter listing is credit-priced: a zero budget must skip
-    the harvest cleanly instead of 429-crashing the wave."""
+    """The works-filter listing is credit-priced: a budget below the
+    reserve must skip the harvest cleanly instead of 429-crashing the
+    wave."""
 
     async def _zero():
         return 0.0
 
-    monkeypatch.setattr(
-        "journal_browser.harvest.institution_stats.openalex_credits_remaining", _zero
-    )
+    monkeypatch.setattr("journal_browser.harvest.common.openalex_credits_remaining", _zero)
     inst = await institution_factory()
     stats = await harvest_institution_stats(db, inst)
     assert stats["skipped"] is not None
