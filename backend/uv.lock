@@ -699,7 +699,7 @@ requires-dist = [
     { name = "levenshtein", specifier = ">=0.27.5" },
     { name = "lxml", specifier = ">=6.1.3" },
     { name = "maxminddb", specifier = ">=3.3.0" },
-    { name = "nameparser", specifier = ">=2.8.0,<3" },
+    { name = "nameparser", specifier = ">=2.8.0,<4" },
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "pgvector", specifier = ">=0.5.1" },
     { name = "pydantic", specifier = ">=2.14.1" },
@@ -1261,11 +1261,11 @@ wheels = [
 
 [[package]]
 name = "nameparser"
-version = "2.8.2"
+version = "3.1.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f5/01/162449ee72f7752253476f3bdb0df59609bac6ee974266bfefc2b3b92a57/nameparser-2.8.2.tar.gz", hash = "sha256:7b6e1bee50aa15f1fd192f9152d21608f351db7fed5593eceea5db589bb2fa08", size = 1373630, upload-time = "2026-11-05T07:56:10.527Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/70/69/0fd7c74074fee7650c2799b87944b19cb0ae9fff1e3b8a147fbf1fd0c2c0/nameparser-3.1.0.tar.gz", hash = "sha256:68eca50ea8c987a3c4f50ffd15be88ce13fbea6245bc333cca8d559dc41dbace", size = 2018513, upload-time = "2026-11-17T03:44:20.21Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/59/59/5ec114435e7f7b5c59fd8fc99fb14fdcc26a9b49f33afc10dc40189c5ded/nameparser-2.8.2-py3-none-any.whl", hash = "sha256:db5c53dd114511ca82f9ae7e6d85f252eee256b707a6a0e97c40b9e534182f2c", size = 490808, upload-time = "2026-11-05T07:56:09.049Z" },
+    { url = "https://files.pythonhosted.org/packages/09/b8/70197be237531f2226d3904d7358a4631fccf9cfacadf73798f73a192f56/nameparser-3.1.0-py3-none-any.whl", hash = "sha256:229c547a4f372ce441b01e2e7d812ccfc4f9d7e78064580666b59e0a74ae8bf4", size = 794112, upload-time = "2026-11-17T03:44:18.644Z" },
 ]
 
 [[package]]
