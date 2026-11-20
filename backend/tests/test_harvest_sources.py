@@ -336,6 +336,95 @@ async def test_openalex_works_rebuild(db, institution_factory):
     assert works == {"w-stale": "green", "w-rev": "closed"}
 
 
+@requires_db
+async def test_foldback_openalex_wins_oa_colour_conflict(db, institution_factory):
+    """Precedence (owner decision 2026-11-20, evidence in
+    scripts/analyze_oa_conflicts.py): when openaire_work_facts states a
+    colour that conflicts with the OpenAlex store, the fold-back keeps the
+    OpenAlex colour. The OpenAIRE claim never writes works.oa_status, and
+    the sync stays idempotent on rerun."""
+    ut = await institution_factory(code="ut")
+    work_run = await _run(db, "pure", "work", ut)
+    _mk_work(db, ut, "w-conflict", work_run, doi="10.1234/conflict", oa_status="gold")
+    await db.flush()
+    db.add(
+        OpenaireWorkFacts(
+            institution_id=ut.id, pure_uuid="w-conflict", source_pk="openaire::1", oa_color="gold"
+        )
+    )
+    await _seed_sweep(
+        db,
+        ut,
+        [("W1", _work("W1", doi="10.1234/conflict", oa="green"))],
+        filter_set="institutions.id=UT",
+    )
+    await db.flush()
+
+    stats = await rebuild_openalex_works(db, ut)
+    assert stats["works_oa_synced"] == 1
+    stored = dict(
+        (
+            await db.execute(
+                select(Work.pure_uuid, Work.oa_status).where(Work.institution_id == ut.id)
+            )
+        ).all()
+    )
+    assert stored == {"w-conflict": "green"}
+
+    # Rerunning the fold-back never flips the colour to the OpenAIRE claim.
+    await rebuild_openalex_works(db, ut)
+    stored = dict(
+        (
+            await db.execute(
+                select(Work.pure_uuid, Work.oa_status).where(Work.institution_id == ut.id)
+            )
+        ).all()
+    )
+    assert stored == {"w-conflict": "green"}
+
+
+@requires_db
+async def test_foldback_oa_colour_passthrough_without_conflict(db, institution_factory):
+    """Non-conflict passthrough: an agreeing OpenAIRE colour and a silent
+    (NULL) one both leave the OpenAlex store colour in place."""
+    ut = await institution_factory(code="ut")
+    work_run = await _run(db, "pure", "work", ut)
+    _mk_work(db, ut, "w-agree", work_run, doi="10.1234/agree")
+    _mk_work(db, ut, "w-silent", work_run, doi="10.1234/silent")
+    await db.flush()
+    db.add_all(
+        [
+            OpenaireWorkFacts(
+                institution_id=ut.id, pure_uuid="w-agree", source_pk="openaire::1", oa_color="gold"
+            ),
+            OpenaireWorkFacts(
+                institution_id=ut.id, pure_uuid="w-silent", source_pk="openaire::2", oa_color=None
+            ),
+        ]
+    )
+    await _seed_sweep(
+        db,
+        ut,
+        [
+            ("W2", _work("W2", doi="10.1234/agree", oa="gold")),
+            ("W3", _work("W3", doi="10.1234/silent", oa="hybrid")),
+        ],
+        filter_set="institutions.id=UT",
+    )
+    await db.flush()
+
+    stats = await rebuild_openalex_works(db, ut)
+    assert stats["works_oa_synced"] == 2
+    stored = dict(
+        (
+            await db.execute(
+                select(Work.pure_uuid, Work.oa_status).where(Work.institution_id == ut.id)
+            )
+        ).all()
+    )
+    assert stored == {"w-agree": "gold", "w-silent": "hybrid"}
+
+
 # ── JISC Open Policy Finder normalize ─────────────────────────────────────
 
 

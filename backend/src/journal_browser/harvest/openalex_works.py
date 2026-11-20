@@ -299,6 +299,16 @@ async def rebuild_openalex_works(session: AsyncSession, institution: Institution
     # The store is the only pass that sees current oa data. DOIs carried
     # under two W-ids with conflicting colors canonicalize to the most
     # open record (owner decision 2026-11-05).
+    #
+    # Precedence vs OpenAIRE (owner decision 2026-11-20): when
+    # openaire_work_facts.oa_color disagrees with the store colour, the
+    # OpenAlex colour wins and the OpenAIRE claim is ignored. Ground-truth
+    # checks (scripts/analyze_oa_conflicts.py) rated both sources at
+    # statistically indistinguishable accuracy, and the owner's tie-break
+    # is OpenAlex. So works.oa_status only ever carries the OpenAlex
+    # colour (Pure rights fill in where OpenAlex has no row); the OpenAIRE
+    # colour stays display-only on the journal card. Pinned by
+    # test_foldback_* outcome tests in tests/test_harvest_sources.py.
     canon = (
         select(
             OpenalexWork.doi_normalized.label("doi"),
