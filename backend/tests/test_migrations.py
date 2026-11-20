@@ -1,9 +1,9 @@
 """Alembic migration outcomes on a scratch database: head schema carries
-the ON CONFLICT constraint names the harvest layer targets, base↔head is
-reversible, and 0053's browse marker backfills and downgrades cleanly.
-create_all (the fixtures' schema source) is not authoritative for
-migrated deployments. Replaces test_usage_migration.py and folds in
-test_schema_contract.py's constraint assertion."""
+the ON CONFLICT constraint names the harvest layer targets, and base↔head
+is reversible. create_all (the fixtures' schema source) is not
+authoritative for migrated deployments. Replaces test_usage_migration.py
+and folds in test_schema_contract.py's constraint assertion; the 0053
+browse-marker test retired with the squash of the migration history."""
 
 import asyncio
 import secrets
@@ -75,33 +75,3 @@ async def test_upgrade_head_down_base_up_head(mig_db):
     await conn.close()
 
     await _alembic(command.upgrade, "head")  # and the tree reinstalls cleanly
-
-
-@requires_db
-async def test_0053_browse_marker_up_down_up(mig_db):
-    _name, url = mig_db
-    sync_url = url.replace("+asyncpg", "")
-    await _alembic(command.upgrade, "0052_usage_events")
-    seed = await asyncpg.connect(sync_url)
-    await seed.execute(
-        "INSERT INTO usage_events (session_id, event_type, path, query) VALUES "
-        "('s', 'search', '/ut', ''),"
-        "('s', 'search', '/ut', 'gold'),"
-        "('s', 'page_view', '/ut', NULL)"
-    )
-
-    await _alembic(command.upgrade, "0053_usage_browse_marker")
-    rows = await seed.fetch("SELECT event_type, query, is_browse FROM usage_events ORDER BY id")
-    assert [(r["event_type"], r["query"], r["is_browse"]) for r in rows] == [
-        ("search", None, True),  # empty query counts as browse
-        ("search", "gold", False),
-        ("page_view", None, False),
-    ]
-
-    await _alembic(command.downgrade, "0052_usage_events")
-    cols = await seed.fetch(
-        "SELECT column_name FROM information_schema.columns "
-        "WHERE table_name = 'usage_events' AND column_name = 'is_browse'"
-    )
-    assert cols == []  # the column is gone again
-    await seed.close()

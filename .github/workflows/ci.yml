@@ -13,8 +13,8 @@ jobs:
         working-directory: backend
     services:
       postgres:
-        # pgvector build: alembic 0020+ needs CREATE EXTENSION vector, and
-        # the compose db image ships it too (db/Dockerfile).
+        # pgvector build: the baseline migration needs CREATE EXTENSION
+        # vector, and the compose db image ships it too (db/Dockerfile).
         image: pgvector/pgvector:pg17
         env:
           POSTGRES_USER: journal

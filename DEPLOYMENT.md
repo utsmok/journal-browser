@@ -121,7 +121,7 @@ sweep (~60 min for the ~177k journal universe) and journal embeddings (~45 min
 on CPU). Subsequent restarts are cheap: `auto` mode skips the pipeline only
 when a plan run completed and left its marker in `harvest_state` (source
 `local`, entity type `bootstrap_plan`; written by bootstrap itself on exit
-0 and seeded for pre-marker deployments by migration 0055). When journals
+0 and seeded for pre-marker deployments by the baseline migration). When journals
 exist but that marker is missing (a bootstrap died partway), `auto` exits
 nonzero and names the repair path instead of quietly serving a
 half-filled database.
@@ -285,7 +285,7 @@ when only one exists. `JB_*` env vars still configure the default
 institution; every other institution reads its config from its row.
 
 Institution-row config (`openaire_org_id`, `data_window_start`, ...) is
-seeded from the env only when migration 0019 inserts the row; an existing
+seeded from the env only when the baseline migration inserts the row; an existing
 row never picks up later env changes. If a step skips with
 "has no openaire_org_id" (the OpenAIRE job finishes in seconds), set the
 column on the row — the env var will not propagate on its own:
@@ -553,12 +553,38 @@ archive off-machine; an off-host target is a known open decision.
   when shipping logs to a collector. Credential-looking substrings
   (`password=`, `token=`, Bearer headers) are redacted from the output.
 - **Upgrading the stack:** `git pull && docker compose up -d --build`. The
-  bootstrap service applies pending migrations before harvesting. Migration
-  0020 (semantic-search index) builds an HNSW graph and needs a few minutes
-  plus about 100 MB of Postgres shared memory (compose sets
-  `db.shm_size: 512mb`; raise it for external databases). Check this file's
+  bootstrap service applies pending migrations. Databases created before the
+  migration history was squashed (2026-11) sit at revision `0069` and must
+  be re-stamped once — see "Migrations" below. Fresh databases get the
+  single `0001_baseline` migration, whose semantic-search index builds an
+  HNSW graph and needs a few minutes plus about 100 MB of Postgres shared
+  memory (compose sets `db.shm_size: 512mb`; raise it for external
+  databases). Check this file's
   changelog-worthy notes before major version bumps; new settings always
   default to the Twente values, so existing deployments keep working.
+
+## Migrations
+
+The history of the original 70-migration chain is squashed into one
+revision, `0001_baseline`, matching the pre-squash schema at head `0069`
+exactly (verified by `pg_dump --schema-only` diff).
+
+- **Fresh installs:** `alembic upgrade head` applies `0001_baseline`.
+- **Existing databases** (at `0069` from before the squash): do NOT run
+  `alembic upgrade head` — the old revisions no longer exist in the repo,
+  and alembic refuses to work against a version row it cannot resolve.
+  Re-stamp once, with no schema change:
+
+  ```
+  cd backend && uv run alembic stamp 0001_baseline --purge
+  ```
+
+  `--purge` is required because the stored version (`0069...`) no longer
+  resolves; it clears the version row, then writes `0001_baseline`. The
+  schema is untouched: verified on a test database upgraded through the old
+  chain to `0069`, where `stamp --purge` flipped the version to
+  `0001_baseline` with all 53 public tables intact.
+
 
 ## Backbone export
 
