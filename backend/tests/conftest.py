@@ -35,6 +35,15 @@ TEST_URL = f"postgresql+asyncpg://journal:journal@localhost:5433/{TEST_DB}"
 # hit the throwaway DB too, never the shared dev DB.
 os.environ.setdefault("JB_DATABASE_URL", TEST_URL)
 
+# Keyless OpenAlex semantics for every test: no test may depend on a real
+# key or budget. pydantic skips empty env values and falls through the
+# AliasChoices chain, so BOTH names must be emptied; aletheca's own env
+# fallbacks too. _offline_openalex keeps the credits helper offline.
+os.environ["JB_OPENALEX_API_KEY"] = ""
+os.environ["OPENALEX_API_KEY"] = ""
+os.environ["ALETHECA_API_KEY"] = ""
+os.environ["ALETHECA_OPENALEX_API_KEY"] = ""
+
 
 def _db_reachable() -> bool:
     try:
@@ -57,6 +66,18 @@ else:
     # DB presence is asserted above; nothing to skip.
     def requires_db(fn):
         return fn
+
+
+@pytest.fixture(autouse=True)
+def _offline_openalex(monkeypatch):
+    """Keep the suite off the live OpenAlex budget: the credits helper
+    returns None (gate open, zero HTTP) even if settings.yaml carries an
+    API key. Tests that exercise the gate must mock the helper explicitly."""
+
+    async def _no_credits() -> float | None:
+        return None
+
+    monkeypatch.setattr("journal_browser.harvest.common.openalex_credits_remaining", _no_credits)
 
 
 @pytest.fixture(scope="session")

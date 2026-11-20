@@ -17,7 +17,9 @@ from jobs.import_pure_export import import_pure_export
 from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+import journal_browser.harvest.common as harvest_common
 from conftest import journal_factory, requires_db
+from journal_browser.config import get_settings, reset_settings_cache
 from journal_browser.harvest import jisc_opf as jisc
 from journal_browser.harvest.common import HarvestDataError, openalex_budget_ok
 from journal_browser.harvest.denorm import MATERIALIZE_SQL
@@ -1650,3 +1652,104 @@ async def test_enrich_openalex_commits_per_chunk(db, institution_factory, monkey
         .all()
     )
     assert len(confirmed) == 4
+
+
+# ── Enrichment outcome: $0 singleton route resolves journals ──────────────
+
+# Captured at import time, before any fixture patches the credits helper.
+_REAL_CREDITS = harvest_common.openalex_credits_remaining
+
+
+@requires_db
+async def test_enrich_openalex_resolves_journal_via_free_singleton(
+    db, institution_factory, monkeypatch
+):
+    """The OpenAlex rung fetches exactly one $0 singleton GET per DOI
+    (never a priced filter page) and resolves works.journal_issn_l when
+    the venue's issn_l matches a seeded journal. Keyless client: the
+    forced-empty settings pass no api_key."""
+    ut = await institution_factory(code="ut", data_window_start=2020)
+    db.add(journal_factory("0044-229X"))
+    run = await _run(db, "pure", "works", ut)
+    _mk_work(db, ut, "w-j", run, doi="10.1234/wj", title="venue outcome", year=2022)
+    await db.commit()
+
+    fetched_urls: list[str] = []
+
+    def _venue_work(id_or_url: str) -> SimpleNamespace:
+        source = SimpleNamespace(issn_l="0044-229X", issn=["0044-229X"])
+        primary = SimpleNamespace(source=source)
+        return SimpleNamespace(
+            id=f"https://openalex.org/W-{id_or_url}",
+            open_access=SimpleNamespace(oa_status="gold"),
+            primary_location=primary,
+            locations=[primary],
+            model_dump=lambda mode="json": {"id": f"https://openalex.org/W-{id_or_url}"},
+        )
+
+    class _FakeWorks:
+        async def get(self, id_or_url: str):
+            fetched_urls.append(id_or_url)
+            return _venue_work(id_or_url)
+
+    client_kwargs: dict = {}
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            client_kwargs.update(kwargs)
+            self.works = _FakeWorks()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(aletheca, "AlethecaClient", _FakeClient)
+    stats = await enrich_openalex(db, ut.id)
+    await db.commit()
+
+    assert stats["matched"] == 1 and stats["journal_resolved"] == 1
+    work = (
+        await db.execute(select(Work).where(Work.institution_id == ut.id, Work.pure_uuid == "w-j"))
+    ).scalar_one()
+    assert work.journal_issn_l == "0044-229X" and work.oa_status == "gold"
+    # Free-route: one path-shaped singleton GET per DOI, no query string.
+    assert fetched_urls == ["https://doi.org/10.1234/wj"]
+    assert client_kwargs.get("api_key", "") == ""
+
+
+async def test_openalex_suite_isolation_survives_key_in_settings(monkeypatch, tmp_path):
+    """The conftest isolation is not env-deep only: even with a key in the
+    settings overlay the suite makes no budget HTTP (gate stays open), and
+    the keyless credits helper short-circuits to None offline."""
+    yaml_file = tmp_path / "settings.yaml"
+    yaml_file.write_text("openalex_api_key: sk-suite-test\n")
+    monkeypatch.setenv("JB_SETTINGS_YAML", str(yaml_file))
+
+    def _no_http(self, *args, **kwargs):
+        raise AssertionError("live OpenAlex HTTP inside the not-live suite")
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", _no_http)
+
+    reset_settings_cache()
+    try:
+        # The overlay wins over the forced-empty env: the key IS visible,
+        # and the autouse stub still keeps the gate open with no network.
+        assert get_settings().openalex_api_key == "sk-suite-test"
+        stats: dict = {}
+        assert await harvest_common.openalex_budget_ok("gate-test", stats) is True
+        assert "openalex_reserve_stop" not in stats
+    finally:
+        reset_settings_cache()
+
+    # The real helper without a key short-circuits: None, zero HTTP.
+    with monkeypatch.context() as m:
+        m.setattr(harvest_common, "openalex_credits_remaining", _REAL_CREDITS)
+        m.delenv("JB_SETTINGS_YAML")
+        reset_settings_cache()
+        try:
+            assert get_settings().openalex_api_key == ""
+            assert await harvest_common.openalex_credits_remaining() is None
+        finally:
+            reset_settings_cache()
