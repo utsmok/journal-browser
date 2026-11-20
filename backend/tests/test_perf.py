@@ -82,4 +82,4 @@ async def test_orgunit_bundle_stale_served_on_epoch_bump(db, institution_factory
         fresh, rebuilt = swr_get(SWR_CACHE, key, await db.scalar(select(CacheEpoch.bumped_at)))
         if fresh:
             break
-    assert fresh and rebuilt is not None
+    assert fresh and isinstance(rebuilt, dict)

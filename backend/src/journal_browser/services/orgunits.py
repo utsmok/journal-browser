@@ -572,10 +572,10 @@ def _unit_bundle_factory(iid, level, name, year_range, sort):
 
         async with async_sessionmaker(get_engine(), expire_on_commit=False)() as session:
             inst = (await session.scalars(select(Institution).where(Institution.id == iid))).one()
-            bundle = await _build_unit_bundle(
+            # _build_unit_bundle already returns (epoch, bundle).
+            return await _build_unit_bundle(
                 session, inst, level, name, year_range=year_range, sort=sort
             )
-            return await cache_epoch(session), bundle
 
     return _factory
 

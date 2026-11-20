@@ -105,6 +105,7 @@ async def db_engine(_test_db):
 
     cache.FACET_CACHE.clear()
     cache.SNAPSHOT_CACHE.clear()
+    cache.SWR_CACHE.clear()
     repo_links.reset_canon_cache()
     source_health.clear_all()
     # Fresh database per test at truncate cost instead of drop/create +

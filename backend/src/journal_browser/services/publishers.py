@@ -538,8 +538,8 @@ def _publisher_bundle_factory(iid, name, years, parts):
 
         async with async_sessionmaker(get_engine(), expire_on_commit=False)() as session:
             inst = (await session.scalars(select(Institution).where(Institution.id == iid))).one()
-            bundle = await _build_publisher_bundle(session, inst, name, years=years, parts=parts)
-            return await cache_epoch(session), bundle
+            # _build_publisher_bundle already returns (epoch, bundle | None).
+            return await _build_publisher_bundle(session, inst, name, years=years, parts=parts)
 
     return _factory
 
