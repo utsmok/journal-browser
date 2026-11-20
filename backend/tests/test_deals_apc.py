@@ -7,7 +7,9 @@ admin deal CRUD with overrides and tombstones.
 Replaces test_deals_api, test_openapc, test_openapc_rerun, test_jct,
 test_deal_coverage, and test_admin_deals."""
 
+import importlib.util
 from datetime import UTC, date, datetime
+from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -1211,3 +1213,43 @@ async def test_funder_counts_gate_dedupe_and_sort(db, client, funders_fixture):
     assert body["n_ut_works"] == 1
     # Only the live work's journal survives the gates.
     assert [(j["issn_l"], j["n_works"]) for j in body["top_journals"]] == [("1234-5678", 1)]
+
+
+# ── Owner-curation provenance restore (scripts/restore_deal_curation.py) ───
+
+
+def _load_restore_script():
+    path = Path(__file__).resolve().parents[1] / "scripts" / "restore_deal_curation.py"
+    spec = importlib.util.spec_from_file_location("restore_deal_curation", path)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_restore_curation_provenance_merge():
+    mod = _load_restore_script()
+    restored = mod.RESTORED_ENTRY
+    jct_pair = [
+        {"source": "jct", "url": "https://example.com/index", "fetched_at": "2026-11-19"},
+        {"source": "jct", "url": "https://example.com/kar.csv", "fetched_at": "2026-11-19"},
+    ]
+    # Missing: the wiped pointer is appended behind the surviving entries.
+    provenance, changed = mod.merge_curation_provenance(jct_pair, restored)
+    assert changed and provenance == [*jct_pair, restored]
+    # None stored: same outcome.
+    provenance, changed = mod.merge_curation_provenance(None, restored)
+    assert changed and provenance == [restored]
+    # Already restored: idempotent, no duplicate.
+    provenance, changed = mod.merge_curation_provenance([*jct_pair, restored], restored)
+    assert not changed and provenance == [*jct_pair, restored]
+    # A different (e.g. newer) owner_curation entry is never overwritten.
+    newer = {"source": "owner_curation", "date": "2026-11-06", "doc": "decision-13.md"}
+    provenance, changed = mod.merge_curation_provenance([*jct_pair, newer], restored)
+    assert not changed and provenance == [*jct_pair, newer]
+    # Other-source entries never block the restore (deal 48's openaccess.nl).
+    provenance, changed = mod.merge_curation_provenance(
+        [{"source": "openaccess.nl", "url": "https://x", "fetched_at": "2026-11-20"}],
+        restored,
+    )
+    assert changed and provenance[-1] == restored
