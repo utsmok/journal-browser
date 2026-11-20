@@ -200,7 +200,9 @@ def base_query(
             .group_by(InstitutionWorksStats.issn_l)
             .subquery()
         )
-    year_works = func.coalesce(yearly.c.works_count, 0) if year_active else flags.c.works_count
+    year_works = (
+        func.coalesce(yearly.c.works_count, 0) if yearly is not None else flags.c.works_count
+    )
     covered = flags.c.deal_covered
     openaire_diamond = flags.c.openaire_diamond
     if q and not fuzzy:
@@ -287,7 +289,7 @@ def base_query(
             *([J.issn_l.not_in(sorted(set(ignored)))] if ignored else []),
         )
     )
-    if year_active:
+    if yearly is not None:
         # Journals without in-range stats rows must stay listed (works: 0),
         # so the year sum joins outside.
         query = query.outerjoin(yearly, yearly.c.issn_l == J.issn_l)

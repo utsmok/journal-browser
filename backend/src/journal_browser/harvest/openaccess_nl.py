@@ -87,7 +87,7 @@ def parse_overview(html: str) -> list[dict[str, str]]:
             dur = row.select_one("td.views-field-field-looptijd-deal")
             if link is None or dur is None:
                 continue
-            href = link["href"]
+            href = str(link["href"])
             out.append(
                 {
                     "slug": href.rstrip("/").rsplit("/", 1)[-1],
@@ -167,7 +167,7 @@ def _page_sections(soup: BeautifulSoup) -> tuple[str | None, dict[str, list[str]
     sections: dict[str, list[str]] = {}
     current: str | None = None
     for body in soup.select("div.body-text"):
-        if "node__content" not in (body.parent.get("class") or []):
+        if body.parent is None or "node__content" not in (body.parent.get("class") or []):
             continue
         for child in body.find_all(["p", "ul", "ol", "table"], recursive=False):
             label = _marker_label(child)
@@ -262,7 +262,7 @@ def parse_deal_page(html: str, url: str) -> dict[str, Any]:
 
     contract_url = None
     for a in soup.find_all("a", href=True):
-        href = a["href"]
+        href = str(a["href"])
         if ".pdf" not in href.lower():
             continue
         absolute = urljoin(url, href)

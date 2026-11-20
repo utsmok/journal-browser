@@ -751,6 +751,7 @@ async def _build_publisher_bundle(
         if oa_row is None and primary is None:
             continue
         split = oa_row if oa_row is not None else primary
+        assert split is not None  # the guard above continued when both rows are None
         works_by_year.append(
             {
                 "year": year,

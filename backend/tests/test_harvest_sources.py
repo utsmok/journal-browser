@@ -633,6 +633,7 @@ async def test_openaccess_nl_upsert_matches_page_url_and_owner_window(db):
     assert await db.scalar(select(func.count()).select_from(Deal)) == 1
     assert canonical.publisher_id == placeholder.id  # stays on the JCT row
     assert canonical.summary == page["summary"]
+    assert canonical.provenance is not None
     assert {p["source"] for p in canonical.provenance} == {"jct", "openaccess.nl"}
 
     # Owner-curated window: the page's programme period does not win.
@@ -663,6 +664,7 @@ async def test_openaccess_nl_upsert_matches_page_url_and_owner_window(db):
     await db.refresh(local)
     assert (local.start_year, local.end_year) == (2026, 2028)
     assert "Twente local deal" in local.duration_text
+    assert local.provenance is not None
     assert {p["source"] for p in local.provenance} == {"owner_curation", "openaccess.nl"}
 
 

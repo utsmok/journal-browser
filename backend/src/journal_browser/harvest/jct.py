@@ -57,6 +57,7 @@ _DEAL_FIELDS = [
 def split_esac_id(esac_id: str) -> tuple[str | None, int | None, str | None]:
     """ESAC ID -> (publisher code, start year, consortium) or Nones."""
     m = _ESAC_RE.match(esac_id.strip())
+    assert m is not None  # every group is optional, so the pattern always matches
     code, year, suffix = m.group(1), m.group(2), m.group(3).strip()
     return (code.lower() or None, int(year) if year else None, suffix or None)
 

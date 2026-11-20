@@ -278,6 +278,7 @@ def test_embedding_text_golden():
     many = embed_text(
         "Blood", [{"display_name": f"Topic {i}"} for i in range(8)], [f"Work {i}" for i in range(6)]
     )
+    assert many is not None
     assert len(many.split(" | ")) == 9  # cleaned title + 5 topics + 3 works
     assert embed_text(None, [], []) is None
 

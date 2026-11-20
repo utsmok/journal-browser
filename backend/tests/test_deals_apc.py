@@ -863,6 +863,7 @@ async def test_admin_deal_update_records_overrides(admin_api, db_engine):
 
     async with async_sessionmaker(db_engine)() as session:
         deal = await session.get(Deal, deal_id)
+        assert deal is not None
         assert str(deal.last_reviewed) == date.today().isoformat()
         assert deal.curation_resolved_reason == "duplicate sheet"
         fields = set(
@@ -930,6 +931,7 @@ async def test_admin_deal_cap_usage_and_nullable_clears(admin_api, db_engine):
 
     async with async_sessionmaker(db_engine)() as session:
         deal = await session.get(Deal, deal_id)
+        assert deal is not None
         assert deal.cap_usage == usage
         override = await session.scalar(
             select(ManualOverride).where(
@@ -1043,6 +1045,7 @@ async def test_admin_deal_journals_and_participation_tombstones(admin_api, db_en
         )
         assert row is not None and row.excluded is True
         deal = await session.get(Deal, deal_id)
+        assert deal is not None
         assert deal.cap_text == "Curated cap"
 
     # Participations: sorted codes, unknown code 404.
@@ -1065,6 +1068,7 @@ async def test_admin_deal_journals_and_participation_tombstones(admin_api, db_en
     assert r.status_code == 200 and r.json()["participations"] == ["rug"]
     async with async_sessionmaker(db_engine)() as session:
         inst = await session.scalar(select(Institution).where(Institution.code == "ut"))
+        assert inst is not None
         inst_id = inst.id  # commit below expires the instance; capture now
         tombstone_key = f"{deal_id}:{inst_id}"
         await _store_agreement(

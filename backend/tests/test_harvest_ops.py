@@ -160,6 +160,7 @@ _spec = importlib.util.spec_from_file_location(
     "bootstrap_ops_mod", Path(__file__).resolve().parents[1] / "jobs" / "bootstrap.py"
 )
 bootstrap_mod = importlib.util.module_from_spec(_spec)
+assert _spec is not None and _spec.loader is not None
 _spec.loader.exec_module(bootstrap_mod)
 
 

@@ -757,6 +757,7 @@ async def ingest_authors(
     # The institution row carries the publication-year window; edges to
     # works outside it drop out of every derived count below.
     institution = await session.get(Institution, institution_id)
+    assert institution is not None  # caller resolved institution_id from a live row
     year_start = institution.data_window_start
     year_end = institution.data_window_end if institution.data_window_end is not None else 9999
     local_works = {

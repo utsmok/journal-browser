@@ -701,13 +701,13 @@ async def chapter_rollup(
         (
             {
                 "parent_id": r.parent_id or None,
-                "name": r.name,
+                "name": str(r.name),
                 "chapters": int(r.chapters),
                 "titles": sorted(t for t in (r.titles or ()) if t),
             }
             for r in rows
         ),
-        key=lambda b: (-b["chapters"], b["name"].lower(), b["parent_id"] or ""),
+        key=lambda b: (-b["chapters"], str(b["name"]).lower(), b["parent_id"] or ""),
     )
     return {
         "chapters_total": int(chapters_total),

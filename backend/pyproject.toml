@@ -37,7 +37,7 @@ dev = [
     # so asyncpg futures cross event loops (tests/test_meta.py).
     "pytest-asyncio>=0.24,<1.5",
     "ruff>=0.17.1",
-    "ty>=0.0.95,<0.0.96",
+    "ty>=0.0.107",
 ]
 
 # Unreleased 0.6 family: resolved from the monorepo's overhaul branch until
@@ -88,10 +88,10 @@ include = ["src", "jobs", "tests", "scripts"]
 # Structural rules (unresolved-import, call-non-callable, invalid-raise,
 # call-non-callable) stay at error; revisit these as ty matures.
 invalid-argument-type = "warn"
-unresolved-attribute = "warn"
+missing-attribute = "warn"
 invalid-assignment = "warn"
 unsupported-operator = "warn"
-invalid-return-type = "warn"
+invalid-explicit-return = "warn"
 not-subscriptable = "warn"
 invalid-type-form = "warn"
 
