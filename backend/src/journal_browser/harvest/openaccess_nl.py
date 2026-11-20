@@ -311,14 +311,29 @@ async def _upsert_publisher(session: AsyncSession, slug: str, name: str) -> Publ
 async def _upsert_deal(
     session: AsyncSession, publisher_id: int, item: dict[str, Any], page: dict[str, Any]
 ) -> bool:
-    """Upsert by natural key (publisher, duration). Returns needs_curation
-    after suppression (False when the admin already dismissed exactly this
-    reason)."""
+    """Upsert by page URL first, then by natural key (publisher, duration).
+    Returns needs_curation after suppression (False when the admin already
+    dismissed exactly this reason).
+
+    The URL is the global page identity: a canonical agreement may sit on a
+    differently named publisher row (JCT placeholder code vs the
+    openaccess.nl display name), and a duration-keyed lookup alone would
+    fork a duplicate. A row the owner curated keeps its local period window
+    when the page describes a wider programme (live case: the ACM deal is
+    2026-2028 for Twente within the national 2021-2030 programme)."""
     deal = await session.scalar(
-        select(Deal).where(
-            Deal.publisher_id == publisher_id,
-            Deal.duration_text == item["duration_text"],
+        select(Deal).where(Deal.openaccess_nl_url == page["openaccess_nl_url"])
+    )
+    if deal is None:
+        deal = await session.scalar(
+            select(Deal).where(
+                Deal.publisher_id == publisher_id,
+                Deal.duration_text == item["duration_text"],
+            )
         )
+    owner_curated = deal is not None and any(
+        isinstance(entry, dict) and entry.get("source") == "owner_curation"
+        for entry in (deal.provenance or [])
     )
     needs_curation = bool(page["curation_reasons"])
     reason = "; ".join(page["curation_reasons"]) or None
@@ -335,8 +350,11 @@ async def _upsert_deal(
     if suppressed:
         needs_curation = False
         reason = None
+    # Refresh the openaccess.nl provenance entries; entries from other
+    # sources (jct merges, owner curation docs) are history and stay.
     values = {
         "status": item["status"],
+        "duration_text": item["duration_text"],
         "start_year": item["start_year"],
         "end_year": item["end_year"],
         "summary": page["summary"],
@@ -349,20 +367,31 @@ async def _upsert_deal(
         "openaccess_nl_url": page["openaccess_nl_url"],
         "per_year_oa_counts": item["per_year_oa_counts"],
         "provenance": [
+            *[
+                entry
+                for entry in ((deal.provenance or []) if deal is not None else [])
+                if not (isinstance(entry, dict) and entry.get("source") == SOURCE)
+            ],
             {
                 "source": SOURCE,
                 "url": page["url"],
                 "fetched_at": datetime.now(UTC).isoformat(),
-            }
+            },
         ],
         "needs_curation": needs_curation,
         "needs_curation_reason": reason,
     }
+    if owner_curated:
+        # Owner-pinned local window; the page's programme period must not
+        # overwrite it (the old openaccess.nl entries are pruned above, the
+        # owner_curation pointer stays and keeps re-asserting the pin).
+        for field in ("duration_text", "start_year", "end_year"):
+            del values[field]
     if not suppressed:
         # Re-flagging voids any stale dismissal; a clean page retires it.
         values["curation_resolved_reason"] = None
     if deal is None:
-        deal = Deal(publisher_id=publisher_id, duration_text=item["duration_text"], **values)
+        deal = Deal(publisher_id=publisher_id, **values)
         session.add(deal)
         await session.flush()  # id needed for the override row_key
     else:

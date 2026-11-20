@@ -67,6 +67,7 @@ from journal_browser.models import (
     OpenalexFunder,
     OpenalexWork,
     OpenalexWorkAuthor,
+    Publisher,
     PureOrg,
     PureOrgParent,
     PurePerson,
@@ -594,6 +595,75 @@ async def test_openaccess_nl_deal_upsert(db):
     assert deal.needs_curation_reason == "ambiguous cap numbers"
     assert deal.curation_resolved_reason is None
     assert await db.scalar(select(func.count()).select_from(Deal)) == 1
+
+
+@requires_db
+async def test_openaccess_nl_upsert_matches_page_url_and_owner_window(db):
+    """The page URL is the global identity: a canonical agreement on a
+    differently named publisher row is updated in place instead of forked,
+    and an owner-curated local period window survives the refresh."""
+    pages = _load("openaccess_nl_pages.json")
+    page = parse_deal_page(pages["deal"], DEAL_URL)
+    item = {
+        "duration_text": "2025-2027",
+        "start_year": 2025,
+        "end_year": 2027,
+        "per_year_oa_counts": {"2025": 7429},
+        "status": "current",
+    }
+    # Canonical on the JCT placeholder publisher ("ELS", no slug): only
+    # the URL finds it.
+    placeholder = Publisher(name="ELS")
+    db.add(placeholder)
+    await db.flush()
+    canonical = Deal(
+        publisher_id=placeholder.id,
+        status="current",
+        corresponding_authors_only=False,
+        provenance=[{"source": "jct", "url": "https://jct.example/els.csv"}],
+        duration_text="2025-2027",
+        openaccess_nl_url=DEAL_URL,
+    )
+    db.add(canonical)
+    await db.flush()
+    display = await _upsert_publisher(db, "elsevier", "Elsevier")
+    assert await _upsert_deal(db, display.id, item, page) is False  # updated, not created
+    await db.flush()
+    await db.refresh(canonical)
+    assert await db.scalar(select(func.count()).select_from(Deal)) == 1
+    assert canonical.publisher_id == placeholder.id  # stays on the JCT row
+    assert canonical.summary == page["summary"]
+    assert {p["source"] for p in canonical.provenance} == {"jct", "openaccess.nl"}
+
+    # Owner-curated window: the page's programme period does not win.
+    acm_page = dict(
+        page, openaccess_nl_url="https://www.openaccess.nl/en/publisherdeal/acm-2021-2030"
+    )
+    acm_item = {
+        "duration_text": "2021-2030",
+        "start_year": 2021,
+        "end_year": 2030,
+        "per_year_oa_counts": {},
+        "status": "current",
+    }
+    local = Deal(
+        publisher_id=display.id,
+        status="current",
+        corresponding_authors_only=False,
+        provenance=[{"source": "owner_curation", "date": "2026-10-22"}],
+        duration_text="2026-2028 (Twente local deal)",
+        start_year=2026,
+        end_year=2028,
+        openaccess_nl_url=acm_page["openaccess_nl_url"],
+    )
+    db.add(local)
+    await db.flush()
+    assert await _upsert_deal(db, display.id, acm_item, acm_page) is False
+    await db.flush()
+    await db.refresh(local)
+    assert (local.start_year, local.end_year) == (2026, 2028)
+    assert "Twente local deal" in local.duration_text
+    assert {p["source"] for p in local.provenance} == {"owner_curation", "openaccess.nl"}
 
 
 # ── OpenAIRE work facts ───────────────────────────────────────────────────
