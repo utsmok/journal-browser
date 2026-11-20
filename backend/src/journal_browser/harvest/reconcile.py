@@ -4,8 +4,10 @@ Matching: publisher (ESAC code alias -> openaccess.nl name) x duration
 overlap. A matched pair converges into ONE deal row: the openaccess.nl
 row becomes canonical (it carries the NL narrative the UI shows) and
 absorbs the JCT row's esac_id, journal list, institutions, and source
-links. Unmatched rows land in the curation report, never silently
-dropped (limitation: jct-coverage).
+links. Duplicate narrative rows (a scrape fork that resolved to a
+different publisher row than the canonical agreement sits on) fold back
+into the canonical first. Unmatched rows land in the curation report,
+never silently dropped (limitation: jct-coverage).
 """
 
 import logging
@@ -91,6 +93,17 @@ def _canonical_name(code: str | None, publisher_name: str | None) -> str | None:
     if code and code in CODE_ALIASES:
         return CODE_ALIASES[code]
     return (publisher_name or "").strip() or None
+
+
+_DUTCH_CONSORTIA = {"ukb", "surf", "nl"}
+_ESAC_SUFFIX_RE = re.compile(r"^[A-Za-z]+(\d{4})([A-Za-z]*)$")
+
+
+def _dutch_esac(esac_id: str | None) -> bool:
+    """True for national (Dutch-consortium) agreements: the only JCT
+    agreements an openaccess.nl deal can be the narrative of."""
+    m = _ESAC_SUFFIX_RE.match(esac_id or "")
+    return bool(m and m.group(2).lower() in _DUTCH_CONSORTIA)
 
 
 def durations_overlap(a: Deal, b: Deal) -> bool:
@@ -311,9 +324,142 @@ async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
     return stats
 
 
+def _pick_keeper(group: list[Deal]) -> Deal:
+    """Keeper of a same-agreement group: an esac-carrying row outranks a
+    narrative-only row, then the oldest row wins (it carries the register
+    history)."""
+    return sorted(group, key=lambda d: (d.esac_id is None, d.id))[0]
+
+
+async def _absorb_fork(session: AsyncSession, keeper: Deal, fork: Deal) -> None:
+    """Move a duplicate narrative row's edges onto the keeper and drop it.
+
+    The keeper keeps its period, esac identity, and JCT journal list; the
+    fork contributes institution links, curated (non-pattern) journal rows,
+    and admin overrides. Pattern-derived journal rows are re-derivable, so
+    they are dropped, not moved."""
+    await session.execute(
+        sa_delete(DealJournal).where(
+            DealJournal.deal_id == fork.id, DealJournal.source == "publisher-pattern"
+        )
+    )
+    keeper_issns = select(DealJournal.issn).where(DealJournal.deal_id == keeper.id)
+    await session.execute(
+        sa_delete(DealJournal).where(
+            DealJournal.deal_id == fork.id, DealJournal.issn.in_(keeper_issns)
+        )
+    )
+    await session.execute(
+        update(DealJournal).where(DealJournal.deal_id == fork.id).values(deal_id=keeper.id)
+    )
+    keeper_insts = select(DealInstitution.institution_id).where(
+        DealInstitution.deal_id == keeper.id
+    )
+    await session.execute(
+        sa_delete(DealInstitution).where(
+            DealInstitution.deal_id == fork.id,
+            DealInstitution.institution_id.in_(keeper_insts),
+        )
+    )
+    await session.execute(
+        update(DealInstitution).where(DealInstitution.deal_id == fork.id).values(deal_id=keeper.id)
+    )
+    keeper_fields = select(ManualOverride.field).where(
+        ManualOverride.table_name == "deals", ManualOverride.row_key == str(keeper.id)
+    )
+    await session.execute(
+        sa_delete(ManualOverride).where(
+            ManualOverride.table_name == "deals",
+            ManualOverride.row_key == str(fork.id),
+            ManualOverride.field.in_(keeper_fields),
+        )
+    )
+    await session.execute(
+        update(ManualOverride)
+        .where(ManualOverride.table_name == "deals", ManualOverride.row_key == str(fork.id))
+        .values(row_key=str(keeper.id))
+    )
+    if keeper.openaccess_nl_url != fork.openaccess_nl_url:
+        # Adopt the fork's deal-page URL so the next scrape matches this
+        # row by URL instead of forking again, and record the merge once.
+        keeper.openaccess_nl_url = fork.openaccess_nl_url
+        provenance = [p for p in (keeper.provenance or []) if isinstance(p, dict)]
+        if not any(p.get("merged_duplicate") == fork.openaccess_nl_url for p in provenance):
+            keeper.provenance = [
+                *provenance,
+                {
+                    "source": "reconcile",
+                    "merged_duplicate": fork.openaccess_nl_url,
+                    "at": datetime.now(UTC).isoformat(),
+                },
+            ]
+    await session.delete(fork)
+    await session.flush()
+
+
+async def dedupe_oanl_deals(session: AsyncSession, publisher_names: dict[int, str]) -> int:
+    """Fold duplicate openaccess.nl narrative rows into the canonical deal.
+
+    The scrape upserts by (publisher row, duration text). A canonical
+    agreement that sits on a differently named publisher row (JCT
+    placeholder code vs openaccess.nl display name) or carries an
+    owner-annotated local duration is missed, so the scrape inserts a
+    second row for the same page. Two rows are the same agreement when
+    they share the openaccess.nl URL, or when the fork's publisher name
+    matches exactly one esac-carrying Dutch-consortium canonical (ESAC
+    alias x duration overlap). Anything ambiguous stays for the curation
+    report instead of guessing.
+    """
+    deals = list(
+        (await session.execute(select(Deal).where(Deal.openaccess_nl_url.is_not(None)))).scalars()
+    )
+    if len(deals) < 2:
+        return 0
+    protected = await _override_protected(session, [d.id for d in deals])
+    merged = 0
+    consumed: set[int] = set()
+
+    by_url: dict[str, list[Deal]] = {}
+    for deal in deals:
+        by_url.setdefault(deal.openaccess_nl_url or "", []).append(deal)
+    for forks in by_url.values():
+        if len(forks) < 2:
+            continue
+        keeper = _pick_keeper(forks)
+        for fork in forks:
+            if fork.id == keeper.id or fork.id in protected:
+                continue
+            await _absorb_fork(session, keeper, fork)
+            consumed.add(fork.id)
+            merged += 1
+
+    canonicals = [d for d in deals if d.esac_id and _dutch_esac(d.esac_id)]
+    for fork in deals:
+        if fork.esac_id or fork.id in protected or fork.id in consumed:
+            continue
+        name = (publisher_names.get(fork.publisher_id) or "").strip().casefold()
+        if not name:
+            continue
+        candidates = [
+            c
+            for c in canonicals
+            if (_canonical_name(_code_of(c.esac_id), publisher_names.get(c.publisher_id)) or "")
+            .strip()
+            .casefold()
+            == name
+            and durations_overlap(c, fork)
+        ]
+        if len(candidates) != 1:
+            continue
+        await _absorb_fork(session, candidates[0], fork)
+        merged += 1
+    return merged
+
+
 async def reconcile_deals(session: AsyncSession) -> dict[str, int]:
     """Match + merge; returns report counters."""
     publisher_names = await _publisher_names(session)
+    merged_oanl = await dedupe_oanl_deals(session, publisher_names)
     jct_deals = await _jct_deals(session)
     matched = unmatched_jct = 0
 
@@ -336,14 +482,11 @@ async def reconcile_deals(session: AsyncSession) -> dict[str, int]:
                 )
             ).scalars()
         )
-    dutch = {"ukb", "surf", "nl"}
-    year_re = re.compile(r"^[A-Za-z]+(\d{4})([A-Za-z]*)$")
 
     def _tier(d: Deal) -> int:
         if d.id in twente_deal_ids:
             return 0
-        m = year_re.match(d.esac_id or "")
-        return 1 if m and m.group(2).lower() in dutch else 2
+        return 1 if _dutch_esac(d.esac_id) else 2
 
     # Tier 2 (foreign consortium, no Twente membership) never merges: it
     # would mislabel the canonical row and Twente-coverage queries would
@@ -384,8 +527,9 @@ async def reconcile_deals(session: AsyncSession) -> dict[str, int]:
     # openaccess.nl deals with no JCT counterpart: flag for curation,
     # except where staff set a manual override on this exact field
     # (reconcile runs after the normalizers, so an unguarded flag would
-    # clobber curated values on every refresh).
-    candidates = [d for d in oanl_deals if d.esac_id is None]
+    # clobber curated values on every refresh). Archive rows are history,
+    # not a curation queue; only current deals flag.
+    candidates = [d for d in oanl_deals if d.esac_id is None and d.status == "current"]
     protected = await _override_protected(session, [d.id for d in candidates])
     for deal in candidates:
         if deal.id in protected:
@@ -397,6 +541,7 @@ async def reconcile_deals(session: AsyncSession) -> dict[str, int]:
         "matched": matched,
         "unmatched_jct": unmatched_jct,
         "unmatched_oanl": len([d for d in candidates if d.id not in protected]),
+        "merged_oanl": merged_oanl,
     }
     # Dutch-consortium merges whose member list omits institutions (UKB
     # joint deals do not always enumerate members): flag for review so

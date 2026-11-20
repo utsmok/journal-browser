@@ -438,6 +438,159 @@ async def test_reconcile_dismissal_protects(db):
     assert d.curation_resolved_reason == "checked: local ACM deal"
 
 
+# ── openaccess.nl scrape forks folded back into the canonical row ─────────
+
+
+@requires_db
+async def test_reconcile_absorbs_scrape_forks(db):
+    """A scrape whose page resolves to a different publisher row than the
+    canonical agreement sits on forks a duplicate narrative row; reconcile
+    folds it back into the canonical (ESAC alias x Dutch consortium)."""
+    pub_els = await _publisher(db, "ELS")  # JCT placeholder, no slug
+    pub_elsevier = await _publisher(db, "Elsevier", slug="elsevier")
+    pub_eme = await _publisher(db, "EME")
+    pub_emerald = await _publisher(db, "Emerald Publishing group", slug="emerald-publishing-group")
+    ut = Institution(
+        name="University of Twente", ror="https://ror.org/006hf6230", code="ut", active=True
+    )
+    rug = Institution(
+        name="University of Groningen", ror="https://ror.org/some-ror", code="rug", active=True
+    )
+    db.add_all([ut, rug])
+    await db.flush()
+
+    canonical = await _deal(
+        db, pub_els.id, esac_id="els2025ukb", openaccess_nl_url="https://oanl/elsevier-2025-2027"
+    )
+    canonical.start_year, canonical.end_year = 2025, 2026  # JCT window
+    db.add(DealJournal(deal_id=canonical.id, issn="0169-5594", source="jct"))
+    db.add(DealInstitution(deal_id=canonical.id, institution_id=ut.id))
+    foreign = await _deal(db, pub_els.id, esac_id="els2025caul")
+    foreign.start_year, foreign.end_year = 2025, 2027  # overlaps, not Dutch
+    eme = await _deal(
+        db,
+        pub_eme.id,
+        esac_id="eme2025ukb",
+        openaccess_nl_url="https://oanl/publisher/emerald-publishing-group",
+    )
+    eme.start_year, eme.end_year = 2025, 2027
+    db.add(DealJournal(deal_id=eme.id, issn="0304-4076", source="jct"))
+    db.add(DealInstitution(deal_id=eme.id, institution_id=ut.id))
+    fork = await _deal(db, pub_elsevier.id, openaccess_nl_url="https://oanl/elsevier-2025-2027")
+    fork.start_year, fork.end_year = 2025, 2027  # page window
+    db.add(DealJournal(deal_id=fork.id, issn="1879-307X", source="publisher-pattern"))
+    db.add(DealInstitution(deal_id=fork.id, institution_id=rug.id))
+    eme_fork = await _deal(
+        db,
+        pub_emerald.id,
+        openaccess_nl_url="https://oanl/publisherdeal/emerald-publishing-group-2025-2027",
+    )
+    eme_fork.start_year, eme_fork.end_year = 2025, 2027  # different URL, same agreement
+    await db.commit()
+
+    stats = await reconcile_deals(db)
+    await db.commit()
+    assert stats["merged_oanl"] == 2 and stats["matched"] == 0
+    kept = await db.get(Deal, canonical.id)
+    assert kept.esac_id == "els2025ukb"
+    assert (kept.start_year, kept.end_year) == (2025, 2026)  # keeper period wins
+    journals = {r.issn for r in (await db.execute(select(DealJournal))).scalars().all()}
+    assert journals == {"0169-5594", "0304-4076"}  # pattern rows dropped, jct kept
+    insts = {
+        (r.deal_id, r.institution_id)
+        for r in (await db.execute(select(DealInstitution))).scalars().all()
+    }
+    assert (canonical.id, rug.id) in insts  # the fork's link moved
+    # Same page URL, so no merged-duplicate note; the Emerald fork (a
+    # different URL) does record one on its keeper.
+    assert not [p for p in kept.provenance if p.get("merged_duplicate")]
+    eme_kept = await db.get(Deal, eme.id)
+    # The canonical adopts the fork's deal-page URL so the next scrape
+    # matches by URL instead of forking again.
+    assert (
+        eme_kept.openaccess_nl_url
+        == "https://oanl/publisherdeal/emerald-publishing-group-2025-2027"
+    )
+    assert await db.scalar(select(func.count()).select_from(Deal)) == 3
+
+    again = await reconcile_deals(db)
+    await db.commit()
+    assert again["merged_oanl"] == 0  # rerun: nothing left to fold
+    eme_kept2 = await db.get(Deal, eme.id)
+    assert len([p for p in eme_kept2.provenance if p.get("merged_duplicate")]) == 1
+
+
+@requires_db
+async def test_reconcile_keeps_owner_window_on_same_url_fork(db):
+    """Two narrative rows for one page (owner-annotated local duration vs
+    the page's programme window): the oldest row keeps the local window,
+    the fork's derived rows are dropped, derived coverage re-lands."""
+    pub = await _publisher(db, "ACM", slug="acm")
+    ut = Institution(
+        name="University of Twente", ror="https://ror.org/006hf6230", code="ut", active=True
+    )
+    db.add(ut)
+    await db.flush()
+    local = await _deal(
+        db,
+        pub.id,
+        openaccess_nl_url="https://oanl/publisherdeal/acm-2021-2030",
+        duration_text="2026-2028 (Twente local deal; national programme 2021-2030)",
+        conditions_text="Participating in the agreement are: University of Twente",
+    )
+    local.start_year, local.end_year = 2026, 2028
+    local.provenance = [{"source": "owner_curation", "date": "2026-10-22"}]
+    db.add(Journal(issn_l="0001-0001", title="J1", publisher_name="ACM"))
+    db.add(DealJournal(deal_id=local.id, issn="0001-0001", source="publisher-pattern"))
+    fork = await _deal(
+        db,
+        pub.id,
+        openaccess_nl_url="https://oanl/publisherdeal/acm-2021-2030",
+        duration_text="2021-2030",
+    )
+    fork.start_year, fork.end_year = 2021, 2030
+    db.add(DealJournal(deal_id=fork.id, issn="0004-0004", source="publisher-pattern"))
+    db.add(DealInstitution(deal_id=fork.id, institution_id=ut.id))
+    await db.commit()
+
+    stats = await reconcile_deals(db)
+    await db.commit()
+    assert stats["merged_oanl"] == 1
+    kept = await db.get(Deal, local.id)
+    assert (kept.start_year, kept.end_year) == (2026, 2028)
+    assert "Twente local deal" in kept.duration_text
+    assert kept.needs_curation is False  # linked + re-derived in the same pass
+    rows = (await db.execute(select(DealJournal))).scalars().all()
+    assert {r.issn for r in rows} == {"0001-0001"} and all(r.deal_id == local.id for r in rows)
+    # Same URL, so no merged-duplicate provenance entry; the owner pointer
+    # survives.
+    assert not [p for p in kept.provenance if p.get("merged_duplicate")]
+    assert any(p.get("source") == "owner_curation" for p in kept.provenance)
+
+
+@requires_db
+async def test_reconcile_leaves_ambiguous_forks_flagged(db):
+    """A fork matching two Dutch canonicals (same publisher, overlapping
+    windows) is not auto-merged; it stays for the curation report."""
+    pub = await _publisher(db, "WIL")  # code not in CODE_ALIASES
+    a = await _deal(
+        db, pub.id, esac_id="wil2024ukb", openaccess_nl_url="https://oanl/wil-2024-2026"
+    )
+    a.start_year, a.end_year = 2024, 2026
+    b = await _deal(db, pub.id, esac_id="wil2025nl", openaccess_nl_url="https://oanl/wil-2025-2027")
+    b.start_year, b.end_year = 2025, 2027
+    fork = await _deal(db, pub.id, openaccess_nl_url="https://oanl/wil-2025-2026")
+    fork.start_year, fork.end_year = 2025, 2026
+    await db.commit()
+
+    stats = await reconcile_deals(db)
+    await db.commit()
+    assert stats["merged_oanl"] == 0
+    await db.refresh(fork)
+    assert fork.esac_id is None and fork.needs_curation is True
+    assert await db.scalar(select(func.count()).select_from(Deal)) == 3
+
+
 # ── NL deal coverage re-derive (folded from test_harvest2_reconcile_rederive.py)
 
 

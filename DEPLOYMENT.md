@@ -214,7 +214,11 @@ the JCT/ESAC dump. Rules:
   insert is idempotent), so journals a publisher adds later join the deal;
   a deal with hand-curated coverage rows (`source` `manual` or `jct`)
   keeps its frozen list, and `ManualOverride` rows still win over any
-  re-harvest.
+  re-harvest. Duplicate narrative rows (a scrape that resolved to a
+  differently named publisher row than the canonical agreement, live case
+  2026-11-20) fold back into the canonical row: the keeper keeps its period,
+  esac identity, and JCT journal list, and adopts the fork's page URL when
+  it differed.
 - `ManualOverride` rows keep hand fixes winning over re-harvests. The
   curation report (`landing/reports/curation_report.html`) lists everything
   that needs a human.
