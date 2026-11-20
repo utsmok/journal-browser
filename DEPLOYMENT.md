@@ -159,7 +159,7 @@ wave (see "Daily refresh wave" below) repeats a subset of these stages.
 | `harvest_jisc` + `normalize_jisc` | Jisc Open Policy Finder | Green-OA policies per journal (`jisc_*` columns). Skips cleanly when `JB_JISC_API_KEY` is unset; run `normalize_jisc` after the sweep to stamp the journal columns |
 | `harvest_pure` | your repository OAI-PMH | The works corpus |
 | `harvest_pure_entities` | your repository OAI-PMH (CERIF sets) | Orgunits, persons, publication author lists (`pure_orgs`, `pure_persons`, `work_pure_authors` inputs) |
-| `enrich_works` | OpenAlex + Crossref | DOIs, types, citation counts per work; the Crossref rung lands the payloads the author ORCID corroboration reads |
+| `enrich_works` | OpenAlex + Crossref | DOIs, types, citation counts per work (OpenAlex rung: $0 singleton GETs, runs ungated); the Crossref rung lands the payloads the author ORCID corroboration reads |
 | `harvest_openaire` | OpenAIRE Graph | Institution works matched by DOI |
 | `derive_openaire_facts` | stored OpenAIRE products | Per-work facts row: diamond flag, usage, FOS, projects |
 | `harvest_stats` | all of the above | Per-journal, per-year statistics. Credit-priced works filter ($0.0001 per page); stops cleanly below the budget reserve |
@@ -315,10 +315,11 @@ because the credit-priced stages must run while that budget is fresh. OpenAlex
 bills per request against the free key's $1/day budget, resetting at 00:00 UTC.
 Measured 2026-11-20 against the live key: singleton GETs (`/works/{id}`) bill
 $0, a list or filter page bills $0.0001, a search bills $0.001. Only list and
-search stages draw the budget. Every OpenAlex stage also checks
+search stages draw the budget. Each credit-priced OpenAlex stage checks
 `openalex_budget_ok()` before each chunk and stops cleanly, with a stats note,
 once the remaining budget falls below `JB_OPENALEX_RESERVE_USD` (default
-0.25). On
+0.25). Singleton-only stages such as `enrich_works` run ungated: every
+request there bills $0. On
 2026-11-07 a manually ordered wave spent about seven hours of the fresh
 budget on the then credit-priced oa colors step. The funder harvest after it
 crashed five seconds in, and the wave's exit gate stopped the remaining

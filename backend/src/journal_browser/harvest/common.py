@@ -384,8 +384,11 @@ def require_openalex_key(step: str) -> str:
 
 async def openalex_credits_remaining() -> float | None:
     """Remaining daily USD credit budget from OpenAlex's rate-limit
-    endpoint; None when the check fails (gate stays open)."""
+    endpoint; None when the check fails or no key is set (gate stays
+    open: a keyless install has no per-key budget to check, so no HTTP)."""
     api_key = get_settings().openalex_api_key
+    if not api_key:
+        return None
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(

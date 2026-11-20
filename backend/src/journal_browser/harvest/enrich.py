@@ -35,7 +35,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..harvest.common import (
     canonical_oa_status,
     normalize_issn,
-    openalex_budget_ok,
     resolve_issn_l,
 )
 from ..ingest import IngestSession
@@ -315,8 +314,9 @@ async def enrich_openalex(
     Singleton GETs bill $0 while list/filter pages cost credits (measured
     2026-11-20), so each DOI gets its own GET instead of a 50-DOI pipe
     filter (whose single malformed DOI used to poison the whole batch).
-    Each fetch chunk checks the daily budget reserve first and the run
-    stops cleanly below it (stats note `openalex_reserve_stop`).
+    Every call in this stage is a singleton GET, so it runs ungated: the
+    daily-budget reserve (`openalex_budget_ok`) stays on the credit-priced
+    listing and search stages.
     `refresh_matched` widens the selection from
     journal-less works to every DOI work of the institution."""
     from aletheca import AlethecaClient
@@ -347,8 +347,6 @@ async def enrich_openalex(
         dois = sorted(by_doi)
         for at in range(0, len(dois), FETCH_CHUNK):
             chunk = dois[at : at + FETCH_CHUNK]
-            if not await openalex_budget_ok("enrich_openalex", stats):
-                break
             found, errored, first_error = await fetch_works_by_doi(client, chunk, fetch_stats)
             if errored:
                 logger.warning(
