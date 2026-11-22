@@ -88,7 +88,7 @@ def _deal_duration(deal: Deal) -> str | None:
     if deal.duration_text:
         return deal.duration_text.strip()
     if deal.start_year and deal.end_year:
-        return f"{deal.start_year}–{deal.end_year}"
+        return f"{deal.start_year} to {deal.end_year}"
     if deal.start_year:
         return f"From {deal.start_year}"
     return None
@@ -368,7 +368,9 @@ def _evaluate_constraints(
             budget_pass = False
             if deal_covered and cap_reached:
                 priority = max(priority, 1)
-                notes.append("Institutional deal cap reached — standard APC may apply")
+                notes.append(
+                    "The institutional deal cap has been reached, so standard APCs may apply"
+                )
             elif estimated_cost_eur is not None and estimated_cost_eur > cap:
                 priority = max(priority, 2)
                 notes.append(
@@ -469,12 +471,12 @@ def _build_reasons_and_summary(
     # 1) Topical similarity
     topic_tone = "positive" if cand.similarity >= 0.70 else "neutral"
     topic_label = (
-        f"Strong topical match ({pct}%)" if cand.similarity >= 0.72 else f"Topical match ({pct}%)"
+        f"Close topic match ({pct}%)" if cand.similarity >= 0.72 else f"Topic match ({pct}%)"
     )
     if topics:
         topic_detail = f"Covers {', '.join(topics)}."
     else:
-        topic_detail = "Close semantic overlap with your manuscript title and abstract."
+        topic_detail = "Matches the topic of your title and abstract."
     reasons.append(
         RecommendReason(kind="topic", tone=topic_tone, label=topic_label, detail=topic_detail)
     )
@@ -486,11 +488,11 @@ def _build_reasons_and_summary(
             RecommendReason(
                 kind="oa",
                 tone="positive",
-                label="Diamond Open Access (€0)",
-                detail="Free to read and free to publish — no APC charged to authors.",
+                label="Diamond open access (€0)",
+                detail="Free to read and free to publish, with no APC charged to authors.",
             )
         )
-        oa_phrase = "€0 Diamond Open Access publishing"
+        oa_phrase = "€0 diamond open access publishing"
     elif item.get("deal_covered") and cand.deal_summary:
         ds = cand.deal_summary
         pub_part = f" ({ds.publisher_name})" if ds.publisher_name else ""
@@ -503,11 +505,11 @@ def _build_reasons_and_summary(
                     label=f"{inst_label} deal cap reached",
                     detail=(
                         f"Covered by an active {inst_label} agreement{pub_part}{dur_part}, "
-                        "but the annual national/institutional cap is reported reached."
+                        "but the annual cap is reported reached."
                     ),
                 )
             )
-            oa_phrase = f"an active {inst_label} deal (annual cap reported reached)"
+            oa_phrase = f"an active {inst_label} deal whose annual cap is reported reached"
         elif ds.is_discount_only:
             reasons.append(
                 RecommendReason(
@@ -515,19 +517,19 @@ def _build_reasons_and_summary(
                     tone="warning",
                     label=f"{inst_label} discount deal",
                     detail=(
-                        f"Active {inst_label} agreement{pub_part}{dur_part} offers an APC "
+                        f"An active {inst_label} agreement{pub_part}{dur_part} gives an APC "
                         "discount rather than full €0 coverage."
                     ),
                 )
             )
             oa_phrase = f"a {inst_label} APC discount agreement"
         elif ds.is_capped:
-            cap_note = f" Note: {ds.cap_text}" if ds.cap_text else " Subject to an annual cap."
+            cap_note = f"Note: {ds.cap_text}" if ds.cap_text else "An annual cap applies."
             reasons.append(
                 RecommendReason(
                     kind="deal",
                     tone="positive",
-                    label=f"Covered by {inst_label} OA deal",
+                    label=f"Covered by {inst_label} open access deal",
                     detail=(
                         f"€0 open access for eligible corresponding authors{pub_part}{dur_part}."
                     ),
@@ -541,46 +543,49 @@ def _build_reasons_and_summary(
                     detail=cap_note.strip(),
                 )
             )
-            oa_phrase = f"€0 open access through a {inst_label} deal (annual cap applies)"
+            oa_phrase = f"€0 open access under a {inst_label} deal with an annual cap"
         else:
             reasons.append(
                 RecommendReason(
                     kind="deal",
                     tone="positive",
-                    label=f"Covered by {inst_label} OA deal",
+                    label=f"Covered by {inst_label} open access deal",
                     detail=(
                         f"€0 open access for eligible corresponding authors{pub_part}{dur_part}."
                     ),
                 )
             )
-            oa_phrase = f"€0 open access covered by an active {inst_label} deal"
+            oa_phrase = f"€0 open access under an active {inst_label} deal"
     elif cand.oa_type == OaType.GOLD:
         if cand.estimated_cost_eur is not None:
             reasons.append(
                 RecommendReason(
                     kind="cost",
                     tone="positive" if cand.strict_pass else "warning",
-                    label=f"Gold Open Access ({cand.estimated_cost_label})",
-                    detail="Fully open-access journal with immediate public readership.",
+                    label=f"Gold open access ({cand.estimated_cost_label})",
+                    detail="All articles in this journal are published open access immediately.",
                 )
             )
-            oa_phrase = f"Gold Open Access ({cand.estimated_cost_label})"
+            oa_phrase = f"gold open access ({cand.estimated_cost_label})"
         else:
             reasons.append(
                 RecommendReason(
                     kind="cost",
                     tone="neutral",
-                    label="Gold Open Access (APC unknown)",
-                    detail="Fully open-access journal; verify the current APC on the journal page.",
+                    label="Gold open access (APC unknown)",
+                    detail=(
+                        "This is a gold open access journal. "
+                        "Check the current APC on the journal page."
+                    ),
                 )
             )
-            oa_phrase = "Gold Open Access (verify current APC)"
+            oa_phrase = "gold open access with an unconfirmed APC"
     else:
         green = item.get("green_oa")
         embargo = item.get("jisc_embargo_accepted_months")
         if green in ("submitted", "accepted", "published"):
             embargo_note = (
-                f" ({embargo}-month embargo on accepted manuscript)"
+                f" with a {embargo}-month embargo on the accepted manuscript"
                 if embargo is not None and embargo > 0
                 else ""
             )
@@ -588,21 +593,24 @@ def _build_reasons_and_summary(
                 RecommendReason(
                     kind="green_oa",
                     tone="neutral",
-                    label=f"Green OA route ({green} version)",
+                    label=f"Green open access ({green} version)",
                     detail=(
-                        "Allows repository self-archiving per Jisc Open Policy Finder"
+                        "Permits repository self-archiving according to Jisc Open Policy Finder"
                         f"{embargo_note}."
                     ),
                 )
             )
-            oa_phrase = f"a Green OA self-archiving route ({green} version)"
+            oa_phrase = f"a green open access route for the {green} version"
         else:
             reasons.append(
                 RecommendReason(
                     kind="oa",
                     tone="warning",
                     label=f"{cand.oa_type.value.capitalize()} journal",
-                    detail="No active institutional deal or confirmed €0 OA route on record.",
+                    detail=(
+                        "No active institutional deal or confirmed €0 open access "
+                        "route is on record."
+                    ),
                 )
             )
             oa_phrase = f"{cand.oa_type.value} publishing"
@@ -625,21 +633,21 @@ def _build_reasons_and_summary(
                 RecommendReason(
                     kind="funder",
                     tone="positive",
-                    label=f"Compliant with {funder_name}",
+                    label=f"Meets {funder_name} policy",
                     detail=detail_txt,
                 )
             )
-            funder_phrase = f"meets {funder_name} OA requirements"
+            funder_phrase = f"meets {funder_name} open access rules"
         elif cand.funder_fit.status == "check":
             reasons.append(
                 RecommendReason(
                     kind="funder",
                     tone="warning",
-                    label=f"{funder_name}: verify Green OA timing",
+                    label=f"{funder_name}: check green open access timing",
                     detail=detail_txt,
                 )
             )
-            funder_phrase = f"requires checking {funder_name} embargo terms"
+            funder_phrase = f"requires checking {funder_name} embargo rules"
         else:
             reasons.append(
                 RecommendReason(
@@ -660,7 +668,7 @@ def _build_reasons_and_summary(
                 kind="institution",
                 tone="positive",
                 label=f"{works:,} {inst_label} {noun}",
-                detail=f"Researchers at {inst_label} have published in this venue.",
+                detail=f"Researchers at {inst_label} have published in this journal.",
             )
         )
         inst_phrase = f"{works:,} recent {inst_label} {noun}"
@@ -671,35 +679,35 @@ def _build_reasons_and_summary(
     if quartile or twoyr is not None:
         parts = []
         if quartile:
-            parts.append(f"ScimagoJR {quartile}")
+            parts.append(f"Scimago {quartile}")
         if twoyr is not None:
-            parts.append(f"2-yr mean citedness {twoyr:.1f}")
+            parts.append(f"2-year mean citedness {twoyr:.1f}")
         if cand.h_index is not None:
             parts.append(f"h-index {cand.h_index}")
         reasons.append(
             RecommendReason(
                 kind="metrics",
                 tone="neutral",
-                label=" · ".join(parts[:2]),
+                label=", ".join(parts[:2]),
                 detail=(
-                    f"Venue-level indicators ({', '.join(parts)}); interpret alongside scope "
-                    "and audience."
+                    f"Journal indicators ({', '.join(parts)}). Interpret these alongside scope "
+                    "and readership."
                 ),
             )
         )
 
-    # Compose crisp 1–2 sentence plain-language summary
+    # Compose 1 to 2 sentence plain-language summary
     lead = (
-        f"Strong topical fit ({pct}% similarity) with {oa_phrase}."
+        f"Close topic match ({pct}% similarity) with {oa_phrase}."
         if cand.similarity >= 0.72
-        else f"Relevant topical match ({pct}% similarity) with {oa_phrase}."
+        else f"Topic match ({pct}% similarity) with {oa_phrase}."
     )
     if funder_phrase and inst_phrase:
-        summary = f"{lead} {funder_phrase[0].upper() + funder_phrase[1:]}, with {inst_phrase}."
+        summary = f"{lead} It {funder_phrase}, and has {inst_phrase}."
     elif funder_phrase:
-        summary = f"{lead} {funder_phrase[0].upper() + funder_phrase[1:]}."
+        summary = f"{lead} It {funder_phrase}."
     elif inst_phrase:
-        summary = f"{lead} Backed by {inst_phrase}."
+        summary = f"{lead} It has {inst_phrase}."
     else:
         summary = lead
 
@@ -713,43 +721,41 @@ def _build_ranking_factors(
     funder_structured: bool,
 ) -> list[str]:
     factors = [
-        "Local bge-small-en-v1.5 semantic similarity between your manuscript and journal profiles",
-        "Open access promotion (Diamond OA +0.12, active institutional deals +0.10, "
-        "capped deals +0.075, Gold OA +0.04)",
+        "Local bge-small-en-v1.5 topic similarity between your text and journal profiles.",
+        "Open access bonuses: diamond open access (+0.12), active institutional deal (+0.10), "
+        "capped deal (+0.075), gold open access (+0.04).",
     ]
     if req.budget_mode == "none":
-        factors.append("Budget filter: €0 APC (Diamond OA or active institutional deal)")
+        factors.append(
+            "Budget rule: €0 APC only (diamond open access or active institutional deal)."
+        )
     elif req.budget_mode == "capped":
         cap = req.max_apc_eur if req.max_apc_eur is not None else 0
-        factors.append(f"Budget filter: APC up to {_fmt_eur(cap)} (or €0 Diamond/deal)")
+        factors.append(f"Budget rule: APC up to {_fmt_eur(cap)}, or €0 diamond or deal.")
     elif req.budget_mode == "funder_pays":
-        factors.append("Budget filter: open-access options eligible for funder/grant APC support")
+        factors.append("Budget rule: open access options eligible for funder or grant APC payment.")
     else:
-        factors.append("Budget filter: flexible (all non-prohibited venues, OA prioritized)")
+        factors.append("Budget rule: all non-prohibited journals, with open access ranked higher.")
 
     if funder_name:
         if funder_structured:
             factors.append(
-                f"Funder compliance: {funder_name} "
-                "(Jisc Open Policy Finder structured policy, +0.06)"
+                f"Funder check: {funder_name} (Jisc Open Policy Finder structured policy, +0.06)."
             )
         else:
             factors.append(
-                f"Funder selected: {funder_name} (text-only policy — verify conditions manually)"
+                f"Funder selected: {funder_name} (text-only policy, check conditions manually)."
             )
     if req.prefer_institution_history:
         factors.append(
-            f"Institutional track record boost for venues where {inst_label} "
-            "authors publish (up to +0.045)"
+            f"Bonus for journals where {inst_label} authors already publish (up to +0.045)."
         )
     if req.prefer_established:
-        factors.append("Established venue nudge (ScimagoJR Q1 +0.03, Q2 +0.015)")
+        factors.append("Bonus for Scimago Q1 (+0.03) and Q2 (+0.015) journals.")
     if not req.include_non_journals:
-        factors.append(
-            "Venue scope: peer-reviewed journals only (book series & conferences hidden)"
-        )
+        factors.append("Venue filter: peer-reviewed journals only.")
     else:
-        factors.append("Venue scope: includes book series and conference series")
+        factors.append("Venue filter: includes book series and conference series.")
     return factors
 
 

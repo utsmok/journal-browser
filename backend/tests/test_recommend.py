@@ -459,7 +459,7 @@ async def test_recommend_include_non_journals_and_established_boost(recommend_fi
     body = res.json()
     issns = [r["issn_l"] for r in body["recommendations"]]
     assert "1000-0008" in issns
-    assert any("Established venue nudge" in f for f in body["ranking_factors"])
+    assert any("Scimago Q1" in f for f in body["ranking_factors"])
 
 
 @requires_db

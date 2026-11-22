@@ -189,7 +189,7 @@ describe("<GuideWizard>", () => {
 
     // Privacy shield note is visible on step 1
     expect(
-      screen.getByText(/Embedded locally on this server — your manuscript text is never sent/),
+      screen.getByText(/Your text is converted to a vector on this server/),
     ).toBeInTheDocument();
 
     // Clicking a demo example fills title + abstract and enables Continue
@@ -213,7 +213,7 @@ describe("<GuideWizard>", () => {
 
     // Step 2: default "No specific funder" -> Continue
     expect(
-      screen.getByText("Do you have a research funder with open-access rules?"),
+      screen.getByText("Does your research funder have open access rules?"),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
@@ -222,15 +222,15 @@ describe("<GuideWizard>", () => {
     fireEvent.click(screen.getByRole("button", { name: "€3,500" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
-    // Step 4: toggle Q1-Q2 nudge ON and submit
+    // Step 4: toggle Q1-Q2 bonus ON and submit
     const establishedSwitch = screen.getByRole("switch", {
-      name: /Boost Q1–Q2 \/ established venues/,
+      name: /Prefer Q1 and Q2 journals/,
     });
     expect(establishedSwitch).toHaveAttribute("aria-checked", "false");
     fireEvent.click(establishedSwitch);
     expect(establishedSwitch).toHaveAttribute("aria-checked", "true");
 
-    fireEvent.click(screen.getByRole("button", { name: "Find recommended journals" }));
+    fireEvent.click(screen.getByRole("button", { name: "Find journals" }));
 
     await waitFor(() => {
       expect(screen.getByText("Open Microfluidics")).toBeInTheDocument();
@@ -248,13 +248,13 @@ describe("<GuideWizard>", () => {
     );
 
     // Podium #1 + #2 + relaxed alternative + transparency card + semantic handoff
-    expect(screen.getByText("#1 Top match")).toBeInTheDocument();
+    expect(screen.getByText("#1 Match")).toBeInTheDocument();
     expect(screen.getByText("Journal of Fluid Membranes")).toBeInTheDocument();
     expect(screen.getByText("Green Route Fluids")).toBeInTheDocument();
     expect(screen.getByText(/Green OA \/ Taverne self-archiving route only/)).toBeInTheDocument();
-    expect(screen.getByText("How these recommendations were built")).toBeInTheDocument();
+    expect(screen.getByText("How these recommendations were calculated")).toBeInTheDocument();
     const handoffHref = screen
-      .getByRole("link", { name: /Explore broader semantic matches in Search/ })
+      .getByRole("link", { name: /Open semantic search/ })
       .getAttribute("href");
     expect(handoffHref).toMatch(/^\/ut\/?\?q=/);
     expect(handoffHref).toContain("&mode=semantic");
@@ -267,7 +267,7 @@ describe("<GuideWizard>", () => {
       "Auditing algorithmic fairness",
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Reset saved wizard answers" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset saved answers" }));
     expect(window.localStorage.getItem("ojb_guide_prefs_v1")).toBeNull();
     expect(screen.getByLabelText("Working title")).toHaveValue("");
   });

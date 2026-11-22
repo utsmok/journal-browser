@@ -12,22 +12,22 @@ const PILLARS: Pillar[] = [
   {
     step: "1",
     title: "Open sources only",
-    body: "Every figure comes from public sources (Pure OAI-PMH, OpenAlex, DOAJ, OpenAIRE, Crossref, openaccess.nl, JCT, OpenAPC, Scimago, Jisc OPF). Raw copies are archived before processing.",
+    body: "All data comes from public sources, including Pure OAI-PMH, OpenAlex, DOAJ, OpenAIRE, Crossref, openaccess.nl, JCT, OpenAPC, Scimago, and Jisc Open Policy Finder. The pipeline stores each raw file before parsing it.",
   },
   {
     step: "2",
     title: "Conservative matching",
-    body: "Only exact identifiers (DOI, ORCID, ISSN-L, ROR) auto-confirm unconditionally. Authors are matched per shared publication with guards against namesakes; uncertain matches wait for human review.",
+    body: "Only exact identifiers such as DOI, ORCID, ISSN-L, and ROR confirm a match automatically. Authors are matched per shared publication with guards against namesakes, and uncertain matches wait for human review.",
   },
   {
     step: "3",
-    title: "Explicit conflict rules",
-    body: "When two sources disagree, we never blend them silently. Primary sources and tie-breakers are fixed (for example, DOAJ for Gold vs. Diamond; Pure for institutional works; OpenAlex over OpenAIRE on work OA color).",
+    title: "Fixed conflict rules",
+    body: "When two sources disagree, the browser does not blend them silently. DOAJ decides gold versus diamond, Pure defines institutional publications, and OpenAlex breaks ties over OpenAIRE for work-level open access status.",
   },
   {
     step: "4",
-    title: "Curator edits stick",
-    body: "Manual deal fixes, excluded titles, and admin identity decisions are stored separately and automatically re-applied after every automated harvest.",
+    title: "Saved curator edits",
+    body: "Manual deal fixes, excluded journal titles, and admin identity decisions are stored in separate tables and re-applied after every harvest.",
   },
 ];
 
@@ -42,147 +42,147 @@ type TopicGuide = {
 const TOPICS: TopicGuide[] = [
   {
     id: "how-authors",
-    title: "Author publications & 'Not in Pure' gaps",
+    title: "Author publications and works not in Pure",
     summary:
-      "Pure OAI-PMH is the canonical publication list; OpenAlex supplies citations and the separate list of papers that may be missing from Pure.",
+      "Pure OAI-PMH provides the canonical list of publications for an author. OpenAlex adds citations and feeds the separate list of works that may be missing from Pure.",
     steps: [
-      "Start with Pure OAI-PMH (persons, org units, publications)",
-      "Confirm affiliation via org-tree closure to the institution ROR",
-      "Filter out 17 non-journal types (keep book chapters for proceedings)",
-      "Match authors per shared paper (ORCID → exact name → initials → safeguards)",
+      "The pipeline harvests publications, persons, and organisation units from Pure OAI-PMH.",
+      "It confirms institutional affiliation by walking the Pure organisation tree up to the institution ROR.",
+      "It removes 17 non-journal work types from counts and lists, while keeping book chapters so conference proceedings remain included.",
+      "It matches Pure authors to OpenAlex and OpenAIRE per shared publication, checking ORCID first and then exact name or initials.",
     ],
     details: [
       {
-        label: "What is filtered out",
-        text: "Preprints, posted-content, working papers, books, monographs, datasets, software, errata, peer reviews, paratext, reference entries, book reviews, retractions, libguides, standards, supplementary materials, and 'other' are excluded from counts and lists. Book chapters and book parts stay in because conference proceedings often appear there.",
+        label: "Filtered work types",
+        text: "Preprints, posted content, working papers, books, monographs, datasets, software, errata, peer reviews, paratext, reference entries, book reviews, retractions, libguides, standards, supplementary materials, and items typed as other are excluded from every count and list. Book chapters and book parts stay in because conference proceedings often appear under those types.",
       },
       {
-        label: "Safeguards against false author matches",
-        text: "Global name-only matching is never used. CJK surnames disable surname-only and fuzzy matching; OpenAIRE's inferred orcid_pending IDs are rejected; multiple OpenAlex profiles link as fragmentation twins only when they never co-occur on the same paper and share at most one ORCID.",
+        label: "Guards against wrong author matches",
+        text: "The matcher never merges people globally by name alone. For CJK surnames, surname-only and fuzzy matching are disabled. Co-authorship-inferred ORCIDs from OpenAIRE (orcid_pending) are ignored. Multiple OpenAlex profiles link to one person automatically only when they never co-occur on the same paper and share at most one ORCID.",
       },
       {
-        label: "Why Pure's own records don't appear as 'missing'",
-        text: "The OpenAlex-only gap list drops works whose primary OpenAlex source is a repository (such as Zenodo or the university's own Pure RIS) and groups book chapters under their parent book.",
+        label: "Excluding Pure from its own gap list",
+        text: "The OpenAlex-only list drops works whose primary OpenAlex source is a repository, such as Zenodo or the university's own Pure system. Book chapters are grouped under their parent book.",
       },
     ],
   },
   {
     id: "how-journals",
-    title: "Journal catalogue, search & OA types",
+    title: "Journal catalogue, search, and open access types",
     summary:
-      "~177,700 OpenAlex venues filtered for active journals and classified live into Diamond, Gold, Hybrid, OA status unknown, or Subscription.",
+      "OpenAlex supplies about 177,700 venues, filtered to active journals and classified at query time into diamond, gold, hybrid, unknown open access, or subscription.",
     steps: [
-      "Collect all OpenAlex sources normalized by canonical ISSN-L",
-      "Keep active journals (>3 works in window) + non-journal venues your university uses (e.g. LNCS)",
-      "Hide unused proceedings-titled venues and admin-ignored ISSNs",
-      "Compute OA type live from DOAJ, OpenAPC, OpenAIRE, recent works, and active deals",
+      "The harvest collects all OpenAlex sources and groups them by canonical ISSN-L.",
+      "Search shows journals with more than 3 works in the institution's year window, plus any book series or conference where the institution publishes.",
+      "Unused venues with proceedings words in their title and ISSNs on the admin ignore list are hidden from browse results.",
+      "Each query calculates open access type live from DOAJ, OpenAPC, OpenAIRE, recent work samples, and active deals.",
     ],
     details: [
       {
-        label: "How OA type is decided (first match wins)",
-        text: "1) OA evidence + any APC charge (DOAJ, OpenAPC, or OpenAlex list price) → Gold (real OpenAPC payments override a no-APC claim). 2) DOAJ with no APC, or OpenAIRE diamond flag → Diamond. 3) Modal OA color of 20 recent works (gold/diamond/hybrid). 4) Active institutional deal → Hybrid. 5) OA evidence without fee info → OA status unknown. 6) Everything else → Subscription.",
+        label: "How open access type is chosen",
+        text: "The query checks six rules in order and takes the first match. First, open access evidence with any APC charge marks gold, so observed OpenAPC payments override a no-APC claim. Second, DOAJ listing with no APC, or an OpenAIRE diamond flag, marks diamond. Third, the modal open access color of 20 recent works applies when it is gold, diamond, or hybrid. Fourth, an active institutional deal marks hybrid. Fifth, open access evidence with no fee data marks open access with unknown model. Sixth, all other journals are marked subscription.",
       },
       {
         label: "Search ranking",
-        text: "Keyword search ranks by text relevance plus your university's own publication count so locally used titles beat obscure homonyms. Zero-hit queries automatically fall back to fuzzy spelling matches.",
+        text: "Keyword search combines text relevance with the institution's own publication count, so journals where local researchers publish rank above same-named titles with no local works. Queries with zero exact hits fall back to trigram fuzzy matching.",
       },
     ],
   },
   {
     id: "how-deals",
-    title: "Open access deals, caps & publishers",
+    title: "Open access deals, caps, and publishers",
     summary:
-      "openaccess.nl is the canonical source for Dutch deal terms and caps; JCT/ESAC provides machine-readable journal lists, with sticky local curation.",
+      "openaccess.nl is the canonical source for Dutch deal terms and caps. JCT/ESAC supplies machine-readable journal lists, and manual edits survive refreshes.",
     steps: [
-      "Scrape openaccess.nl for deal existence, terms, caps, and contract PDFs",
-      "Enrich with cOAlition S JCT/ESAC journal ISSN lists",
-      "Fold duplicate rows by URL and re-apply manual overrides & excluded tombstones",
-      "Map publisher imprints to parent publishers and flag publisher transfers",
+      "The scraper reads openaccess.nl pages for deal existence, dates, terms, caps, and contract PDFs.",
+      "The JCT job imports cOAlition S agreement sheets for ESAC identifiers and journal ISSN lists.",
+      "Reconciliation merges duplicate rows by page URL and reapplies manual overrides and excluded journal tombstones.",
+      "OpenAlex publisher lineage groups sub-imprints under parent publishers and flags journals that changed publisher after signing.",
     ],
     details: [
       {
-        label: "Conflicts & curation",
-        text: "openaccess.nl wins for deal existence and terms; JCT absence never erases a local deal (like UT's ACM deal). Ambiguous caps flag for human curation instead of auto-parsing PDFs. When JCT linked Emerald to Elsevier's sheet, all 311 Emerald titles were rebuilt from the signed contract.",
+        label: "Conflicts and curation",
+        text: "openaccess.nl takes precedence for deal existence and terms, and absence from JCT never removes a local deal such as UT's ACM agreement. Ambiguous cap text sets a curation flag instead of guessing from PDFs. After the pipeline detected that JCT linked Emerald to Elsevier's sheet, all 311 Emerald titles were rebuilt from the signed contract.",
       },
       {
-        label: "Multi-university scoping",
-        text: "Shared agreements are stored once; each university links only the deals it participates in and can maintain local title overrides or exclusions without affecting other universities.",
+        label: "Multiple universities on one instance",
+        text: "Shared deals are stored once. Each university links only the agreements it joins and can keep its own journal list override or exclusions without changing other universities.",
       },
     ],
   },
   {
     id: "how-apc",
-    title: "APC & publication cost evidence",
+    title: "APC and publication cost data",
     summary:
-      "Combines publisher list prices (EUR-converted) with real institutional payments reported to OpenAPC.",
+      "Displayed prices combine declared publisher list prices in OpenAlex with actual fees reported by institutions to OpenAPC.",
     steps: [
-      "Check OpenAlex declared list price (EUR → USD → first currency)",
-      "Convert to EUR using the Jan 1 ECB exchange rate",
-      "If no list price exists, fall back to OpenAPC observed min–max over the newest 2 periods",
-      "Show DOAJ declared APC separately on detail pages with caveats",
+      "The display checks OpenAlex list prices first, preferring EUR, then USD, then the first listed currency.",
+      "Non-EUR list prices convert to euros at the January 1 ECB exchange rate for the current year.",
+      "If no list price exists, the display shows the observed OpenAPC euro range across the two newest reporting periods.",
+      "Journal detail pages also display DOAJ declared maximum APCs separately with caveats.",
     ],
     details: [
       {
-        label: "Sorting convention",
-        text: "When sorting by APC, OpenAPC fallback uses the newest period's highest observed single price rather than an average, avoiding understated costs from institutional discounts.",
+        label: "Why sorting uses the period maximum",
+        text: "OpenAPC period averages blend multi-article discounts and waivers across institutions. Sorting by the newest period's highest reported price gives a more realistic upper bound for list costs.",
       },
     ],
   },
   {
     id: "how-green-funder",
-    title: "Green OA policies & funder compliance",
+    title: "Green open access policies and funder compliance",
     summary:
-      "Verbatim publisher self-archiving rules from Jisc Open Policy Finder paired with a 5-tier funder compliance engine.",
+      "Self-archiving policies come verbatim from the Jisc Open Policy Finder and feed a five-rule funder compliance check.",
     steps: [
-      "Harvest Jisc Open Policy Finder policies, publishers, and 202 funders by exact ISSN",
-      "Exclude fee-only routes (~12,000 published routes requiring an OA fee)",
-      "Pick freest free version (submitted > accepted > published); prohibited overrides all",
-      "Evaluate funder fit identically in search facets, detail pages, and the Guided Finder",
+      "The harvest fetches publications, policies, publishers, repositories, and 202 funders from Jisc Open Policy Finder by exact ISSN.",
+      "Normalization excludes routes where every fee entry requires payment, removing about 12,000 paid published-version routes.",
+      "Each journal receives its freest allowed version, preferring submitted over accepted over published, while prohibition overrides all routes.",
+      "Search facets, detail pages, and the journal finder run the same five-rule funder check.",
     ],
     details: [
       {
-        label: "Funder fit rule order",
-        text: "1) Publisher prohibits OA deposit → Not compliant. 2) Gold or Diamond journal → Compliant. 3) Active institutional deal (structured funder policy) → Compliant. 4) Free green route → Check embargo/timing. 5) Otherwise → Not compliant. Text-only funder policies prompt manual checking.",
+        label: "Funder compliance rules",
+        text: "First, journals where the publisher prohibits archiving are marked not compliant. Second, gold and diamond journals are marked compliant. Third, journals covered by an active institutional deal are marked compliant for structured funder policies. Fourth, journals with a free green route are marked check embargo. Fifth, all remaining journals are marked not compliant. Funders with text-only policies show no automated tier.",
       },
     ],
   },
   {
     id: "how-works",
-    title: "Journal publication totals & work OA conflicts",
+    title: "Journal publication counts and open access conflicts",
     summary:
-      "Pure canonical counts and OpenAlex cross-checks are kept separate so every number on screen has one clear meaning.",
+      "Pure canonical counts and OpenAlex cross-checks stay separate so each number on a journal page has one clear source.",
     steps: [
-      "Link Pure works to journals via OpenAlex DOI → Crossref → Pure CERIF ISSN",
-      "Count non-retired Pure works (excluding 17 non-journal types) for journal totals",
-      "Keep OpenAlex institution-filter counts labeled separately as a cross-check",
-      "Resolve work OA color: OpenAlex (most open per DOI) → Pure rights fallback",
+      "Pure works link to journals through OpenAlex DOI lookup, then Crossref, and finally Pure CERIF ISSNs.",
+      "Journal totals and publication tabs count active Pure works in the selected years, excluding the 17 non-journal types.",
+      "OpenAlex institution-filter totals appear alongside Pure totals as a separate cross-check.",
+      "Work-level open access status uses OpenAlex first (taking the most open record per DOI) and falls back to Pure rights when unmatched.",
     ],
     details: [
       {
-        label: "OpenAlex vs. OpenAIRE disagreements",
-        text: "Ground-truth evaluation showed OpenAlex and OpenAIRE tied in accuracy. OpenAlex is used consistently for work-level OA status, while OpenAIRE's status stays visible as a labeled comparison on journal pages.",
+        label: "OpenAlex versus OpenAIRE",
+        text: "A 94-work ground-truth sample showed OpenAIRE (53.3%) and OpenAlex (44.8%) in a statistical tie. OpenAlex is used consistently for work-level open access status, and OpenAIRE's classification remains visible on the OpenAIRE comparison card.",
       },
       {
-        label: "Why ~60% of Pure works have no journal link",
-        text: "Dissertations, reports, and non-ISSN conference outputs legitimately have no journal ISSN. Journal statistics therefore use dedicated aggregate tables rather than naive table joins.",
+        label: "Works without a journal link",
+        text: "About 60% of Pure records have no journal ISSN because they are dissertations, reports, or non-ISSN conference outputs. Journal statistics therefore read from pre-computed aggregate tables.",
       },
     ],
   },
   {
     id: "how-guided-finder",
-    title: "Semantic search, similar journals & Guided Finder",
+    title: "Semantic search, similar journals, and the journal finder",
     summary:
-      "Local CPU embeddings match manuscripts to journals privately with zero external LLMs and transparent, deterministic scoring.",
+      "A local CPU embedding model matches text to journals on the server without sending data to external AI services.",
     steps: [
-      "Embed every journal from cleaned title + top 5 topics + 3 most-cited paper titles",
-      "Encode search queries or manuscript abstracts locally on CPU (never logged or sent out)",
-      "Retrieve nearest topical matches via pgvector cosine similarity",
-      "Rank with transparent boosts: Diamond > Active deal > Gold in budget > Funder fit",
+      "Each journal is embedded from its cleaned title, its top five OpenAlex topics, and the titles of its three most cited works.",
+      "Search queries and paper abstracts are encoded locally on CPU with bge-small-en-v1.5 and are never logged or stored.",
+      "PostgreSQL pgvector retrieves the closest journals by cosine similarity.",
+      "The journal finder ranks matching journals with fixed bonuses for diamond open access, active deals, gold open access within budget, and funder compliance.",
     ],
     details: [
       {
-        label: "Privacy & explainability",
-        text: "The embedding model (BAAI/bge-small-en-v1.5) runs inside the application server. No generative AI is used, so recommendations cannot invent journals or deals, and every ranking reason is shown explicitly.",
+        label: "No generative AI",
+        text: "Recommendations use deterministic vector similarity and structured policy rules over open datasets. The system cannot invent journals or deals, and every ranking factor is listed on the results screen.",
       },
     ],
   },
@@ -190,36 +190,36 @@ const TOPICS: TopicGuide[] = [
 
 const SAFEGUARDS: [string, string][] = [
   [
-    "MDPI & DOAJ bulk CSV",
-    "DOAJ's API caps at 1,000 rows and OpenAlex misses some DOAJ journals (e.g. MDPI Water); OJB ingests the full DOAJ CSV and combines OpenAlex is_oa + OpenAIRE diamond flags.",
+    "DOAJ bulk CSV and MDPI fix",
+    "The DOAJ search API caps results at 1,000 rows, and OpenAlex misses DOAJ flags for some open access journals such as MDPI Water. The pipeline downloads the full DOAJ CSV and combines OpenAlex is_oa with OpenAIRE diamond flags.",
   ],
   [
     "Jisc fee-only routes",
-    "~12,000 paid published-version routes in Jisc OPF are filtered out so only genuinely free self-archiving routes count as Green OA.",
+    "About 12,000 published-version routes in Jisc Open Policy Finder require an open access fee. Normalization marks those routes as fee-only so they do not appear as free green open access.",
   ],
   [
-    "Pure RIS in gap lists",
-    "OpenAlex indexes Pure itself as a repository; repository-primary OpenAlex rows are excluded from all 'Not in Pure' gap lists.",
+    "Pure excluded from its own gap list",
+    "OpenAlex indexes Pure repositories as repository sources. The gap query drops repository-primary OpenAlex works so Pure records do not appear as missing from Pure.",
   ],
   [
-    "Book chapters & LNCS",
-    "Book chapters stay in work counts (conference proceedings hide there), chapters group under parent books in gap lists, and non-journal venues with institutional works (like LNCS) are searchable.",
+    "Book chapters and LNCS",
+    "Book chapters stay in publication counts because conference proceedings often use that type. In gap lists, chapters roll up under their parent book, and non-journal venues with local works such as LNCS remain searchable.",
   ],
   [
     "Author matching guards",
-    "CJK homonym guard, fragmentation-twin ledger (never co-occur + single ORCID), and rejection of OpenAIRE's inferred orcid_pending prevent false merges.",
+    "CJK surnames disable surname-only and fuzzy matching. OpenAIRE's inferred orcid_pending values are ignored, and multiple OpenAlex profiles link automatically only when they never co-occur on a work and share at most one ORCID.",
   ],
   [
-    "Mega-journal topic bias",
-    "Author research topics are weighted proportionally by each journal's topic counts at the subfield level instead of counting all 5 venue topics equally.",
+    "Author topic weighting",
+    "Mega-journals previously stamped generic neural-network topics onto hundreds of unrelated authors. Author topics are now weighted proportionally by each journal's per-topic counts at the subfield level.",
   ],
   [
-    "Emerald & deal overrides",
-    "Rebuilt 311 Emerald titles from the signed contract after catching JCT's Elsevier mix-up; re-scrapes fold duplicates by URL and preserve manual_overrides + excluded titles.",
+    "Emerald contract and deal overrides",
+    "When JCT linked the Dutch Emerald agreement to Elsevier's sheet, all 311 Emerald titles were rebuilt from the signed contract. Re-scrapes fold duplicate deal rows by URL and preserve manual overrides and excluded titles.",
   ],
   [
-    "Publisher lineage & flips",
-    "Sub-imprints map to canonical parent publishers via OpenAlex lineage; post-contract publisher transfers surface as explicit deal discrepancies.",
+    "Publisher lineage and transfers",
+    "Sub-imprints map to their parent publisher through OpenAlex lineage. Journals whose current publisher differs from their signed agreement appear as explicit deal discrepancies.",
   ],
 ];
 
@@ -229,13 +229,12 @@ export function HowItWorks() {
       <div className="space-y-2">
         <h2 className="text-2xl font-bold tracking-tight">How the data is processed</h2>
         <p className="max-w-4xl text-sm leading-relaxed text-[var(--muted-foreground)]">
-          A plain-language overview of how records are gathered, matched, filtered, and reconciled.
-          Expand any topic below for the exact rules, or scroll further down for the full technical
-          pipeline and database schema.
+          This section explains how records are collected, matched, filtered, and reconciled across
+          sources. Open any topic below to see the exact rules, or scroll down for the harvest jobs
+          and database tables.
         </p>
       </div>
 
-      {/* Clean 4-pillar summary */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {PILLARS.map((p) => (
           <Card key={p.step} className="space-y-2 p-5">
@@ -250,7 +249,6 @@ export function HowItWorks() {
         ))}
       </div>
 
-      {/* Calm, scannable expandable topic cards */}
       <div className="space-y-3">
         {TOPICS.map((topic) => (
           <details
@@ -298,7 +296,6 @@ export function HowItWorks() {
           </details>
         ))}
 
-        {/* Safeguards & edge-case fixes */}
         <details
           id="how-safeguards"
           className="group scroll-mt-20 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] shadow-sm"
@@ -306,11 +303,11 @@ export function HowItWorks() {
           <summary className="flex cursor-pointer list-none items-start justify-between gap-4 p-5 [&::-webkit-details-marker]:hidden">
             <div className="space-y-1">
               <h3 className="text-base font-semibold tracking-tight">
-                Documented safeguards &amp; real-world fixes ({SAFEGUARDS.length})
+                Data fixes and safeguards ({SAFEGUARDS.length})
               </h3>
               <p className="text-sm text-[var(--muted-foreground)]">
-                Edge cases caught during validation — from the Emerald JCT contract mix-up to
-                fee-only green OA routes and Pure repository self-matches.
+                Specific upstream data problems found during validation, including the Emerald JCT
+                sheet mix-up, fee-only green open access routes, and Pure repository self-matches.
               </p>
             </div>
             <ChevronDown
