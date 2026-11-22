@@ -152,7 +152,12 @@ function FundersPageInner() {
               </div>
             )}
             <div className="mt-3">
-              <SourceNote source={t("sourceJisc")} url={OPF_URL} codes={["jisc-policy-currency"]} />
+              <SourceNote
+                source={t("sourceJisc")}
+                url={OPF_URL}
+                codes={["jisc-policy-currency"]}
+                processAnchor="how-green-funder"
+              />
             </div>
           </CardContent>
         </Card>

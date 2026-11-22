@@ -98,7 +98,7 @@ export function OpenaireCard({
         </ul>
       )}
       <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-[var(--border)] pt-3">
-        <SourceNote {...note} codes={note.caveat_codes} />
+        <SourceNote {...note} codes={note.caveat_codes} processAnchor="how-works" />
       </div>
     </CollapsibleCard>
   );

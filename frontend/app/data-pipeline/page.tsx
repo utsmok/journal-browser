@@ -6,6 +6,7 @@ import { getTranslations } from "next-intl/server";
 import { DagDiagram } from "@/components/data-pipeline/dag-diagram";
 import { DbReference } from "@/components/data-pipeline/db-reference";
 import { DomainMap } from "@/components/data-pipeline/domain-map";
+import { HowItWorks } from "@/components/data-pipeline/how-it-works";
 import { OaRules } from "@/components/data-pipeline/oa-rules";
 import { StorageFlow } from "@/components/data-pipeline/storage-flow";
 import { Card } from "@/components/ui/card";
@@ -112,6 +113,8 @@ const MANUAL_JOBS: [string, string, string][] = [
 
 // [message key of the section heading, anchor id]
 const TOC: [string, string][] = [
+  ["howItWorks.tocViews", "how-each-view"],
+  ["howItWorks.tocSafeguards", "how-safeguards"],
   ["sources.heading", "sources"],
   ["dag.heading", "dag"],
   ["jobs.heading", "jobs"],
@@ -203,6 +206,8 @@ export default async function DataPipelinePage() {
           ))}
         </ul>
       </header>
+
+      <HowItWorks />
 
       <section id="sources" className="space-y-4">
         <h2 className="mt-2 text-2xl font-semibold">{t("sources.heading")}</h2>

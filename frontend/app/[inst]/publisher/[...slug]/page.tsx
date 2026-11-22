@@ -14,6 +14,7 @@ import { GapCsvButton } from "@/components/gap-csv-button";
 import { OaCompositionBar, OaCompositionLegend } from "@/components/oa-composition";
 import { OaTrend } from "@/components/oa-trend";
 import { BackLink } from "@/components/back-link";
+import { ProcessLink } from "@/components/source-note";
 import { DetailSkeleton, ErrorPanel } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -465,6 +466,8 @@ export default function PublisherPage() {
               <span>{t("units.dealCovered", { count: publisher.deal_journals })}</span>
             </>
           )}
+          <span aria-hidden>·</span>
+          <ProcessLink anchor="how-deals" />
           {publisher.external_ids?.openaccess_nl_slug && (
             <>
               <span aria-hidden>·</span>

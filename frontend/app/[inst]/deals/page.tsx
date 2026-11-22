@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 
-import { SourceNote } from "@/components/source-note";
+import { ProcessLink, SourceNote } from "@/components/source-note";
 import { Badge } from "@/components/ui/badge";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { Button } from "@/components/ui/button";
@@ -362,11 +362,15 @@ export default function DealsPage() {
           </Button>
         </section>
       ) : null}
-      <SourceNote
-        source="JCT · openaccess.nl"
-        url="https://journalcheckertool.org/transformative-agreements/"
-        codes={["jct-coverage", "openaccess-nl-prose", "issn-mapping"]}
-      />
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <SourceNote
+          source="JCT · openaccess.nl"
+          url="https://journalcheckertool.org/transformative-agreements/"
+          codes={["jct-coverage", "openaccess-nl-prose", "issn-mapping"]}
+          processAnchor="how-deals"
+        />
+        <ProcessLink anchor="how-deals" />
+      </div>
     </div>
   );
 }

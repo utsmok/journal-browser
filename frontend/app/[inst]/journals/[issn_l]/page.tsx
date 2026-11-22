@@ -28,7 +28,7 @@ import { OtherNamesCard } from "@/components/journal/other-names-card";
 import { OaTrend } from "@/components/oa-trend";
 import { PublicationsCard } from "@/components/journal/publications-card";
 import { SectionNav, useLastSearchHref } from "@/components/journal/section-nav";
-import { SourceNote } from "@/components/source-note";
+import { ProcessLink, SourceNote } from "@/components/source-note";
 import { ErrorPanel, JournalDetailSkeleton } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import { useJournal, useJournalWorks, useSimilar } from "@/hooks/use-api";
@@ -197,11 +197,13 @@ function JournalPageInner() {
               <External href={data.homepage_url}>{t("header.homepage")}</External>
             </p>
           )}
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted-foreground)]">
             <SourceNote
               source={t("header.metadataSource")}
               url={attribution.title?.url ?? undefined}
+              processAnchor="how-journals"
             />
+            <ProcessLink anchor="how-journals" />
           </p>
         </header>
 
@@ -260,12 +262,18 @@ function JournalPageInner() {
                     ),
                   })}
             </p>
-            <div className="mt-2 flex flex-wrap gap-x-4">
-              <SourceNote {...(attribution.stats ?? {})} codes={attribution.stats?.caveat_codes} />
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+              <SourceNote
+                {...(attribution.stats ?? {})}
+                codes={attribution.stats?.caveat_codes}
+                processAnchor="how-works"
+              />
               <SourceNote
                 {...(attribution.oa_status ?? {})}
                 codes={attribution.oa_status?.caveat_codes}
+                processAnchor="how-journals"
               />
+              <ProcessLink anchor="how-works" />
             </div>
           </CollapsibleCard>
 
@@ -291,11 +299,13 @@ function JournalPageInner() {
                   <External href="https://journalcheckertool.org">{chunks}</External>
                 ),
               })}
-              <div className="mt-2">
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
                 <SourceNote
                   {...(attribution.deals ?? {})}
                   codes={attribution.deals?.caveat_codes}
+                  processAnchor="how-deals"
                 />
+                <ProcessLink anchor="how-deals" />
               </div>
             </CollapsibleCard>
           )}
@@ -358,17 +368,23 @@ function JournalPageInner() {
                   })}
                 </p>
               )}
-              <div className="mt-3">
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
                 <SourceNote
                   {...(attribution.apc_evidence ?? {})}
                   codes={attribution.apc_evidence?.caveat_codes}
+                  processAnchor="how-apc"
                 />
+                <ProcessLink anchor="how-apc" />
               </div>
             </CollapsibleCard>
           )}
 
           {similar && !similarEmpty && (
-            <CollapsibleCard id="similar" title={t("similar.title")}>
+            <CollapsibleCard
+              id="similar"
+              title={t("similar.title")}
+              description={<ProcessLink anchor="how-guided-finder" />}
+            >
               <div className="space-y-5">
                 {(
                   [

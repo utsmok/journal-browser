@@ -7,7 +7,7 @@ import { DealBadge } from "@/components/badges";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { DealCapUsage } from "@/components/deal-cap-usage";
 import { External } from "@/components/journal/shared";
-import { SourceNote } from "@/components/source-note";
+import { ProcessLink, SourceNote } from "@/components/source-note";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { capReached, latestYearUsage } from "@/lib/deal-caps";
 import { dealLinkLabel, orderedDealLinks } from "@/lib/deal-links";
@@ -136,7 +136,8 @@ export function DealPanel({
             {deal.jct_data_url && <External href={deal.jct_data_url}>{t("deal.jctLink")}</External>}
           </>
         )}
-        <SourceNote {...attribution} codes={attribution.caveat_codes} />
+        <SourceNote {...attribution} codes={attribution.caveat_codes} processAnchor="how-deals" />
+        <ProcessLink anchor="how-deals" />
       </div>
     </CollapsibleCard>
   );

@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { External } from "@/components/journal/shared";
-import { SourceNote } from "@/components/source-note";
+import { ProcessLink, SourceNote } from "@/components/source-note";
 import type { Attribution } from "@/lib/api";
 import type { GreenOaPolicy } from "@/components/journal/shared";
 
@@ -161,7 +161,12 @@ export function GreenOaPanel({
             {greenOaLinkLabel(t, u.description) || u.url}
           </External>
         ))}
-        <SourceNote {...attribution} codes={attribution.caveat_codes} />
+        <SourceNote
+          {...attribution}
+          codes={attribution.caveat_codes}
+          processAnchor="how-green-funder"
+        />
+        <ProcessLink anchor="how-green-funder" />
       </div>
     </CollapsibleCard>
   );

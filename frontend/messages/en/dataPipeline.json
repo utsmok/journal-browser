@@ -4,8 +4,12 @@
     "description": "Where the site's data comes from, and how it is harvested and stored."
   },
   "intro": {
-    "title": "Data pipeline",
-    "lead": "This page documents where the site's data comes from. It covers the external sources, the harvest jobs that fetch data from them, the order the jobs run in, and how the database stores the result. The text describes the working code, and the database section is generated from the live database, so the two cannot drift apart. The page shows no row counts, because counts change every time a job runs. To see current counts and harvest times, call <code>GET /api/v1/'{'code'}'/meta/freshness</code>."
+    "title": "Data pipeline & methodology",
+    "lead": "This page documents both how every list, badge, and metric in the browser is built (sources, filters, matching ladders, and conflict rules) and the full engineering pipeline behind it (harvest jobs, DAG order, and live database schema). To see current row counts and harvest timestamps, call <code>GET /api/v1/'{'code'}'/meta/freshness</code>."
+  },
+  "howItWorks": {
+    "tocViews": "How every view is built",
+    "tocSafeguards": "Safeguards & fixes"
   },
   "sources": {
     "heading": "External sources",
@@ -45,7 +49,7 @@
     "jiscTransport": "REST API with an x-api-key header and search_after paging, 0.15 seconds between requests by default.",
     "jiscUsedBy": "Manual steps harvest_jisc and normalize_jisc.",
     "ipApiProvides": "Country codes for usage events.",
-    "ipApiTransport": "Batch POST of up to 100 IPs, 4.5 seconds between calls on the free tier.",
+    "ipApiTransport": "Local DB-IP Country Lite database (CC BY 4.0), downloaded monthly into landing/dbip/ — no per-IP external API calls.",
     "ipApiUsedBy": "Manual step enrich_usage_geo.",
     "purePortalProvides": "Organisation parents and person-org links the OAI feed lacks.",
     "purePortalTransport": "RSS pages fetched with a browser user agent, 2 seconds between requests.",

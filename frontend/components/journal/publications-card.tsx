@@ -15,7 +15,7 @@ import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { useYearRange } from "@/hooks/use-year-filter";
 import { encodeNamePath } from "@/lib/api";
-import { SourceNote } from "@/components/source-note";
+import { ProcessLink, SourceNote } from "@/components/source-note";
 import type { Attribution, OpenalexSource, WorksPage } from "@/lib/api";
 
 /** Twente works in this journal, paginated from the /works endpoint. The
@@ -269,7 +269,8 @@ export function PublicationsCard({
         >
           {t("publications.openaireLink")}
         </External>
-        <SourceNote {...worksNote} codes={worksNote.caveat_codes} />
+        <SourceNote {...worksNote} codes={worksNote.caveat_codes} processAnchor="how-works" />
+        <ProcessLink anchor="how-works" />
       </div>
     </CollapsibleCard>
   );
