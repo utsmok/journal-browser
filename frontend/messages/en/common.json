@@ -19,6 +19,7 @@
   "nav": {
     "mainLabel": "Main",
     "search": "Search",
+    "guide": "Journal finder",
     "deals": "Deals",
     "funders": "Funders",
     "publishers": "Publishers",
@@ -200,7 +201,9 @@
 
   "sourceNote": {
     "fallbackLabel": "Source",
-    "moreInfo": "More info"
+    "moreInfo": "More info",
+    "howProcessed": "How this data is processed",
+    "howBuilt": "How is this built?"
   },
 
   "cardPager": {

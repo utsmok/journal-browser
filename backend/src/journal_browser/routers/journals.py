@@ -39,6 +39,8 @@ from ..schemas import (
     OpenaireInfo,
     OpenalexInfo,
     OpenalexOnly,
+    RecommendRequest,
+    RecommendResponse,
     ScimagojrOut,
     SimilarJournalItem,
     SimilarJournalsBundle,
@@ -46,7 +48,7 @@ from ..schemas import (
     UTAuthorship,
     WorksPage,
 )
-from ..services import authorship, detail_enrichment, exports, repo_links
+from ..services import authorship, detail_enrichment, exports, recommend, repo_links
 from ..services import search as search_service
 from ..services.deal_coverage import DEAL_FIELDS, deal_institution_join, dj_scope
 from ..services.funder_fit import JournalFacts, compute_funder_fit
@@ -260,6 +262,16 @@ async def semantic_search_journals(
         total=result["total"],
         next_cursor=result["next_cursor"],
     )
+
+
+@router.post("/recommend", response_model=RecommendResponse)
+async def recommend_journals(
+    payload: RecommendRequest,
+    session: SessionDep,
+    institution: InstitutionDep,
+) -> RecommendResponse:
+    """Guided Journal Finder: local semantic retrieval + transparent OA/funder/budget ranking."""
+    return await recommend.recommend_journals(session, institution, payload)
 
 
 @router.get("/{issn_l}/similar", response_model=SimilarJournalsBundle)

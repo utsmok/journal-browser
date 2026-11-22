@@ -8,6 +8,7 @@ import dataPipeline from "../messages/en/dataPipeline.json";
 import deals from "../messages/en/deals.json";
 import docs from "../messages/en/docs.json";
 import funders from "../messages/en/funders.json";
+import guide from "../messages/en/guide.json";
 import home from "../messages/en/home.json";
 import journals from "../messages/en/journals.json";
 import orgunits from "../messages/en/orgunits.json";
@@ -30,6 +31,7 @@ export default getRequestConfig(async () => ({
     orgunits,
     publishers,
     funders,
+    guide,
     deals,
     docs,
     about,

@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .vocab import (
     DealJournalSource,
@@ -83,6 +83,109 @@ class JournalSearchResponse(BaseModel):
     next_cursor: str | None = None
     fuzzy: bool = False
     facets: dict[str, dict[str, int]] = {}
+
+
+# ── Guided Journal Finder recommendations ──────────────────────────────────
+
+
+BudgetMode = Literal["none", "capped", "funder_pays", "any"]
+
+
+class RecommendRequest(BaseModel):
+    """Guided Journal Finder request; manuscript text is embedded locally
+    and never logged or persisted."""
+
+    title: str = Field(default="", max_length=400)
+    abstract: str = Field(default="", max_length=6000)
+    funder_id: int | None = None
+    budget_mode: BudgetMode = "none"
+    max_apc_eur: int | None = Field(default=None, ge=0, le=50000)
+    prefer_institution_history: bool = True
+    prefer_established: bool = False
+    include_non_journals: bool = False
+    limit: int = Field(default=8, ge=1, le=20)
+
+    @model_validator(mode="after")
+    def _validate_manuscript_text(self) -> "RecommendRequest":
+        combined = f"{self.title.strip()} {self.abstract.strip()}".strip()
+        if len(combined) < 15:
+            raise ValueError(
+                "Please provide at least 15 characters across the manuscript title and abstract."
+            )
+        return self
+
+
+class RecommendDealSummary(BaseModel):
+    """Active institutional deal metadata attached to a recommended journal."""
+
+    publisher_name: str | None = None
+    duration_text: str | None = None
+    is_capped: bool = False
+    cap_reached: bool = False
+    cap_text: str | None = None
+    is_discount_only: bool = False
+    summary: str | None = None
+    openaccess_nl_url: str | None = None
+
+
+class RecommendApcDisplay(BaseModel):
+    """Structured APC evidence attached to a recommended journal."""
+
+    source: str | None = None
+    currency: str | None = None
+    price: float | None = None
+    low: float | None = None
+    high: float | None = None
+    mean: float | None = None
+
+
+class RecommendReason(BaseModel):
+    """One transparent argumentation point explaining a journal's placement."""
+
+    kind: str
+    tone: Literal["positive", "neutral", "warning"]
+    label: str
+    detail: str
+
+
+class RecommendedJournal(BaseModel):
+    """One ranked journal recommendation with transparent argumentation."""
+
+    rank: int
+    issn_l: str
+    title: str | None = None
+    publisher: str | None = None
+    oa_type: OaType
+    deal_covered: bool = False
+    deal_summary: RecommendDealSummary | None = None
+    similarity: float
+    match_score: float
+    estimated_cost_label: str
+    estimated_cost_eur: float | None = None
+    apc_display: RecommendApcDisplay | None = None
+    funder_fit: FunderFitOut | None = None
+    green_oa: str | None = None
+    quartile: str | None = None
+    twoyr_mean_citedness: float | None = None
+    h_index: int | None = None
+    works: int = 0
+    topics: list[str] = []
+    summary: str
+    reasons: list[RecommendReason] = []
+    relaxed_note: str | None = None
+
+
+class RecommendResponse(BaseModel):
+    """Guided Journal Finder response with strict matches and relaxed fallbacks."""
+
+    recommendations: list[RecommendedJournal]
+    alternatives: list[RecommendedJournal]
+    candidate_pool_size: int
+    strict_match_count: int
+    relaxed: bool
+    funder_name: str | None = None
+    funder_policy_structured: bool = False
+    ranking_factors: list[str]
 
 
 class FunderListItem(BaseModel):

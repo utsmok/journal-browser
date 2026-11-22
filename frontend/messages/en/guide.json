@@ -1,0 +1,133 @@
+{
+  "meta": {
+    "title": "Guided Journal Finder — Open Journal Browser",
+    "description": "Match your manuscript to open-access journals, institutional deals, and funder requirements using local semantic search."
+  },
+  "header": {
+    "eyebrow": "Guided Journal Finder",
+    "heading": "Find the right open-access journal for your manuscript",
+    "intro": "Answer four quick questions about your manuscript, funder, and budget. We match locally against {institution} deals, open-access models, and journal scope.",
+    "savedNote": "Saved in your browser",
+    "reset": "Reset",
+    "resetAria": "Reset saved wizard answers"
+  },
+  "steps": {
+    "ariaLabel": "Journal finder progress",
+    "counter": "Step {current} of {total}",
+    "manuscript": "Manuscript",
+    "funder": "Funder",
+    "budget": "Budget",
+    "preferences": "Preferences",
+    "back": "Back",
+    "next": "Continue",
+    "submit": "Find recommended journals",
+    "submitting": "Matching your manuscript locally…"
+  },
+  "manuscript": {
+    "heading": "Tell us about your manuscript",
+    "description": "Paste a working title and abstract (or a short summary). We match topic similarity against journal scopes and recent articles.",
+    "titleLabel": "Working title",
+    "titlePlaceholder": "e.g. Droplet formation dynamics in microfluidic T-junctions",
+    "abstractLabel": "Abstract or research summary",
+    "abstractPlaceholder": "Paste your abstract, key methods, or a few sentences describing the study…",
+    "charCountReady": "{count} characters · ready to match",
+    "charCountNeeded": "Add at least {remaining} more characters across title and abstract",
+    "examplesHeading": "Or try a sample manuscript:",
+    "examples": {
+      "microfluidics": {
+        "chip": "Microfluidic droplet dynamics",
+        "title": "Interfacial dynamics and breakup regimes of viscoelastic droplets in microfluidic T-junctions",
+        "abstract": "We investigate the formation and pinch-off dynamics of viscoelastic polymer droplets in planar microfluidic T-junction channels using high-speed optical imaging and particle image velocimetry. By varying the capillary number, flow rate ratio, and fluid elasticity, we map transitions between squeezing, dripping, and jetting regimes and derive a scaling law for droplet volume control in lab-on-a-chip synthesis."
+      },
+      "membranes": {
+        "chip": "Membrane water purification",
+        "title": "Polyelectrolyte multilayer nanofiltration membranes for selective micropollutant removal in wastewater reuse",
+        "abstract": "Hollow-fiber nanofiltration membranes fabricated via layer-by-layer assembly of polyelectrolytes are evaluated for high-recovery municipal wastewater reclamation. We measure permeance, monovalent versus divalent ion selectivity, and retention of pharmaceutical micropollutants under cross-flow fouling conditions, demonstrating chemical cleaning stability over extended filtration cycles."
+      },
+      "responsibleAi": {
+        "chip": "Responsible AI governance",
+        "title": "Auditing algorithmic fairness and transparency in public-sector automated decision systems",
+        "abstract": "Public administrations increasingly deploy machine learning models for risk assessment and resource allocation, raising legal and ethical concerns around accountability and disparate impact. We combine socio-technical impact assessments with empirical fairness audits under the EU AI Act to propose a participatory governance framework for trustworthy public-sector AI."
+      }
+    },
+    "privacyTitle": "Private by construction — embedded locally",
+    "privacyBody": "Embedded locally on this server — your manuscript text is never sent to external AI services or stored."
+  },
+  "funder": {
+    "heading": "Do you have a research funder with open-access rules?",
+    "description": "Selecting a funder checks every candidate journal against its Jisc Open Policy Finder policy and syncs with your browser preference.",
+    "yesTitle": "Yes, funded with OA requirements",
+    "yesDesc": "Check journals against NWO, Horizon Europe, ERC, ZonMw, or any Jisc Open Policy Finder funder.",
+    "noTitle": "No specific funder / institutional policy",
+    "noDesc": "Prioritize Diamond OA and {institution} agreements without a separate funder check.",
+    "quickSelectHeading": "Frequent funders at {institution}",
+    "searchHeading": "Search all funders",
+    "selectedNotice": "Checking policy compliance for {name}.",
+    "viewPolicy": "View funder policy",
+    "selectPrompt": "Pick a funder above or search below to check compliance (you can also continue without selecting one)."
+  },
+  "budget": {
+    "heading": "What is your publishing (APC) budget?",
+    "description": "Diamond Open Access and active {institution} publishing deals are always prioritized first.",
+    "noneTitle": "€0 — No APC budget",
+    "noneDesc": "Only €0 publishing options: Diamond OA journals and active {institution} publishing deals.",
+    "cappedTitle": "Capped APC budget",
+    "cappedDesc": "Include Gold OA journals up to a maximum fee alongside €0 Diamond OA and institutional deals.",
+    "funderPaysTitle": "Funder or grant covers APC",
+    "funderPaysDesc": "Show all open-access options eligible for grant reimbursement (Diamond and deals still ranked first).",
+    "anyTitle": "Flexible — show all options",
+    "anyDesc": "Include every topically relevant venue, including subscription journals, while highlighting OA routes.",
+    "capLabel": "Maximum APC (EUR)",
+    "capCustomHint": "Or enter a custom amount in euros (0 – 50,000)"
+  },
+  "preferences": {
+    "heading": "Fine-tune your ranking preferences",
+    "description": "Every preference is transparent and optional — topical relevance always stays the main signal.",
+    "historyTitle": "Boost journals where {institution} researchers already publish",
+    "historyDesc": "Adds a gentle familiarity nudge for venues with recent {institution} publications.",
+    "establishedTitle": "Boost Q1–Q2 / established venues",
+    "establishedDesc": "Adds a modest nudge for ScimagoJR Q1–Q2 journals. Per DORA principles, treat venue indicators as context rather than article quality.",
+    "nonJournalsTitle": "Include conference series & book series",
+    "nonJournalsDesc": "Broaden results beyond peer-reviewed journals to include book series and proceedings (e.g. LNCS).",
+    "readySummary": "Ready to match your manuscript",
+    "budgetSummaryNone": "€0 budget",
+    "budgetSummaryCapped": "Up to €{amount} APC",
+    "budgetSummaryFunderPays": "Funder covers APC",
+    "budgetSummaryAny": "Flexible budget",
+    "funderSummaryNone": "Institutional OA policy",
+    "errorHeading": "Could not generate recommendations",
+    "retry": "Try again"
+  },
+  "results": {
+    "heading": "Recommended journals",
+    "subheading": "Ranked from {pool} semantically similar venues ({strict} strict {strict, plural, one {match} other {matches}}).",
+    "adjustAnswers": "Adjust answers",
+    "startOver": "Start over",
+    "criteriaAria": "Active search criteria",
+    "topMatchBadge": "#1 Top match",
+    "rankBadge": "#{rank}",
+    "topicMatch": "{percent}% topic match",
+    "whyHeading": "Why this journal",
+    "viewDetails": "View full journal details",
+    "worksLabel": "{count} {institution} {count, plural, one {work} other {works}}",
+    "citednessLabel": "2-yr citedness {value}",
+    "hIndexLabel": "h-index {value}",
+    "dealCapWarning": "Annual cap applies",
+    "moreMatchesHeading": "More strong matches",
+    "moreMatchesIntro": "Additional venues matching all of your criteria.",
+    "expandReasons": "Why this match",
+    "collapseReasons": "Hide reasons",
+    "alternativesHeading": "Closest alternatives (constraints relaxed)",
+    "alternativesIntro": "Fewer than three journals matched every strict rule. These topically close venues show what would change if you relax one constraint (for example via Green OA / Taverne or a higher APC).",
+    "relaxedBadge": "Relaxed",
+    "noResultsHeading": "No close topical matches found",
+    "noResultsBody": "Try adding a few more domain keywords or sentences to your abstract, or relax your budget and venue filters.",
+    "editManuscript": "Edit manuscript text",
+    "transparencyTitle": "How these recommendations were built",
+    "transparencyLead": "No black-box AI ranking: your manuscript is embedded locally with bge-small-en-v1.5, matched against journal profiles in PostgreSQL (pgvector), and scored with the deterministic rules below.",
+    "transparencyStats": "Candidate pool: {pool} journals · Strict matches: {strict}",
+    "transparencyPipelineLink": "Read full methodology in Data Pipeline",
+    "handoffLead": "Want to browse a wider list without policy filters?",
+    "handoffCta": "Explore broader semantic matches in Search"
+  }
+}

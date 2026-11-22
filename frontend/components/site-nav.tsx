@@ -41,6 +41,7 @@ export function SiteNav() {
     >
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 sm:gap-x-6">
         <NavLink href={`${prefix}/`} label={t("nav.search")} />
+        <NavLink href={`${prefix}/guide`} label={t("nav.guide")} />
         <NavLink href={`${prefix}/deals`} label={t("nav.deals")} />
         <NavLink href={`${prefix}/funders`} label={t("nav.funders")} />
         <NavLink href={`${prefix}/publisher`} label={t("nav.publishers")} />

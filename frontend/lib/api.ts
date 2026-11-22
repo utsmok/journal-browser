@@ -39,6 +39,14 @@ export type FunderDetailResponse = Schemas["FunderDetailResponse"];
 export type FunderFitOut = Schemas["FunderFitOut"];
 export type Attribution = Schemas["Attribution"];
 
+export type BudgetMode = NonNullable<Schemas["RecommendRequest"]["budget_mode"]>;
+export type RecommendRequest = Schemas["RecommendRequest"];
+export type RecommendResponse = Schemas["RecommendResponse"];
+export type RecommendedJournal = Schemas["RecommendedJournal"];
+export type RecommendReason = Schemas["RecommendReason"];
+export type RecommendDealSummary = Schemas["RecommendDealSummary"];
+export type RecommendApcDisplay = Schemas["RecommendApcDisplay"];
+
 // --- Author profiles (Pure-based, per institution) ---
 
 export type AuthorSearchItem = Schemas["AuthorItem"];
@@ -192,6 +200,36 @@ export async function apiGet<T>(
     if (!(err instanceof ApiError)) console.error(`Fetch failed on ${path}`, err);
     throw err;
   }
+}
+
+/** POST helper against the same-origin /api proxy. Never logs request bodies. */
+export async function apiPost<T>(path: string, body: unknown): Promise<T> {
+  try {
+    const res = await fetch(`/api/v1${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      cache: "no-store",
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) {
+      console.error(`API ${res.status} on ${path}`);
+      trackApiError("POST", path, res.status);
+      throw new ApiError(res.status, path);
+    }
+    return (await res.json()) as T;
+  } catch (err) {
+    if (!(err instanceof ApiError)) console.error(`Fetch failed on ${path}`, err);
+    throw err;
+  }
+}
+
+/** Guided Journal Finder recommendation endpoint; manuscript text stays private. */
+export async function recommendJournals(
+  inst: string,
+  req: RecommendRequest,
+): Promise<RecommendResponse> {
+  return apiPost<RecommendResponse>(`/${inst}/journals/recommend`, req);
 }
 
 export async function fetchAuthors(

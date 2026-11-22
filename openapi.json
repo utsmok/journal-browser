@@ -2132,6 +2132,59 @@
         }
       }
     },
+    "/api/v1/{institution_code}/journals/recommend": {
+      "post": {
+        "tags": [
+          "journals"
+        ],
+        "summary": "Recommend Journals",
+        "description": "Guided Journal Finder: local semantic retrieval + transparent OA/funder/budget ranking.",
+        "operationId": "recommend_journals_api_v1__institution_code__journals_recommend_post",
+        "parameters": [
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecommendRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/{institution_code}/journals/{issn_l}/similar": {
       "get": {
         "tags": [
@@ -12125,6 +12178,517 @@
           "total"
         ],
         "title": "PublisherSearchResponse"
+      },
+      "RecommendApcDisplay": {
+        "properties": {
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Low"
+          },
+          "high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "High"
+          },
+          "mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean"
+          }
+        },
+        "type": "object",
+        "title": "RecommendApcDisplay",
+        "description": "Structured APC evidence attached to a recommended journal."
+      },
+      "RecommendDealSummary": {
+        "properties": {
+          "publisher_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Name"
+          },
+          "duration_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Text"
+          },
+          "is_capped": {
+            "type": "boolean",
+            "title": "Is Capped",
+            "default": false
+          },
+          "cap_reached": {
+            "type": "boolean",
+            "title": "Cap Reached",
+            "default": false
+          },
+          "cap_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap Text"
+          },
+          "is_discount_only": {
+            "type": "boolean",
+            "title": "Is Discount Only",
+            "default": false
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "openaccess_nl_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openaccess Nl Url"
+          }
+        },
+        "type": "object",
+        "title": "RecommendDealSummary",
+        "description": "Active institutional deal metadata attached to a recommended journal."
+      },
+      "RecommendReason": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "tone": {
+            "type": "string",
+            "enum": [
+              "positive",
+              "neutral",
+              "warning"
+            ],
+            "title": "Tone"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "tone",
+          "label",
+          "detail"
+        ],
+        "title": "RecommendReason",
+        "description": "One transparent argumentation point explaining a journal's placement."
+      },
+      "RecommendRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 400,
+            "title": "Title",
+            "default": ""
+          },
+          "abstract": {
+            "type": "string",
+            "maxLength": 6000,
+            "title": "Abstract",
+            "default": ""
+          },
+          "funder_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Funder Id"
+          },
+          "budget_mode": {
+            "type": "string",
+            "enum": [
+              "none",
+              "capped",
+              "funder_pays",
+              "any"
+            ],
+            "title": "Budget Mode",
+            "default": "none"
+          },
+          "max_apc_eur": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 50000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Apc Eur"
+          },
+          "prefer_institution_history": {
+            "type": "boolean",
+            "title": "Prefer Institution History",
+            "default": true
+          },
+          "prefer_established": {
+            "type": "boolean",
+            "title": "Prefer Established",
+            "default": false
+          },
+          "include_non_journals": {
+            "type": "boolean",
+            "title": "Include Non Journals",
+            "default": false
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 8
+          }
+        },
+        "type": "object",
+        "title": "RecommendRequest",
+        "description": "Guided Journal Finder request; manuscript text is embedded locally\nand never logged or persisted."
+      },
+      "RecommendResponse": {
+        "properties": {
+          "recommendations": {
+            "items": {
+              "$ref": "#/components/schemas/RecommendedJournal"
+            },
+            "type": "array",
+            "title": "Recommendations"
+          },
+          "alternatives": {
+            "items": {
+              "$ref": "#/components/schemas/RecommendedJournal"
+            },
+            "type": "array",
+            "title": "Alternatives"
+          },
+          "candidate_pool_size": {
+            "type": "integer",
+            "title": "Candidate Pool Size"
+          },
+          "strict_match_count": {
+            "type": "integer",
+            "title": "Strict Match Count"
+          },
+          "relaxed": {
+            "type": "boolean",
+            "title": "Relaxed"
+          },
+          "funder_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Funder Name"
+          },
+          "funder_policy_structured": {
+            "type": "boolean",
+            "title": "Funder Policy Structured",
+            "default": false
+          },
+          "ranking_factors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Ranking Factors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "recommendations",
+          "alternatives",
+          "candidate_pool_size",
+          "strict_match_count",
+          "relaxed",
+          "ranking_factors"
+        ],
+        "title": "RecommendResponse",
+        "description": "Guided Journal Finder response with strict matches and relaxed fallbacks."
+      },
+      "RecommendedJournal": {
+        "properties": {
+          "rank": {
+            "type": "integer",
+            "title": "Rank"
+          },
+          "issn_l": {
+            "type": "string",
+            "title": "Issn L"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          },
+          "oa_type": {
+            "$ref": "#/components/schemas/OaType"
+          },
+          "deal_covered": {
+            "type": "boolean",
+            "title": "Deal Covered",
+            "default": false
+          },
+          "deal_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecommendDealSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "similarity": {
+            "type": "number",
+            "title": "Similarity"
+          },
+          "match_score": {
+            "type": "number",
+            "title": "Match Score"
+          },
+          "estimated_cost_label": {
+            "type": "string",
+            "title": "Estimated Cost Label"
+          },
+          "estimated_cost_eur": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Eur"
+          },
+          "apc_display": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecommendApcDisplay"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "funder_fit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FunderFitOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "green_oa": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Green Oa"
+          },
+          "quartile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quartile"
+          },
+          "twoyr_mean_citedness": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Twoyr Mean Citedness"
+          },
+          "h_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "H Index"
+          },
+          "works": {
+            "type": "integer",
+            "title": "Works",
+            "default": 0
+          },
+          "topics": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Topics",
+            "default": []
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "reasons": {
+            "items": {
+              "$ref": "#/components/schemas/RecommendReason"
+            },
+            "type": "array",
+            "title": "Reasons",
+            "default": []
+          },
+          "relaxed_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relaxed Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rank",
+          "issn_l",
+          "oa_type",
+          "similarity",
+          "match_score",
+          "estimated_cost_label",
+          "summary"
+        ],
+        "title": "RecommendedJournal",
+        "description": "One ranked journal recommendation with transparent argumentation."
       },
       "ScimagojrOut": {
         "properties": {

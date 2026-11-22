@@ -562,6 +562,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/{institution_code}/journals/recommend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recommend Journals
+         * @description Guided Journal Finder: local semantic retrieval + transparent OA/funder/budget ranking.
+         */
+        post: operations["recommend_journals_api_v1__institution_code__journals_recommend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/{institution_code}/journals/{issn_l}/similar": {
         parameters: {
             query?: never;
@@ -3506,6 +3526,202 @@ export interface components {
                 };
             };
         };
+        /**
+         * RecommendApcDisplay
+         * @description Structured APC evidence attached to a recommended journal.
+         */
+        RecommendApcDisplay: {
+            /** Source */
+            source?: string | null;
+            /** Currency */
+            currency?: string | null;
+            /** Price */
+            price?: number | null;
+            /** Low */
+            low?: number | null;
+            /** High */
+            high?: number | null;
+            /** Mean */
+            mean?: number | null;
+        };
+        /**
+         * RecommendDealSummary
+         * @description Active institutional deal metadata attached to a recommended journal.
+         */
+        RecommendDealSummary: {
+            /** Publisher Name */
+            publisher_name?: string | null;
+            /** Duration Text */
+            duration_text?: string | null;
+            /**
+             * Is Capped
+             * @default false
+             */
+            is_capped: boolean;
+            /**
+             * Cap Reached
+             * @default false
+             */
+            cap_reached: boolean;
+            /** Cap Text */
+            cap_text?: string | null;
+            /**
+             * Is Discount Only
+             * @default false
+             */
+            is_discount_only: boolean;
+            /** Summary */
+            summary?: string | null;
+            /** Openaccess Nl Url */
+            openaccess_nl_url?: string | null;
+        };
+        /**
+         * RecommendReason
+         * @description One transparent argumentation point explaining a journal's placement.
+         */
+        RecommendReason: {
+            /** Kind */
+            kind: string;
+            /**
+             * Tone
+             * @enum {string}
+             */
+            tone: "positive" | "neutral" | "warning";
+            /** Label */
+            label: string;
+            /** Detail */
+            detail: string;
+        };
+        /**
+         * RecommendRequest
+         * @description Guided Journal Finder request; manuscript text is embedded locally
+         *     and never logged or persisted.
+         */
+        RecommendRequest: {
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+            /**
+             * Abstract
+             * @default
+             */
+            abstract: string;
+            /** Funder Id */
+            funder_id?: number | null;
+            /**
+             * Budget Mode
+             * @default none
+             * @enum {string}
+             */
+            budget_mode: "none" | "capped" | "funder_pays" | "any";
+            /** Max Apc Eur */
+            max_apc_eur?: number | null;
+            /**
+             * Prefer Institution History
+             * @default true
+             */
+            prefer_institution_history: boolean;
+            /**
+             * Prefer Established
+             * @default false
+             */
+            prefer_established: boolean;
+            /**
+             * Include Non Journals
+             * @default false
+             */
+            include_non_journals: boolean;
+            /**
+             * Limit
+             * @default 8
+             */
+            limit: number;
+        };
+        /**
+         * RecommendResponse
+         * @description Guided Journal Finder response with strict matches and relaxed fallbacks.
+         */
+        RecommendResponse: {
+            /** Recommendations */
+            recommendations: components["schemas"]["RecommendedJournal"][];
+            /** Alternatives */
+            alternatives: components["schemas"]["RecommendedJournal"][];
+            /** Candidate Pool Size */
+            candidate_pool_size: number;
+            /** Strict Match Count */
+            strict_match_count: number;
+            /** Relaxed */
+            relaxed: boolean;
+            /** Funder Name */
+            funder_name?: string | null;
+            /**
+             * Funder Policy Structured
+             * @default false
+             */
+            funder_policy_structured: boolean;
+            /** Ranking Factors */
+            ranking_factors: string[];
+        };
+        /**
+         * RecommendedJournal
+         * @description One ranked journal recommendation with transparent argumentation.
+         */
+        RecommendedJournal: {
+            /** Rank */
+            rank: number;
+            /** Issn L */
+            issn_l: string;
+            /** Title */
+            title?: string | null;
+            /** Publisher */
+            publisher?: string | null;
+            oa_type: components["schemas"]["OaType"];
+            /**
+             * Deal Covered
+             * @default false
+             */
+            deal_covered: boolean;
+            deal_summary?: components["schemas"]["RecommendDealSummary"] | null;
+            /** Similarity */
+            similarity: number;
+            /** Match Score */
+            match_score: number;
+            /** Estimated Cost Label */
+            estimated_cost_label: string;
+            /** Estimated Cost Eur */
+            estimated_cost_eur?: number | null;
+            apc_display?: components["schemas"]["RecommendApcDisplay"] | null;
+            funder_fit?: components["schemas"]["FunderFitOut"] | null;
+            /** Green Oa */
+            green_oa?: string | null;
+            /** Quartile */
+            quartile?: string | null;
+            /** Twoyr Mean Citedness */
+            twoyr_mean_citedness?: number | null;
+            /** H Index */
+            h_index?: number | null;
+            /**
+             * Works
+             * @default 0
+             */
+            works: number;
+            /**
+             * Topics
+             * @default []
+             */
+            topics: string[];
+            /** Summary */
+            summary: string;
+            /**
+             * Reasons
+             * @default []
+             */
+            reasons: components["schemas"]["RecommendReason"][];
+            /** Relaxed Note */
+            relaxed_note?: string | null;
+        };
         /** ScimagojrOut */
         ScimagojrOut: {
             /** Year */
@@ -5251,6 +5467,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JournalSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recommend_journals_api_v1__institution_code__journals_recommend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecommendRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendResponse"];
                 };
             };
             /** @description Validation Error */

@@ -1,7 +1,7 @@
 "use client";
 
 import { flexRender, getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
-import { Search } from "lucide-react";
+import { ArrowRight, Search, Sparkles } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { notFound, usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -680,6 +680,22 @@ function SearchView() {
           <div className="mt-2 max-w-2xl">
             <FunderPicker />
           </div>
+          <div className="mt-4 flex max-w-2xl flex-wrap items-center justify-between gap-3 rounded-[var(--radius)] border border-[var(--primary)]/35 bg-[var(--card)] px-4 py-3 shadow-sm">
+            <div className="flex min-w-0 flex-1 items-start gap-2.5">
+              <Sparkles aria-hidden className="mt-0.5 size-4 shrink-0 text-[var(--primary-text)]" />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">{t("hero.guideTitle")}</p>
+                <p className="text-xs text-[var(--muted-foreground)]">{t("hero.guideBody")}</p>
+              </div>
+            </div>
+            <Link
+              href={`/${inst}/guide`}
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[var(--radius)] bg-[var(--secondary)] px-3.5 text-xs font-semibold text-[var(--secondary-foreground)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
+            >
+              {t("hero.guideCta")}
+              <ArrowRight aria-hidden className="size-3.5" />
+            </Link>
+          </div>
         </section>
 
         {/* Stacked filter card: the only filter UI below 960px. */}
@@ -998,6 +1014,7 @@ function SearchView() {
                 <SourceNote
                   source={t("footer.sources")}
                   url="https://doaj.org"
+                  processAnchor="how-journals"
                   codes={[
                     "stats-window",
                     "openalex-coverage",
