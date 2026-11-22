@@ -248,7 +248,6 @@ function OpenaireCard({ oa }: { oa: NonNullable<FunderDetailResponse["openaire"]
             source={t("detail.openaire.source")}
             url={OPENAIRE_URL}
             codes={["openaire-enrichment"]}
-            processAnchor="how-green-funder"
           />
         </div>
       </div>

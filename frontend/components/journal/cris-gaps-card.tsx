@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { GapCsvButton } from "@/components/gap-csv-button";
 import { GapEntryList } from "@/components/gap-entries";
-import { ProcessLink } from "@/components/source-note";
+import { SourceNote } from "@/components/source-note";
 import { useYearRange, yearQuery } from "@/hooks/use-year-filter";
 import { entriesTotal, toGapEntries } from "@/lib/gap-entries";
 import type { OpenalexOnly } from "@/components/journal/shared";
@@ -22,6 +22,7 @@ export function CrisGapsCard({
   issnL: string;
 }) {
   const t = useTranslations("journals");
+  const tc = useTranslations("common");
   const { year_from, year_to } = useYearRange();
   const { total } = openalexOnly;
   const entries = toGapEntries(openalexOnly.items);
@@ -38,14 +39,11 @@ export function CrisGapsCard({
               ? ` ${t("crisGaps.showingRecent", { count: entries.length })}`
               : ""}
           </p>
-          <div className="flex flex-wrap items-center gap-3">
-            <ProcessLink anchor="how-authors" />
-            {total > 0 && (
-              <GapCsvButton
-                href={`/api/v1/${inst}/journals/${issnL}/openalex-only.csv${yearQuery("?", year_from, year_to)}`}
-              />
-            )}
-          </div>
+          {total > 0 && (
+            <GapCsvButton
+              href={`/api/v1/${inst}/journals/${issnL}/openalex-only.csv${yearQuery("?", year_from, year_to)}`}
+            />
+          )}
         </div>
       }
       contentClassName="text-sm"
@@ -60,6 +58,12 @@ export function CrisGapsCard({
           showUtAuthors
         />
       )}
+      <div className="mt-3 border-t border-[var(--border)] pt-3">
+        <SourceNote
+          source={tc("sourceNote.howListLabel")}
+          howBuilt={tc("sourceNote.explain.crisGaps")}
+        />
+      </div>
     </CollapsibleCard>
   );
 }

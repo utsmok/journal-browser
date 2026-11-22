@@ -195,7 +195,7 @@ export default async function DataPipelinePage() {
     <div className="mx-auto max-w-screen-2xl space-y-10 px-4 py-10">
       <header className="space-y-3">
         <h1 className="text-3xl font-bold">{t("intro.title")}</h1>
-        <p className="max-w-prose">{t.rich("intro.lead", { code })}</p>
+        <p className="max-w-4xl">{t.rich("intro.lead", { code })}</p>
         <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
           {TOC.map(([labelKey, id]) => (
             <li key={id}>
@@ -211,7 +211,7 @@ export default async function DataPipelinePage() {
 
       <section id="sources" className="space-y-4">
         <h2 className="mt-2 text-2xl font-semibold">{t("sources.heading")}</h2>
-        <p className="max-w-prose">{t("sources.lead")}</p>
+        <p className="max-w-4xl">{t("sources.lead")}</p>
         <DataTable
           head={[
             t("sources.headSource"),
@@ -230,17 +230,17 @@ export default async function DataPipelinePage() {
 
       <section id="dag" className="space-y-4">
         <h2 className="mt-2 text-2xl font-semibold">{t("dag.heading")}</h2>
-        <p className="max-w-prose">{t.rich("dag.planLead", { code })}</p>
-        <p className="max-w-prose">{t.rich("dag.clientLead", { code })}</p>
-        <p className="max-w-prose">{t.rich("dag.modesLead", { code })}</p>
+        <p className="max-w-4xl">{t.rich("dag.planLead", { code })}</p>
+        <p className="max-w-4xl">{t.rich("dag.clientLead", { code })}</p>
+        <p className="max-w-4xl">{t.rich("dag.modesLead", { code })}</p>
         <Card className="p-4">
           <DagDiagram />
         </Card>
         <p className="text-sm text-[var(--muted-foreground)]">{t("dag.perCodeCaption")}</p>
-        <p className="max-w-prose text-sm text-[var(--muted-foreground)]">
+        <p className="max-w-4xl text-sm text-[var(--muted-foreground)]">
           {t.rich("dag.generatedCaption", { code, date: PLAN.generatedAt })}
         </p>
-        <details className="max-w-prose text-sm">
+        <details className="max-w-4xl text-sm">
           <summary className="cursor-pointer text-[var(--muted-foreground)]">
             {t("dag.allEdges", {
               count: PLAN.steps.reduce((count, step) => count + step.deps.length, 0),
@@ -257,8 +257,8 @@ export default async function DataPipelinePage() {
 
         <div className="space-y-3">
           <h3 className="text-lg font-semibold">OpenAlex</h3>
-          <p className="max-w-prose">{t.rich("jobs.openalexIntro", { code })}</p>
-          <p className="max-w-prose">{t.rich("jobs.openalexInstitutionJobs", { code })}</p>
+          <p className="max-w-4xl">{t.rich("jobs.openalexIntro", { code })}</p>
+          <p className="max-w-4xl">{t.rich("jobs.openalexInstitutionJobs", { code })}</p>
           <CallsTable
             head={[t("calls.headStep"), t("calls.headRequest"), t("calls.headWrites")]}
             rows={OPENALEX_CALLS}
@@ -267,7 +267,7 @@ export default async function DataPipelinePage() {
 
         <div className="space-y-3">
           <h3 className="text-lg font-semibold">Crossref</h3>
-          <p className="max-w-prose">{t.rich("jobs.crossrefIntro", { code })}</p>
+          <p className="max-w-4xl">{t.rich("jobs.crossrefIntro", { code })}</p>
           <CallsTable
             head={[t("calls.headStep"), t("calls.headRequest"), t("calls.headWrites")]}
             rows={CROSSREF_CALLS}
@@ -276,8 +276,8 @@ export default async function DataPipelinePage() {
 
         <div className="space-y-3">
           <h3 className="text-lg font-semibold">Pure OAI-PMH</h3>
-          <p className="max-w-prose">{t.rich("jobs.pureProtocol", { code })}</p>
-          <p className="max-w-prose">{t.rich("jobs.purePasses", { code })}</p>
+          <p className="max-w-4xl">{t.rich("jobs.pureProtocol", { code })}</p>
+          <p className="max-w-4xl">{t.rich("jobs.purePasses", { code })}</p>
           <CallsTable
             head={[t("calls.headStep"), t("calls.headRequest"), t("calls.headWrites")]}
             rows={PURE_CALLS}
@@ -286,7 +286,7 @@ export default async function DataPipelinePage() {
 
         <div className="space-y-3">
           <h3 className="text-lg font-semibold">OpenAIRE</h3>
-          <p className="max-w-prose">{t.rich("jobs.openaireIntro", { code })}</p>
+          <p className="max-w-4xl">{t.rich("jobs.openaireIntro", { code })}</p>
           <CallsTable
             head={[t("calls.headStep"), t("calls.headRequest"), t("calls.headWrites")]}
             rows={OPENAIRE_CALLS}
@@ -295,8 +295,8 @@ export default async function DataPipelinePage() {
 
         <div className="space-y-3">
           <h3 className="text-lg font-semibold">{t("jobs.dealRegistersHeading")}</h3>
-          <p className="max-w-prose">{t.rich("jobs.dealsHarvests", { code })}</p>
-          <p className="max-w-prose">{t.rich("jobs.dealsMerge", { code })}</p>
+          <p className="max-w-4xl">{t.rich("jobs.dealsHarvests", { code })}</p>
+          <p className="max-w-4xl">{t.rich("jobs.dealsMerge", { code })}</p>
           <CallsTable
             head={[t("calls.headStep"), t("calls.headRequest"), t("calls.headWrites")]}
             rows={DEAL_CALLS}
@@ -305,7 +305,7 @@ export default async function DataPipelinePage() {
 
         <div className="space-y-3">
           <h3 className="text-lg font-semibold">OpenAPC, DOAJ, Scimago</h3>
-          <p className="max-w-prose">{t.rich("jobs.openapcDoajScimagoIntro", { code })}</p>
+          <p className="max-w-4xl">{t.rich("jobs.openapcDoajScimagoIntro", { code })}</p>
           <CallsTable
             head={[t("calls.headStep"), t("calls.headRequest"), t("calls.headWrites")]}
             rows={CSV_CALLS}
@@ -314,16 +314,16 @@ export default async function DataPipelinePage() {
 
         <div className="space-y-3">
           <h3 className="text-lg font-semibold">{t("jobs.identityRulesHeading")}</h3>
-          <p className="max-w-prose">{t.rich("jobs.identityWorkIntro", { code })}</p>
-          <p className="max-w-prose">{t.rich("jobs.identityAuthorIntro", { code })}</p>
+          <p className="max-w-4xl">{t.rich("jobs.identityWorkIntro", { code })}</p>
+          <p className="max-w-4xl">{t.rich("jobs.identityAuthorIntro", { code })}</p>
         </div>
       </section>
 
       <section id="scheduling" className="space-y-4">
         <h2 className="mt-2 text-2xl font-semibold">{t("scheduling.heading")}</h2>
-        <p className="max-w-prose">{t.rich("scheduling.lead", { code })}</p>
-        <p className="max-w-prose">{t.rich("scheduling.loopsLead", { code })}</p>
-        <p className="max-w-prose">{t.rich("scheduling.runbookLead", { code })}</p>
+        <p className="max-w-4xl">{t.rich("scheduling.lead", { code })}</p>
+        <p className="max-w-4xl">{t.rich("scheduling.loopsLead", { code })}</p>
+        <p className="max-w-4xl">{t.rich("scheduling.runbookLead", { code })}</p>
         <DataTable
           head={[
             t("scheduling.headStep"),
@@ -342,7 +342,7 @@ export default async function DataPipelinePage() {
 
       <section id="manual" className="space-y-4">
         <h2 className="mt-2 text-2xl font-semibold">{t("manual.heading")}</h2>
-        <p className="max-w-prose">{t("manual.lead")}</p>
+        <p className="max-w-4xl">{t("manual.lead")}</p>
         <DataTable
           head={[t("manual.headJob"), t("manual.headWhat"), t("manual.headWrites")]}
           rows={MANUAL_JOBS.map(([job, whatKey, writesKey]) => [job, t(whatKey), t(writesKey)])}
@@ -351,7 +351,7 @@ export default async function DataPipelinePage() {
 
       <section id="config" className="space-y-4">
         <h2 className="mt-2 text-2xl font-semibold">{t("config.heading")}</h2>
-        <p className="max-w-prose">{t.rich("config.lead", { code })}</p>
+        <p className="max-w-4xl">{t.rich("config.lead", { code })}</p>
         <DataTable
           head={[t("config.headVariable"), t("config.headPurpose")]}
           rows={[
@@ -372,15 +372,15 @@ export default async function DataPipelinePage() {
 
       <section id="storage" className="space-y-4">
         <h2 className="mt-2 text-2xl font-semibold">{t("storage.heading")}</h2>
-        <p className="max-w-prose">{t.rich("storage.leadRaw", { code })}</p>
-        <p className="max-w-prose">{t.rich("storage.leadDerived", { code })}</p>
-        <p className="max-w-prose">{t.rich("storage.leadSiteWrites", { code })}</p>
+        <p className="max-w-4xl">{t.rich("storage.leadRaw", { code })}</p>
+        <p className="max-w-4xl">{t.rich("storage.leadDerived", { code })}</p>
+        <p className="max-w-4xl">{t.rich("storage.leadSiteWrites", { code })}</p>
         <StorageFlow />
       </section>
 
       <section id="database" className="space-y-4">
         <h2 className="mt-2 text-2xl font-semibold">{t("database.heading")}</h2>
-        <p className="max-w-prose">
+        <p className="max-w-4xl">
           {t.rich("database.lead", {
             code,
             tables: tableCount,
@@ -388,7 +388,7 @@ export default async function DataPipelinePage() {
             date: schema.generatedAt,
           })}
         </p>
-        <p className="max-w-prose font-mono text-xs break-all">
+        <p className="max-w-4xl font-mono text-xs break-all">
           cd backend &amp;&amp; uv run python scripts/dump_db_schema.py --dsn &lt;read-only dsn&gt;{" "}
           --out ../frontend/lib/data-pipeline-schema.json
         </p>
@@ -406,12 +406,12 @@ export default async function DataPipelinePage() {
 
       <section id="serving" className="space-y-4">
         <h2 className="mt-2 text-2xl font-semibold">{t("serving.heading")}</h2>
-        <p className="max-w-prose">{t.rich("serving.searchLead", { code })}</p>
-        <p className="max-w-prose">{t.rich("serving.oaTypeLead", { code })}</p>
+        <p className="max-w-4xl">{t.rich("serving.searchLead", { code })}</p>
+        <p className="max-w-4xl">{t.rich("serving.oaTypeLead", { code })}</p>
         <OaRules />
-        <p className="max-w-prose">{t.rich("serving.oaStatusLead", { code })}</p>
-        <p className="max-w-prose">{t.rich("serving.embeddingsLead", { code })}</p>
-        <p className="max-w-prose">{t.rich("serving.apiContractLead", { code })}</p>
+        <p className="max-w-4xl">{t.rich("serving.oaStatusLead", { code })}</p>
+        <p className="max-w-4xl">{t.rich("serving.embeddingsLead", { code })}</p>
+        <p className="max-w-4xl">{t.rich("serving.apiContractLead", { code })}</p>
       </section>
     </div>
   );

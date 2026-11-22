@@ -156,7 +156,7 @@ function FundersPageInner() {
                 source={t("sourceJisc")}
                 url={OPF_URL}
                 codes={["jisc-policy-currency"]}
-                processAnchor="how-green-funder"
+                howBuilt={tc("sourceNote.explain.greenOa")}
               />
             </div>
           </CardContent>

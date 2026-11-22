@@ -12,7 +12,6 @@ import { CollapsibleCard } from "@/components/collapsible-card";
 import { GapEntryList } from "@/components/gap-entries";
 import { OaTrend } from "@/components/oa-trend";
 import { OrcidLink } from "@/components/orcid-link";
-import { ProcessLink } from "@/components/source-note";
 import { DetailSkeleton, ErrorPanel } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -274,7 +273,6 @@ function OrgUnitDetail({
               {unit.faculty}
             </Badge>
           )}
-          <ProcessLink anchor="how-authors" />
         </div>
         <UnitStats unit={unit} />
       </header>

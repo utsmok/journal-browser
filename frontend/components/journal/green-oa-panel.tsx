@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { External } from "@/components/journal/shared";
-import { ProcessLink, SourceNote } from "@/components/source-note";
+import { SourceNote } from "@/components/source-note";
 import type { Attribution } from "@/lib/api";
 import type { GreenOaPolicy } from "@/components/journal/shared";
 
@@ -86,6 +86,7 @@ export function GreenOaPanel({
   attribution: Partial<Attribution>;
 }) {
   const t = useTranslations("journals");
+  const tc = useTranslations("common");
   const routes = Object.entries(greenOa.routes);
   return (
     <CollapsibleCard
@@ -164,9 +165,8 @@ export function GreenOaPanel({
         <SourceNote
           {...attribution}
           codes={attribution.caveat_codes}
-          processAnchor="how-green-funder"
+          howBuilt={tc("sourceNote.explain.greenOa")}
         />
-        <ProcessLink anchor="how-green-funder" />
       </div>
     </CollapsibleCard>
   );

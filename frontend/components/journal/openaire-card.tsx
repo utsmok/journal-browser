@@ -20,6 +20,7 @@ export function OpenaireCard({
   note: Partial<Attribution>;
 }) {
   const t = useTranslations("journals");
+  const tc = useTranslations("common");
   const site = useSiteMeta();
   return (
     <CollapsibleCard
@@ -98,7 +99,7 @@ export function OpenaireCard({
         </ul>
       )}
       <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-[var(--border)] pt-3">
-        <SourceNote {...note} codes={note.caveat_codes} processAnchor="how-works" />
+        <SourceNote {...note} codes={note.caveat_codes} howBuilt={tc("sourceNote.explain.works")} />
       </div>
     </CollapsibleCard>
   );

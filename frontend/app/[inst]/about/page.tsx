@@ -1,7 +1,6 @@
 "use client";
 
-import { ExternalLink, GitBranch } from "lucide-react";
-import Link from "next/link";
+import { ExternalLink } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 
@@ -178,24 +177,6 @@ export default function AboutPage() {
             })}{" "}
             {t("page.introPolicy")}
           </p>
-        </div>
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm shadow-sm">
-          <div className="flex items-start gap-2.5">
-            <GitBranch aria-hidden className="mt-0.5 size-4 shrink-0 text-[var(--primary-text)]" />
-            <div>
-              <p className="font-semibold">How is every list, metric, and match built?</p>
-              <p className="text-xs text-[var(--muted-foreground)]">
-                Trace the primary sources, work-type filters, author matching cascade, OA conflict
-                rules, and documented fixes in the interactive data methodology guide.
-              </p>
-            </div>
-          </div>
-          <Link
-            href="/data-pipeline#how-each-view"
-            className="shrink-0 text-xs font-semibold text-[var(--primary-text)] underline-offset-2 hover:underline"
-          >
-            Open data methodology →
-          </Link>
         </div>
       </header>
       {(freshness?.degraded?.length ?? 0) > 0 && (

@@ -116,7 +116,7 @@ export default function DocPage() {
       />
 
       <div className="border-b border-[var(--border)] bg-[var(--muted)]">
-        <div className="docs-page-column mx-auto max-w-[72ch] px-4 py-8">
+        <div className="docs-page-column mx-auto max-w-4xl px-4 py-8">
           <Link
             href={`/${inst}/docs`}
             className="text-sm text-[var(--primary-text)] underline-offset-2 hover:underline"
@@ -139,7 +139,7 @@ export default function DocPage() {
         </div>
       </div>
 
-      <div className="docs-page-column mx-auto max-w-[72ch] space-y-6 px-4 py-10 text-[15px] leading-relaxed">
+      <div className="docs-page-column mx-auto max-w-4xl space-y-6 px-4 py-10 text-[15px] leading-relaxed">
         {doc.isPending && <p className="text-[var(--muted-foreground)]">{t("doc.loading")}</p>}
         {doc.isError && (
           <p className="text-destructive">

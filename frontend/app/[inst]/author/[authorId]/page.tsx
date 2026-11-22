@@ -19,7 +19,7 @@ import {
 } from "@/components/gap-entries";
 import { GapCsvButton } from "@/components/gap-csv-button";
 import { OaTrend } from "@/components/oa-trend";
-import { ProcessLink } from "@/components/source-note";
+import { SourceNote } from "@/components/source-note";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -284,7 +284,6 @@ export default function AuthorPage() {
             <span className="text-sm text-[var(--muted-foreground)]">
               {t("worksCount", { count: author.n_works })}
             </span>
-            <ProcessLink anchor="how-authors" />
           </div>
           {(author.orcid ||
             author.openalex_author_id ||
@@ -480,12 +479,9 @@ export default function AuthorPage() {
                       })}
                     </p>
                   )}
-                  <div className="flex flex-wrap items-center gap-3">
-                    <ProcessLink anchor="how-authors" />
-                    <GapCsvButton
-                      href={`/api/v1/${inst}/authors/${encodeURIComponent(author.pure_uuid)}/works.csv?scope=canon${yearQuery("&", year_from, year_to)}`}
-                    />
-                  </div>
+                  <GapCsvButton
+                    href={`/api/v1/${inst}/authors/${encodeURIComponent(author.pure_uuid)}/works.csv?scope=canon${yearQuery("&", year_from, year_to)}`}
+                  />
                 </div>
               }
             >
@@ -556,6 +552,12 @@ export default function AuthorPage() {
                   {t("cards.publicationsCapped", { count: 200 })}
                 </p>
               )}
+              <div className="mt-3 border-t border-[var(--border)] pt-3">
+                <SourceNote
+                  source={tc("sourceNote.howListLabel")}
+                  howBuilt={tc("sourceNote.explain.authorWorks")}
+                />
+              </div>
             </CollapsibleCard>
           )}
 
@@ -573,14 +575,11 @@ export default function AuthorPage() {
                     {gapShownTotal > gapEntries.length &&
                       ` ${t("gap.showing", { count: gapEntries.length })}`}
                   </p>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <ProcessLink anchor="how-authors" />
-                    {data.openalex_only.total > 0 && (
-                      <GapCsvButton
-                        href={`/api/v1/${inst}/authors/${encodeURIComponent(author.pure_uuid)}/works.csv?scope=missed${yearQuery("&", year_from, year_to)}`}
-                      />
-                    )}
-                  </div>
+                  {data.openalex_only.total > 0 && (
+                    <GapCsvButton
+                      href={`/api/v1/${inst}/authors/${encodeURIComponent(author.pure_uuid)}/works.csv?scope=missed${yearQuery("&", year_from, year_to)}`}
+                    />
+                  )}
                 </div>
               }
               contentClassName="text-sm"
@@ -606,6 +605,12 @@ export default function AuthorPage() {
                   </TableBody>
                 </Table>
               )}
+              <div className="mt-3 border-t border-[var(--border)] pt-3">
+                <SourceNote
+                  source={tc("sourceNote.howListLabel")}
+                  howBuilt={tc("sourceNote.explain.crisGaps")}
+                />
+              </div>
             </CollapsibleCard>
           )}
         </div>

@@ -1014,7 +1014,7 @@ function SearchView() {
                 <SourceNote
                   source={t("footer.sources")}
                   url="https://doaj.org"
-                  processAnchor="how-journals"
+                  howBuilt={tc("sourceNote.explain.journals")}
                   codes={[
                     "stats-window",
                     "openalex-coverage",

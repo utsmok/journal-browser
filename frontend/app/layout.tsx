@@ -83,6 +83,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const clientNamespaces = [
     "common",
     "home",
+    "guide",
     "search",
     "journals",
     "authors",
