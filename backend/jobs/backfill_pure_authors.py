@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from journal_browser.config import get_settings
 from journal_browser.harvest.common import resolve_institution
 from journal_browser.harvest.pure.cerif import publication_contributors
-from journal_browser.harvest.pure.entities import latest_publication_records, parse_metadata_xml
+from journal_browser.harvest.pure.entities import iter_latest_publication_xml, parse_metadata_xml
 from journal_browser.harvest.pure.store import store_pure_work_authors
 
 logger = logging.getLogger(__name__)
@@ -32,15 +32,16 @@ async def backfill_pure_work_authors(session, institution) -> dict:
     """Extract + store pure authorship edges for every stored cerif
     publication of one institution."""
     started = time.monotonic()
-    # Latest stored version per Pure uuid: full-author export versions
-    # preferred over the stream's truncated ones, scoped to this
-    # institution's runs.
-    latest = await latest_publication_records(session, institution.id)
+    # Stream latest stored metadata_xml per Pure uuid: full-author export
+    # versions win over the stream's truncated ones, scoped to this
+    # institution's runs, without materializing all payloads in RAM.
+    cerif_records = 0
     works = 0
     edges = 0
     parse_failures = 0
-    for uuid, payload in sorted(latest.items()):
-        root = parse_metadata_xml(payload.get("metadata_xml"))
+    async for uuid, metadata_xml in iter_latest_publication_xml(session, institution.id):
+        cerif_records += 1
+        root = parse_metadata_xml(metadata_xml)
         if root is None:
             parse_failures += 1
             continue
@@ -55,7 +56,7 @@ async def backfill_pure_work_authors(session, institution) -> dict:
             institution_id=institution.id,
         )
     stats = {
-        "cerif_records": len(latest),
+        "cerif_records": cerif_records,
         "works_with_authors": works,
         "edges": edges,
         "parse_failures": parse_failures,

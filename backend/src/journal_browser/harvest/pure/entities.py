@@ -14,9 +14,11 @@ restarts the whole set (the works-set pattern, MAX_TOKEN_RESTARTS).
 
 import logging
 import xml.etree.ElementTree as ET
+from collections.abc import AsyncIterator
 from typing import Any
 
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,6 +41,9 @@ ENTITY_SETS: tuple[tuple[str, str], ...] = (
     (CRIS_PERSONS_SET, "persons"),
 )
 
+STREAM_PARTITION = 500
+INSERT_CHUNK = 2000
+
 
 def parse_metadata_xml(xml_text: str | None) -> ET.Element | None:
     """First element of a stored inner-metadata XML string.
@@ -55,11 +60,8 @@ def parse_metadata_xml(xml_text: str | None) -> ET.Element | None:
     return next(iter(wrapped), None)
 
 
-def parse_entity_record(payload: dict[str, Any]) -> dict[str, Any] | None:
-    """Parsed CERIF person/orgunit from one stored OAI record payload.
-
-    None when the record carries no parseable Person/OrgUnit root."""
-    root = parse_metadata_xml(payload.get("metadata_xml"))
+def _parse_entity_xml(metadata_xml: str | None) -> dict[str, Any] | None:
+    root = parse_metadata_xml(metadata_xml)
     if root is None:
         return None
     kind = cerif.localname(root)
@@ -70,26 +72,103 @@ def parse_entity_record(payload: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
-async def _latest_records(
-    session: AsyncSession, entity_type: str
-) -> list[tuple[str, dict[str, Any]]]:
-    """Latest stored payload per source_pk for one entity type.
+def parse_entity_record(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Parsed CERIF person/orgunit from one stored OAI record payload.
+
+    None when the record carries no parseable Person/OrgUnit root."""
+    return _parse_entity_xml(payload.get("metadata_xml"))
+
+
+async def _iter_latest_entity_xml(
+    session: AsyncSession, entity_type: str, institution_id: int
+) -> AsyncIterator[tuple[str, str | None]]:
+    """Stream latest stored metadata_xml per source_pk for one institution
+    and entity type, deduplicated server-side via DISTINCT ON.
 
     source_records is versioned by content hash; the newest version of a
     record wins (ut-metadata latest_source_records convention)."""
-    rows = await session.execute(
-        select(SourceRecord.source_pk, SourceRecord.payload)
-        .where(SourceRecord.source == SOURCE, SourceRecord.entity_type == entity_type)
+    stmt = (
+        select(
+            SourceRecord.source_pk,
+            SourceRecord.payload.op("->>")("metadata_xml"),
+        )
+        .ext(distinct_on(SourceRecord.source_pk))
+        .join(HarvestRun, HarvestRun.id == SourceRecord.harvest_run_id)
+        .where(
+            SourceRecord.source == SOURCE,
+            SourceRecord.entity_type == entity_type,
+            HarvestRun.institution_id == institution_id,
+        )
         .order_by(
             SourceRecord.source_pk,
             SourceRecord.harvested_at.desc(),
             SourceRecord.id.desc(),
         )
     )
-    out: dict[str, dict[str, Any]] = {}
-    for pk, payload in rows.all():
-        out.setdefault(pk, payload)
-    return list(out.items())
+    result = await session.stream(
+        stmt.execution_options(stream_results=True, max_row_buffer=STREAM_PARTITION)
+    )
+    async for partition in result.partitions(STREAM_PARTITION):
+        for pk, metadata_xml in partition:
+            yield pk, metadata_xml
+
+
+async def iter_latest_publication_records(
+    session: AsyncSession, institution_id: int
+) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+    """Stream latest stored publication payload per Pure uuid,
+    institution-scoped, deduplicated server-side via DISTINCT ON.
+
+    work_cerif_full rows (the Pure backend export, which carries every
+    author's person id) win over the stream's work_cerif versions — the
+    OAI stream truncates author identity — and work_cerif fills the uuids
+    the export set lacks."""
+    seen: set[str] = set()
+    for entity_type in ("work_cerif_full", "work_cerif"):
+        stmt = (
+            select(SourceRecord.source_pk, SourceRecord.payload)
+            .ext(distinct_on(SourceRecord.source_pk))
+            .join(HarvestRun, HarvestRun.id == SourceRecord.harvest_run_id)
+            .where(
+                SourceRecord.source == SOURCE,
+                SourceRecord.entity_type == entity_type,
+                HarvestRun.institution_id == institution_id,
+            )
+            .order_by(
+                SourceRecord.source_pk,
+                SourceRecord.harvested_at.desc(),
+                SourceRecord.id.desc(),
+            )
+        )
+        result = await session.stream(
+            stmt.execution_options(stream_results=True, max_row_buffer=STREAM_PARTITION)
+        )
+        async for partition in result.partitions(STREAM_PARTITION):
+            for pk, payload in partition:
+                uuid = pure_uuid_for(pk)
+                if uuid in seen:
+                    continue
+                seen.add(uuid)
+                yield uuid, payload
+
+
+async def iter_latest_publication_xml(
+    session: AsyncSession, institution_id: int
+) -> AsyncIterator[tuple[str, str | None]]:
+    """Stream (bare_uuid, metadata_xml) for the institution's latest
+    publications, preferring work_cerif_full over work_cerif.
+
+    Projects only payload->>'metadata_xml' server-side and streams in
+    partitions so multi-hundred-thousand-work corpora never materialize
+    hundreds of MB of raw JSON/XML in Python."""
+    seen: set[str] = set()
+    for entity_type in ("work_cerif_full", "work_cerif"):
+        async for pk, metadata_xml in _iter_latest_entity_xml(session, entity_type, institution_id):
+            uuid = pure_uuid_for(pk)
+            if uuid in seen:
+                continue
+            seen.add(uuid)
+            yield uuid, metadata_xml
 
 
 async def latest_publication_records(
@@ -103,27 +182,10 @@ async def latest_publication_records(
     the export set lacks. Keys are bare uuids: pure_uuid_for normalizes
     the stream's prefixed pks and the export's bare pks. Scope is this
     institution's harvest runs (the join the author backfill used)."""
-    latest: dict[str, dict[str, Any]] = {}
-    for entity_type in ("work_cerif_full", "work_cerif"):
-        rows = await session.execute(
-            select(SourceRecord.source_pk, SourceRecord.payload)
-            .join(HarvestRun, HarvestRun.id == SourceRecord.harvest_run_id)
-            .where(
-                SourceRecord.source == SOURCE,
-                SourceRecord.entity_type == entity_type,
-                HarvestRun.institution_id == institution_id,
-            )
-            .order_by(
-                SourceRecord.source_pk,
-                SourceRecord.harvested_at.desc(),
-                SourceRecord.id.desc(),
-            )
-        )
-        for pk, payload in rows.all():
-            uuid = pure_uuid_for(pk)
-            if uuid not in latest:
-                latest[uuid] = payload
-    return latest
+    return {
+        uuid: payload
+        async for uuid, payload in iter_latest_publication_records(session, institution_id)
+    }
 
 
 async def mine_publication_entities(
@@ -134,13 +196,13 @@ async def mine_publication_entities(
     the rebuilds insert them insert-if-absent after the set-derived rows,
     so the standalone-set long tail fills gaps without ever overriding it.
     Authorships without a person id and org refs without an id are skipped.
-    Reads latest_publication_records: the full-author export versions win
-    over the stream's truncated ones, scoped to this institution's runs."""
+    Streams via iter_latest_publication_xml so the full-author export
+    versions win over the stream's truncated ones without holding every
+    publication payload in memory."""
     org_candidates: dict[str, dict] = {}
     person_candidates: dict[str, dict] = {}
-    records = await latest_publication_records(session, institution_id)
-    for _uuid, payload in records.items():
-        root = parse_metadata_xml(payload.get("metadata_xml"))
+    async for _uuid, metadata_xml in iter_latest_publication_xml(session, institution_id):
+        root = parse_metadata_xml(metadata_xml)
         if root is None:
             continue
         for author in cerif.publication_contributors(root, "Author"):
@@ -181,16 +243,28 @@ async def rebuild_pure_orgs(
 ) -> dict[str, int]:
     """Full-replace the institution's pure_orgs/pure_org_parents from the
     stored orgunit records."""
-    org_rows: list[dict[str, Any]] = []
-    parent_rows: list[dict[str, Any]] = []
+    await session.execute(delete(PureOrg).where(PureOrg.institution_id == institution_id))
+    org_batch: list[dict[str, Any]] = []
+    parent_batch: list[dict[str, Any]] = []
     seen: set[str] = set()
+    orgs_count = 0
+    parents_count = 0
     parse_failures = 0
-    for pk, payload in await _latest_records(session, "orgs"):
+
+    async def _flush_orgs() -> None:
+        if org_batch:
+            await session.execute(pg_insert(PureOrg), org_batch)
+            org_batch.clear()
+        if parent_batch:
+            await session.execute(pg_insert(PureOrgParent), parent_batch)
+            parent_batch.clear()
+
+    async for pk, metadata_xml in _iter_latest_entity_xml(session, "orgs", institution_id):
         uuid = pure_uuid_for(pk)
         if uuid in seen:
             continue
         seen.add(uuid)
-        parsed = parse_entity_record(payload)
+        parsed = _parse_entity_xml(metadata_xml)
         if parsed is None or parsed["entity_type"] != "orgs":
             parse_failures += 1
             continue
@@ -199,7 +273,7 @@ async def rebuild_pure_orgs(
         if not name:
             parse_failures += 1
             continue
-        org_rows.append(
+        org_batch.append(
             {
                 "institution_id": institution_id,
                 "uuid": uuid,
@@ -208,9 +282,10 @@ async def rebuild_pure_orgs(
                 "identifiers": cer.get("identifiers") or [],
             }
         )
+        orgs_count += 1
         parent_uuid = ref_uuid(cer.get("part_of_org_id"))
         if parent_uuid and parent_uuid != uuid:
-            parent_rows.append(
+            parent_batch.append(
                 {
                     "institution_id": institution_id,
                     "org_uuid": uuid,
@@ -218,31 +293,45 @@ async def rebuild_pure_orgs(
                     "parent_name": cer.get("part_of_name"),
                 }
             )
-    await session.execute(delete(PureOrg).where(PureOrg.institution_id == institution_id))
-    if org_rows:
-        await session.execute(pg_insert(PureOrg), org_rows)
-    if parent_rows:
-        await session.execute(pg_insert(PureOrgParent), parent_rows)
+            parents_count += 1
+        if len(org_batch) >= INSERT_CHUNK:
+            await _flush_orgs()
+    await _flush_orgs()
+
     mined_orgs = 0
-    for uuid, cand in sorted((mined or {}).items()):
-        if uuid in seen or not cand.get("name"):
-            continue
+    mined_batch: list[dict[str, Any]] = []
+
+    async def _flush_mined_orgs() -> None:
+        nonlocal mined_orgs
+        if not mined_batch:
+            return
         inserted = await session.execute(
             pg_insert(PureOrg)
-            .values(
-                institution_id=institution_id,
-                uuid=uuid,
-                name=cand["name"],
-                org_type=cand.get("org_type"),
-                identifiers=cand.get("identifiers") or [],
-            )
+            .values(mined_batch)
             .on_conflict_do_nothing(index_elements=["institution_id", "uuid"])
             .returning(PureOrg.uuid)
         )
         mined_orgs += len(inserted.all())
+        mined_batch.clear()
+
+    for uuid, cand in sorted((mined or {}).items()):
+        if uuid in seen or not cand.get("name"):
+            continue
+        mined_batch.append(
+            {
+                "institution_id": institution_id,
+                "uuid": uuid,
+                "name": cand["name"],
+                "org_type": cand.get("org_type"),
+                "identifiers": cand.get("identifiers") or [],
+            }
+        )
+        if len(mined_batch) >= INSERT_CHUNK:
+            await _flush_mined_orgs()
+    await _flush_mined_orgs()
     return {
-        "orgs": len(org_rows),
-        "parents": len(parent_rows),
+        "orgs": orgs_count,
+        "parents": parents_count,
         "mined_orgs": mined_orgs,
         "parse_failures": parse_failures,
     }
@@ -254,15 +343,23 @@ async def rebuild_pure_persons(
     """Full-replace the institution's pure_persons from the stored person
     records. orcid stores the bare lower-cased form (comparisons key on
     it); the payload keeps the parsed CERIF verbatim-ish."""
-    person_rows: list[dict[str, Any]] = []
+    await session.execute(delete(PurePerson).where(PurePerson.institution_id == institution_id))
+    person_batch: list[dict[str, Any]] = []
     seen: set[str] = set()
+    persons_count = 0
     parse_failures = 0
-    for pk, payload in await _latest_records(session, "persons"):
+
+    async def _flush_persons() -> None:
+        if person_batch:
+            await session.execute(pg_insert(PurePerson), person_batch)
+            person_batch.clear()
+
+    async for pk, metadata_xml in _iter_latest_entity_xml(session, "persons", institution_id):
         uuid = pure_uuid_for(pk)
         if uuid in seen:
             continue
         seen.add(uuid)
-        parsed = parse_entity_record(payload)
+        parsed = _parse_entity_xml(metadata_xml)
         if parsed is None or parsed["entity_type"] != "persons":
             parse_failures += 1
             continue
@@ -272,7 +369,7 @@ async def rebuild_pure_persons(
         name = " ".join(
             part for part in (cer.get("first_names"), cer.get("family_names")) if part
         ).strip()
-        person_rows.append(
+        person_batch.append(
             {
                 "institution_id": institution_id,
                 "uuid": uuid,
@@ -281,10 +378,27 @@ async def rebuild_pure_persons(
                 "payload": {"cerif": cer},
             }
         )
-    await session.execute(delete(PurePerson).where(PurePerson.institution_id == institution_id))
-    if person_rows:
-        await session.execute(pg_insert(PurePerson), person_rows)
+        persons_count += 1
+        if len(person_batch) >= INSERT_CHUNK:
+            await _flush_persons()
+    await _flush_persons()
+
     mined_persons = 0
+    mined_batch: list[dict[str, Any]] = []
+
+    async def _flush_mined_persons() -> None:
+        nonlocal mined_persons
+        if not mined_batch:
+            return
+        inserted = await session.execute(
+            pg_insert(PurePerson)
+            .values(mined_batch)
+            .on_conflict_do_nothing(index_elements=["institution_id", "uuid"])
+            .returning(PurePerson.uuid)
+        )
+        mined_persons += len(inserted.all())
+        mined_batch.clear()
+
     for uuid, cand in sorted((mined or {}).items()):
         if uuid in seen:
             continue
@@ -293,14 +407,13 @@ async def rebuild_pure_persons(
         ).strip()
         # parse_cerif_person-shaped payload: the shared identity derivation
         # (harvest.authors) reads payload["cerif"] and its affiliations list.
-        inserted = await session.execute(
-            pg_insert(PurePerson)
-            .values(
-                institution_id=institution_id,
-                uuid=uuid,
-                orcid=None,
-                name=name or None,
-                payload={
+        mined_batch.append(
+            {
+                "institution_id": institution_id,
+                "uuid": uuid,
+                "orcid": None,
+                "name": name or None,
+                "payload": {
                     "cerif": {
                         "id": cand.get("id"),
                         "family_names": cand.get("family_names"),
@@ -312,13 +425,13 @@ async def rebuild_pure_persons(
                     },
                     "origin": "publication",
                 },
-            )
-            .on_conflict_do_nothing(index_elements=["institution_id", "uuid"])
-            .returning(PurePerson.uuid)
+            }
         )
-        mined_persons += len(inserted.all())
+        if len(mined_batch) >= INSERT_CHUNK:
+            await _flush_mined_persons()
+    await _flush_mined_persons()
     return {
-        "persons": len(person_rows),
+        "persons": persons_count,
         "mined_persons": mined_persons,
         "parse_failures": parse_failures,
     }

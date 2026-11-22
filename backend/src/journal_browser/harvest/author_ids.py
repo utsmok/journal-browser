@@ -28,6 +28,7 @@ from collections import Counter, defaultdict
 from typing import Any
 
 from sqlalchemy import case, func, select, text
+from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -206,22 +207,29 @@ async def gather_openalex_authors(
 
 
 async def _listing_orcids(session: AsyncSession, institution_id: int) -> dict[str, str | None]:
-    """Latest stored author listing payload per bare A-id (corroboration
-    source beyond work authorships)."""
+    """Latest stored author listing ORCID per bare A-id (corroboration
+    source beyond work authorships). Projects only payload->>'orcid' with
+    server-side DISTINCT ON so hundreds of MB of full author payloads
+    never cross the wire."""
     stmt = (
-        select(SourceRecord.source_pk, SourceRecord.payload)
+        select(
+            SourceRecord.source_pk,
+            SourceRecord.payload.op("->>")("orcid"),
+        )
+        .ext(distinct_on(SourceRecord.source_pk))
         .join(HarvestRun, HarvestRun.id == SourceRecord.harvest_run_id)
         .where(
             SourceRecord.source == SOURCE,
             SourceRecord.entity_type == AUTHOR_ENTITY,
             HarvestRun.institution_id == institution_id,
         )
-        .order_by(SourceRecord.source_pk, SourceRecord.harvested_at.desc(), SourceRecord.id.desc())
+        .order_by(
+            SourceRecord.source_pk,
+            SourceRecord.harvested_at.desc(),
+            SourceRecord.id.desc(),
+        )
     )
-    out: dict[str, str | None] = {}
-    for pk, payload in (await session.execute(stmt)).all():
-        out.setdefault(pk, bare_orcid(payload.get("orcid")))
-    return out
+    return {pk: bare_orcid(raw_orcid) for pk, raw_orcid in (await session.execute(stmt)).all()}
 
 
 async def sweep_author_works(

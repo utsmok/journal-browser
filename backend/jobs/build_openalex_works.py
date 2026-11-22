@@ -9,15 +9,21 @@ uv run python jobs/build_openalex_works.py [--institution rug]
 
 import asyncio
 import json
+import logging
+import time
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
 from journal_browser.harvest.common import get_active_institutions, resolve_institution
 from journal_browser.harvest.openalex_works import rebuild_openalex_works
+from journal_browser.logging_setup import configure_logging
+
+logger = logging.getLogger("journal_browser.jobs.build_openalex_works")
 
 
 async def main(code: str | None = None) -> None:
+    configure_logging()
     engine = create_async_engine(get_settings().database_url)
     maker = async_sessionmaker(engine, expire_on_commit=False)
     async with maker() as session:
@@ -27,10 +33,17 @@ async def main(code: str | None = None) -> None:
             institutions = await get_active_institutions(session)
         stats = {}
         for institution in institutions:
-            stats[institution.code or str(institution.id)] = await rebuild_openalex_works(
-                session, institution
+            key = institution.code or str(institution.id)
+            started = time.monotonic()
+            logger.info("build_openalex_works[%s]: starting rebuild", key)
+            inst_stats = await rebuild_openalex_works(session, institution)
+            await session.commit()
+            logger.info(
+                "build_openalex_works[%s]: committed in %.1fs",
+                key,
+                time.monotonic() - started,
             )
-        await session.commit()
+            stats[key] = inst_stats
     await engine.dispose()
     print(json.dumps(stats))
 

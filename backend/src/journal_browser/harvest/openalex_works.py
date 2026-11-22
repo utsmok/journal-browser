@@ -17,7 +17,8 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import case, delete, func, select, text, update
+from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import work_type_excluded
@@ -40,7 +41,8 @@ ENTITY_TYPE = "works_stats"
 #: harvest_runs.filter_set prefix of the per-author enrichment sweep
 AUTHOR_SWEEP_PREFIX = "author-sweep"
 
-INSERT_CHUNK = 5000
+INSERT_CHUNK = 2000
+STREAM_PARTITION = 200
 
 
 def _w_id(openalex_id: Any) -> str | None:
@@ -152,10 +154,12 @@ def work_row(payload: dict[str, Any], issn_by_source: dict[str, str]) -> dict[st
 
 async def _issn_map(session: AsyncSession) -> dict[str, str]:
     """OpenAlex source id -> issn_l (journals.openalex_id, per-source key)."""
-    from ..models import Journal
-
-    rows = await session.execute(select(Journal.openalex_id, Journal.issn_l))
-    return {_w_id(s): issn_l for s, issn_l in rows.all() if s and issn_l}
+    rows = await session.execute(
+        select(Journal.openalex_id, Journal.issn_l).where(
+            Journal.openalex_id.is_not(None), Journal.issn_l.is_not(None)
+        )
+    )
+    return {wid: issn_l for s, issn_l in rows.all() if (wid := _w_id(s))}
 
 
 async def rebuild_openalex_works(session: AsyncSession, institution: Institution) -> dict[str, Any]:
@@ -163,23 +167,57 @@ async def rebuild_openalex_works(session: AsyncSession, institution: Institution
     works_stats payload per W-id (scoped to the institution's runs).
     Part-of facts survive: payload-carried parents mark the row checked,
     silent payloads inherit prior backfill facts."""
+    issn_by_source = await _issn_map(session)
+
+    # Part-of facts survive the full replace: payloads harvested before
+    # OpenAlex's 2026-11 part-of release carry no parent_works, so a plain
+    # rebuild would flip is_part back to false and re-queue every row for
+    # the per-DOI backfill (jobs/backfill_parts.py). A payload that DOES
+    # name parents wins (newer knowledge from OpenAlex itself) and counts
+    # as checked; a silent payload inherits the stored facts.
+    #
+    # Keep only rows that carry part-of facts or a checked timestamp:
+    # unchecked non-part rows reproduce identically from scratch, and
+    # checked standalone rows only need their timestamp (not an empty list).
+    prior_part_rows: dict[str, tuple[list[dict[str, Any]], bool, datetime | None]] = {}
+    prior_checked_only: dict[str, datetime] = {}
+    has_parents = OpenalexWork.parent_works != text("'[]'::jsonb")
+    prior_stmt = select(
+        OpenalexWork.w_id,
+        case((OpenalexWork.is_part | has_parents, OpenalexWork.parent_works), else_=None),
+        OpenalexWork.is_part,
+        OpenalexWork.parts_checked_at,
+    ).where(
+        OpenalexWork.institution_id == institution.id,
+        OpenalexWork.is_part | OpenalexWork.parts_checked_at.is_not(None) | has_parents,
+    )
+    prior_stream = await session.stream(
+        prior_stmt.execution_options(stream_results=True, max_row_buffer=1000)
+    )
+    async for partition in prior_stream.partitions(1000):
+        for w_id, parents, is_part, checked in partition:
+            if is_part or parents:
+                prior_part_rows[w_id] = (parents or [], bool(is_part), checked)
+            elif checked is not None:
+                prior_checked_only[w_id] = checked
+
+    await session.execute(delete(OpenalexWork).where(OpenalexWork.institution_id == institution.id))
+    await session.execute(
+        delete(OpenalexWorkAuthor).where(OpenalexWorkAuthor.institution_id == institution.id)
+    )
+
     # filter_set rides HarvestState (keyed by last_run_id), not the run row.
-    # DISTINCT ON keeps only each W-id's newest payload server-side and the
-    # result streams in partitions: materialising every payload at once
-    # (hundreds of MB of decoded JSON) pushed the live author-ids step past
-    # the host's memory during the rebuild phase.
+    # DISTINCT ON keeps only each source_pk's newest payload server-side so
+    # historical versions never cross the wire; streaming in partitions and
+    # flushing INSERT_CHUNK batches bounds Python memory to one batch plus
+    # the lightweight W-id dedupe set.
     stmt = (
         select(
             SourceRecord.source_pk,
             SourceRecord.payload,
             func.coalesce(HarvestState.filter_set, ""),
-            func.row_number()
-            .over(
-                partition_by=SourceRecord.source_pk,
-                order_by=[SourceRecord.harvested_at.desc(), SourceRecord.id.desc()],
-            )
-            .label("rn"),
         )
+        .ext(distinct_on(SourceRecord.source_pk))
         .join(HarvestRun, HarvestRun.id == SourceRecord.harvest_run_id)
         .outerjoin(HarvestState, HarvestState.last_run_id == HarvestRun.id)
         .where(
@@ -187,17 +225,31 @@ async def rebuild_openalex_works(session: AsyncSession, institution: Institution
             SourceRecord.entity_type == ENTITY_TYPE,
             HarvestRun.institution_id == institution.id,
         )
+        .order_by(
+            SourceRecord.source_pk,
+            SourceRecord.harvested_at.desc(),
+            SourceRecord.id.desc(),
+        )
     )
-    issn_by_source = await _issn_map(session)
-    rows: dict[str, dict[str, Any]] = {}
+
+    seen_w_ids: set[str] = set()
+    batch: list[dict[str, Any]] = []
+    works_count = 0
+    author_sweep_rows = 0
     parse_failures = 0
     excluded_types = 0
-    result = await session.stream(stmt.execution_options(stream_results=True, max_row_buffer=200))
-    async for partition in result.partitions(200):
-        for _source_pk, payload, filter_set, rn in partition:
-            if rn != 1:
-                continue
-            filter_set = filter_set or ""
+    checked_now = datetime.now(UTC)
+
+    async def _flush_batch() -> None:
+        if batch:
+            await session.execute(OpenalexWork.__table__.insert(), batch)
+            batch.clear()
+
+    result = await session.stream(
+        stmt.execution_options(stream_results=True, max_row_buffer=STREAM_PARTITION)
+    )
+    async for partition in result.partitions(STREAM_PARTITION):
+        for _source_pk, payload, filter_set in partition:
             row = work_row(payload, issn_by_source)
             if row is None:
                 # An excluded type (preprint/book, dataset, peer review, ...)
@@ -208,67 +260,65 @@ async def rebuild_openalex_works(session: AsyncSession, institution: Institution
                 else:
                     parse_failures += 1
                 continue
-            if filter_set.startswith(AUTHOR_SWEEP_PREFIX):
+            w_id = row["w_id"]
+            # One publication under two W-ids (merged profiles) or distinct
+            # source_pk spellings of the same W-id: first wins — deterministic
+            # because DISTINCT ON streams in source_pk order.
+            if w_id in seen_w_ids:
+                continue
+            seen_w_ids.add(w_id)
+            if (filter_set or "").startswith(AUTHOR_SWEEP_PREFIX):
                 row["source"] = AUTHOR_SWEEP_PREFIX
-            # One publication under two W-ids (merged profiles): first wins,
-            # which is the most-mentioned-at-first-sweep id — deterministic.
-            rows.setdefault(row["w_id"], row)
-    # Part-of facts survive the full replace: payloads harvested before
-    # OpenAlex's 2026-11 part-of release carry no parent_works, so a plain
-    # rebuild would flip is_part back to false and re-queue every row for
-    # the per-DOI backfill (jobs/backfill_parts.py). A payload that DOES
-    # name parents wins (newer knowledge from OpenAlex itself) and counts
-    # as checked; a silent payload inherits the stored facts.
-    prior_parts = {
-        w_id: (parents, is_part, checked)
-        for w_id, parents, is_part, checked in (
-            await session.execute(
-                select(
-                    OpenalexWork.w_id,
-                    OpenalexWork.parent_works,
-                    OpenalexWork.is_part,
-                    OpenalexWork.parts_checked_at,
-                ).where(OpenalexWork.institution_id == institution.id)
-            )
-        ).all()
-    }
-    checked_now = datetime.now(UTC)
-    for row in rows.values():
-        if row["parent_works"]:
-            row["parts_checked_at"] = checked_now
-        elif prior := prior_parts.get(row["w_id"]):
-            row["parent_works"], row["is_part"], row["parts_checked_at"] = prior
-        else:
-            # New row, silent payload: unchecked. The key must exist on
-            # every row — chunked executemany compiles the INSERT from
-            # the first dict, so heterogeneous keys crash mid-chunk.
-            row["parts_checked_at"] = None
-    await session.execute(delete(OpenalexWork).where(OpenalexWork.institution_id == institution.id))
-    await session.execute(
-        delete(OpenalexWorkAuthor).where(OpenalexWorkAuthor.institution_id == institution.id)
-    )
-    values = list(rows.values())
-    for start in range(0, len(values), INSERT_CHUNK):
-        await session.execute(
-            OpenalexWork.__table__.insert(),
-            [
-                {**row, "institution_id": institution.id}
-                for row in values[start : start + INSERT_CHUNK]
-            ],
-        )
+                author_sweep_rows += 1
+            if row["parent_works"]:
+                row["parts_checked_at"] = checked_now
+                prior_part_rows.pop(w_id, None)
+                prior_checked_only.pop(w_id, None)
+            elif (prior := prior_part_rows.pop(w_id, None)) is not None:
+                row["parent_works"], row["is_part"], row["parts_checked_at"] = prior
+            elif (checked := prior_checked_only.pop(w_id, None)) is not None:
+                row["parts_checked_at"] = checked
+            else:
+                # New row, silent payload: unchecked. The key must exist on
+                # every row — chunked executemany compiles the INSERT from
+                # the first dict, so heterogeneous keys crash mid-chunk.
+                row["parts_checked_at"] = None
+            row["institution_id"] = institution.id
+            batch.append(row)
+            works_count += 1
+            if len(batch) >= INSERT_CHUNK:
+                await _flush_batch()
+    await _flush_batch()
+    seen_w_ids.clear()
+    prior_part_rows.clear()
+    prior_checked_only.clear()
+
     # Attribution edges: one (work, lower-cased author id) pair per
-    # authorship — the indexed side of every attribution probe. OpenAlex
-    # authorships can repeat an author within one work; the PK forbids
-    # duplicate edges, so dedupe per row.
-    pairs = [
-        {"institution_id": institution.id, "author_id": aid, "w_id": row["w_id"]}
-        for row in values
-        for aid in sorted({a["a"].lower() for a in row["authorships"] if a["a"]})
-    ]
-    for start in range(0, len(pairs), INSERT_CHUNK):
-        await session.execute(
-            OpenalexWorkAuthor.__table__.insert(), pairs[start : start + INSERT_CHUNK]
-        )
+    # authorship — the indexed side of every attribution probe. Derived
+    # directly in Postgres from openalex_works.authorships so millions of
+    # author edges never materialize in Python; the lateral DISTINCT dedupes
+    # repeated authors within each work without a global sort over the
+    # institution.
+    attributions_result = await session.execute(
+        text(
+            """
+            INSERT INTO openalex_work_authors (institution_id, author_id, w_id)
+            SELECT
+                ow.institution_id,
+                a.author_id,
+                ow.w_id
+            FROM openalex_works ow
+            CROSS JOIN LATERAL (
+                SELECT DISTINCT lower(elem ->> 'a') AS author_id
+                FROM jsonb_array_elements(ow.authorships) AS elem
+                WHERE nullif(elem ->> 'a', '') IS NOT NULL
+            ) AS a
+            WHERE ow.institution_id = :iid
+            """
+        ),
+        {"iid": institution.id},
+    )
+    attributions = int(getattr(attributions_result, "rowcount", 0) or 0)
     # Modal work language per journal, over every institution's stored works
     # (language is a journal attribute, so any rebuild refreshes the same
     # global stamp; ties break alphabetically for determinism). Journals
@@ -322,7 +372,7 @@ async def rebuild_openalex_works(session: AsyncSession, institution: Institution
             OpenalexWork.institution_id == institution.id,
             OpenalexWork.oa_status.is_not(None),
         )
-        .distinct(OpenalexWork.doi_normalized)
+        .ext(distinct_on(OpenalexWork.doi_normalized))
         .order_by(
             OpenalexWork.doi_normalized,
             oa_openness_desc(OpenalexWork.oa_status),
@@ -340,11 +390,11 @@ async def rebuild_openalex_works(session: AsyncSession, institution: Institution
         .values(oa_status=canon.c.oa)
     )
     stats = {
-        "works": len(values),
+        "works": works_count,
         "parse_failures": parse_failures,
         "excluded_types": excluded_types,
-        "author_sweep_rows": sum(1 for r in values if r["source"] == AUTHOR_SWEEP_PREFIX),
-        "attributions": len(pairs),
+        "author_sweep_rows": author_sweep_rows,
+        "attributions": attributions,
         "journals_language_stamped": stamped.rowcount,
         "works_oa_synced": synced.rowcount,
     }
