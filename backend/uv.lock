@@ -10,7 +10,7 @@ resolution-markers = [
 [[package]]
 name = "aireloom"
 version = "0.8.0"
-source = { git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Faireloom&branch=overhaul-2026-11#639e70026fe39d8e7f2a541ccd55e138f07dcc68" }
+source = { git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Faireloom&branch=overhaul-2026-11#84788de28d3fd67527ded7fd60f3a1c6edc252c9" }
 dependencies = [
     { name = "bibliofabric" },
 ]
@@ -32,7 +32,7 @@ wheels = [
 [[package]]
 name = "aletheca"
 version = "0.4.0"
-source = { git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Faletheca&branch=overhaul-2026-11#639e70026fe39d8e7f2a541ccd55e138f07dcc68" }
+source = { git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Faletheca&branch=overhaul-2026-11#84788de28d3fd67527ded7fd60f3a1c6edc252c9" }
 dependencies = [
     { name = "bibliofabric" },
 ]
@@ -146,7 +146,7 @@ wheels = [
 [[package]]
 name = "bibliofabric"
 version = "0.6.0"
-source = { git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Fbibliofabric&branch=overhaul-2026-11#639e70026fe39d8e7f2a541ccd55e138f07dcc68" }
+source = { git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Fbibliofabric&branch=overhaul-2026-11#84788de28d3fd67527ded7fd60f3a1c6edc252c9" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
@@ -2017,7 +2017,7 @@ wheels = [
 [[package]]
 name = "stavrophora"
 version = "0.3.0"
-source = { git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Fstavrophora&branch=overhaul-2026-11#639e70026fe39d8e7f2a541ccd55e138f07dcc68" }
+source = { git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Fstavrophora&branch=overhaul-2026-11#84788de28d3fd67527ded7fd60f3a1c6edc252c9" }
 dependencies = [
     { name = "bibliofabric" },
 ]
