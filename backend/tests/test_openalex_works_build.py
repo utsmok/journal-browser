@@ -171,7 +171,12 @@ async def test_rebuild_preserves_prior_parts(db, institution_factory):
     t_old = datetime(2026, 11, 10, 8, 0, tzinfo=UTC)
     t_checked = datetime(2026, 11, 12, 9, 0, tzinfo=UTC)
     existing_parents = [{"id": "W999", "name": "Old Book", "rel": "part_of"}]
+    # OpenAlex serves parent_works[].link_type since 2026-11-14 and drops
+    # relationship on 2026-12-07; both payload shapes must compact the same.
     new_parents = [
+        {"id": "https://openalex.org/W888", "display_name": "Fresh Book", "link_type": "part_of"}
+    ]
+    old_shape_parents = [
         {"id": "https://openalex.org/W888", "display_name": "Fresh Book", "relationship": "part_of"}
     ]
 
@@ -219,7 +224,7 @@ async def test_rebuild_preserves_prior_parts(db, institution_factory):
             ("W_UNCHECKED", _payload("W_UNCHECKED"), now),
             ("W_UPGRADED", _payload("W_UPGRADED", parent_works=new_parents), now),
             ("W_NEW_SILENT", _payload("W_NEW_SILENT"), now),
-            ("W_NEW_PART", _payload("W_NEW_PART", parent_works=new_parents), now),
+            ("W_NEW_PART", _payload("W_NEW_PART", parent_works=old_shape_parents), now),
         ],
     )
 

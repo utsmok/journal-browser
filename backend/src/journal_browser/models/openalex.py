@@ -66,7 +66,7 @@ class OpenalexWork(Base):
     source: Mapped[str] = mapped_column(Text, nullable=False, server_default="works_stats")
     # OpenAlex work parts (Graph v12, 2026-11-15): parent works of this
     # work (chapter of a book, figure of a paper) in compact form
-    # [{id: bare W-id, name: display name, rel: relationship}]. is_part
+    # [{id: bare W-id, name: display name, rel: link type}]. is_part
     # drives the standalone/chapter/part serving filter. Payloads
     # harvested before v12 carry no parent_works; jobs/backfill_parts.py
     # fills those rows per DOI and stamps parts_checked_at.

@@ -81,8 +81,10 @@ MARK_CHECKED = (
 
 
 def _compact_parents(work: Any) -> list[dict[str, Any]]:
-    """Contract shape [{id: bare W-id, name: display name, rel: relationship}]
-    from one aletheca Work's parent_works (ids may be full URLs)."""
+    """Contract shape [{id: bare W-id, name: display name, rel: link type}]
+    from one aletheca Work's parent_works (ids may be full URLs).
+    RelatedWork.link_type parses both the current field name and the
+    pre-2026-12-07 relationship name."""
     out: list[dict[str, Any]] = []
     for pw in (getattr(work, "parent_works", None) or [])[:MAX_PARENTS]:
         pid = getattr(pw, "id", None)
@@ -90,7 +92,7 @@ def _compact_parents(work: Any) -> list[dict[str, Any]]:
             {
                 "id": str(pid).rsplit("/", 1)[-1] if pid else None,
                 "name": (getattr(pw, "display_name", None) or "").strip() or None,
-                "rel": getattr(pw, "relationship", None),
+                "rel": getattr(pw, "link_type", None),
             }
         )
     return out

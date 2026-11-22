@@ -66,7 +66,7 @@ OPENALEX_URL = "https://openalex.org"
 
 #: SQL predicate per parts filter value (the shared contract's part_kind):
 #: standalone rows have no parents; chapter rows name a volume parent
-#: (the book); other relationships (component, data-series, part) stay
+#: (the book); other link types (component, data-series, part) stay
 #: "part". Values validate at the API boundary (422 on unknown).
 PART_KIND_PREDICATES: dict[str, Any] = {
     "standalone": OpenalexWork.is_part.is_(False),

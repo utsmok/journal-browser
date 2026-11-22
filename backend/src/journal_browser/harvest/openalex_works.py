@@ -77,9 +77,12 @@ def _authorships(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _parent_works(payload: dict[str, Any]) -> list[dict[str, Any]]:
     """Compact parent works: [{id: bare W-id, name: display name, rel:
-    relationship}] — OpenAlex work parts (Graph v12, 2026-11-15); payloads
+    link type}] — OpenAlex work parts (Graph v12, 2026-11-15); payloads
     harvested before it carry none. Ids may be full URLs; all parents are
-    kept, capped at 10."""
+    kept, capped at 10. OpenAlex renamed the source field
+    parent_works[].relationship to link_type (2026-11-14; the old name is
+    served until 2026-12-07), so link_type wins and relationship is the
+    fallback for payloads stored before the rename."""
     out: list[dict[str, Any]] = []
     for pw in (payload.get("parent_works") or [])[:10]:
         if not isinstance(pw, dict):
@@ -88,7 +91,7 @@ def _parent_works(payload: dict[str, Any]) -> list[dict[str, Any]]:
             {
                 "id": _w_id(pw.get("id")),
                 "name": (pw.get("display_name") or "").strip() or None,
-                "rel": pw.get("relationship"),
+                "rel": pw.get("link_type") or pw.get("relationship"),
             }
         )
     return out
