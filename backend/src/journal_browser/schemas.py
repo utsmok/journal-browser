@@ -1690,6 +1690,9 @@ class CollaborationMapPoint(BaseModel):
     ror: str
     name: str
     country_code: str | None = None
+    city: str | None = None
+    # ROR organisation type in lower case; "unknown" when ROR gives none.
+    org_type: str
     lat: float
     lng: float
     works: int

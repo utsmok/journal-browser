@@ -350,9 +350,12 @@ async def test_map_leaves_out_partners_without_coordinates(client, collab_api):
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["unmapped"] == 1
-    assert sorted((p["ror"], p["country_code"], p["works"]) for p in body["items"]) == [
-        (P1, "NL", 3),
-        (P3, "US", 1),
+    # The organisation type colours the map circles.
+    assert sorted(
+        (p["ror"], p["country_code"], p["org_type"], p["works"]) for p in body["items"]
+    ) == [
+        (P1, "NL", "education", 3),
+        (P3, "US", "education", 1),
     ]
     filtered = (
         await client.get("/api/v1/ut/collaborations/map", params={"type": "nonprofit"})

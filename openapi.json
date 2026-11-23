@@ -9247,6 +9247,21 @@
             ],
             "title": "Country Code"
           },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "org_type": {
+            "type": "string",
+            "title": "Org Type"
+          },
           "lat": {
             "type": "number",
             "title": "Lat"
@@ -9268,6 +9283,7 @@
         "required": [
           "ror",
           "name",
+          "org_type",
           "lat",
           "lng",
           "works",
