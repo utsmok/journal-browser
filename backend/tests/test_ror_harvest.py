@@ -1,10 +1,13 @@
 """Outcome tests for the ROR gap-fill (jobs/harvest_ror.py): the record
 to row mapping and the fetch-and-mark loop, with the network faked."""
 
+import io
+import json
+import zipfile
 from datetime import timedelta
 from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 
 from conftest import requires_db
 from journal_browser.harvest import ror
@@ -145,3 +148,69 @@ async def test_harvest_ror_fills_stubs_marks_missing_and_resumes(db, monkeypatch
 
     assert stats == {"selected": 2, "fetched": 2, "not_found": 0, "failed": 0}
     assert fetched[-1] == ["01x000001", "01x000002"]
+
+
+class _Trickle(io.StringIO):
+    """A stream that hands out 7 characters per read, so every record of the
+    dump spans several reads."""
+
+    def read(self, size: int | None = -1) -> str:
+        return super().read(7)
+
+
+def test_dump_records_decode_records_split_across_reads():
+    records = [{"id": f"https://ror.org/0{i}", "names": [{"value": "x, ]"}]} for i in range(3)]
+
+    assert list(ror._decode_array(_Trickle(json.dumps(records, indent=2)))) == records
+    assert list(ror._decode_array(_Trickle("[]"))) == []
+
+
+@requires_db
+async def test_load_ror_dump_fills_partners_the_dump_holds(db, tmp_path):
+    """Partners in the dump get its record; a partner the dump lacks stays
+    a stub, and organisations that are no partner are skipped."""
+    db.add_all(
+        [
+            PartnerInstitution(ror="05d000001", name="Stub one", openalex_id="I1"),
+            PartnerInstitution(ror="05d000002", name="Stub two"),
+        ]
+    )
+    await db.commit()
+    dump = tmp_path / "v2.0-ror-data.zip"
+    records = [
+        {
+            "id": "https://ror.org/05d000001",
+            "names": [{"types": ["ror_display"], "value": "One"}],
+            "types": ["education"],
+            "status": "active",
+            "locations": [{"geonames_details": {"city": "Oslo", "lat": 59.9, "lng": 10.7}}],
+        },
+        {"id": "https://ror.org/05d000009", "names": [], "types": []},
+    ]
+    with zipfile.ZipFile(dump, "w") as archive:
+        archive.writestr("v2.0-ror-data.json", json.dumps(records))
+        archive.writestr("v2.0-ror-data.csv", "id\n")
+
+    try:
+        stats = await ror.load_ror_dump(db, dump)
+
+        assert (stats["records"], stats["loaded"]) == (2, 1)
+        db.expire_all()
+        rows = {
+            p.ror: p
+            for p in (
+                await db.execute(
+                    select(PartnerInstitution).where(
+                        PartnerInstitution.ror.in_(["05d000001", "05d000002", "05d000009"])
+                    )
+                )
+            ).scalars()
+        }
+        assert set(rows) == {"05d000001", "05d000002"}
+        one, two = rows["05d000001"], rows["05d000002"]
+        assert (one.name, one.city, one.openalex_id) == ("One", "Oslo", "I1")
+        assert one.payload is not None
+        assert (two.name, two.payload) == ("Stub two", None)
+    finally:
+        await db.execute(delete(PartnerInstitution).where(PartnerInstitution.ror.like("05d%")))
+        await db.commit()

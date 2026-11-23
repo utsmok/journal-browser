@@ -368,9 +368,12 @@ The stages, in order:
    funders, so the Partners page shows each funder once. Both make no API
    calls. `harvest_ror` then fetches the ROR records of new partners and
    refreshes records older than 30 days (`--ttl-days`), paced under ROR's
-   limit of 2000 requests per 5 minutes. The first run on an install
-   fetches about 9,000 records for the UT works and takes about 30
-   minutes; later runs fetch only the new and stale ones.
+   limit of 2000 requests per 5 minutes. For a first fill, load the
+   monthly ROR data dump instead of asking the API for every partner:
+   download the zip from https://zenodo.org/communities/ror-data into
+   `backend/state/ror/` and run `jobs/harvest_ror.py --dump
+   /app/state/ror/<file>.zip`. The API pass then asks only about the
+   partners the dump lacks; later nightly runs fetch the new and stale ones.
 6. `harvest_publishers`. It resolves journal host organizations in
    credit-priced 50-id pipe-filter batches ($0.0001 per page), gated by
    the budget reserve. Results cache in

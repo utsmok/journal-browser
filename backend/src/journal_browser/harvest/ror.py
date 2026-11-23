@@ -18,9 +18,14 @@ asked again once that mark is as old as the ttl (ROR registers new ids).
 Idempotent; commits per chunk, so an interrupted run resumes as a rerun.
 """
 
+import io
+import json
 import logging
+import zipfile
+from collections.abc import Iterator
 from datetime import timedelta
-from typing import Any, cast
+from pathlib import Path
+from typing import Any, TextIO, cast
 
 import httpx
 from bibliofabric.exceptions import NotFoundError
@@ -191,23 +196,7 @@ async def harvest_ror(
                 if payload is not None and ror not in failed
             ]
             if fetched:
-                stmt = pg_insert(table).values(fetched)
-                await session.execute(
-                    stmt.on_conflict_do_update(
-                        index_elements=["ror"],
-                        set_={
-                            # A ROR record without a value keeps what the
-                            # work payload gave; openalex_id is never touched.
-                            **{
-                                col: func.coalesce(stmt.excluded[col], table.c[col])
-                                for col in _COLUMNS
-                                if col != "payload"
-                            },
-                            "payload": stmt.excluded.payload,
-                            "updated_at": text("now()"),
-                        },
-                    )
-                )
+                await _upsert(session, fetched)
             if missing:
                 await session.execute(
                     update(table)
@@ -225,4 +214,90 @@ async def harvest_ror(
                 stats["not_found"],
             )
     logger.info("harvest_ror: %s", stats)
+    return stats
+
+
+async def _upsert(session: AsyncSession, rows: list[dict[str, Any]]) -> None:
+    """Write ror_row results. A ROR record without a value keeps what the
+    work payload gave; openalex_id is never touched."""
+    table = cast("Any", PartnerInstitution.__table__)
+    stmt = pg_insert(table).values(rows)
+    await session.execute(
+        stmt.on_conflict_do_update(
+            index_elements=["ror"],
+            set_={
+                **{
+                    col: func.coalesce(stmt.excluded[col], table.c[col])
+                    for col in _COLUMNS
+                    if col != "payload"
+                },
+                "payload": stmt.excluded.payload,
+                "updated_at": text("now()"),
+            },
+        )
+    )
+
+
+def _decode_array(stream: TextIO) -> Iterator[dict[str, Any]]:
+    """The objects of a top-level JSON array, decoded one at a time from
+    1 MB reads, so the array never sits in memory as one value."""
+    decoder = json.JSONDecoder()
+    buffer, pos = "", 0
+    while True:
+        chunk = stream.read(1 << 20)
+        buffer, pos = buffer[pos:] + chunk, 0
+        while True:
+            while pos < len(buffer) and buffer[pos] in " \t\r\n,[":
+                pos += 1
+            if pos >= len(buffer) or buffer[pos] == "]":
+                break
+            try:
+                record, pos = decoder.raw_decode(buffer, pos)
+            except json.JSONDecodeError:
+                if not chunk:
+                    raise
+                break  # the object continues in the next read
+            yield record
+        if not chunk:
+            return
+
+
+def dump_records(path: Path) -> Iterator[dict[str, Any]]:
+    """Every organization record of a ROR data dump: the zip from
+    https://zenodo.org/communities/ror-data, or the JSON file inside it. The
+    dump's JSON holds the same v2 records the API serves."""
+    if path.suffix != ".zip":
+        with path.open(encoding="utf-8") as stream:
+            yield from _decode_array(stream)
+        return
+    with zipfile.ZipFile(path) as archive:
+        name = next(n for n in archive.namelist() if n.endswith(".json"))
+        with archive.open(name) as raw:
+            yield from _decode_array(io.TextIOWrapper(raw, encoding="utf-8"))
+
+
+async def load_ror_dump(session: AsyncSession, path: Path) -> dict[str, int]:
+    """Fill and refresh partner_institutions from a ROR data dump instead of
+    the API: every partner the dump holds gets the dump's record, whatever
+    its age. A partner the dump lacks stays as it was, for the API pass."""
+    wanted = set((await session.execute(select(PartnerInstitution.ror))).scalars())
+    stats = {"partners": len(wanted), "records": 0, "loaded": 0}
+    rows: list[dict[str, Any]] = []
+    for record in dump_records(path):
+        stats["records"] += 1
+        ror = normalize_ror(record.get("id"))
+        if ror is None or ror not in wanted:
+            continue
+        rows.append(ror_row(record, ror))
+        if len(rows) == CHUNK:
+            await _upsert(session, rows)
+            await session.commit()
+            stats["loaded"] += len(rows)
+            rows = []
+    if rows:
+        await _upsert(session, rows)
+        await session.commit()
+        stats["loaded"] += len(rows)
+    stats["not_in_dump"] = stats["partners"] - stats["loaded"]
+    logger.info("load_ror_dump: %s", stats)
     return stats

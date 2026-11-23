@@ -56,7 +56,7 @@ Without a range in the year control at the top of the page, partners are counted
 | `funder_aliases` | One row per OpenAIRE funder name that resolves to an OpenAlex funder, with the rule that resolved it |
 | `derive_work_partners` | Nightly refresh wave. Rebuilds `work_partners` from the stored payloads for every hosted institution. A rerun gives the same rows |
 | `derive_funder_aliases` | Nightly refresh wave, after the partner derive. Rebuilds `funder_aliases` from the stored OpenAlex grants and OpenAIRE projects. Makes no API calls |
-| `harvest_ror` | Nightly refresh wave, after the derive jobs. Fetches the ROR records of new partners and refreshes records older than 30 days. `--refresh` re-fetches every record |
+| `harvest_ror` | Nightly refresh wave, after the derive jobs. Fetches the ROR records of new partners and refreshes records older than 30 days. `--refresh` re-fetches every record. `--dump` first loads the records from a ROR data dump (https://zenodo.org/communities/ror-data), so a first fill needs no API call per partner |
 
 The nightly wave ends with the usual prewarm requests, which include the partner list and map so the first visit finds the counts cached.
 
