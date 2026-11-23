@@ -17,6 +17,7 @@ from .app_data import (
 )
 from .authors import Author, AuthorWork
 from .base import Base, _tstamp
+from .collaborations import FunderAlias, PartnerInstitution, WorkPartner
 from .deals import Deal, DealInstitution, DealJournal
 from .evidence import ApcEvidence, InstitutionTrend, InstitutionWorksStats, JournalApcAggregate
 from .harvest import HarvestRun, HarvestState, RawFile, SourceRecord
@@ -56,6 +57,7 @@ __all__ = [
     "DealJournal",
     "DocEdit",
     "Feedback",
+    "FunderAlias",
     "FunderLink",
     "HarvestRun",
     "HarvestState",
@@ -82,6 +84,7 @@ __all__ = [
     "OpenalexWork",
     "OpenalexWorkAuthor",
     "OpenalexWorkParent",
+    "PartnerInstitution",
     "PeopleUtwentePerson",
     "PeopleUtwentePersonOrg",
     "Publisher",
@@ -97,6 +100,7 @@ __all__ = [
     "Work",
     "WorkFunder",
     "WorkIdentity",
+    "WorkPartner",
     "WorkPureAuthor",
     "_tstamp",
 ]

@@ -86,7 +86,7 @@ SETTINGS_REGISTRY: list[FieldDef] = [
         "global",
         "string",
         "Contact email",
-        "Sent to OpenAlex for polite-pool identification.",
+        "Sent to OpenAlex and ROR for polite-pool identification.",
     ),
     _f(
         "cors_origins",

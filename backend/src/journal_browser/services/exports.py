@@ -12,7 +12,7 @@ joins batch over the whole result before streaming.
 import csv
 import io
 import re
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncIterator, Iterable, Sequence
 from types import SimpleNamespace
 from typing import Any
 
@@ -329,14 +329,16 @@ async def _empty_rows() -> AsyncIterator[list[str]]:
     yield  # pragma: no cover
 
 
-def _csv_response(filename: str, rows: AsyncIterator[list[str]]) -> StreamingResponse:
+def _csv_response(
+    filename: str, rows: AsyncIterator[list[str]], header: Sequence[str] = CSV_COLUMNS
+) -> StreamingResponse:
     """CSV attachment; the csv module owns the quoting, rows arrive
     lazily (one flush per FLUSH_EVERY rows)."""
 
     async def _stream() -> AsyncIterator[str]:
         buf = io.StringIO()
         writer = csv.writer(buf, lineterminator="\n")
-        writer.writerow(CSV_COLUMNS)
+        writer.writerow(header)
         yield buf.getvalue()
         buf = io.StringIO()
         writer = csv.writer(buf, lineterminator="\n")

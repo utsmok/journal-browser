@@ -55,7 +55,9 @@ class SearchIn(BaseModel):
     # this on (and nulls the query) whenever the query is missing/blank.
     is_browse: bool = False
     results_count: int | None = Field(default=None, ge=0, le=10_000_000)
-    search_scope: Literal["journals", "funders", "authors", "publishers", "orgunits"] | None = None
+    search_scope: (
+        Literal["journals", "funders", "authors", "publishers", "orgunits", "collaborations"] | None
+    ) = None
     filters: dict[str, Any] | None = None
 
 

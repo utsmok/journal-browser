@@ -44,6 +44,12 @@ STAGES=(
   harvest_work_funders
   harvest_openalex_funders
   harvest_openaire_funders
+  # Partner links from the stored OpenAlex and OpenAIRE work payloads, the
+  # OpenAIRE funder names resolved to OpenAlex funders, then the ROR records
+  # of new and stale partners (free, no key).
+  derive_work_partners
+  derive_funder_aliases
+  harvest_ror
   # Credit-priced only on a fresh install (empty publisher cache).
   harvest_publishers
   # Slow CPU step last, so it never delays the priced stages.

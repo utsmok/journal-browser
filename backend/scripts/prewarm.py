@@ -68,6 +68,8 @@ def warm_institution(code: str) -> None:
             get(f"{root}/journals/{issn}/similar")
     get(f"{root}/deals")
     get(f"{root}/funders")
+    get(f"{root}/collaborations")
+    get(f"{root}/collaborations/map")
     for publisher in items(get(f"{root}/publishers?limit=50"))[:TOP_N]:
         name = publisher.get("name")
         if name:

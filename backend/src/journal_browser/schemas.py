@@ -1583,3 +1583,180 @@ class UsageSummaryOut(BaseModel):
     errors: list[UsageErrorGroup]
     countries: list[UsageCountryCount]
     sessions: int
+
+
+# ── Collaborations (/collaborations) ───────────────────────────────────────
+
+
+class FacetCount(BaseModel):
+    """One facet value and the number of works in the result set that
+    match it."""
+
+    value: str
+    label: str | None = None
+    count: int
+
+
+class CollaborationFunder(BaseModel):
+    """A funder credited on the joint works. OpenAlex awards and OpenAIRE
+    projects that credit the same funder are one entry."""
+
+    # Filter key: "openalex:<bare OpenAlex funder id>" for a funder OpenAlex
+    # knows, "openaire:<funder name as the project payload gives it>" for a
+    # funder only OpenAIRE names.
+    key: str
+    # The name as OpenAlex gives it when OpenAlex credits the funder.
+    name: str
+    # Payloads that credit the funder on the selected works.
+    sources: list[Literal["openalex", "openaire"]]
+    works: int
+
+
+class CollaborationProject(BaseModel):
+    """A grant or project acknowledged on the joint works."""
+
+    # Filter key: "openaire:<OpenAIRE project id>" for projects,
+    # "openalex:<bare funder id>/<award id>" for awards.
+    key: str
+    code: str | None = None
+    acronym: str | None = None
+    # Funder name as the payload gives it.
+    funder: str | None = None
+    source: Literal["openalex", "openaire"]
+    works: int
+
+
+class CollaborationPartner(BaseModel):
+    """A partner institution in the list (funders and projects capped at
+    5) or the detail view (capped at 25)."""
+
+    ror: str
+    name: str
+    org_type: str | None = None
+    country_code: str | None = None
+    city: str | None = None
+    lat: float | None = None
+    lng: float | None = None
+    parent_ror: str | None = None
+    parent_name: str | None = None
+    # False when ROR has no record for this id and the name comes from
+    # the work payload alone.
+    in_ror: bool
+    works: int
+    # works / total_works in the result set; None when the set is empty.
+    share: float | None = None
+    corresponding_works: int
+    # Author positions held at the partner across the joint works: two
+    # authors of one work at the same partner count twice.
+    authorships: int
+    # Payloads that supplied the links to this partner.
+    sources: list[Literal["openalex", "openaire"]]
+    funders: list[CollaborationFunder]
+    projects: list[CollaborationProject]
+
+
+class CollaborationFacets(BaseModel):
+    """Facet values under every active filter except the facet's own
+    dimension. Every count is a number of works in that result set."""
+
+    org_type: list[FacetCount]
+    country: list[FacetCount]
+    orgunit: list[FacetCount]
+    funder: list[CollaborationFunder]
+    project: list[CollaborationProject]
+    source: list[FacetCount]
+
+
+class CollaborationSearchResponse(BaseModel):
+    items: list[CollaborationPartner]
+    total_partners: int
+    # Works of the institution in the filtered set, with or without a
+    # partner link.
+    total_works: int
+    # Of those, works linked to at least one partner.
+    works_with_partner: int
+    # Works linked to at least one partner through each payload; a work
+    # with links from both payloads counts in both.
+    works_by_source: dict[Literal["openalex", "openaire"], int]
+    # Effective publication-year range; None when the set has no works.
+    year_from: int | None = None
+    year_to: int | None = None
+    facets: CollaborationFacets | None = None
+
+
+class CollaborationMapPoint(BaseModel):
+    """One partner with coordinates, for the map."""
+
+    ror: str
+    name: str
+    country_code: str | None = None
+    lat: float
+    lng: float
+    works: int
+    corresponding_works: int
+
+
+class CollaborationMapResponse(BaseModel):
+    items: list[CollaborationMapPoint]
+    # Partners in the filtered set without coordinates; they do not
+    # appear on the map.
+    unmapped: int
+
+
+class CollaborationWork(BaseModel):
+    """One joint work: by the institution and the partner."""
+
+    pure_uuid: str
+    title: str
+    year: int
+    # Normalized DOI ("10.1000/xyz123"); None when the work has none.
+    doi: str | None = None
+    work_type: str | None = None
+    # A corresponding author sits at the partner.
+    corresponding: bool
+    # Payload that supplied the link to the partner.
+    source: Literal["openalex", "openaire"]
+    # Display names of the institution's authors on the work.
+    authors: list[str]
+
+
+class CollaborationYearCount(BaseModel):
+    year: int
+    works: int
+
+
+class CollaborationLink(BaseModel):
+    """An identifier or URL the ROR record lists for the partner."""
+
+    type: str
+    value: str
+
+
+class CollaborationRelation(BaseModel):
+    """A parent, child, or related organisation in the ROR record."""
+
+    type: str
+    ror: str
+    label: str
+
+
+class CollaborationDetailResponse(CollaborationPartner):
+    status: str | None = None
+    openalex_id: str | None = None
+    # ROR display name, labels, acronyms and aliases, deduplicated.
+    labels: list[str]
+    links: list[CollaborationLink]
+    relationships: list[CollaborationRelation]
+    # Works of the institution in the filtered set (the share denominator).
+    total_works: int
+    # Normalized work types of the joint works (article, conference, ...).
+    works_by_type: list[FacetCount]
+    # Joint works per publication year inside the filtered range.
+    per_year: list[CollaborationYearCount]
+    # Joint works by payload, newest first, capped at 25.
+    recent_works: list[CollaborationWork]
+
+
+class CollaborationWorksResponse(BaseModel):
+    items: list[CollaborationWork]
+    total: int

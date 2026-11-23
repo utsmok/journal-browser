@@ -204,7 +204,8 @@ class UsageEvent(Base):
             "event_type IN ('page_view', 'search', 'error')", name="ck_usage_event_type"
         ),
         CheckConstraint(
-            "search_scope IN ('journals', 'funders', 'authors', 'publishers', 'orgunits')",
+            "search_scope IN ('journals', 'funders', 'authors', 'publishers', 'orgunits', "
+            "'collaborations')",
             name="ck_usage_search_scope",
         ),
         CheckConstraint(

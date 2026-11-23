@@ -19,6 +19,7 @@ from .logging_setup import REQUEST_ID_HEADER, configure_logging, new_request_id,
 from .routers import (
     admin,
     authors,
+    collaborations,
     deals,
     docs,
     feedback,
@@ -52,6 +53,7 @@ scoped_router.include_router(funders.router)
 scoped_router.include_router(authors.router)
 scoped_router.include_router(publishers.router)
 scoped_router.include_router(orgunits.router)
+scoped_router.include_router(collaborations.router)
 scoped_router.include_router(deals.router)
 scoped_router.include_router(meta.router)
 api_router.include_router(scoped_router)

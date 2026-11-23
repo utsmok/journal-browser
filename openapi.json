@@ -4330,6 +4330,1626 @@
         }
       }
     },
+    "/api/v1/{institution_code}/collaborations": {
+      "get": {
+        "tags": [
+          "collaborations"
+        ],
+        "summary": "Search Collaborations",
+        "operationId": "search_collaborations_api_v1__institution_code__collaborations_get",
+        "parameters": [
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "works",
+                "name",
+                "corresponding_works"
+              ],
+              "type": "string",
+              "description": "Result sort key",
+              "default": "works",
+              "title": "Sort"
+            },
+            "description": "Result sort key"
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Sort direction; default desc for counts, asc for name",
+              "title": "Dir"
+            },
+            "description": "Sort direction; default desc for counts, asc for name"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "include_facets",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Include Facets"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 60,
+              "description": "ROR organisation types (multi-select)",
+              "title": "Type"
+            },
+            "description": "ROR organisation types (multi-select)"
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 20,
+              "description": "ISO 3166-1 alpha-2 country codes (multi-select)",
+              "title": "Country"
+            },
+            "description": "ISO 3166-1 alpha-2 country codes (multi-select)"
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "faculty",
+                "group",
+                "institute"
+              ],
+              "type": "string",
+              "default": "faculty",
+              "title": "Level"
+            }
+          },
+          {
+            "name": "faculty",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 400,
+              "description": "Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit",
+              "title": "Faculty"
+            },
+            "description": "Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit"
+          },
+          {
+            "name": "funder",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 400,
+              "description": "Funder keys from the funder facet (pipe-joined)",
+              "title": "Funder"
+            },
+            "description": "Funder keys from the funder facet (pipe-joined)"
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 400,
+              "description": "Project keys from the project facet (pipe-joined)",
+              "title": "Project"
+            },
+            "description": "Project keys from the project facet (pipe-joined)"
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "openalex",
+                      "openaire"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 40,
+              "description": "Payloads that supplied the partner links (pipe-joined)",
+              "title": "Source"
+            },
+            "description": "Payloads that supplied the partner links (pipe-joined)"
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: 2020)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: 2020)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the end of the window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the end of the window)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollaborationSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/collaborations/map": {
+      "get": {
+        "tags": [
+          "collaborations"
+        ],
+        "summary": "Collaboration Map",
+        "operationId": "collaboration_map_api_v1__institution_code__collaborations_map_get",
+        "parameters": [
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 60,
+              "description": "ROR organisation types (multi-select)",
+              "title": "Type"
+            },
+            "description": "ROR organisation types (multi-select)"
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 20,
+              "description": "ISO 3166-1 alpha-2 country codes (multi-select)",
+              "title": "Country"
+            },
+            "description": "ISO 3166-1 alpha-2 country codes (multi-select)"
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "faculty",
+                "group",
+                "institute"
+              ],
+              "type": "string",
+              "default": "faculty",
+              "title": "Level"
+            }
+          },
+          {
+            "name": "faculty",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 400,
+              "description": "Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit",
+              "title": "Faculty"
+            },
+            "description": "Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit"
+          },
+          {
+            "name": "funder",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 400,
+              "description": "Funder keys from the funder facet (pipe-joined)",
+              "title": "Funder"
+            },
+            "description": "Funder keys from the funder facet (pipe-joined)"
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 400,
+              "description": "Project keys from the project facet (pipe-joined)",
+              "title": "Project"
+            },
+            "description": "Project keys from the project facet (pipe-joined)"
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "openalex",
+                      "openaire"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 40,
+              "description": "Payloads that supplied the partner links (pipe-joined)",
+              "title": "Source"
+            },
+            "description": "Payloads that supplied the partner links (pipe-joined)"
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: 2020)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: 2020)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the end of the window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the end of the window)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollaborationMapResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/collaborations/partners.csv": {
+      "get": {
+        "tags": [
+          "collaborations"
+        ],
+        "summary": "Collaborations Csv",
+        "description": "The filtered partner list as CSV, without paging.",
+        "operationId": "collaborations_csv_api_v1__institution_code__collaborations_partners_csv_get",
+        "parameters": [
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 60,
+              "description": "ROR organisation types (multi-select)",
+              "title": "Type"
+            },
+            "description": "ROR organisation types (multi-select)"
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 20,
+              "description": "ISO 3166-1 alpha-2 country codes (multi-select)",
+              "title": "Country"
+            },
+            "description": "ISO 3166-1 alpha-2 country codes (multi-select)"
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "faculty",
+                "group",
+                "institute"
+              ],
+              "type": "string",
+              "default": "faculty",
+              "title": "Level"
+            }
+          },
+          {
+            "name": "faculty",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 400,
+              "description": "Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit",
+              "title": "Faculty"
+            },
+            "description": "Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit"
+          },
+          {
+            "name": "funder",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 400,
+              "description": "Funder keys from the funder facet (pipe-joined)",
+              "title": "Funder"
+            },
+            "description": "Funder keys from the funder facet (pipe-joined)"
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 400,
+              "description": "Project keys from the project facet (pipe-joined)",
+              "title": "Project"
+            },
+            "description": "Project keys from the project facet (pipe-joined)"
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "openalex",
+                      "openaire"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 40,
+              "description": "Payloads that supplied the partner links (pipe-joined)",
+              "title": "Source"
+            },
+            "description": "Payloads that supplied the partner links (pipe-joined)"
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: 2020)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: 2020)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the end of the window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the end of the window)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/collaborations/{ror}": {
+      "get": {
+        "tags": [
+          "collaborations"
+        ],
+        "summary": "Collaboration Detail",
+        "operationId": "collaboration_detail_api_v1__institution_code__collaborations__ror__get",
+        "parameters": [
+          {
+            "name": "ror",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ror"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 60,
+              "description": "ROR organisation types (multi-select)",
+              "title": "Type"
+            },
+            "description": "ROR organisation types (multi-select)"
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 20,
+              "description": "ISO 3166-1 alpha-2 country codes (multi-select)",
+              "title": "Country"
+            },
+            "description": "ISO 3166-1 alpha-2 country codes (multi-select)"
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "faculty",
+                "group",
+                "institute"
+              ],
+              "type": "string",
+              "default": "faculty",
+              "title": "Level"
+            }
+          },
+          {
+            "name": "faculty",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 400,
+              "description": "Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit",
+              "title": "Faculty"
+            },
+            "description": "Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit"
+          },
+          {
+            "name": "funder",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 400,
+              "description": "Funder keys from the funder facet (pipe-joined)",
+              "title": "Funder"
+            },
+            "description": "Funder keys from the funder facet (pipe-joined)"
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 400,
+              "description": "Project keys from the project facet (pipe-joined)",
+              "title": "Project"
+            },
+            "description": "Project keys from the project facet (pipe-joined)"
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "openalex",
+                      "openaire"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 40,
+              "description": "Payloads that supplied the partner links (pipe-joined)",
+              "title": "Source"
+            },
+            "description": "Payloads that supplied the partner links (pipe-joined)"
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: 2020)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: 2020)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the end of the window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the end of the window)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollaborationDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/collaborations/{ror}/works": {
+      "get": {
+        "tags": [
+          "collaborations"
+        ],
+        "summary": "Partner Works",
+        "operationId": "partner_works_api_v1__institution_code__collaborations__ror__works_get",
+        "parameters": [
+          {
+            "name": "ror",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ror"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 60,
+              "description": "ROR organisation types (multi-select)",
+              "title": "Type"
+            },
+            "description": "ROR organisation types (multi-select)"
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 20,
+              "description": "ISO 3166-1 alpha-2 country codes (multi-select)",
+              "title": "Country"
+            },
+            "description": "ISO 3166-1 alpha-2 country codes (multi-select)"
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "faculty",
+                "group",
+                "institute"
+              ],
+              "type": "string",
+              "default": "faculty",
+              "title": "Level"
+            }
+          },
+          {
+            "name": "faculty",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 400,
+              "description": "Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit",
+              "title": "Faculty"
+            },
+            "description": "Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit"
+          },
+          {
+            "name": "funder",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 400,
+              "description": "Funder keys from the funder facet (pipe-joined)",
+              "title": "Funder"
+            },
+            "description": "Funder keys from the funder facet (pipe-joined)"
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 400,
+              "description": "Project keys from the project facet (pipe-joined)",
+              "title": "Project"
+            },
+            "description": "Project keys from the project facet (pipe-joined)"
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "openalex",
+                      "openaire"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 40,
+              "description": "Payloads that supplied the partner links (pipe-joined)",
+              "title": "Source"
+            },
+            "description": "Payloads that supplied the partner links (pipe-joined)"
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: 2020)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: 2020)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the end of the window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the end of the window)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollaborationWorksResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/collaborations/{ror}/works.csv": {
+      "get": {
+        "tags": [
+          "collaborations"
+        ],
+        "summary": "Partner Works Csv",
+        "description": "The joint works of one partner as CSV, without paging.",
+        "operationId": "partner_works_csv_api_v1__institution_code__collaborations__ror__works_csv_get",
+        "parameters": [
+          {
+            "name": "ror",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ror"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 60,
+              "description": "ROR organisation types (multi-select)",
+              "title": "Type"
+            },
+            "description": "ROR organisation types (multi-select)"
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 20,
+              "description": "ISO 3166-1 alpha-2 country codes (multi-select)",
+              "title": "Country"
+            },
+            "description": "ISO 3166-1 alpha-2 country codes (multi-select)"
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "faculty",
+                "group",
+                "institute"
+              ],
+              "type": "string",
+              "default": "faculty",
+              "title": "Level"
+            }
+          },
+          {
+            "name": "faculty",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 400,
+              "description": "Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit",
+              "title": "Faculty"
+            },
+            "description": "Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit"
+          },
+          {
+            "name": "funder",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 400,
+              "description": "Funder keys from the funder facet (pipe-joined)",
+              "title": "Funder"
+            },
+            "description": "Funder keys from the funder facet (pipe-joined)"
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 400,
+              "description": "Project keys from the project facet (pipe-joined)",
+              "title": "Project"
+            },
+            "description": "Project keys from the project facet (pipe-joined)"
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "openalex",
+                      "openaire"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 40,
+              "description": "Payloads that supplied the partner links (pipe-joined)",
+              "title": "Source"
+            },
+            "description": "Payloads that supplied the partner links (pipe-joined)"
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: 2020)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: 2020)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the end of the window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the end of the window)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/{institution_code}/deals": {
       "get": {
         "tags": [
@@ -7265,6 +8885,842 @@
         "type": "object",
         "title": "ClientInfo"
       },
+      "CollaborationDetailResponse": {
+        "properties": {
+          "ror": {
+            "type": "string",
+            "title": "Ror"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "org_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Org Type"
+          },
+          "country_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country Code"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat"
+          },
+          "lng": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lng"
+          },
+          "parent_ror": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Ror"
+          },
+          "parent_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Name"
+          },
+          "in_ror": {
+            "type": "boolean",
+            "title": "In Ror"
+          },
+          "works": {
+            "type": "integer",
+            "title": "Works"
+          },
+          "share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Share"
+          },
+          "corresponding_works": {
+            "type": "integer",
+            "title": "Corresponding Works"
+          },
+          "authorships": {
+            "type": "integer",
+            "title": "Authorships"
+          },
+          "sources": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "openalex",
+                "openaire"
+              ]
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "funders": {
+            "items": {
+              "$ref": "#/components/schemas/CollaborationFunder"
+            },
+            "type": "array",
+            "title": "Funders"
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/CollaborationProject"
+            },
+            "type": "array",
+            "title": "Projects"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "openalex_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Id"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Labels"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/CollaborationLink"
+            },
+            "type": "array",
+            "title": "Links"
+          },
+          "relationships": {
+            "items": {
+              "$ref": "#/components/schemas/CollaborationRelation"
+            },
+            "type": "array",
+            "title": "Relationships"
+          },
+          "total_works": {
+            "type": "integer",
+            "title": "Total Works"
+          },
+          "works_by_type": {
+            "items": {
+              "$ref": "#/components/schemas/FacetCount"
+            },
+            "type": "array",
+            "title": "Works By Type"
+          },
+          "per_year": {
+            "items": {
+              "$ref": "#/components/schemas/CollaborationYearCount"
+            },
+            "type": "array",
+            "title": "Per Year"
+          },
+          "recent_works": {
+            "items": {
+              "$ref": "#/components/schemas/CollaborationWork"
+            },
+            "type": "array",
+            "title": "Recent Works"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ror",
+          "name",
+          "in_ror",
+          "works",
+          "corresponding_works",
+          "authorships",
+          "sources",
+          "funders",
+          "projects",
+          "labels",
+          "links",
+          "relationships",
+          "total_works",
+          "works_by_type",
+          "per_year",
+          "recent_works"
+        ],
+        "title": "CollaborationDetailResponse"
+      },
+      "CollaborationFacets": {
+        "properties": {
+          "org_type": {
+            "items": {
+              "$ref": "#/components/schemas/FacetCount"
+            },
+            "type": "array",
+            "title": "Org Type"
+          },
+          "country": {
+            "items": {
+              "$ref": "#/components/schemas/FacetCount"
+            },
+            "type": "array",
+            "title": "Country"
+          },
+          "orgunit": {
+            "items": {
+              "$ref": "#/components/schemas/FacetCount"
+            },
+            "type": "array",
+            "title": "Orgunit"
+          },
+          "funder": {
+            "items": {
+              "$ref": "#/components/schemas/CollaborationFunder"
+            },
+            "type": "array",
+            "title": "Funder"
+          },
+          "project": {
+            "items": {
+              "$ref": "#/components/schemas/CollaborationProject"
+            },
+            "type": "array",
+            "title": "Project"
+          },
+          "source": {
+            "items": {
+              "$ref": "#/components/schemas/FacetCount"
+            },
+            "type": "array",
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "org_type",
+          "country",
+          "orgunit",
+          "funder",
+          "project",
+          "source"
+        ],
+        "title": "CollaborationFacets",
+        "description": "Facet values under every active filter except the facet's own\ndimension. Every count is a number of works in that result set."
+      },
+      "CollaborationFunder": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "sources": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "openalex",
+                "openaire"
+              ]
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "works": {
+            "type": "integer",
+            "title": "Works"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "name",
+          "sources",
+          "works"
+        ],
+        "title": "CollaborationFunder",
+        "description": "A funder credited on the joint works. OpenAlex awards and OpenAIRE\nprojects that credit the same funder are one entry."
+      },
+      "CollaborationLink": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "value"
+        ],
+        "title": "CollaborationLink",
+        "description": "An identifier or URL the ROR record lists for the partner."
+      },
+      "CollaborationMapPoint": {
+        "properties": {
+          "ror": {
+            "type": "string",
+            "title": "Ror"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "country_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country Code"
+          },
+          "lat": {
+            "type": "number",
+            "title": "Lat"
+          },
+          "lng": {
+            "type": "number",
+            "title": "Lng"
+          },
+          "works": {
+            "type": "integer",
+            "title": "Works"
+          },
+          "corresponding_works": {
+            "type": "integer",
+            "title": "Corresponding Works"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ror",
+          "name",
+          "lat",
+          "lng",
+          "works",
+          "corresponding_works"
+        ],
+        "title": "CollaborationMapPoint",
+        "description": "One partner with coordinates, for the map."
+      },
+      "CollaborationMapResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CollaborationMapPoint"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "unmapped": {
+            "type": "integer",
+            "title": "Unmapped"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "unmapped"
+        ],
+        "title": "CollaborationMapResponse"
+      },
+      "CollaborationPartner": {
+        "properties": {
+          "ror": {
+            "type": "string",
+            "title": "Ror"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "org_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Org Type"
+          },
+          "country_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country Code"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat"
+          },
+          "lng": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lng"
+          },
+          "parent_ror": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Ror"
+          },
+          "parent_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Name"
+          },
+          "in_ror": {
+            "type": "boolean",
+            "title": "In Ror"
+          },
+          "works": {
+            "type": "integer",
+            "title": "Works"
+          },
+          "share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Share"
+          },
+          "corresponding_works": {
+            "type": "integer",
+            "title": "Corresponding Works"
+          },
+          "authorships": {
+            "type": "integer",
+            "title": "Authorships"
+          },
+          "sources": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "openalex",
+                "openaire"
+              ]
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "funders": {
+            "items": {
+              "$ref": "#/components/schemas/CollaborationFunder"
+            },
+            "type": "array",
+            "title": "Funders"
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/CollaborationProject"
+            },
+            "type": "array",
+            "title": "Projects"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ror",
+          "name",
+          "in_ror",
+          "works",
+          "corresponding_works",
+          "authorships",
+          "sources",
+          "funders",
+          "projects"
+        ],
+        "title": "CollaborationPartner",
+        "description": "A partner institution in the list (funders and projects capped at\n5) or the detail view (capped at 25)."
+      },
+      "CollaborationProject": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "acronym": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acronym"
+          },
+          "funder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Funder"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "openalex",
+              "openaire"
+            ],
+            "title": "Source"
+          },
+          "works": {
+            "type": "integer",
+            "title": "Works"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "source",
+          "works"
+        ],
+        "title": "CollaborationProject",
+        "description": "A grant or project acknowledged on the joint works."
+      },
+      "CollaborationRelation": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "ror": {
+            "type": "string",
+            "title": "Ror"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "ror",
+          "label"
+        ],
+        "title": "CollaborationRelation",
+        "description": "A parent, child, or related organisation in the ROR record."
+      },
+      "CollaborationSearchResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CollaborationPartner"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total_partners": {
+            "type": "integer",
+            "title": "Total Partners"
+          },
+          "total_works": {
+            "type": "integer",
+            "title": "Total Works"
+          },
+          "works_with_partner": {
+            "type": "integer",
+            "title": "Works With Partner"
+          },
+          "works_by_source": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "propertyNames": {
+              "enum": [
+                "openalex",
+                "openaire"
+              ]
+            },
+            "type": "object",
+            "title": "Works By Source"
+          },
+          "year_from": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year From"
+          },
+          "year_to": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year To"
+          },
+          "facets": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CollaborationFacets"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total_partners",
+          "total_works",
+          "works_with_partner",
+          "works_by_source"
+        ],
+        "title": "CollaborationSearchResponse"
+      },
+      "CollaborationWork": {
+        "properties": {
+          "pure_uuid": {
+            "type": "string",
+            "title": "Pure Uuid"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "work_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Type"
+          },
+          "corresponding": {
+            "type": "boolean",
+            "title": "Corresponding"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "openalex",
+              "openaire"
+            ],
+            "title": "Source"
+          },
+          "authors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Authors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pure_uuid",
+          "title",
+          "year",
+          "corresponding",
+          "source",
+          "authors"
+        ],
+        "title": "CollaborationWork",
+        "description": "One joint work: by the institution and the partner."
+      },
+      "CollaborationWorksResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CollaborationWork"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "CollaborationWorksResponse"
+      },
+      "CollaborationYearCount": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "works": {
+            "type": "integer",
+            "title": "Works"
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "works"
+        ],
+        "title": "CollaborationYearCount"
+      },
       "CreateFeedbackIn": {
         "properties": {
           "title": {
@@ -8261,6 +10717,36 @@
           "source"
         ],
         "title": "ErrorIn"
+      },
+      "FacetCount": {
+        "properties": {
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "value",
+          "count"
+        ],
+        "title": "FacetCount",
+        "description": "One facet value and the number of works in the result set that\nmatch it."
       },
       "FeedbackAdminOut": {
         "properties": {
@@ -12795,7 +15281,8 @@
                   "funders",
                   "authors",
                   "publishers",
-                  "orgunits"
+                  "orgunits",
+                  "collaborations"
                 ]
               },
               {
