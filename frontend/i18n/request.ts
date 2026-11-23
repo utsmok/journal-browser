@@ -3,6 +3,7 @@ import { getRequestConfig } from "next-intl/server";
 import about from "../messages/en/about.json";
 import admin from "../messages/en/admin.json";
 import authors from "../messages/en/authors.json";
+import collaborations from "../messages/en/collaborations.json";
 import common from "../messages/en/common.json";
 import dataPipeline from "../messages/en/dataPipeline.json";
 import deals from "../messages/en/deals.json";
@@ -30,6 +31,7 @@ export default getRequestConfig(async () => ({
     authors,
     orgunits,
     publishers,
+    collaborations,
     funders,
     guide,
     deals,

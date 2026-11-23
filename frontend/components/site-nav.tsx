@@ -46,6 +46,7 @@ export function SiteNav() {
         <NavLink href={`${prefix}/funders`} label={t("nav.funders")} />
         <NavLink href={`${prefix}/publisher`} label={t("nav.publishers")} />
         <NavLink href={`${prefix}/author`} label={t("nav.authors")} />
+        <NavLink href={`${prefix}/collaborations`} label={t("nav.collaborations")} />
         <NavLink href={`${prefix}/orgunit`} label={t("nav.faculties")} />
         <NavLink href={`${prefix}/about`} label={t("nav.about")} />
         <NavLink href="/" label={t("nav.allUniversities")} />

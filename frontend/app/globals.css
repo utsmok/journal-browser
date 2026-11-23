@@ -443,3 +443,52 @@
     transition: none;
   }
 }
+
+/* MapLibre widgets on the partner map inherit the site palette. */
+.jb-map {
+  font-family: inherit;
+}
+.jb-map .maplibregl-popup-content {
+  background: var(--card);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
+  padding: 0.5rem 0.75rem;
+}
+.jb-map .maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+.jb-map .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+.jb-map .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: var(--card);
+}
+.jb-map .maplibregl-popup-anchor-top .maplibregl-popup-tip,
+.jb-map .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+.jb-map .maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: var(--card);
+}
+.jb-map .maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: var(--card);
+}
+.jb-map .maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: var(--card);
+}
+.jb-map .maplibregl-ctrl-group {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
+}
+.jb-map .maplibregl-ctrl-group button + button {
+  border-top-color: var(--border);
+}
+.jb-map .maplibregl-ctrl-attrib {
+  background: var(--card);
+  color: var(--muted-foreground);
+}
+.jb-map .maplibregl-ctrl-attrib a {
+  color: var(--foreground);
+}
+/* The zoom icons are dark drawings; on the dark card they need inverting. */
+.dark .jb-map .maplibregl-ctrl-icon {
+  filter: invert(1);
+}

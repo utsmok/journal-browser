@@ -885,6 +885,114 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/{institution_code}/collaborations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search Collaborations */
+        get: operations["search_collaborations_api_v1__institution_code__collaborations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/{institution_code}/collaborations/map": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Collaboration Map */
+        get: operations["collaboration_map_api_v1__institution_code__collaborations_map_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/{institution_code}/collaborations/partners.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Collaborations Csv
+         * @description The filtered partner list as CSV, without paging.
+         */
+        get: operations["collaborations_csv_api_v1__institution_code__collaborations_partners_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/{institution_code}/collaborations/{ror}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Collaboration Detail */
+        get: operations["collaboration_detail_api_v1__institution_code__collaborations__ror__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/{institution_code}/collaborations/{ror}/works": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Partner Works */
+        get: operations["partner_works_api_v1__institution_code__collaborations__ror__works_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/{institution_code}/collaborations/{ror}/works.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Partner Works Csv
+         * @description The joint works of one partner as CSV, without paging.
+         */
+        get: operations["partner_works_csv_api_v1__institution_code__collaborations__ror__works_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/{institution_code}/deals": {
         parameters: {
             query?: never;
@@ -1805,6 +1913,265 @@ export interface components {
             /** Locale */
             locale?: string | null;
         };
+        /** CollaborationDetailResponse */
+        CollaborationDetailResponse: {
+            /** Ror */
+            ror: string;
+            /** Name */
+            name: string;
+            /** Org Type */
+            org_type?: string | null;
+            /** Country Code */
+            country_code?: string | null;
+            /** City */
+            city?: string | null;
+            /** Lat */
+            lat?: number | null;
+            /** Lng */
+            lng?: number | null;
+            /** Parent Ror */
+            parent_ror?: string | null;
+            /** Parent Name */
+            parent_name?: string | null;
+            /** In Ror */
+            in_ror: boolean;
+            /** Works */
+            works: number;
+            /** Share */
+            share?: number | null;
+            /** Corresponding Works */
+            corresponding_works: number;
+            /** Authorships */
+            authorships: number;
+            /** Sources */
+            sources: ("openalex" | "openaire")[];
+            /** Funders */
+            funders: components["schemas"]["CollaborationFunder"][];
+            /** Projects */
+            projects: components["schemas"]["CollaborationProject"][];
+            /** Status */
+            status?: string | null;
+            /** Openalex Id */
+            openalex_id?: string | null;
+            /** Labels */
+            labels: string[];
+            /** Links */
+            links: components["schemas"]["CollaborationLink"][];
+            /** Relationships */
+            relationships: components["schemas"]["CollaborationRelation"][];
+            /** Total Works */
+            total_works: number;
+            /** Works By Type */
+            works_by_type: components["schemas"]["FacetCount"][];
+            /** Per Year */
+            per_year: components["schemas"]["CollaborationYearCount"][];
+            /** Recent Works */
+            recent_works: components["schemas"]["CollaborationWork"][];
+        };
+        /**
+         * CollaborationFacets
+         * @description Facet values under every active filter except the facet's own
+         *     dimension. Every count is a number of works in that result set.
+         */
+        CollaborationFacets: {
+            /** Org Type */
+            org_type: components["schemas"]["FacetCount"][];
+            /** Country */
+            country: components["schemas"]["FacetCount"][];
+            /** Orgunit */
+            orgunit: components["schemas"]["FacetCount"][];
+            /** Funder */
+            funder: components["schemas"]["CollaborationFunder"][];
+            /** Project */
+            project: components["schemas"]["CollaborationProject"][];
+            /** Source */
+            source: components["schemas"]["FacetCount"][];
+        };
+        /**
+         * CollaborationFunder
+         * @description A funder credited on the joint works. OpenAlex awards and OpenAIRE
+         *     projects that credit the same funder are one entry.
+         */
+        CollaborationFunder: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Sources */
+            sources: ("openalex" | "openaire")[];
+            /** Works */
+            works: number;
+        };
+        /**
+         * CollaborationLink
+         * @description An identifier or URL the ROR record lists for the partner.
+         */
+        CollaborationLink: {
+            /** Type */
+            type: string;
+            /** Value */
+            value: string;
+        };
+        /**
+         * CollaborationMapPoint
+         * @description One partner with coordinates, for the map.
+         */
+        CollaborationMapPoint: {
+            /** Ror */
+            ror: string;
+            /** Name */
+            name: string;
+            /** Country Code */
+            country_code?: string | null;
+            /** Lat */
+            lat: number;
+            /** Lng */
+            lng: number;
+            /** Works */
+            works: number;
+            /** Corresponding Works */
+            corresponding_works: number;
+        };
+        /** CollaborationMapResponse */
+        CollaborationMapResponse: {
+            /** Items */
+            items: components["schemas"]["CollaborationMapPoint"][];
+            /** Unmapped */
+            unmapped: number;
+        };
+        /**
+         * CollaborationPartner
+         * @description A partner institution in the list (funders and projects capped at
+         *     5) or the detail view (capped at 25).
+         */
+        CollaborationPartner: {
+            /** Ror */
+            ror: string;
+            /** Name */
+            name: string;
+            /** Org Type */
+            org_type?: string | null;
+            /** Country Code */
+            country_code?: string | null;
+            /** City */
+            city?: string | null;
+            /** Lat */
+            lat?: number | null;
+            /** Lng */
+            lng?: number | null;
+            /** Parent Ror */
+            parent_ror?: string | null;
+            /** Parent Name */
+            parent_name?: string | null;
+            /** In Ror */
+            in_ror: boolean;
+            /** Works */
+            works: number;
+            /** Share */
+            share?: number | null;
+            /** Corresponding Works */
+            corresponding_works: number;
+            /** Authorships */
+            authorships: number;
+            /** Sources */
+            sources: ("openalex" | "openaire")[];
+            /** Funders */
+            funders: components["schemas"]["CollaborationFunder"][];
+            /** Projects */
+            projects: components["schemas"]["CollaborationProject"][];
+        };
+        /**
+         * CollaborationProject
+         * @description A grant or project acknowledged on the joint works.
+         */
+        CollaborationProject: {
+            /** Key */
+            key: string;
+            /** Code */
+            code?: string | null;
+            /** Acronym */
+            acronym?: string | null;
+            /** Funder */
+            funder?: string | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "openalex" | "openaire";
+            /** Works */
+            works: number;
+        };
+        /**
+         * CollaborationRelation
+         * @description A parent, child, or related organisation in the ROR record.
+         */
+        CollaborationRelation: {
+            /** Type */
+            type: string;
+            /** Ror */
+            ror: string;
+            /** Label */
+            label: string;
+        };
+        /** CollaborationSearchResponse */
+        CollaborationSearchResponse: {
+            /** Items */
+            items: components["schemas"]["CollaborationPartner"][];
+            /** Total Partners */
+            total_partners: number;
+            /** Total Works */
+            total_works: number;
+            /** Works With Partner */
+            works_with_partner: number;
+            /** Works By Source */
+            works_by_source: {
+                [key: string]: number;
+            };
+            /** Year From */
+            year_from?: number | null;
+            /** Year To */
+            year_to?: number | null;
+            facets?: components["schemas"]["CollaborationFacets"] | null;
+        };
+        /**
+         * CollaborationWork
+         * @description One joint work: by the institution and the partner.
+         */
+        CollaborationWork: {
+            /** Pure Uuid */
+            pure_uuid: string;
+            /** Title */
+            title: string;
+            /** Year */
+            year: number;
+            /** Doi */
+            doi?: string | null;
+            /** Work Type */
+            work_type?: string | null;
+            /** Corresponding */
+            corresponding: boolean;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "openalex" | "openaire";
+            /** Authors */
+            authors: string[];
+        };
+        /** CollaborationWorksResponse */
+        CollaborationWorksResponse: {
+            /** Items */
+            items: components["schemas"]["CollaborationWork"][];
+            /** Total */
+            total: number;
+        };
+        /** CollaborationYearCount */
+        CollaborationYearCount: {
+            /** Year */
+            year: number;
+            /** Works */
+            works: number;
+        };
         /** CreateFeedbackIn */
         CreateFeedbackIn: {
             /** Title */
@@ -2112,6 +2479,19 @@ export interface components {
             detail?: string | null;
             /** Status */
             status?: number | null;
+        };
+        /**
+         * FacetCount
+         * @description One facet value and the number of works in the result set that
+         *     match it.
+         */
+        FacetCount: {
+            /** Value */
+            value: string;
+            /** Label */
+            label?: string | null;
+            /** Count */
+            count: number;
         };
         /** FeedbackAdminOut */
         FeedbackAdminOut: {
@@ -3754,7 +4134,7 @@ export interface components {
             /** Results Count */
             results_count?: number | null;
             /** Search Scope */
-            search_scope?: ("journals" | "funders" | "authors" | "publishers" | "orgunits") | null;
+            search_scope?: ("journals" | "funders" | "authors" | "publishers" | "orgunits" | "collaborations") | null;
             /** Filters */
             filters?: {
                 [key: string]: unknown;
@@ -6167,6 +6547,318 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrgUnitDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_collaborations_api_v1__institution_code__collaborations_get: {
+        parameters: {
+            query?: {
+                /** @description Result sort key */
+                sort?: "works" | "name" | "corresponding_works";
+                /** @description Sort direction; default desc for counts, asc for name */
+                dir?: ("asc" | "desc") | null;
+                offset?: number;
+                limit?: number;
+                include_facets?: boolean;
+                q?: string | null;
+                /** @description ROR organisation types (multi-select) */
+                type?: string[] | null;
+                /** @description ISO 3166-1 alpha-2 country codes (multi-select) */
+                country?: string[] | null;
+                level?: "faculty" | "group" | "institute";
+                /** @description Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit */
+                faculty?: string[] | null;
+                /** @description Funder keys from the funder facet (pipe-joined) */
+                funder?: string[] | null;
+                /** @description Project keys from the project facet (pipe-joined) */
+                project?: string[] | null;
+                /** @description Payloads that supplied the partner links (pipe-joined) */
+                source?: ("openalex" | "openaire")[] | null;
+                /** @description Publication-year range start (clamped to the institution's data window; default: 2020) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the end of the window) */
+                year_to?: number | null;
+            };
+            header?: never;
+            path: {
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollaborationSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    collaboration_map_api_v1__institution_code__collaborations_map_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                /** @description ROR organisation types (multi-select) */
+                type?: string[] | null;
+                /** @description ISO 3166-1 alpha-2 country codes (multi-select) */
+                country?: string[] | null;
+                level?: "faculty" | "group" | "institute";
+                /** @description Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit */
+                faculty?: string[] | null;
+                /** @description Funder keys from the funder facet (pipe-joined) */
+                funder?: string[] | null;
+                /** @description Project keys from the project facet (pipe-joined) */
+                project?: string[] | null;
+                /** @description Payloads that supplied the partner links (pipe-joined) */
+                source?: ("openalex" | "openaire")[] | null;
+                /** @description Publication-year range start (clamped to the institution's data window; default: 2020) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the end of the window) */
+                year_to?: number | null;
+            };
+            header?: never;
+            path: {
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollaborationMapResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    collaborations_csv_api_v1__institution_code__collaborations_partners_csv_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                /** @description ROR organisation types (multi-select) */
+                type?: string[] | null;
+                /** @description ISO 3166-1 alpha-2 country codes (multi-select) */
+                country?: string[] | null;
+                level?: "faculty" | "group" | "institute";
+                /** @description Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit */
+                faculty?: string[] | null;
+                /** @description Funder keys from the funder facet (pipe-joined) */
+                funder?: string[] | null;
+                /** @description Project keys from the project facet (pipe-joined) */
+                project?: string[] | null;
+                /** @description Payloads that supplied the partner links (pipe-joined) */
+                source?: ("openalex" | "openaire")[] | null;
+                /** @description Publication-year range start (clamped to the institution's data window; default: 2020) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the end of the window) */
+                year_to?: number | null;
+            };
+            header?: never;
+            path: {
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    collaboration_detail_api_v1__institution_code__collaborations__ror__get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                /** @description ROR organisation types (multi-select) */
+                type?: string[] | null;
+                /** @description ISO 3166-1 alpha-2 country codes (multi-select) */
+                country?: string[] | null;
+                level?: "faculty" | "group" | "institute";
+                /** @description Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit */
+                faculty?: string[] | null;
+                /** @description Funder keys from the funder facet (pipe-joined) */
+                funder?: string[] | null;
+                /** @description Project keys from the project facet (pipe-joined) */
+                project?: string[] | null;
+                /** @description Payloads that supplied the partner links (pipe-joined) */
+                source?: ("openalex" | "openaire")[] | null;
+                /** @description Publication-year range start (clamped to the institution's data window; default: 2020) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the end of the window) */
+                year_to?: number | null;
+            };
+            header?: never;
+            path: {
+                ror: string;
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollaborationDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    partner_works_api_v1__institution_code__collaborations__ror__works_get: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+                q?: string | null;
+                /** @description ROR organisation types (multi-select) */
+                type?: string[] | null;
+                /** @description ISO 3166-1 alpha-2 country codes (multi-select) */
+                country?: string[] | null;
+                level?: "faculty" | "group" | "institute";
+                /** @description Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit */
+                faculty?: string[] | null;
+                /** @description Funder keys from the funder facet (pipe-joined) */
+                funder?: string[] | null;
+                /** @description Project keys from the project facet (pipe-joined) */
+                project?: string[] | null;
+                /** @description Payloads that supplied the partner links (pipe-joined) */
+                source?: ("openalex" | "openaire")[] | null;
+                /** @description Publication-year range start (clamped to the institution's data window; default: 2020) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the end of the window) */
+                year_to?: number | null;
+            };
+            header?: never;
+            path: {
+                ror: string;
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollaborationWorksResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    partner_works_csv_api_v1__institution_code__collaborations__ror__works_csv_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                /** @description ROR organisation types (multi-select) */
+                type?: string[] | null;
+                /** @description ISO 3166-1 alpha-2 country codes (multi-select) */
+                country?: string[] | null;
+                level?: "faculty" | "group" | "institute";
+                /** @description Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit */
+                faculty?: string[] | null;
+                /** @description Funder keys from the funder facet (pipe-joined) */
+                funder?: string[] | null;
+                /** @description Project keys from the project facet (pipe-joined) */
+                project?: string[] | null;
+                /** @description Payloads that supplied the partner links (pipe-joined) */
+                source?: ("openalex" | "openaire")[] | null;
+                /** @description Publication-year range start (clamped to the institution's data window; default: 2020) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the end of the window) */
+                year_to?: number | null;
+            };
+            header?: never;
+            path: {
+                ror: string;
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

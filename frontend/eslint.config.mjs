@@ -2,6 +2,8 @@ import coreWebVitals from "eslint-config-next/core-web-vitals";
 import nextTypescript from "eslint-config-next/typescript";
 
 const eslintConfig = [
+  // Copied from node_modules by scripts/copy-maplibre-worker.mjs; not source.
+  { ignores: ["public/maplibre-gl-worker.mjs"] },
   ...coreWebVitals,
   ...nextTypescript,
   {

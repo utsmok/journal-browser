@@ -1,0 +1,125 @@
+{
+  "title": "Collaboration partners",
+  "titleTemplate": "%s · Partners",
+  "intro": "Organisations that {inst} published with, matched on organisation identifiers. Open a partner for the funders, projects and works you share.",
+  "years": {
+    "default": "Works published from {from} to {to}. Partners start in {from}. The year control at the top of the page sets another range.",
+    "selected": "Works published from {from} to {to}, as set in the year control at the top of the page."
+  },
+  "search": {
+    "placeholder": "Search partner names",
+    "aria": "Search partners by name",
+    "clear": "Clear filters",
+    "retry": "Try again"
+  },
+  "facets": {
+    "type": "Organisation type",
+    "country": "Country",
+    "funder": "Funder",
+    "project": "Project",
+    "source": "Source",
+    "level": "Group the units by",
+    "level_faculty": "Faculty",
+    "level_group": "Group",
+    "level_institute": "Institute"
+  },
+  "map": {
+    "title": "Where the partners are",
+    "description": "Map of the partner organisations. Each circle is one partner, and a larger circle marks more shared works. The table below lists the same partners.",
+    "point": "{works, plural, one {# shared work} other {# shared works}}",
+    "caption": "Each circle is one partner. Larger circles mark more shared works. Select a circle to open the partner.",
+    "unmapped": "{count, plural, one {# partner has no coordinates and is not on the map.} other {# partners have no coordinates and are not on the map.}}",
+    "failed": "The map did not load. The table below lists every partner."
+  },
+  "summary": {
+    "line": "{partners, plural, one {One partner appears} other {# partners appear}} on {withPartner, plural, one {one} other {#}} of the {works} works that {inst} published from {from} to {to}.",
+    "bySource": "OpenAlex supplied the partner links for {openalex, plural, one {one work} other {# works}} and OpenAIRE for {openaire, plural, one {one work} other {# works}}."
+  },
+  "table": {
+    "title": "Partners",
+    "partner": "Partner",
+    "type": "Type",
+    "country": "Country",
+    "works": "Shared works",
+    "corresponding": "Corresponding author",
+    "authorships": "Author positions",
+    "sort": "Sort by {column}",
+    "partOf": "Part of {name}",
+    "viaOpenaire": "Linked by OpenAIRE only",
+    "empty": "No partner matches these filters."
+  },
+  "range": "{from} to {to} of {total}",
+  "prev": "Previous",
+  "next": "Next",
+  "sources": {
+    "title": "Sources and processing",
+    "openalex": "OpenAlex",
+    "openaire": "OpenAIRE",
+    "ror": "ROR"
+  },
+  "methodology": "How partners are matched and counted",
+  "types": {
+    "education": "Education",
+    "nonprofit": "Nonprofit",
+    "government": "Government",
+    "company": "Company",
+    "healthcare": "Healthcare",
+    "facility": "Facility",
+    "archive": "Archive",
+    "funder": "Funder",
+    "other": "Other",
+    "unknown": "Not recorded"
+  },
+  "detail": {
+    "back": "All partners",
+    "notFound": "This organisation is not a collaboration partner in the selected years.",
+    "facts": {
+      "type": "Type",
+      "country": "Country",
+      "city": "City",
+      "parent": "Part of",
+      "ror": "ROR",
+      "openalex": "OpenAlex",
+      "aliases": "Also known as",
+      "links": "Profiles",
+      "relationships": "Related organisations",
+      "inactive": "Inactive in ROR"
+    },
+    "linkTypes": {
+      "website": "Website",
+      "wikipedia": "Wikipedia",
+      "linkedin": "LinkedIn",
+      "twitter": "X",
+      "facebook": "Facebook",
+      "instagram": "Instagram",
+      "youtube": "YouTube",
+      "github": "GitHub"
+    },
+    "relationTypes": {
+      "parent": "Parent",
+      "child": "Child",
+      "related": "Related",
+      "successor": "Successor",
+      "predecessor": "Predecessor"
+    },
+    "stats": "{works, plural, one {# work names} other {# works name}} both organisations, published from {from} to {to}. On {corresponding} of them a corresponding author is affiliated with the partner. The partner's authors hold {authorships} positions on these works.",
+    "share": "{share}% of the works that {inst} published in these years name this partner.",
+    "funders": "Funders of the shared works",
+    "projects": "Projects linked to the shared works",
+    "noFunders": "None of the shared works lists a funder.",
+    "noProjects": "None of the shared works lists a project.",
+    "byType": "Shared works by type",
+    "byYear": "Shared works by year",
+    "works": {
+      "title": "Shared works",
+      "work": "Title",
+      "year": "Year",
+      "type": "Type",
+      "authors": "Authors",
+      "corresponding": "Corresponding author",
+      "correspondingYes": "Yes",
+      "source": "Partner link from",
+      "moreAuthors": "and {count} more"
+    }
+  }
+}

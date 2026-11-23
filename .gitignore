@@ -15,6 +15,9 @@ node_modules/
 .next/
 next-env.d.ts
 
+# Generated from node_modules/maplibre-gl by frontend/scripts/copy-maplibre-worker.mjs
+frontend/public/maplibre-gl-worker.mjs
+
 # Environment
 .env
 .env.local

@@ -24,6 +24,7 @@
     "funders": "Funders",
     "publishers": "Publishers",
     "authors": "Authors",
+    "collaborations": "Partners",
     "faculties": "Faculties",
     "about": "About",
     "allUniversities": "All universities"
@@ -212,7 +213,8 @@
       "greenOa": "Self-archiving policies come verbatim from the Jisc Open Policy Finder. Routes that require an open access fee are excluded from free green open access, and prohibited journals always show as having no route. Funder compliance marks gold, diamond, and active deal journals as compliant.",
       "similar": "Similar journals are ranked locally with the bge-small-en-v1.5 embedding model. Each journal vector is built from its cleaned title, its top five OpenAlex topics, and the titles of its three most cited works.",
       "authorWorks": "Lists active publications registered for this author in your university's Pure repository. Preprints, books, datasets, software, errata, and peer reviews are excluded, while book chapters stay in. Each work is enriched by DOI with OpenAlex and OpenAIRE data, and OpenAlex takes precedence when the two disagree on open access status.",
-      "crisGaps": "Shows works that OpenAlex links to this author, journal, or unit whose DOI is missing from Pure. Authors are matched per shared publication using ORCID first and then exact name or initials, with guards against namesakes. Repository copies such as Pure itself and Zenodo are excluded, non-journal work types are filtered out, and book chapters are grouped under their parent book."
+      "crisGaps": "Shows works that OpenAlex links to this author, journal, or unit whose DOI is missing from Pure. Authors are matched per shared publication using ORCID first and then exact name or initials, with guards against namesakes. Repository copies such as Pure itself and Zenodo are excluded, non-journal work types are filtered out, and book chapters are grouped under their parent book.",
+      "collaborations": "A partner is another organisation that your institution published with in the selected years. Partners are matched on identifiers only: OpenAlex lists the institutions on each work by ROR id, and a work with no OpenAlex institution takes its partners from OpenAIRE. Names, countries and map positions come from the Research Organization Registry (ROR)."
     }
   },
 

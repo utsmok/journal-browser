@@ -89,6 +89,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     "authors",
     "orgunits",
     "publishers",
+    "collaborations",
     "funders",
     "deals",
     "docs",

@@ -39,6 +39,110 @@ export type FunderDetailResponse = Schemas["FunderDetailResponse"];
 export type FunderFitOut = Schemas["FunderFitOut"];
 export type Attribution = Schemas["Attribution"];
 
+// --- Collaboration partners (ROR-identified co-author institutions) ---
+
+export type CollaborationPartner = Schemas["CollaborationPartner"];
+export type CollaborationSearchResponse = Schemas["CollaborationSearchResponse"];
+export type CollaborationFacets = Schemas["CollaborationFacets"];
+export type CollaborationMapPoint = Schemas["CollaborationMapPoint"];
+export type CollaborationMapResponse = Schemas["CollaborationMapResponse"];
+export type CollaborationDetailResponse = Schemas["CollaborationDetailResponse"];
+export type CollaborationWork = Schemas["CollaborationWork"];
+export type CollaborationWorksResponse = Schemas["CollaborationWorksResponse"];
+
+/** Multi-select filters. The API splits each of them on "|". */
+export const COLLAB_MULTI_KEYS = [
+  "type",
+  "country",
+  "faculty",
+  "funder",
+  "project",
+  "source",
+] as const;
+export type CollabMultiKey = (typeof COLLAB_MULTI_KEYS)[number];
+
+export type CollaborationSort = "works" | "name" | "corresponding_works";
+export type CollaborationLevel = "faculty" | "group" | "institute";
+
+/** Filters shared by the partner list, map, detail and works endpoints. */
+export type CollaborationSearchParams = {
+  q?: string;
+  year_from?: number;
+  year_to?: number;
+  level?: CollaborationLevel;
+  sort?: CollaborationSort;
+  dir?: "asc" | "desc";
+} & Partial<Record<CollabMultiKey, string[]>>;
+
+export const COLLAB_PAGE_SIZE = 25;
+
+/** Years of the partner pages when the header's year control is off. */
+export const COLLAB_DEFAULT_YEARS = { year_from: 2020, year_to: new Date().getFullYear() };
+
+function collabParams(p: CollaborationSearchParams): Record<string, string | undefined> {
+  return {
+    q: p.q?.trim() || undefined,
+    year_from: p.year_from === undefined ? undefined : String(p.year_from),
+    year_to: p.year_to === undefined ? undefined : String(p.year_to),
+    level: p.level,
+    sort: p.sort,
+    dir: p.dir,
+    type: p.type?.join("|"),
+    country: p.country?.join("|"),
+    faculty: p.faculty?.join("|"),
+    funder: p.funder?.join("|"),
+    project: p.project?.join("|"),
+    source: p.source?.join("|"),
+  };
+}
+
+export function fetchCollaborations(inst: string, p: CollaborationSearchParams, offset: number) {
+  return apiGet<CollaborationSearchResponse>(`/${inst}/collaborations`, {
+    ...collabParams(p),
+    offset,
+    limit: COLLAB_PAGE_SIZE,
+  });
+}
+
+export function fetchCollaborationMap(inst: string, p: CollaborationSearchParams) {
+  return apiGet<CollaborationMapResponse>(`/${inst}/collaborations/map`, collabParams(p));
+}
+
+export function fetchCollaboration(inst: string, ror: string, p: CollaborationSearchParams) {
+  return apiGet<CollaborationDetailResponse>(
+    `/${inst}/collaborations/${encodeURIComponent(ror)}`,
+    collabParams(p),
+  );
+}
+
+export function fetchCollaborationWorks(
+  inst: string,
+  ror: string,
+  p: CollaborationSearchParams,
+  offset: number,
+) {
+  return apiGet<CollaborationWorksResponse>(
+    `/${inst}/collaborations/${encodeURIComponent(ror)}/works`,
+    { ...collabParams(p), offset, limit: COLLAB_PAGE_SIZE },
+  );
+}
+
+/** CSV export of the filtered partner list, or of one partner's works with
+ * `ror`. The anchor goes through the same /api proxy as apiGet. */
+export function collaborationCsvHref(
+  inst: string,
+  p: CollaborationSearchParams,
+  ror?: string,
+): string {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(collabParams(p))) {
+    if (value) qs.set(key, value);
+  }
+  const query = qs.toString();
+  const tail = ror ? `/${encodeURIComponent(ror)}/works.csv` : "/partners.csv";
+  return `/api/v1/${inst}/collaborations${tail}${query ? `?${query}` : ""}`;
+}
+
 export type BudgetMode = NonNullable<Schemas["RecommendRequest"]["budget_mode"]>;
 export type RecommendRequest = Schemas["RecommendRequest"];
 export type RecommendResponse = Schemas["RecommendResponse"];
@@ -150,7 +254,7 @@ export type JournalSearchParams = {
 };
 
 /** Error with an HTTP status; message stays technical (console only). */
-class ApiError extends Error {
+export class ApiError extends Error {
   status: number;
   constructor(status: number, path: string) {
     super(`API ${status} on ${path}`);

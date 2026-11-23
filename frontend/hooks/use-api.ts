@@ -7,10 +7,16 @@ import { useInstitution } from "./use-institution";
 import { trackSearch } from "@/lib/usage/tracker";
 import {
   apiGet,
+  COLLAB_MULTI_KEYS,
+  fetchCollaboration,
+  fetchCollaborationMap,
+  fetchCollaborations,
+  fetchCollaborationWorks,
   fetchOrgUnit,
   fetchOrgUnits,
   fetchPublisher,
   fetchPublishers,
+  type CollaborationSearchParams,
   type DealOut,
   type FreshnessResponse,
   type FunderDetailResponse,
@@ -48,6 +54,14 @@ const qk = {
   orgunit: (i: string, level: OrgUnitLevel, name: string) => ["orgunit", i, level, name] as const,
   funders: (i: string, q: string) => ["funders", i, q] as const,
   funder: (i: string, id: number) => ["funder", i, id] as const,
+  collaborations: (i: string, p: CollaborationSearchParams, offset: number) =>
+    ["collaborations", i, p, offset] as const,
+  collaborationMap: (i: string, p: CollaborationSearchParams) =>
+    ["collaboration-map", i, p] as const,
+  collaboration: (i: string, ror: string, p: CollaborationSearchParams) =>
+    ["collaboration", i, ror, p] as const,
+  collaborationWorks: (i: string, ror: string, p: CollaborationSearchParams, offset: number) =>
+    ["collaboration-works", i, ror, p, offset] as const,
 };
 
 /**
@@ -367,5 +381,66 @@ export function useFunder(id: number | undefined, years?: YearParams) {
         year_to: years?.year_to,
       }),
     enabled: Boolean(id) && inst !== "",
+  });
+}
+
+/** The multi-select filters of a partner search, kept on its usage event. */
+function collabUsageFilters(p: CollaborationSearchParams): Record<string, unknown> {
+  return Object.fromEntries(
+    COLLAB_MULTI_KEYS.filter((key) => p[key]?.length).map((key) => [key, p[key]]),
+  );
+}
+
+/** Partner list. The response carries the totals, facets and effective year
+ * range of the whole filter set, not only of the page shown. */
+export function useCollaborations(params: CollaborationSearchParams, offset: number) {
+  const inst = useInstitution();
+  return useQuery({
+    queryKey: qk.collaborations(inst, params, offset),
+    queryFn: async () => {
+      const data = await fetchCollaborations(inst, params, offset);
+      trackSearch({
+        query: params.q ?? "",
+        results_count: data.total_partners,
+        search_scope: "collaborations",
+        filters: collabUsageFilters(params),
+      });
+      return data;
+    },
+    enabled: inst !== "",
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useCollaborationMap(params: CollaborationSearchParams) {
+  const inst = useInstitution();
+  return useQuery({
+    queryKey: qk.collaborationMap(inst, params),
+    queryFn: () => fetchCollaborationMap(inst, params),
+    enabled: inst !== "",
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useCollaboration(ror: string | undefined, params: CollaborationSearchParams) {
+  const inst = useInstitution();
+  return useQuery({
+    queryKey: qk.collaboration(inst, ror ?? "", params),
+    queryFn: () => fetchCollaboration(inst, ror ?? "", params),
+    enabled: Boolean(ror) && inst !== "",
+  });
+}
+
+export function useCollaborationWorks(
+  ror: string,
+  params: CollaborationSearchParams,
+  offset: number,
+) {
+  const inst = useInstitution();
+  return useQuery({
+    queryKey: qk.collaborationWorks(inst, ror, params, offset),
+    queryFn: () => fetchCollaborationWorks(inst, ror, params, offset),
+    enabled: inst !== "",
+    placeholderData: keepPreviousData,
   });
 }
