@@ -2023,6 +2023,10 @@ export interface components {
             name: string;
             /** Country Code */
             country_code?: string | null;
+            /** City */
+            city?: string | null;
+            /** Org Type */
+            org_type: string;
             /** Lat */
             lat: number;
             /** Lng */

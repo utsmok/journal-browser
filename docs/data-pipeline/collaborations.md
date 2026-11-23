@@ -29,6 +29,9 @@ The server counts over the whole filter set on every request. Paging and sorting
 | Share | Shared works divided by all works of the university in the selected years |
 | Partners, works with a partner | Distinct partners, and distinct works with at least one partner, in the filter set |
 | Circle size on the map | Grows with the logarithm of the shared works, so one very large partner does not shrink all others to dots |
+| Circle colour on the map | The partner's organisation type from its ROR record |
+| Number in a group on the map | Partners whose circles would overlap at the current zoom. The ring around the number shows their organisation types in proportion. Partners at one place (ROR often gives a city's coordinates) stay one group at every zoom and list their members when selected |
+| Partners in view | Mapped partners inside the visible part of the map, in total and per organisation type; it changes as you pan and zoom |
 
 A partner linked only by OpenAIRE carries a note in the list, because its works have no OpenAlex institution to confirm the link.
 

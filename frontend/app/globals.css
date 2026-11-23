@@ -51,6 +51,22 @@
   --oa-diamond: #4fe4f8;
   /* #e11d48 on white is 4.7:1; gold (#f4aa2a) is hue 38, bronze hue ~350. */
   --oa-bronze: #e11d48;
+  /* Organisation types on the partner map. Education, the largest group,
+     takes the signal orange; the rest are spread over the hue circle and
+     named in the legend and in every popup, so colour is never the only cue. */
+  --org-education: #f06e00;
+  --org-facility: #2f6fbf;
+  --org-healthcare: #d61f4f;
+  --org-company: #7c5cdb;
+  --org-government: #047857;
+  --org-nonprofit: #0e8a96;
+  --org-funder: #c98a12;
+  --org-archive: #8b5e3c;
+  --org-other: #64748b;
+  /* Numbered circles that group partners: navy, so they read as counts
+     rather than as one more organisation type. */
+  --map-cluster: #14274c;
+  --map-cluster-foreground: #ffffff;
 }
 
 /* Dark palette: same tokens, hand-rolled (no next-themes). */
@@ -84,6 +100,17 @@
   --oa-diamond: #67e8f9;
   /* #fb7185 on the night card is 6.4:1. */
   --oa-bronze: #fb7185;
+  --org-education: #ff8a2a;
+  --org-facility: #82b1e4;
+  --org-healthcare: #fb7185;
+  --org-company: #a99af0;
+  --org-government: #34d399;
+  --org-nonprofit: #5eead4;
+  --org-funder: #fbbf24;
+  --org-archive: #d6a57c;
+  --org-other: #94a3b8;
+  --map-cluster: #dbe3ee;
+  --map-cluster-foreground: #101318;
 }
 
 @theme inline {
@@ -448,6 +475,100 @@
 .jb-map {
   font-family: inherit;
 }
+/* A group of partners: a ring split by organisation type around a count. */
+.jb-map-group {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 9999px;
+  cursor: pointer;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.25));
+  transition: transform 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.jb-map-group:hover {
+  transform: scale(1.08);
+}
+.jb-map-group:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.jb-map-group-disc {
+  fill: var(--card);
+}
+.jb-map-group-count {
+  fill: var(--foreground);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+@media (prefers-reduced-motion: reduce) {
+  .jb-map-group {
+    transition: none;
+  }
+}
+.jb-map-swatch {
+  display: inline-block;
+  flex: none;
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 9999px;
+}
+.jb-map-type {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.jb-map-list {
+  width: min(18rem, 70vw);
+}
+.jb-map-list-title {
+  font-weight: 600;
+  padding-bottom: 0.375rem;
+  padding-right: 1rem;
+}
+.jb-map-list-items {
+  max-height: min(14rem, 40vh);
+  overflow-y: auto;
+  margin: 0 -0.5rem;
+  overscroll-behavior: contain;
+}
+.jb-map-list-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: calc(var(--radius) - 2px);
+  padding: 0.3rem 0.5rem;
+  text-align: left;
+  cursor: pointer;
+}
+.jb-map-list-item:hover {
+  background: var(--muted);
+}
+.jb-map-list-item:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+.jb-map-list-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.jb-map-list-works {
+  flex: none;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+.jb-map .maplibregl-popup-close-button {
+  color: var(--muted-foreground);
+  font-size: 1rem;
+  padding: 0 0.4rem;
+}
 .jb-map .maplibregl-popup-content {
   background: var(--card);
   color: var(--foreground);
@@ -481,7 +602,8 @@
 .jb-map .maplibregl-ctrl-group button + button {
   border-top-color: var(--border);
 }
-.jb-map .maplibregl-ctrl-attrib {
+.jb-map .maplibregl-ctrl-attrib,
+.jb-map .maplibregl-ctrl-attrib-inner {
   background: var(--card);
   color: var(--muted-foreground);
 }

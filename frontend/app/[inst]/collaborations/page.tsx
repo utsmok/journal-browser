@@ -176,7 +176,6 @@ function PartnersPageInner() {
                 <PartnerMap
                   points={map.data?.items ?? []}
                   description={t("map.description")}
-                  pointLabel={(works) => t("map.point", { works })}
                   failedText={t("map.failed")}
                   retryText={t("search.retry")}
                   onSelect={(ror) =>

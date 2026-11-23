@@ -25,9 +25,15 @@
   },
   "map": {
     "title": "Where the partners are",
-    "description": "Map of the partner organisations. Each circle is one partner, and a larger circle marks more shared works. The table below lists the same partners.",
+    "description": "Map of the partner organisations. Each circle is one partner in the colour of its organisation type, and a larger circle marks more shared works. A numbered circle groups the partners of one area. The table below lists the same partners.",
     "point": "{works, plural, one {# shared work} other {# shared works}}",
-    "caption": "Each circle is one partner. Larger circles mark more shared works. Select a circle to open the partner.",
+    "works": "{works, plural, one {# work} other {# works}}",
+    "group": "{count, plural, one {# partner} other {# partners}} in this area",
+    "groupHint": "Select to zoom in, or to list partners that share one place.",
+    "listTitle": "{count, plural, one {# partner} other {# partners}} at this place",
+    "inView": "{count, plural, =0 {No partners in view} one {# partner in view} other {# partners in view}}",
+    "legend": "Partners in view per organisation type",
+    "caption": "Each circle is one partner, coloured by organisation type; larger circles mark more shared works. A numbered circle counts the partners of an area: select it to zoom in, or to list the partners that share one place. Select a partner to open it.",
     "unmapped": "{count, plural, one {# partner has no coordinates and is not on the map.} other {# partners have no coordinates and are not on the map.}}",
     "failed": "The map did not load. The table below lists every partner."
   },
