@@ -974,6 +974,18 @@ class AuthorOpenalexOnly(BaseModel):
     likely_missing: int = 0
 
 
+class PartnerSummary(BaseModel):
+    """Compact partner rollup shown on org-unit and author detail pages."""
+
+    ror: str
+    name: str
+    org_type: str | None = None
+    country_code: str | None = None
+    city: str | None = None
+    works: int
+    oa_share: float | None = None
+
+
 class AuthorProfileResponse(BaseModel):
     author: AuthorOut
     oa_by_year: list[AuthorYearRow]
@@ -982,6 +994,7 @@ class AuthorProfileResponse(BaseModel):
     similar: AuthorSimilarBundle
     alternatives: list[AuthorAlternative]
     works: list[AuthorWorkItem]
+    top_partners: list[PartnerSummary] = []
     openalex_only: AuthorOpenalexOnly = AuthorOpenalexOnly()
     # Exact count of OpenAlex-only works after gating; None when the
     # source could not answer (DSN path). The openalex_only section
@@ -1121,6 +1134,7 @@ class OrgUnitDetailResponse(BaseModel):
     authors: list[OrgUnitAuthorRow] = []
     works_by_year: list[StatsYear] = []
     deal_usage: list[DealUsageRow] = []
+    top_partners: list[PartnerSummary] = []
     # Store works attributed to the unit's member authors and missing
     # from the Pure population.
     openalex_only: OpenalexOnly
@@ -1610,25 +1624,27 @@ class CollaborationFunder(BaseModel):
     # Payloads that credit the funder on the selected works.
     sources: list[Literal["openalex", "openaire"]]
     works: int
+    # Jisc OPF funder id when canon-linked, so the UI can link to /funders/{id}.
+    jisc_funder_id: int | None = None
 
 
 class CollaborationProject(BaseModel):
     """A grant or project acknowledged on the joint works."""
 
-    # Filter key: "openaire:<OpenAIRE project id>" for projects,
-    # "openalex:<bare funder id>/<award id>" for awards.
+    # Filter key: "openalex:<bare funder id>/<grant code>" when resolved to a
+    # known OpenAlex funder + code, else "openaire:<OpenAIRE project id>".
     key: str
     code: str | None = None
     acronym: str | None = None
     # Funder name as the payload gives it.
     funder: str | None = None
     source: Literal["openalex", "openaire"]
+    sources: list[Literal["openalex", "openaire"]] = []
     works: int
 
 
 class CollaborationPartner(BaseModel):
-    """A partner institution in the list (funders and projects capped at
-    5) or the detail view (capped at 25)."""
+    """A partner institution in the list or the detail view."""
 
     ror: str
     name: str
@@ -1646,13 +1662,24 @@ class CollaborationPartner(BaseModel):
     # works / total_works in the result set; None when the set is empty.
     share: float | None = None
     corresponding_works: int
-    # Author positions held at the partner across the joint works: two
-    # authors of one work at the same partner count twice.
+    # Joint works where the home institution holds a corresponding author.
+    home_corresponding_works: int = 0
+    # Author positions held at the partner across the joint works.
     authorships: int
+    # Joint works with an open access status (gold/diamond/hybrid/green/bronze).
+    oa_works: int = 0
+    closed_works: int = 0
+    oa_share: float | None = None
+    # True when the partner participates in at least one OA deal shared with
+    # the home institution (via deal_institutions).
+    shares_deals: bool = False
+    # Number of rolled-up child/inactive RORs folded into this partner when
+    # rollup is enabled.
+    merged_count: int = 0
     # Payloads that supplied the links to this partner.
     sources: list[Literal["openalex", "openaire"]]
-    funders: list[CollaborationFunder]
-    projects: list[CollaborationProject]
+    funders: list[CollaborationFunder] = []
+    projects: list[CollaborationProject] = []
 
 
 class CollaborationFacets(BaseModel):
@@ -1665,6 +1692,24 @@ class CollaborationFacets(BaseModel):
     funder: list[CollaborationFunder]
     project: list[CollaborationProject]
     source: list[FacetCount]
+    oa_status: list[FacetCount] = []
+    topic: list[FacetCount] = []
+
+
+class CollaborationTrendYear(BaseModel):
+    """Per-year aggregate of collaborative works for the overview chart."""
+
+    year: int
+    total_works: int
+    with_partner: int
+    domestic: int
+    international: int
+    oa_gold: int = 0
+    oa_diamond: int = 0
+    oa_hybrid: int = 0
+    oa_green: int = 0
+    oa_bronze: int = 0
+    oa_closed: int = 0
 
 
 class CollaborationSearchResponse(BaseModel):
@@ -1675,12 +1720,18 @@ class CollaborationSearchResponse(BaseModel):
     total_works: int
     # Of those, works linked to at least one partner.
     works_with_partner: int
-    # Works linked to at least one partner through each payload; a work
-    # with links from both payloads counts in both.
+    # Works linked to at least one domestic vs international partner.
+    domestic_works: int = 0
+    international_works: int = 0
+    # Open access vs closed works among works_with_partner.
+    oa_works: int = 0
+    closed_works: int = 0
+    # Works linked to at least one partner through each payload.
     works_by_source: dict[Literal["openalex", "openaire"], int]
     # Effective publication-year range; None when the set has no works.
     year_from: int | None = None
     year_to: int | None = None
+    trend: list[CollaborationTrendYear] = []
     facets: CollaborationFacets | None = None
 
 
@@ -1697,6 +1748,9 @@ class CollaborationMapPoint(BaseModel):
     lng: float
     works: int
     corresponding_works: int
+    home_corresponding_works: int = 0
+    oa_share: float | None = None
+    merged_count: int = 0
 
 
 class CollaborationMapResponse(BaseModel):
@@ -1704,6 +1758,13 @@ class CollaborationMapResponse(BaseModel):
     # Partners in the filtered set without coordinates; they do not
     # appear on the map.
     unmapped: int
+
+
+class CollaborationWorkAuthor(BaseModel):
+    """An institution author on a joint work, linked when on the roster."""
+
+    pure_uuid: str | None = None
+    name: str
 
 
 class CollaborationWork(BaseModel):
@@ -1717,15 +1778,28 @@ class CollaborationWork(BaseModel):
     work_type: str | None = None
     # A corresponding author sits at the partner.
     corresponding: bool
+    # A corresponding author sits at the home institution.
+    home_corresponding: bool = False
+    oa_status: str | None = None
+    journal_issn_l: str | None = None
+    journal_title: str | None = None
+    deal_covered: bool = False
     # Payload that supplied the link to the partner.
     source: Literal["openalex", "openaire"]
     # Display names of the institution's authors on the work.
     authors: list[str]
+    author_links: list[CollaborationWorkAuthor] = []
 
 
 class CollaborationYearCount(BaseModel):
     year: int
     works: int
+    oa_gold: int = 0
+    oa_diamond: int = 0
+    oa_hybrid: int = 0
+    oa_green: int = 0
+    oa_bronze: int = 0
+    oa_closed: int = 0
 
 
 class CollaborationLink(BaseModel):
@@ -1741,6 +1815,47 @@ class CollaborationRelation(BaseModel):
     type: str
     ror: str
     label: str
+    # True when this related organisation is also a partner of the institution.
+    is_partner: bool = False
+
+
+class CollaborationUnitCount(BaseModel):
+    """Home-institution org unit collaborating with a partner."""
+
+    name: str
+    level: Literal["faculty", "group", "institute"]
+    works: int
+
+
+class CollaborationAuthorCount(BaseModel):
+    """Home-institution researcher collaborating with a partner."""
+
+    pure_uuid: str
+    name: str
+    faculty: str | None = None
+    research_group: str | None = None
+    works: int
+
+
+class CollaborationJournalCount(BaseModel):
+    """Shared publication venue between the institution and a partner."""
+
+    issn_l: str
+    title: str
+    works: int
+    closed_works: int = 0
+    oa_type: str | None = None
+    quartile: str | None = None
+    deal_covered: bool = False
+
+
+class CollaborationMergedChild(BaseModel):
+    """A child or inactive ROR rolled up into this partner."""
+
+    ror: str
+    name: str
+    status: str | None = None
+    works: int
 
 
 class CollaborationDetailResponse(CollaborationPartner):
@@ -1752,12 +1867,23 @@ class CollaborationDetailResponse(CollaborationPartner):
     relationships: list[CollaborationRelation]
     # Works of the institution in the filtered set (the share denominator).
     total_works: int
+    # Closed joint works published in a journal covered by a home-institution deal.
+    deal_closed_works: int = 0
     # Normalized work types of the joint works (article, conference, ...).
     works_by_type: list[FacetCount]
-    # Joint works per publication year inside the filtered range.
+    # Joint works per publication year inside the filtered range (with OA mix).
     per_year: list[CollaborationYearCount]
-    # Joint works by payload, newest first, capped at 25.
-    recent_works: list[CollaborationWork]
+    # Home-institution faculties, research groups and authors on the joint works.
+    ut_faculties: list[CollaborationUnitCount] = []
+    ut_groups: list[CollaborationUnitCount] = []
+    ut_authors: list[CollaborationAuthorCount] = []
+    # Top shared journals and OpenAlex primary topics.
+    top_journals: list[CollaborationJournalCount] = []
+    top_topics: list[FacetCount] = []
+    # Child/inactive RORs folded into this partner when rollup is enabled.
+    merged_children: list[CollaborationMergedChild] = []
+    # Joint works by payload, newest first, capped at 25 (when include_works=True).
+    recent_works: list[CollaborationWork] = []
 
 
 class CollaborationWorksResponse(BaseModel):

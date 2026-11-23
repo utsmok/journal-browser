@@ -1,9 +1,8 @@
 """/api/v1/{code}/collaborations: partner institutions on joint works.
 
 Counts come from work_partners, which the derive job builds from the
-stored OpenAlex and OpenAIRE work payloads. Names and coordinates come
-from partner_institutions (the ROR records). Before the derive has run,
-the lists are empty and only the work totals answer.
+stored OpenAlex and OpenAIRE work payloads. Names, aliases, roll-ups and
+coordinates come from partner_institutions (the ROR records).
 """
 
 from typing import Annotated, Literal
@@ -23,7 +22,7 @@ from ..schemas import (
 )
 from ..services import collaborations as collaborations_service
 from ..services.collaborations import CollaborationFilters
-from ..services.works_query import clamped_year_range, year_end
+from ..services.works_query import clamped_year_range
 from .params import split_multi, split_pipe
 
 router = APIRouter(prefix="/collaborations", tags=["collaborations"])
@@ -32,18 +31,12 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 DEFAULT_LIMIT = 25
 
-#: First publication year of the default view; the user asked for 2020
-#: until today instead of the institution's full data window.
-DEFAULT_YEAR_FROM = 2020
-
-#: Publication-year range; clamped to the institution's data window.
 YearFrom = Annotated[
     int | None,
     Query(
         ge=1900,
         le=2100,
-        description="Publication-year range start (clamped to the "
-        "institution's data window; default: 2020)",
+        description="Publication-year range start (clamped to the institution's data window)",
     ),
 ]
 YearTo = Annotated[
@@ -51,8 +44,7 @@ YearTo = Annotated[
     Query(
         ge=1900,
         le=2100,
-        description="Publication-year range end (clamped to the "
-        "institution's data window; default: the end of the window)",
+        description="Publication-year range end (clamped to the institution's data window)",
     ),
 ]
 
@@ -76,8 +68,7 @@ def collaboration_filters(
         BeforeValidator(split_pipe),
         Query(
             max_length=400,
-            description="Org unit names at `level` (pipe-joined multi-select); "
-            "a work matches when one of its authors belongs to the unit",
+            description="Org unit names at `level` (pipe-joined multi-select)",
         ),
     ] = None,
     funder: Annotated[
@@ -88,29 +79,53 @@ def collaboration_filters(
     project: Annotated[
         list[str] | None,
         BeforeValidator(split_pipe),
-        Query(
-            max_length=400,
-            description="Project keys from the project facet (pipe-joined)",
-        ),
+        Query(max_length=400, description="Project keys from the project facet (pipe-joined)"),
     ] = None,
     source: Annotated[
         list[Literal["openalex", "openaire"]] | None,
         BeforeValidator(split_pipe),
+        Query(max_length=40, description="Payloads that supplied partner links (pipe-joined)"),
+    ] = None,
+    oa_status: Annotated[
+        list[str] | None,
+        BeforeValidator(split_multi),
+        Query(max_length=60, description="Open access statuses (multi-select)"),
+    ] = None,
+    topic: Annotated[
+        list[str] | None,
+        BeforeValidator(split_pipe),
+        Query(max_length=400, description="OpenAlex primary topics (pipe-joined)"),
+    ] = None,
+    size: Annotated[
+        Literal["standard", "small", "all"],
         Query(
-            max_length=40,
-            description="Payloads that supplied the partner links (pipe-joined)",
+            description="Collaboration size: standard (<=20 partners, default), "
+            "small (<=5 partners), or all (including mega-consortia)"
         ),
+    ] = "standard",
+    rollup: Annotated[
+        bool,
+        Query(
+            description="Roll up inactive successors and same-city sub-units into their "
+            "canonical organisation (default: true)"
+        ),
+    ] = True,
+    lead: Annotated[
+        Literal["all", "home", "partner"],
+        Query(description="Corresponding-author lead filter: all, home, or partner"),
+    ] = "all",
+    min_works: Annotated[
+        int | None,
+        Query(ge=1, le=10000, description="Minimum shared works per partner"),
+    ] = None,
+    shares_deals: Annotated[
+        bool | None,
+        Query(description="Filter to partners sharing OA deals with the home institution"),
     ] = None,
     year_from: YearFrom = None,
     year_to: YearTo = None,
 ) -> CollaborationFilters:
-    # Funder, project and source keys can hold commas (OpenAIRE funder
-    # names), so those multi-selects split on the pipe only.
-    year_range = clamped_year_range(
-        institution,
-        DEFAULT_YEAR_FROM if year_from is None and year_end(institution) >= 2020 else year_from,
-        year_to,
-    )
+    year_range = clamped_year_range(institution, year_from, year_to)
     return CollaborationFilters(
         q=q,
         org_types=type,
@@ -120,6 +135,13 @@ def collaboration_filters(
         funders=funder,
         projects=project,
         sources=source,
+        oa_statuses=oa_status,
+        topics=topic,
+        size=size,
+        rollup=rollup,
+        lead=lead,
+        min_works=min_works,
+        shares_deals=shares_deals,
         year_range=year_range,
     )
 
@@ -133,7 +155,8 @@ async def search_collaborations(
     institution: InstitutionDep,
     filters: FiltersDep,
     sort: Annotated[
-        Literal["works", "name", "corresponding_works"], Query(description="Result sort key")
+        Literal["works", "name", "corresponding_works", "home_corresponding_works", "oa_share"],
+        Query(description="Result sort key"),
     ] = "works",
     dir: Annotated[
         Literal["asc", "desc"] | None,
@@ -142,6 +165,7 @@ async def search_collaborations(
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = DEFAULT_LIMIT,
     include_facets: bool = True,
+    include_credits: bool = False,
 ) -> CollaborationSearchResponse:
     return await collaborations_service.search_collaborations(
         session,
@@ -152,6 +176,7 @@ async def search_collaborations(
         offset=offset,
         limit=limit,
         include_facets=include_facets,
+        include_credits=include_credits,
     )
 
 
@@ -180,8 +205,11 @@ async def collaboration_detail(
     institution: InstitutionDep,
     filters: FiltersDep,
     ror: str,
+    include_works: bool = True,
 ) -> CollaborationDetailResponse:
-    detail = await collaborations_service.collaboration_detail(session, institution, ror, filters)
+    detail = await collaborations_service.collaboration_detail(
+        session, institution, ror, filters, include_works=include_works
+    )
     if detail is None:
         raise HTTPException(status_code=404, detail="partner not found")
     return detail

@@ -1704,6 +1704,11 @@ export interface components {
             /** Works */
             works: components["schemas"]["AuthorWorkItem"][];
             /**
+             * Top Partners
+             * @default []
+             */
+            top_partners: components["schemas"]["PartnerSummary"][];
+            /**
              * @default {
              *       "total": 0,
              *       "entries_total": 0,
@@ -1913,6 +1918,22 @@ export interface components {
             /** Locale */
             locale?: string | null;
         };
+        /**
+         * CollaborationAuthorCount
+         * @description Home-institution researcher collaborating with a partner.
+         */
+        CollaborationAuthorCount: {
+            /** Pure Uuid */
+            pure_uuid: string;
+            /** Name */
+            name: string;
+            /** Faculty */
+            faculty?: string | null;
+            /** Research Group */
+            research_group?: string | null;
+            /** Works */
+            works: number;
+        };
         /** CollaborationDetailResponse */
         CollaborationDetailResponse: {
             /** Ror */
@@ -1941,13 +1962,46 @@ export interface components {
             share?: number | null;
             /** Corresponding Works */
             corresponding_works: number;
+            /**
+             * Home Corresponding Works
+             * @default 0
+             */
+            home_corresponding_works: number;
             /** Authorships */
             authorships: number;
+            /**
+             * Oa Works
+             * @default 0
+             */
+            oa_works: number;
+            /**
+             * Closed Works
+             * @default 0
+             */
+            closed_works: number;
+            /** Oa Share */
+            oa_share?: number | null;
+            /**
+             * Shares Deals
+             * @default false
+             */
+            shares_deals: boolean;
+            /**
+             * Merged Count
+             * @default 0
+             */
+            merged_count: number;
             /** Sources */
             sources: ("openalex" | "openaire")[];
-            /** Funders */
+            /**
+             * Funders
+             * @default []
+             */
             funders: components["schemas"]["CollaborationFunder"][];
-            /** Projects */
+            /**
+             * Projects
+             * @default []
+             */
             projects: components["schemas"]["CollaborationProject"][];
             /** Status */
             status?: string | null;
@@ -1961,11 +2015,49 @@ export interface components {
             relationships: components["schemas"]["CollaborationRelation"][];
             /** Total Works */
             total_works: number;
+            /**
+             * Deal Closed Works
+             * @default 0
+             */
+            deal_closed_works: number;
             /** Works By Type */
             works_by_type: components["schemas"]["FacetCount"][];
             /** Per Year */
             per_year: components["schemas"]["CollaborationYearCount"][];
-            /** Recent Works */
+            /**
+             * Ut Faculties
+             * @default []
+             */
+            ut_faculties: components["schemas"]["CollaborationUnitCount"][];
+            /**
+             * Ut Groups
+             * @default []
+             */
+            ut_groups: components["schemas"]["CollaborationUnitCount"][];
+            /**
+             * Ut Authors
+             * @default []
+             */
+            ut_authors: components["schemas"]["CollaborationAuthorCount"][];
+            /**
+             * Top Journals
+             * @default []
+             */
+            top_journals: components["schemas"]["CollaborationJournalCount"][];
+            /**
+             * Top Topics
+             * @default []
+             */
+            top_topics: components["schemas"]["FacetCount"][];
+            /**
+             * Merged Children
+             * @default []
+             */
+            merged_children: components["schemas"]["CollaborationMergedChild"][];
+            /**
+             * Recent Works
+             * @default []
+             */
             recent_works: components["schemas"]["CollaborationWork"][];
         };
         /**
@@ -1986,6 +2078,16 @@ export interface components {
             project: components["schemas"]["CollaborationProject"][];
             /** Source */
             source: components["schemas"]["FacetCount"][];
+            /**
+             * Oa Status
+             * @default []
+             */
+            oa_status: components["schemas"]["FacetCount"][];
+            /**
+             * Topic
+             * @default []
+             */
+            topic: components["schemas"]["FacetCount"][];
         };
         /**
          * CollaborationFunder
@@ -2001,6 +2103,34 @@ export interface components {
             sources: ("openalex" | "openaire")[];
             /** Works */
             works: number;
+            /** Jisc Funder Id */
+            jisc_funder_id?: number | null;
+        };
+        /**
+         * CollaborationJournalCount
+         * @description Shared publication venue between the institution and a partner.
+         */
+        CollaborationJournalCount: {
+            /** Issn L */
+            issn_l: string;
+            /** Title */
+            title: string;
+            /** Works */
+            works: number;
+            /**
+             * Closed Works
+             * @default 0
+             */
+            closed_works: number;
+            /** Oa Type */
+            oa_type?: string | null;
+            /** Quartile */
+            quartile?: string | null;
+            /**
+             * Deal Covered
+             * @default false
+             */
+            deal_covered: boolean;
         };
         /**
          * CollaborationLink
@@ -2035,6 +2165,18 @@ export interface components {
             works: number;
             /** Corresponding Works */
             corresponding_works: number;
+            /**
+             * Home Corresponding Works
+             * @default 0
+             */
+            home_corresponding_works: number;
+            /** Oa Share */
+            oa_share?: number | null;
+            /**
+             * Merged Count
+             * @default 0
+             */
+            merged_count: number;
         };
         /** CollaborationMapResponse */
         CollaborationMapResponse: {
@@ -2044,9 +2186,22 @@ export interface components {
             unmapped: number;
         };
         /**
+         * CollaborationMergedChild
+         * @description A child or inactive ROR rolled up into this partner.
+         */
+        CollaborationMergedChild: {
+            /** Ror */
+            ror: string;
+            /** Name */
+            name: string;
+            /** Status */
+            status?: string | null;
+            /** Works */
+            works: number;
+        };
+        /**
          * CollaborationPartner
-         * @description A partner institution in the list (funders and projects capped at
-         *     5) or the detail view (capped at 25).
+         * @description A partner institution in the list or the detail view.
          */
         CollaborationPartner: {
             /** Ror */
@@ -2075,13 +2230,46 @@ export interface components {
             share?: number | null;
             /** Corresponding Works */
             corresponding_works: number;
+            /**
+             * Home Corresponding Works
+             * @default 0
+             */
+            home_corresponding_works: number;
             /** Authorships */
             authorships: number;
+            /**
+             * Oa Works
+             * @default 0
+             */
+            oa_works: number;
+            /**
+             * Closed Works
+             * @default 0
+             */
+            closed_works: number;
+            /** Oa Share */
+            oa_share?: number | null;
+            /**
+             * Shares Deals
+             * @default false
+             */
+            shares_deals: boolean;
+            /**
+             * Merged Count
+             * @default 0
+             */
+            merged_count: number;
             /** Sources */
             sources: ("openalex" | "openaire")[];
-            /** Funders */
+            /**
+             * Funders
+             * @default []
+             */
             funders: components["schemas"]["CollaborationFunder"][];
-            /** Projects */
+            /**
+             * Projects
+             * @default []
+             */
             projects: components["schemas"]["CollaborationProject"][];
         };
         /**
@@ -2102,6 +2290,11 @@ export interface components {
              * @enum {string}
              */
             source: "openalex" | "openaire";
+            /**
+             * Sources
+             * @default []
+             */
+            sources: ("openalex" | "openaire")[];
             /** Works */
             works: number;
         };
@@ -2116,6 +2309,11 @@ export interface components {
             ror: string;
             /** Label */
             label: string;
+            /**
+             * Is Partner
+             * @default false
+             */
+            is_partner: boolean;
         };
         /** CollaborationSearchResponse */
         CollaborationSearchResponse: {
@@ -2127,6 +2325,26 @@ export interface components {
             total_works: number;
             /** Works With Partner */
             works_with_partner: number;
+            /**
+             * Domestic Works
+             * @default 0
+             */
+            domestic_works: number;
+            /**
+             * International Works
+             * @default 0
+             */
+            international_works: number;
+            /**
+             * Oa Works
+             * @default 0
+             */
+            oa_works: number;
+            /**
+             * Closed Works
+             * @default 0
+             */
+            closed_works: number;
             /** Works By Source */
             works_by_source: {
                 [key: string]: number;
@@ -2135,7 +2353,73 @@ export interface components {
             year_from?: number | null;
             /** Year To */
             year_to?: number | null;
+            /**
+             * Trend
+             * @default []
+             */
+            trend: components["schemas"]["CollaborationTrendYear"][];
             facets?: components["schemas"]["CollaborationFacets"] | null;
+        };
+        /**
+         * CollaborationTrendYear
+         * @description Per-year aggregate of collaborative works for the overview chart.
+         */
+        CollaborationTrendYear: {
+            /** Year */
+            year: number;
+            /** Total Works */
+            total_works: number;
+            /** With Partner */
+            with_partner: number;
+            /** Domestic */
+            domestic: number;
+            /** International */
+            international: number;
+            /**
+             * Oa Gold
+             * @default 0
+             */
+            oa_gold: number;
+            /**
+             * Oa Diamond
+             * @default 0
+             */
+            oa_diamond: number;
+            /**
+             * Oa Hybrid
+             * @default 0
+             */
+            oa_hybrid: number;
+            /**
+             * Oa Green
+             * @default 0
+             */
+            oa_green: number;
+            /**
+             * Oa Bronze
+             * @default 0
+             */
+            oa_bronze: number;
+            /**
+             * Oa Closed
+             * @default 0
+             */
+            oa_closed: number;
+        };
+        /**
+         * CollaborationUnitCount
+         * @description Home-institution org unit collaborating with a partner.
+         */
+        CollaborationUnitCount: {
+            /** Name */
+            name: string;
+            /**
+             * Level
+             * @enum {string}
+             */
+            level: "faculty" | "group" | "institute";
+            /** Works */
+            works: number;
         };
         /**
          * CollaborationWork
@@ -2155,12 +2439,43 @@ export interface components {
             /** Corresponding */
             corresponding: boolean;
             /**
+             * Home Corresponding
+             * @default false
+             */
+            home_corresponding: boolean;
+            /** Oa Status */
+            oa_status?: string | null;
+            /** Journal Issn L */
+            journal_issn_l?: string | null;
+            /** Journal Title */
+            journal_title?: string | null;
+            /**
+             * Deal Covered
+             * @default false
+             */
+            deal_covered: boolean;
+            /**
              * Source
              * @enum {string}
              */
             source: "openalex" | "openaire";
             /** Authors */
             authors: string[];
+            /**
+             * Author Links
+             * @default []
+             */
+            author_links: components["schemas"]["CollaborationWorkAuthor"][];
+        };
+        /**
+         * CollaborationWorkAuthor
+         * @description An institution author on a joint work, linked when on the roster.
+         */
+        CollaborationWorkAuthor: {
+            /** Pure Uuid */
+            pure_uuid?: string | null;
+            /** Name */
+            name: string;
         };
         /** CollaborationWorksResponse */
         CollaborationWorksResponse: {
@@ -2175,6 +2490,36 @@ export interface components {
             year: number;
             /** Works */
             works: number;
+            /**
+             * Oa Gold
+             * @default 0
+             */
+            oa_gold: number;
+            /**
+             * Oa Diamond
+             * @default 0
+             */
+            oa_diamond: number;
+            /**
+             * Oa Hybrid
+             * @default 0
+             */
+            oa_hybrid: number;
+            /**
+             * Oa Green
+             * @default 0
+             */
+            oa_green: number;
+            /**
+             * Oa Bronze
+             * @default 0
+             */
+            oa_bronze: number;
+            /**
+             * Oa Closed
+             * @default 0
+             */
+            oa_closed: number;
         };
         /** CreateFeedbackIn */
         CreateFeedbackIn: {
@@ -3709,6 +4054,11 @@ export interface components {
              * @default []
              */
             deal_usage: components["schemas"]["DealUsageRow"][];
+            /**
+             * Top Partners
+             * @default []
+             */
+            top_partners: components["schemas"]["PartnerSummary"][];
             openalex_only: components["schemas"]["OpenalexOnly"];
             chapter_rollup: components["schemas"]["PartsRollup"];
         };
@@ -3793,6 +4143,26 @@ export interface components {
             ref_type?: ("journal" | "funder" | "author" | "orgunit" | "publisher") | null;
             /** Ref Id */
             ref_id?: string | null;
+        };
+        /**
+         * PartnerSummary
+         * @description Compact partner rollup shown on org-unit and author detail pages.
+         */
+        PartnerSummary: {
+            /** Ror */
+            ror: string;
+            /** Name */
+            name: string;
+            /** Org Type */
+            org_type?: string | null;
+            /** Country Code */
+            country_code?: string | null;
+            /** City */
+            city?: string | null;
+            /** Works */
+            works: number;
+            /** Oa Share */
+            oa_share?: number | null;
         };
         /**
          * PartsRollup
@@ -6568,29 +6938,44 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Result sort key */
-                sort?: "works" | "name" | "corresponding_works";
+                sort?: "works" | "name" | "corresponding_works" | "home_corresponding_works" | "oa_share";
                 /** @description Sort direction; default desc for counts, asc for name */
                 dir?: ("asc" | "desc") | null;
                 offset?: number;
                 limit?: number;
                 include_facets?: boolean;
+                include_credits?: boolean;
                 q?: string | null;
                 /** @description ROR organisation types (multi-select) */
                 type?: string[] | null;
                 /** @description ISO 3166-1 alpha-2 country codes (multi-select) */
                 country?: string[] | null;
                 level?: "faculty" | "group" | "institute";
-                /** @description Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit */
+                /** @description Org unit names at `level` (pipe-joined multi-select) */
                 faculty?: string[] | null;
                 /** @description Funder keys from the funder facet (pipe-joined) */
                 funder?: string[] | null;
                 /** @description Project keys from the project facet (pipe-joined) */
                 project?: string[] | null;
-                /** @description Payloads that supplied the partner links (pipe-joined) */
+                /** @description Payloads that supplied partner links (pipe-joined) */
                 source?: ("openalex" | "openaire")[] | null;
-                /** @description Publication-year range start (clamped to the institution's data window; default: 2020) */
+                /** @description Open access statuses (multi-select) */
+                oa_status?: string[] | null;
+                /** @description OpenAlex primary topics (pipe-joined) */
+                topic?: string[] | null;
+                /** @description Collaboration size: standard (<=20 partners, default), small (<=5 partners), or all (including mega-consortia) */
+                size?: "standard" | "small" | "all";
+                /** @description Roll up inactive successors and same-city sub-units into their canonical organisation (default: true) */
+                rollup?: boolean;
+                /** @description Corresponding-author lead filter: all, home, or partner */
+                lead?: "all" | "home" | "partner";
+                /** @description Minimum shared works per partner */
+                min_works?: number | null;
+                /** @description Filter to partners sharing OA deals with the home institution */
+                shares_deals?: boolean | null;
+                /** @description Publication-year range start (clamped to the institution's data window) */
                 year_from?: number | null;
-                /** @description Publication-year range end (clamped to the institution's data window; default: the end of the window) */
+                /** @description Publication-year range end (clamped to the institution's data window) */
                 year_to?: number | null;
             };
             header?: never;
@@ -6630,17 +7015,31 @@ export interface operations {
                 /** @description ISO 3166-1 alpha-2 country codes (multi-select) */
                 country?: string[] | null;
                 level?: "faculty" | "group" | "institute";
-                /** @description Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit */
+                /** @description Org unit names at `level` (pipe-joined multi-select) */
                 faculty?: string[] | null;
                 /** @description Funder keys from the funder facet (pipe-joined) */
                 funder?: string[] | null;
                 /** @description Project keys from the project facet (pipe-joined) */
                 project?: string[] | null;
-                /** @description Payloads that supplied the partner links (pipe-joined) */
+                /** @description Payloads that supplied partner links (pipe-joined) */
                 source?: ("openalex" | "openaire")[] | null;
-                /** @description Publication-year range start (clamped to the institution's data window; default: 2020) */
+                /** @description Open access statuses (multi-select) */
+                oa_status?: string[] | null;
+                /** @description OpenAlex primary topics (pipe-joined) */
+                topic?: string[] | null;
+                /** @description Collaboration size: standard (<=20 partners, default), small (<=5 partners), or all (including mega-consortia) */
+                size?: "standard" | "small" | "all";
+                /** @description Roll up inactive successors and same-city sub-units into their canonical organisation (default: true) */
+                rollup?: boolean;
+                /** @description Corresponding-author lead filter: all, home, or partner */
+                lead?: "all" | "home" | "partner";
+                /** @description Minimum shared works per partner */
+                min_works?: number | null;
+                /** @description Filter to partners sharing OA deals with the home institution */
+                shares_deals?: boolean | null;
+                /** @description Publication-year range start (clamped to the institution's data window) */
                 year_from?: number | null;
-                /** @description Publication-year range end (clamped to the institution's data window; default: the end of the window) */
+                /** @description Publication-year range end (clamped to the institution's data window) */
                 year_to?: number | null;
             };
             header?: never;
@@ -6680,17 +7079,31 @@ export interface operations {
                 /** @description ISO 3166-1 alpha-2 country codes (multi-select) */
                 country?: string[] | null;
                 level?: "faculty" | "group" | "institute";
-                /** @description Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit */
+                /** @description Org unit names at `level` (pipe-joined multi-select) */
                 faculty?: string[] | null;
                 /** @description Funder keys from the funder facet (pipe-joined) */
                 funder?: string[] | null;
                 /** @description Project keys from the project facet (pipe-joined) */
                 project?: string[] | null;
-                /** @description Payloads that supplied the partner links (pipe-joined) */
+                /** @description Payloads that supplied partner links (pipe-joined) */
                 source?: ("openalex" | "openaire")[] | null;
-                /** @description Publication-year range start (clamped to the institution's data window; default: 2020) */
+                /** @description Open access statuses (multi-select) */
+                oa_status?: string[] | null;
+                /** @description OpenAlex primary topics (pipe-joined) */
+                topic?: string[] | null;
+                /** @description Collaboration size: standard (<=20 partners, default), small (<=5 partners), or all (including mega-consortia) */
+                size?: "standard" | "small" | "all";
+                /** @description Roll up inactive successors and same-city sub-units into their canonical organisation (default: true) */
+                rollup?: boolean;
+                /** @description Corresponding-author lead filter: all, home, or partner */
+                lead?: "all" | "home" | "partner";
+                /** @description Minimum shared works per partner */
+                min_works?: number | null;
+                /** @description Filter to partners sharing OA deals with the home institution */
+                shares_deals?: boolean | null;
+                /** @description Publication-year range start (clamped to the institution's data window) */
                 year_from?: number | null;
-                /** @description Publication-year range end (clamped to the institution's data window; default: the end of the window) */
+                /** @description Publication-year range end (clamped to the institution's data window) */
                 year_to?: number | null;
             };
             header?: never;
@@ -6724,23 +7137,38 @@ export interface operations {
     collaboration_detail_api_v1__institution_code__collaborations__ror__get: {
         parameters: {
             query?: {
+                include_works?: boolean;
                 q?: string | null;
                 /** @description ROR organisation types (multi-select) */
                 type?: string[] | null;
                 /** @description ISO 3166-1 alpha-2 country codes (multi-select) */
                 country?: string[] | null;
                 level?: "faculty" | "group" | "institute";
-                /** @description Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit */
+                /** @description Org unit names at `level` (pipe-joined multi-select) */
                 faculty?: string[] | null;
                 /** @description Funder keys from the funder facet (pipe-joined) */
                 funder?: string[] | null;
                 /** @description Project keys from the project facet (pipe-joined) */
                 project?: string[] | null;
-                /** @description Payloads that supplied the partner links (pipe-joined) */
+                /** @description Payloads that supplied partner links (pipe-joined) */
                 source?: ("openalex" | "openaire")[] | null;
-                /** @description Publication-year range start (clamped to the institution's data window; default: 2020) */
+                /** @description Open access statuses (multi-select) */
+                oa_status?: string[] | null;
+                /** @description OpenAlex primary topics (pipe-joined) */
+                topic?: string[] | null;
+                /** @description Collaboration size: standard (<=20 partners, default), small (<=5 partners), or all (including mega-consortia) */
+                size?: "standard" | "small" | "all";
+                /** @description Roll up inactive successors and same-city sub-units into their canonical organisation (default: true) */
+                rollup?: boolean;
+                /** @description Corresponding-author lead filter: all, home, or partner */
+                lead?: "all" | "home" | "partner";
+                /** @description Minimum shared works per partner */
+                min_works?: number | null;
+                /** @description Filter to partners sharing OA deals with the home institution */
+                shares_deals?: boolean | null;
+                /** @description Publication-year range start (clamped to the institution's data window) */
                 year_from?: number | null;
-                /** @description Publication-year range end (clamped to the institution's data window; default: the end of the window) */
+                /** @description Publication-year range end (clamped to the institution's data window) */
                 year_to?: number | null;
             };
             header?: never;
@@ -6783,17 +7211,31 @@ export interface operations {
                 /** @description ISO 3166-1 alpha-2 country codes (multi-select) */
                 country?: string[] | null;
                 level?: "faculty" | "group" | "institute";
-                /** @description Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit */
+                /** @description Org unit names at `level` (pipe-joined multi-select) */
                 faculty?: string[] | null;
                 /** @description Funder keys from the funder facet (pipe-joined) */
                 funder?: string[] | null;
                 /** @description Project keys from the project facet (pipe-joined) */
                 project?: string[] | null;
-                /** @description Payloads that supplied the partner links (pipe-joined) */
+                /** @description Payloads that supplied partner links (pipe-joined) */
                 source?: ("openalex" | "openaire")[] | null;
-                /** @description Publication-year range start (clamped to the institution's data window; default: 2020) */
+                /** @description Open access statuses (multi-select) */
+                oa_status?: string[] | null;
+                /** @description OpenAlex primary topics (pipe-joined) */
+                topic?: string[] | null;
+                /** @description Collaboration size: standard (<=20 partners, default), small (<=5 partners), or all (including mega-consortia) */
+                size?: "standard" | "small" | "all";
+                /** @description Roll up inactive successors and same-city sub-units into their canonical organisation (default: true) */
+                rollup?: boolean;
+                /** @description Corresponding-author lead filter: all, home, or partner */
+                lead?: "all" | "home" | "partner";
+                /** @description Minimum shared works per partner */
+                min_works?: number | null;
+                /** @description Filter to partners sharing OA deals with the home institution */
+                shares_deals?: boolean | null;
+                /** @description Publication-year range start (clamped to the institution's data window) */
                 year_from?: number | null;
-                /** @description Publication-year range end (clamped to the institution's data window; default: the end of the window) */
+                /** @description Publication-year range end (clamped to the institution's data window) */
                 year_to?: number | null;
             };
             header?: never;
@@ -6834,17 +7276,31 @@ export interface operations {
                 /** @description ISO 3166-1 alpha-2 country codes (multi-select) */
                 country?: string[] | null;
                 level?: "faculty" | "group" | "institute";
-                /** @description Org unit names at `level` (pipe-joined multi-select); a work matches when one of its authors belongs to the unit */
+                /** @description Org unit names at `level` (pipe-joined multi-select) */
                 faculty?: string[] | null;
                 /** @description Funder keys from the funder facet (pipe-joined) */
                 funder?: string[] | null;
                 /** @description Project keys from the project facet (pipe-joined) */
                 project?: string[] | null;
-                /** @description Payloads that supplied the partner links (pipe-joined) */
+                /** @description Payloads that supplied partner links (pipe-joined) */
                 source?: ("openalex" | "openaire")[] | null;
-                /** @description Publication-year range start (clamped to the institution's data window; default: 2020) */
+                /** @description Open access statuses (multi-select) */
+                oa_status?: string[] | null;
+                /** @description OpenAlex primary topics (pipe-joined) */
+                topic?: string[] | null;
+                /** @description Collaboration size: standard (<=20 partners, default), small (<=5 partners), or all (including mega-consortia) */
+                size?: "standard" | "small" | "all";
+                /** @description Roll up inactive successors and same-city sub-units into their canonical organisation (default: true) */
+                rollup?: boolean;
+                /** @description Corresponding-author lead filter: all, home, or partner */
+                lead?: "all" | "home" | "partner";
+                /** @description Minimum shared works per partner */
+                min_works?: number | null;
+                /** @description Filter to partners sharing OA deals with the home institution */
+                shares_deals?: boolean | null;
+                /** @description Publication-year range start (clamped to the institution's data window) */
                 year_from?: number | null;
-                /** @description Publication-year range end (clamped to the institution's data window; default: the end of the window) */
+                /** @description Publication-year range end (clamped to the institution's data window) */
                 year_to?: number | null;
             };
             header?: never;

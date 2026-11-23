@@ -27,7 +27,7 @@ from sqlalchemy import (
     Text,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, _tstamp
@@ -57,7 +57,15 @@ class PartnerInstitution(Base):
     openalex_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     # The ROR record verbatim; null until the ROR harvest fetched this id.
     payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # Lowercased name + ROR aliases/acronyms + city + ror for search.
+    search_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Lowercased acronyms / short aliases for exact-acronym ranking.
+    acronyms: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
+    # Conservative roll-up target ROR (inactive successor or same-city sub-unit).
+    rollup_ror: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = _tstamp()
+
+    __table_args__ = (Index("ix_partner_institutions_rollup_ror", "rollup_ror"),)
 
 
 class WorkPartner(Base):
@@ -85,8 +93,14 @@ class WorkPartner(Base):
     corresponding: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
+    # At least one authorship at the home institution is a corresponding authorship.
+    home_corresponding: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     # Author positions at this partner on the work.
     authorships: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    # Total distinct partner RORs on this work (for mega-collaboration filtering).
+    partner_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
     updated_at: Mapped[datetime] = _tstamp()
 
     __table_args__ = (
@@ -100,6 +114,7 @@ class WorkPartner(Base):
             name="work_partners_source_check",
         ),
         Index("ix_work_partners_partner", "partner_ror", "institution_id"),
+        Index("ix_work_partners_inst_count", "institution_id", "partner_count"),
     )
 
 

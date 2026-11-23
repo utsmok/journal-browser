@@ -39,6 +39,7 @@ from ..models import (
 )
 from .common import get_active_institutions
 from .funders import normalize_ror
+from .partner_rollup import build_search_fields, refresh_partner_rollups
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +119,21 @@ def openalex_partners(
             partner["authorships"] += 1
             partner["corresponding"] = partner["corresponding"] or corresponding
     return partners, home_rors, without_ror, home_entries
+
+
+def openalex_home_corresponding(payload: dict[str, Any], home_id: str | None) -> bool:
+    """True when at least one authorship at the home institution (or its
+    OpenAlex lineage) carries is_corresponding=True."""
+    if home_id is None:
+        return False
+    for authorship in payload.get("authorships") or []:
+        if not authorship.get("is_corresponding"):
+            continue
+        for inst in authorship.get("institutions") or []:
+            lineage = {_bare(i) for i in inst.get("lineage") or []}
+            if home_id == _bare(inst.get("id")) or home_id in lineage:
+                return True
+    return False
 
 
 def openaire_partners(payload: dict[str, Any], home_rors: set[str]) -> dict[str, dict[str, Any]]:
@@ -210,10 +226,17 @@ async def _upsert_stubs(session: AsyncSession, stubs: dict[str, dict[str, Any]])
     """Stub rows for every partner the payloads named. A column that
     already holds a value (from ROR or an earlier run) keeps it."""
     table = cast("Any", PartnerInstitution.__table__)
-    rows = [
-        {"ror": ror, **{key: partner.get(key) for key in _STUB_COLS}}
-        for ror, partner in sorted(stubs.items())
-    ]
+    rows = []
+    for ror, partner in sorted(stubs.items()):
+        search_text, acronyms = build_search_fields(ror=ror, name=partner.get("name"))
+        rows.append(
+            {
+                "ror": ror,
+                **{key: partner.get(key) for key in _STUB_COLS},
+                "search_text": search_text,
+                "acronyms": acronyms or None,
+            }
+        )
     for at in range(0, len(rows), INSERT_CHUNK):
         chunk = rows[at : at + INSERT_CHUNK]
         stmt = pg_insert(table).values(chunk)
@@ -221,7 +244,10 @@ async def _upsert_stubs(session: AsyncSession, stubs: dict[str, dict[str, Any]])
             stmt.on_conflict_do_update(
                 index_elements=["ror"],
                 set_={
-                    **{col: func.coalesce(table.c[col], stmt.excluded[col]) for col in _STUB_COLS},
+                    **{
+                        col: func.coalesce(table.c[col], stmt.excluded[col])
+                        for col in (*_STUB_COLS, "search_text", "acronyms")
+                    },
                     "updated_at": text("now()"),
                 },
             )
@@ -277,9 +303,21 @@ async def _derive_institution(session: AsyncSession, institution: Institution) -
             if not partners:
                 continue
             covered.add(pure_uuid)
+            home_corr = openalex_home_corresponding(payload, home_id)
+            partner_count = len(partners)
             for ror, partner in partners.items():
                 stubs.setdefault(ror, partner)
-                rows.append(_row(institution.id, pure_uuid, ror, OPENALEX, partner))
+                rows.append(
+                    _row(
+                        institution.id,
+                        pure_uuid,
+                        ror,
+                        OPENALEX,
+                        partner,
+                        home_corresponding=home_corr,
+                        partner_count=partner_count,
+                    )
+                )
         await flush()
     await flush()
     stats["openalex_works_with_partner"] = len(covered)
@@ -296,14 +334,26 @@ async def _derive_institution(session: AsyncSession, institution: Institution) -
             if not partners:
                 continue
             rescued.add(pure_uuid)
+            partner_count = len(partners)
             for ror, partner in partners.items():
                 stubs.setdefault(ror, partner)
-                rows.append(_row(institution.id, pure_uuid, ror, OPENAIRE, partner))
+                rows.append(
+                    _row(
+                        institution.id,
+                        pure_uuid,
+                        ror,
+                        OPENAIRE,
+                        partner,
+                        home_corresponding=False,
+                        partner_count=partner_count,
+                    )
+                )
         await flush()
     await flush()
     stats["openaire_works_with_partner"] = len(rescued)
 
     await _upsert_stubs(session, stubs)
+    await refresh_partner_rollups(session)
     stats["partners"] = len(stubs)
     stats["works_without_partner"] = (
         stats["works"] - stats["openalex_works_with_partner"] - stats["openaire_works_with_partner"]
@@ -312,7 +362,14 @@ async def _derive_institution(session: AsyncSession, institution: Institution) -
 
 
 def _row(
-    institution_id: int, pure_uuid: str, ror: str, source: str, partner: dict[str, Any]
+    institution_id: int,
+    pure_uuid: str,
+    ror: str,
+    source: str,
+    partner: dict[str, Any],
+    *,
+    home_corresponding: bool = False,
+    partner_count: int = 1,
 ) -> dict[str, Any]:
     return {
         "institution_id": institution_id,
@@ -321,7 +378,9 @@ def _row(
         "source": source,
         "partner_openalex_id": partner.get("openalex_id"),
         "corresponding": partner["corresponding"],
+        "home_corresponding": home_corresponding,
         "authorships": partner["authorships"],
+        "partner_count": partner_count,
     }
 
 

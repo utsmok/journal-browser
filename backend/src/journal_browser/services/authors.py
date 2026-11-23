@@ -856,6 +856,9 @@ async def author_profile(
     openalex_section, openalex_only_count = await _openalex_only_section(
         session, institution, author, year_range
     )
+    from .collaborations import top_partners_for_author
+
+    top_partners = await top_partners_for_author(session, institution, author.pure_uuid, year_range)
 
     return {
         "author": {
@@ -914,6 +917,7 @@ async def author_profile(
             }
             for row in all_work_rows
         ],
+        "top_partners": top_partners,
         "openalex_only": openalex_section,
         "openalex_only_count": openalex_only_count,
     }

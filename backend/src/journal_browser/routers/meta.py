@@ -17,6 +17,7 @@ from ..models import (
     InstitutionWorksStats,
     Journal,
     Limitation,
+    PartnerInstitution,
     ScimagojrMetric,
 )
 from ..schemas import DegradedSource, FreshnessEntry, FreshnessResponse, LimitationOut
@@ -80,6 +81,7 @@ async def freshness(session: SessionDep, institution: InstitutionDep) -> Freshne
         ),
         "scimagojr_metrics": await table_ts(select(func.max(ScimagojrMetric.year))),
         "apc_evidence": await table_ts(select(func.max(ApcEvidence.period))),
+        "partner_institutions": await table_ts(select(func.max(PartnerInstitution.updated_at))),
     }
     return FreshnessResponse(
         institution=institution.name,

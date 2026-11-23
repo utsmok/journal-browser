@@ -42,6 +42,7 @@ from .cache import (
     swr_put,
     swr_schedule,
 )
+from .collaborations import top_partners_for_orgunit
 from .search import _oa_type
 from .works_query import (
     WORKS_STRATA,
@@ -901,5 +902,8 @@ async def _build_unit_bundle(
         "deal_usage": [
             {"label": r.label, "n_works": int(r.n_works), "euro": float(r.euro)} for r in usage_rows
         ],
+        "top_partners": await top_partners_for_orgunit(
+            session, institution, level, name, year_range
+        ),
     }
     return await cache_epoch(session), bundle

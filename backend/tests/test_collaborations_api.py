@@ -165,6 +165,8 @@ async def collab_api(client, db, institution_factory):
                 lng=6.9,
                 status="active",
                 openalex_id="I1",
+                search_text="alpha university | enschede | au | 01a2b3c04",
+                acronyms=["au"],
                 payload={
                     "names": [
                         {"value": "AU", "types": ["acronym"]},
@@ -185,7 +187,11 @@ async def collab_api(client, db, institution_factory):
                 },
             ),
             PartnerInstitution(
-                ror=P2, name="Beta Institute", org_type="nonprofit", country_code="DE"
+                ror=P2,
+                name="Beta Institute",
+                org_type="nonprofit",
+                country_code="DE",
+                search_text="beta institute | 02b3c4d05",
             ),
             PartnerInstitution(
                 ror=P3,
@@ -194,6 +200,7 @@ async def collab_api(client, db, institution_factory):
                 country_code="US",
                 lat=41.0,
                 lng=-74.0,
+                search_text="alpha college | 03c4d5e06",
             ),
         ]
     )
@@ -225,7 +232,7 @@ async def rors(client, **params) -> list[str]:
 
 @requires_db
 async def test_counts_are_works_not_links(client, collab_api):
-    body = await search(client)
+    body = await search(client, include_credits=True)
     assert (body["total_works"], body["works_with_partner"], body["total_partners"]) == (6, 4, 3)
     assert body["works_by_source"] == {"openalex": 3, "openaire": 2}
     assert (body["year_from"], body["year_to"]) == (2020, 2025)
@@ -245,6 +252,10 @@ async def test_counts_are_works_not_links(client, collab_api):
         ("openaire:p1", 1),
         ("openaire:p2", 1),
     ]
+    # Default list skips per-row credits for speed.
+    fast = await search(client)
+    assert fast["items"][0]["funders"] == []
+    assert fast["items"][0]["projects"] == []
     # P3 and P2 tie on works; the name breaks the tie.
     assert (p3["ror"], p2["ror"]) == (P3, P2)
     # P2's one joint work is w1, so it shares w1's funders.
@@ -307,6 +318,9 @@ async def test_filters_narrow_works_partners_and_links(client, collab_api):
     assert [i["works"] for i in body["items"]] == [1, 1]
 
     assert await rors(client, q="alpha") == [P1, P3]
+    # Exact acronym and city searches match ROR aliases and locations.
+    assert await rors(client, q="AU") == [P1]
+    assert await rors(client, q="Enschede") == [P1]
     assert await rors(client, q=P2) == [P2]
     assert await rors(client, country="de") == [P2]
     assert await rors(client, type="nonprofit") == [P2]
@@ -375,9 +389,11 @@ async def test_detail(client, collab_api):
         ("wikidata", "Q1"),
         ("homepage", "https://alpha.example"),
     ]
-    assert [(r["type"], r["ror"], r["label"]) for r in detail["relationships"]] == [
-        ("related", P2, "Beta Institute")
-    ]
+    assert [
+        (r["type"], r["ror"], r["label"], r["is_partner"]) for r in detail["relationships"]
+    ] == [("related", P2, "Beta Institute", True)]
+    assert [(u["name"], u["works"]) for u in detail["ut_faculties"]] == [("ET", 2), ("EWI", 1)]
+    assert [(a["pure_uuid"], a["works"]) for a in detail["ut_authors"]] == [("a1", 2), ("a2", 1)]
     assert [(t["value"], t["count"]) for t in detail["works_by_type"]] == [("article", 3)]
     assert [(y["year"], y["works"]) for y in detail["per_year"]] == [
         (2020, 1),
@@ -431,10 +447,12 @@ async def test_partner_works_and_the_csv_exports(client, collab_api):
     assert response.headers["content-type"].startswith("text/csv")
     lines = response.text.strip().splitlines()
     assert lines[0] == (
-        "ror,name,org_type,country_code,city,works,corresponding_works,authorships,share,sources,funders,projects"
+        "ror,name,org_type,country_code,city,works,home_corresponding_works,"
+        "corresponding_works,authorships,oa_works,closed_works,oa_share,"
+        "shares_deals,share,sources,funders,projects"
     )
     assert lines[1] == (
-        "01a2b3c04,Alpha University,education,NL,Enschede,3,1,4,0.5,openalex,"
+        "01a2b3c04,Alpha University,education,NL,Enschede,3,0,1,4,0,0,0.0,no,0.5,openalex,"
         "Alpha Foundation; Beta Fund; European Commission,A1; PROJ; NWO"
     )
     assert len(lines) == 4
@@ -442,7 +460,105 @@ async def test_partner_works_and_the_csv_exports(client, collab_api):
     response = await client.get(f"/api/v1/ut/collaborations/{P1}/works.csv")
     assert response.status_code == 200, response.text
     lines = response.text.strip().splitlines()
-    assert lines[0] == "pure_uuid,title,year,doi,work_type,corresponding,source,authors"
-    assert lines[1] == "w4,Work 4,2023,10.0/w4,article,no,openalex,"
-    assert lines[-1] == "w1,Work 1,2020,10.0/w1,article,yes,openalex,Test Author"
+    assert lines[0] == (
+        "pure_uuid,title,year,doi,work_type,journal,oa_status,deal_covered,"
+        "home_corresponding,corresponding,source,authors"
+    )
+    assert lines[1] == "w4,Work 4,2023,10.0/w4,article,,,no,no,no,openalex,"
+    assert lines[-1] == "w1,Work 1,2020,10.0/w1,article,,,no,no,yes,openalex,Test Author"
     assert len(lines) == 4
+
+
+@requires_db
+async def test_size_rollup_and_junk_project_filters(client, db, collab_api):
+    # Add a mega-collab work (partner_count=25) and a rolled-up child partner,
+    # plus a junk 'unidentified' OpenAIRE project and duplicate grant.
+    from sqlalchemy import select
+
+    ut = (await db.execute(select(Work.institution_id).limit(1))).scalar_one()
+    run_id = (await db.execute(select(Work.first_seen_run).limit(1))).scalar_one()
+    db.add(
+        Work(
+            institution_id=ut,
+            pure_uuid="w_mega",
+            title="Mega Consortium Paper",
+            norm_title="mega consortium paper",
+            year=2024,
+            doi_normalized="10.0/wmega",
+            work_type="info:eu-repo/semantics/article",
+            oa_status="hybrid",
+            first_seen_run=run_id,
+            last_seen_run=run_id,
+        )
+    )
+    db.add(
+        PartnerInstitution(
+            ror="09child01",
+            name="Alpha University Medical Wing",
+            org_type="facility",
+            country_code="NL",
+            city="Enschede",
+            parent_ror=P1,
+            rollup_ror=P1,
+            search_text="alpha university medical wing | enschede | 09child01",
+        )
+    )
+    db.add(
+        OpenaireWorkFacts(
+            institution_id=ut,
+            pure_uuid="w2",
+            source_pk="oai:w2",
+            projects=[
+                {"id": "p_junk", "funder": "DFG", "code": "unidentified"},
+                {"id": "p_dup", "funder": "NWO", "code": "B1", "acronym": "BETAPROJ"},
+            ],
+        )
+    )
+    await db.flush()
+    db.add_all(
+        [
+            WorkPartner(
+                institution_id=ut,
+                work_pure_uuid="w_mega",
+                partner_ror=P3,
+                source="openalex",
+                corresponding=False,
+                home_corresponding=True,
+                authorships=1,
+                partner_count=25,
+            ),
+            WorkPartner(
+                institution_id=ut,
+                work_pure_uuid="w5",
+                partner_ror="09child01",
+                source="openalex",
+                corresponding=False,
+                home_corresponding=True,
+                authorships=1,
+                partner_count=1,
+            ),
+        ]
+    )
+    await db.commit()
+
+    # Standard size (default <=20) excludes w_mega; rollup folds 09child01 into P1.
+    std = await search(client)
+    by_ror = {i["ror"]: i for i in std["items"]}
+    assert "09child01" not in by_ror
+    assert by_ror[P1]["works"] == 4  # w1, w2, w4 + rolled-up w5
+    assert by_ror[P1]["home_corresponding_works"] == 1
+    assert by_ror[P3]["works"] == 1  # w_mega excluded!
+
+    # Raw ROR mode keeps 09child01 separate; size=all brings back w_mega.
+    raw = await search(client, rollup="false", size="all")
+    by_ror_raw = {i["ror"]: i for i in raw["items"]}
+    assert by_ror_raw["09child01"]["works"] == 1
+    assert by_ror_raw[P1]["works"] == 3
+    assert by_ror_raw[P3]["works"] == 2
+
+    # Junk 'unidentified' project never appears; duplicate grant B1 merges.
+    proj_keys = {p["key"]: p for p in std["facets"]["project"]}
+    assert "openaire:p_junk" not in proj_keys
+    assert proj_keys["openalex:F2/B1"]["acronym"] == "BETAPROJ"
+    assert proj_keys["openalex:F2/B1"]["works"] == 2
+    assert sorted(proj_keys["openalex:F2/B1"]["sources"]) == ["openaire", "openalex"]

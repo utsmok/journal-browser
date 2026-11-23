@@ -37,6 +37,7 @@ from ..config import get_settings
 from ..models import PartnerInstitution
 from .common import paced_single_gets
 from .funders import normalize_ror
+from .partner_rollup import build_search_fields, refresh_partner_rollups
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,8 @@ _COLUMNS = (
     "parent_name",
     "status",
     "payload",
+    "search_text",
+    "acronyms",
 )
 
 
@@ -112,18 +115,23 @@ def ror_row(record: dict[str, Any], ror: str) -> dict[str, Any]:
         {},
     )
     types = record.get("types") or []
+    name = display_name(record.get("names") or [])
+    city = geo.get("city") or geo.get("name")
+    search_text, acronyms = build_search_fields(ror=ror, name=name, city=city, payload=record)
     return {
         "ror": ror,
-        "name": display_name(record.get("names") or []),
+        "name": name,
         "org_type": display_type(types),
         "country_code": geo.get("country_code"),
-        "city": geo.get("city") or geo.get("name"),
+        "city": city,
         "lat": geo.get("lat"),
         "lng": geo.get("lng"),
         "parent_ror": normalize_ror(parent.get("id")),
         "parent_name": parent.get("label"),
         "status": record.get("status"),
         "payload": record,
+        "search_text": search_text,
+        "acronyms": acronyms or None,
     }
 
 
@@ -213,6 +221,9 @@ async def harvest_ror(
                 stats["fetched"],
                 stats["not_found"],
             )
+    if stats["fetched"] > 0:
+        await refresh_partner_rollups(session)
+        await session.commit()
     logger.info("harvest_ror: %s", stats)
     return stats
 
@@ -229,9 +240,11 @@ async def _upsert(session: AsyncSession, rows: list[dict[str, Any]]) -> None:
                 **{
                     col: func.coalesce(stmt.excluded[col], table.c[col])
                     for col in _COLUMNS
-                    if col != "payload"
+                    if col not in ("payload", "search_text", "acronyms")
                 },
                 "payload": stmt.excluded.payload,
+                "search_text": stmt.excluded.search_text,
+                "acronyms": stmt.excluded.acronyms,
                 "updated_at": text("now()"),
             },
         )
@@ -298,6 +311,9 @@ async def load_ror_dump(session: AsyncSession, path: Path) -> dict[str, int]:
         await _upsert(session, rows)
         await session.commit()
         stats["loaded"] += len(rows)
+    if stats["loaded"] > 0:
+        await refresh_partner_rollups(session)
+        await session.commit()
     stats["not_in_dump"] = stats["partners"] - stats["loaded"]
     logger.info("load_ror_dump: %s", stats)
     return stats
