@@ -148,6 +148,16 @@
       "description": "Publications in journals that are currently part of each deal. Historical deal usage is not shown.",
       "caption": "Open access deals used by this unit"
     },
+    "partners": {
+      "title": "Top collaboration partners",
+      "description": "Most frequent external co-publishing organisations (standard collaborations, ≤20 partners per work, with sub-units rolled up).",
+      "caption": "Top external collaboration partners of this unit",
+      "colPartner": "Partner",
+      "colCountry": "Country",
+      "colWorks": "Shared works",
+      "colOa": "Open access",
+      "exploreAll": "Explore all partners for this unit"
+    },
     "bookChapters": "Book chapters",
     "bookChaptersIntro": "{chapters, plural, one {# chapter} other {# chapters}} across {books, plural, one {# book} other {# books}}.",
     "chapterCount": "{count, plural, one {# chapter} other {# chapters}}",

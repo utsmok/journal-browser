@@ -46,9 +46,14 @@ OpenAIRE names a project's funder in free text and gives no funder id, while Ope
 
 A resolved funder is one entry. It shows the OpenAlex name, lists both sources, and counts each work once, even when both sources credit it. An OpenAIRE name that neither rule resolves stays a separate entry marked as OpenAIRE. Projects stay one entry per source. The funder and project filters narrow the shared works to those carrying the selected credit, so opening a partner under a selected funder shows only the works that funder paid for.
 
-## Years
+## Years, collaboration size and entity roll-up
 
-Without a range in the year control at the top of the page, partners are counted from 2020 to the current year. The year control sets any other range.
+The Partners page follows the global year selector in the top bar (no separate default cutoff).
+
+- **Collaboration size (`size`):** Defaults to **Standard (≤20 partners per work)** so mega-consortia (such as Global Burden of Disease papers with hundreds of co-authoring institutions) do not inflate partner counts. Switch to **Small teams (≤5 partners)** or **All incl. mega-collabs** at any time.
+- **Entity roll-up (`rollup`):** Defaults to **on**. Conservatively combines inactive/withdrawn ROR records into their single active ROR successor, and folds same-city hospital locations or embedded university facilities (such as Amsterdam UMC site locations or the Donders Institute) into their parent organisation while keeping distinct universities and multi-institute research societies (such as UCL, ETH Zurich, or Max Planck institutes) separate. Toggle off for raw ROR rows.
+- **Search:** Matches partner display names, ROR acronyms and aliases (e.g. `TU Delft`, `UMCG`, `MST`, `WUR`), cities, and ROR identifiers.
+- **Project deduplication:** Filters out sentinel/placeholder codes (such as OpenAIRE `unidentified`) and merges OpenAlex awards and OpenAIRE projects sharing a resolved funder and grant code.
 
 ## Tables and jobs
 

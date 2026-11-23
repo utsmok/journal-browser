@@ -71,6 +71,8 @@ export const TABLE_GROUPS: TableGroup[] = [
       "pure_person_orgs",
       "pure_orgs",
       "pure_org_parents",
+      "partner_institutions",
+      "work_partners",
     ],
   },
   {
@@ -84,6 +86,7 @@ export const TABLE_GROUPS: TableGroup[] = [
       "openaire_funders",
       "openaire_funder_streams",
       "funder_links",
+      "funder_aliases",
       "jisc_funders",
       "jisc_funder_groups",
       "jisc_policies",

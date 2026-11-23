@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowRight } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -8,6 +9,7 @@ import * as React from "react";
 import { DealBadge, OaTypeBadge, QuartileBadge } from "@/components/badges";
 import { BackLink } from "@/components/back-link";
 import { CardPager } from "@/components/card-pager";
+import { orgTypeCssVar } from "@/components/collaborations/labels";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { GapEntryList } from "@/components/gap-entries";
 import { OaTrend } from "@/components/oa-trend";
@@ -233,7 +235,17 @@ function OrgUnitDetail({
 }) {
   const t = useTranslations("orgunits");
   const { year_from, year_to } = useYearRange();
-  const { unit, groups, journals, authors, works_by_year, deal_usage } = data;
+  const { unit, groups, journals, authors, works_by_year, deal_usage, top_partners } = data;
+  const regions = React.useMemo(() => new Intl.DisplayNames(["en"], { type: "region" }), []);
+  const regionName = (code: string | null | undefined) => {
+    if (!code) return "—";
+    try {
+      return regions.of(code.toUpperCase()) ?? code;
+    } catch {
+      return code;
+    }
+  };
+  const partnersQuery = `level=${encodeURIComponent(unit.level)}&faculty=${encodeURIComponent(unit.name)}`;
   const trendYears = works_by_year.filter(
     (s) =>
       (year_from === undefined || s.year >= year_from) &&
@@ -526,6 +538,70 @@ function OrgUnitDetail({
                         not "free": sibling surfaces gate on apc_n > 0. */}
                     <TableCell className="text-right tabular-nums">
                       {d.euro ? `${formatEur(d.euro)} €` : "—"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CollapsibleCard>
+        )}
+
+        {(top_partners?.length ?? 0) > 0 && (
+          <CollapsibleCard
+            id="collaboration-partners"
+            title={t("detail.partners.title")}
+            description={
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm text-[var(--muted-foreground)]">
+                  {t("detail.partners.description")}
+                </p>
+                <Link
+                  href={`/${inst}/collaborations?${partnersQuery}`}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-[var(--primary-text)] underline-offset-2 hover:underline"
+                >
+                  {t("detail.partners.exploreAll")}
+                  <ArrowRight aria-hidden className="size-3.5" />
+                </Link>
+              </div>
+            }
+            contentClassName="text-sm"
+          >
+            <Table>
+              <caption className="sr-only">{t("detail.partners.caption")}</caption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("detail.partners.colPartner")}</TableHead>
+                  <TableHead>{t("detail.partners.colCountry")}</TableHead>
+                  <TableHead className="text-right">{t("detail.partners.colWorks")}</TableHead>
+                  <TableHead className="text-right">{t("detail.partners.colOa")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(top_partners ?? []).map((p) => (
+                  <TableRow key={p.ror}>
+                    <TableCell className="font-medium">
+                      <span className="inline-flex items-center gap-2">
+                        <span
+                          aria-hidden
+                          className="inline-block size-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: orgTypeCssVar(p.org_type) }}
+                        />
+                        <Link
+                          href={`/${inst}/collaborations/${encodeURIComponent(p.ror)}?${partnersQuery}`}
+                          className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                        >
+                          {p.name}
+                        </Link>
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-[var(--muted-foreground)]">
+                      {regionName(p.country_code)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {p.works.toLocaleString("en")}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {p.oa_share != null ? `${Math.round(p.oa_share * 100)}%` : "—"}
                     </TableCell>
                   </TableRow>
                 ))}

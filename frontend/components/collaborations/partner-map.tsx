@@ -17,38 +17,32 @@ import type {
 
 import { useCollabLabels } from "@/components/collaborations/labels";
 import { Button } from "@/components/ui/button";
+import { useSiteMeta } from "@/hooks/use-site-meta";
 import type { CollaborationMapPoint } from "@/lib/api";
 
 const SOURCE = "partners";
 const HALO = "partner-halo";
 const CIRCLES = "partner-circles";
-/** OpenFreeMap's public instance serves both styles without a key or cookies
- * (openfreemap.org); its style files carry the map attribution. */
 const STYLE = {
   light: "https://tiles.openfreemap.org/styles/positron",
   dark: "https://tiles.openfreemap.org/styles/dark",
 } as const;
-/** MapLibre 6 loads its worker from a file of its own. The script
- * scripts/copy-maplibre-worker.mjs copies it into public/ before every
- * build and dev start. */
 const WORKER_URL = "/maplibre-gl-worker.mjs";
-/** The populated land masses; the poles stay out of view. */
 const WORLD: [[number, number], [number, number]] = [
   [-168, -57],
   [178, 71],
 ];
-/** Deepest zoom, and the deepest zoom that still groups partners. Grouping
- * up to the last zoom keeps partners that share one place (ROR often gives
- * a city's coordinates) as one group that lists them, never as circles
- * drawn on top of each other. */
+const EUROPE: [[number, number], [number, number]] = [
+  [-11, 35],
+  [32, 62],
+];
+const NETHERLANDS: [[number, number], [number, number]] = [
+  [3.2, 50.7],
+  [7.3, 53.6],
+];
 const MAX_ZOOM = 12;
-/** Partners closer than this many pixels form one group. */
 const CLUSTER_RADIUS = 46;
-/** Give up waiting for the tiles after this long; the retry starts a new
- * attempt, so a slow tile host costs a click and nothing else. */
 const LOAD_TIMEOUT_MS = 20_000;
-/** The organisation types with a colour of their own, in legend order;
- * every other value draws in the colour of "other". */
 const TYPES = [
   "education",
   "facility",
@@ -67,7 +61,17 @@ function orgType(value: string | null | undefined): OrgType {
   return (TYPES as readonly string[]).includes(value ?? "") ? (value as OrgType) : "other";
 }
 
-type PartnerProperties = { ror: string; name: string; works: number; org_type: OrgType };
+type PartnerProperties = {
+  ror: string;
+  name: string;
+  city: string;
+  country_code: string;
+  works: number;
+  corresponding_works: number;
+  home_corresponding_works: number;
+  oa_pct: number;
+  org_type: OrgType;
+};
 
 function partnerFeatures(points: CollaborationMapPoint[]) {
   return {
@@ -78,20 +82,22 @@ function partnerFeatures(points: CollaborationMapPoint[]) {
       properties: {
         ror: p.ror,
         name: p.name,
+        city: p.city ?? "",
+        country_code: p.country_code ?? "",
         works: p.works,
+        corresponding_works: p.corresponding_works,
+        home_corresponding_works: p.home_corresponding_works ?? 0,
+        oa_pct: p.oa_share != null ? Math.round(p.oa_share * 100) : -1,
         org_type: orgType(p.org_type),
       } satisfies PartnerProperties,
     })),
   };
 }
 
-/** Per group, the number of partners of each type: `n_<type>`. */
 const CLUSTER_PROPERTIES = Object.fromEntries(
   TYPES.map((type) => [`n_${type}`, ["+", ["case", ["==", ["get", "org_type"], type], 1, 0]]]),
 ) as Record<string, [unknown, unknown]>;
 
-/** Circle radius follows the logarithm of the shared works: a partner with
- * the most shared works draws at `max` px, one with a single work at `min` px. */
 function radiusExpression(
   points: CollaborationMapPoint[],
   min: number,
@@ -101,8 +107,6 @@ function radiusExpression(
   return ["interpolate", ["linear"], ["ln", ["get", "works"]], 0, min, top, max];
 }
 
-/** A CSS custom property as a color MapLibre accepts, whichever notation the
- * stylesheet uses for it. */
 function tokenColor(name: string): string {
   const ctx = document.createElement("canvas").getContext("2d");
   if (!ctx) return "#000000";
@@ -110,8 +114,6 @@ function tokenColor(name: string): string {
   return ctx.fillStyle;
 }
 
-/** Paint that follows the theme tokens; set at start and on every theme
- * switch. The group markers are DOM and follow the tokens by themselves. */
 function applyThemeColors(map: MapLibreMap) {
   if (!map.getLayer(CIRCLES)) return;
   const surface = tokenColor("--card");
@@ -125,8 +127,6 @@ function applyThemeColors(map: MapLibreMap) {
   map.setPaintProperty(CIRCLES, "circle-stroke-color", surface);
 }
 
-/** The partner source and its layers of the outgoing style, added to the
- * incoming one, so a style switch keeps the partners and their data. */
 function withPartners(
   previous: StyleSpecification | undefined,
   next: StyleSpecification,
@@ -171,8 +171,6 @@ function groupCounts(properties: Record<string, unknown>): [OrgType, number][] {
 
 const SVG = "http://www.w3.org/2000/svg";
 
-/** A group marker: a ring split by organisation type around the number of
- * partners. Its size climbs with that number. */
 function groupMarker(count: number, label: string, counts: [OrgType, number][]): HTMLDivElement {
   const size = count < 10 ? 30 : count < 50 ? 36 : count < 250 ? 44 : 52;
   const ring = size < 40 ? 5 : 7;
@@ -217,8 +215,6 @@ function groupMarker(count: number, label: string, counts: [OrgType, number][]):
     count >= 1000 ? `${(count / 1000).toFixed(count >= 10_000 ? 0 : 1)}k` : String(count);
   svg.append(text);
   button.append(svg);
-  // MapLibre positions the marker element by its transform, so the button
-  // that grows on hover sits inside a wrapper of its own.
   const wrapper = element("div", "");
   wrapper.append(button);
   return wrapper;
@@ -238,47 +234,65 @@ function countInView(points: CollaborationMapPoint[], bounds: LngLatBounds | nul
   return { total, byType };
 }
 
-/**
- * World map of the partners. Each partner is a circle in the colour of its
- * organisation type, sized by shared works. Partners close together on screen
- * form a group: a ring split by type around the number of partners. Selecting
- * a group zooms in, or lists its partners when they share one place. Below the
- * map a legend counts the partners in view per type. The map library loads in
- * the browser only; the partner table carries the same links for keyboard and
- * screen reader users, so a map that fails to load shows a sentence and
- * nothing else is lost.
- */
+function boundsForPoints(
+  points: CollaborationMapPoint[],
+): [[number, number], [number, number]] | null {
+  if (points.length === 0) return null;
+  let minLng = Infinity;
+  let maxLng = -Infinity;
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  for (const p of points) {
+    if (p.lng < minLng) minLng = p.lng;
+    if (p.lng > maxLng) maxLng = p.lng;
+    if (p.lat < minLat) minLat = p.lat;
+    if (p.lat > maxLat) maxLat = p.lat;
+  }
+  if (!Number.isFinite(minLng)) return null;
+  // Pad single-point or single-city selections so fitBounds zooms cleanly.
+  const padLng = maxLng - minLng < 0.05 ? 0.5 : 0;
+  const padLat = maxLat - minLat < 0.05 ? 0.5 : 0;
+  return [
+    [minLng - padLng, minLat - padLat],
+    [maxLng + padLng, maxLat + padLat],
+  ];
+}
+
 export function PartnerMap({
   points,
   description,
   failedText,
   retryText,
   onSelect,
+  activeTypes = [],
+  onToggleType,
+  autoFitKey,
 }: {
   points: CollaborationMapPoint[];
-  /** Screen reader description of what the map shows. */
   description: string;
   failedText: string;
   retryText: string;
   onSelect: (ror: string) => void;
+  activeTypes?: string[];
+  onToggleType?: (type: string) => void;
+  /** Changes whenever narrow geographic/search filters change so the map
+   * automatically fits the matching partners. */
+  autoFitKey?: string;
 }) {
   const t = useTranslations("collaborations");
   const labels = useCollabLabels();
+  const site = useSiteMeta();
   const format = useFormatter();
   const containerRef = React.useRef<HTMLDivElement>(null);
   const mapRef = React.useRef<MapLibreMap | null>(null);
   const pointsRef = React.useRef(points);
   const onSelectRef = React.useRef(onSelect);
-  // The texts the map's own popups use, kept current for its event handlers.
-  const textRef = React.useRef({ t, labels });
-  // Group markers by group id; a new data set makes new groups.
+  const textRef = React.useRef({ t, labels, instShort: site.short });
   const markersRef = React.useRef(new Map<number, MapLibreMarker>());
-  // The base style in use, set before the map starts and on every switch.
   const styleRef = React.useRef<string>(STYLE.light);
-  // The site theme, once known.
+  const lastFitKeyRef = React.useRef<string | undefined>(autoFitKey);
   const [dark, setDark] = React.useState<boolean | null>(null);
   const [failed, setFailed] = React.useState(false);
-  // Counts the retries of a map that did not load.
   const [attempt, setAttempt] = React.useState(0);
   const [inView, setInView] = React.useState<InView>(() => countInView(points, null));
 
@@ -286,8 +300,16 @@ export function PartnerMap({
     setInView(countInView(pointsRef.current, mapRef.current?.getBounds() ?? null));
   }, []);
 
-  /** The current partners into the loaded source. A style switch leaves a
-   * moment without one, which the next style.load event covers. */
+  const fitTo = React.useCallback((bounds: [[number, number], [number, number]], maxZoom = 10) => {
+    mapRef.current?.fitBounds(bounds, { padding: 40, maxZoom, duration: 500 });
+  }, []);
+
+  const fitResults = React.useCallback(() => {
+    const b = boundsForPoints(pointsRef.current);
+    if (b) fitTo(b, 10);
+    else fitTo(WORLD, 3);
+  }, [fitTo]);
+
   const applyPoints = React.useCallback(() => {
     updateInView();
     const map = mapRef.current;
@@ -304,12 +326,20 @@ export function PartnerMap({
   React.useEffect(() => {
     pointsRef.current = points;
     applyPoints();
-  }, [points, applyPoints]);
+    if (autoFitKey && autoFitKey !== lastFitKeyRef.current) {
+      lastFitKeyRef.current = autoFitKey;
+      const b = boundsForPoints(points);
+      if (b) fitTo(b, 10);
+    } else if (!autoFitKey && lastFitKeyRef.current) {
+      lastFitKeyRef.current = undefined;
+      fitTo(WORLD, 3);
+    }
+  }, [points, applyPoints, autoFitKey, fitTo]);
 
   React.useEffect(() => {
     onSelectRef.current = onSelect;
-    textRef.current = { t, labels };
-  }, [onSelect, t, labels]);
+    textRef.current = { t, labels, instShort: site.short };
+  }, [onSelect, t, labels, site.short]);
 
   React.useEffect(() => {
     const root = document.documentElement;
@@ -320,9 +350,6 @@ export function PartnerMap({
     return () => observer.disconnect();
   }, []);
 
-  // A theme change swaps the base style in place. The partners move along.
-  // A new style may carry its own center and zoom, so the viewport the user
-  // left is put back once the style has loaded.
   React.useEffect(() => {
     const map = mapRef.current;
     const style = dark ? STYLE.dark : STYLE.light;
@@ -350,18 +377,12 @@ export function PartnerMap({
     let disposed = false;
     let cleanup: (() => void) | undefined;
     let timer: number | undefined;
-    // The theme is read from the document here, not from state: the library
-    // below can finish loading after a theme toggle, and the map must start
-    // in the theme of that moment.
     styleRef.current = document.documentElement.classList.contains("dark")
       ? STYLE.dark
       : STYLE.light;
 
     (async () => {
       try {
-        // Dynamic import on purpose: maplibre-gl is a very large dependency
-        // that needs WebGL, so it stays out of every other route's bundle and
-        // of the server render; it loads only when a partner map is shown.
         const { Map, Marker, NavigationControl, Popup, setWorkerUrl } = await import("maplibre-gl");
         if (disposed) return;
         setWorkerUrl(WORKER_URL);
@@ -382,7 +403,7 @@ export function PartnerMap({
           closeButton: false,
           closeOnClick: false,
           offset: 16,
-          maxWidth: "18rem",
+          maxWidth: "20rem",
         });
         let list: MapLibrePopup | null = null;
         const source = () => map.getSource(SOURCE) as GeoJSONSource;
@@ -399,7 +420,6 @@ export function PartnerMap({
             clusterProperties: CLUSTER_PROPERTIES,
           });
           const partner: ExpressionSpecification = ["!", ["has", "point_count"]];
-          // A surface-colored ring separates touching circles from each other.
           map.addLayer({
             id: HALO,
             type: "circle",
@@ -428,8 +448,6 @@ export function PartnerMap({
           if (!map.getSource(SOURCE)) setFailed(true);
         }, LOAD_TIMEOUT_MS);
         map.on("moveend", updateInView);
-        // A group under the pointer can vanish while the map moves, and its
-        // card would stay behind.
         map.on("movestart", () => hover.remove());
 
         map.on("mouseenter", CIRCLES, () => {
@@ -442,17 +460,28 @@ export function PartnerMap({
         map.on("mousemove", CIRCLES, (event: MapLayerMouseEvent) => {
           const props = event.features?.[0]?.properties as PartnerProperties | undefined;
           if (!props) return;
-          const { t, labels } = textRef.current;
+          const { t, labels, instShort } = textRef.current;
+          const place = [props.city, props.country_code ? labels.region(props.country_code) : ""]
+            .filter(Boolean)
+            .join(", ");
           const type = element("p", "jb-map-type");
           type.append(swatch(props.org_type), labels.orgType(props.org_type));
-          const node = element("div", "space-y-0.5");
+          const statsParts = [t("map.point", { works: props.works })];
+          if (props.oa_pct >= 0) statsParts.push(t("map.oaPct", { pct: props.oa_pct }));
+          const node = element("div", "space-y-0.5 text-xs");
+          node.append(element("p", "font-semibold leading-snug text-sm", props.name));
+          if (place) node.append(element("p", "text-[var(--muted-foreground)]", place));
           node.append(
-            element("p", "font-semibold leading-snug", props.name),
             type,
+            element("p", "tabular-nums font-medium", statsParts.join(" · ")),
             element(
               "p",
               "tabular-nums text-[var(--muted-foreground)]",
-              t("map.point", { works: props.works }),
+              t("map.corrMeta", {
+                home: props.home_corresponding_works ?? 0,
+                inst: instShort,
+                partner: props.corresponding_works ?? 0,
+              }),
             ),
           );
           hover.setLngLat(event.lngLat).setDOMContent(node).addTo(map);
@@ -462,7 +491,7 @@ export function PartnerMap({
           if (typeof ror === "string") onSelectRef.current(ror);
         });
 
-        /** The partners of one group in a popup, most shared works first. */
+        /** City-stack popup with inline search when >8 partners share a place. */
         const openList = (leaves: PartnerProperties[], at: [number, number]) => {
           const { t, labels } = textRef.current;
           leaves.sort((a, b) => b.works - a.works || a.name.localeCompare(b.name));
@@ -471,25 +500,39 @@ export function PartnerMap({
             element("p", "jb-map-list-title", t("map.listTitle", { count: leaves.length })),
           );
           const items = element("ul", "jb-map-list-items");
-          for (const leaf of leaves) {
-            const item = element("li", "");
-            const button = element("button", "jb-map-list-item");
-            button.type = "button";
-            button.title = labels.orgType(leaf.org_type);
-            button.append(
-              swatch(leaf.org_type),
-              element("span", "jb-map-list-name", leaf.name),
-              element("span", "jb-map-list-works", t("map.works", { works: leaf.works })),
+          const renderRows = (query: string) => {
+            items.replaceChildren();
+            const q = query.trim().toLowerCase();
+            const matches = q ? leaves.filter((l) => l.name.toLowerCase().includes(q)) : leaves;
+            for (const leaf of matches) {
+              const item = element("li", "");
+              const button = element("button", "jb-map-list-item");
+              button.type = "button";
+              button.title = labels.orgType(leaf.org_type);
+              button.append(
+                swatch(leaf.org_type),
+                element("span", "jb-map-list-name", leaf.name),
+                element("span", "jb-map-list-works", t("map.works", { works: leaf.works })),
+              );
+              button.addEventListener("click", () => onSelectRef.current(leaf.ror));
+              item.append(button);
+              items.append(item);
+            }
+          };
+          if (leaves.length > 8) {
+            const input = element(
+              "input",
+              "mb-1.5 w-full rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-xs text-[var(--foreground)]",
             );
-            button.addEventListener("click", () => onSelectRef.current(leaf.ror));
-            item.append(button);
-            items.append(item);
+            input.type = "search";
+            input.placeholder = t("map.listFilterPlaceholder");
+            input.addEventListener("input", () => renderRows(input.value));
+            node.append(input);
           }
+          renderRows("");
           node.append(items);
           hover.remove();
           list?.remove();
-          // The group moves to the upper part of the map, so the list below
-          // it has room.
           map.easeTo({ center: at, offset: [0, -map.getContainer().clientHeight / 4] });
           list = new Popup({ offset: 22, maxWidth: "20rem", anchor: "top" })
             .setLngLat(at)
@@ -497,8 +540,6 @@ export function PartnerMap({
             .addTo(map);
         };
 
-        /** Zoom to the extent of a group's partners, or list them when they
-         * share one place or the map cannot zoom further. */
         const openGroup = async (id: number, count: number, at: [number, number]) => {
           try {
             const zoom = await source().getClusterExpansionZoom(id);
@@ -528,7 +569,6 @@ export function PartnerMap({
           }
         };
 
-        /** The breakdown of a group by type, for its hover card. */
         const groupCard = (count: number, counts: [OrgType, number][]) => {
           const { t, labels } = textRef.current;
           const node = element("div", "space-y-1");
@@ -547,7 +587,6 @@ export function PartnerMap({
           return node;
         };
 
-        /** One DOM marker per group on screen; groups change with the zoom. */
         let shown = new Set<number>();
         const syncGroups = () => {
           if (!map.getSource(SOURCE) || !map.isSourceLoaded(SOURCE)) return;
@@ -575,18 +614,14 @@ export function PartnerMap({
               marker = new Marker({ element: node }).setLngLat(at);
               markers.set(id, marker);
             }
-            // A new data set or style removes every marker; put it back.
             if (!marker.getElement().isConnected) marker.addTo(map);
           }
           for (const id of shown) if (!next.has(id)) markers.get(id)?.remove();
           shown = next;
         };
         map.on("render", syncGroups);
-        // The last render can come before the source has its groups ready;
-        // idle follows once everything has loaded.
         map.on("idle", syncGroups);
 
-        // The column can change width without a window resize.
         const observer = new ResizeObserver(() => map.resize());
         observer.observe(container);
         cleanup = () => {
@@ -611,6 +646,9 @@ export function PartnerMap({
     };
   }, [failed, attempt, updateInView]);
 
+  const presetBtn =
+    "rounded border border-[var(--border)] bg-[var(--card)]/95 px-2 py-1 text-xs font-medium text-[var(--foreground)] shadow-sm backdrop-blur-sm hover:border-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]";
+
   return (
     <>
       <p className="sr-only">{description}</p>
@@ -630,26 +668,63 @@ export function PartnerMap({
         </div>
       ) : (
         <>
-          <div ref={containerRef} className="jb-map h-[22rem] w-full sm:h-[26rem]" />
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs">
+          <div className="relative">
+            <div ref={containerRef} className="jb-map h-[22rem] w-full sm:h-[26rem]" />
+            <div className="pointer-events-auto absolute left-2.5 top-2.5 z-10 flex flex-wrap gap-1">
+              <button type="button" onClick={() => fitTo(WORLD, 3)} className={presetBtn}>
+                {t("map.presetWorld")}
+              </button>
+              <button type="button" onClick={() => fitTo(EUROPE, 5)} className={presetBtn}>
+                {t("map.presetEurope")}
+              </button>
+              <button type="button" onClick={() => fitTo(NETHERLANDS, 8)} className={presetBtn}>
+                {t("map.presetNl")}
+              </button>
+              {points.length > 0 && (
+                <button type="button" onClick={fitResults} className={presetBtn}>
+                  {t("map.presetFit")}
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs">
             <p className="font-semibold tabular-nums" aria-live="polite">
               {t("map.inView", { count: inView.total })}
             </p>
-            <ul
-              className="flex flex-wrap items-center gap-x-3 gap-y-1"
-              aria-label={t("map.legend")}
-            >
-              {TYPES.filter((type) => (inView.byType[type] ?? 0) > 0).map((type) => (
-                <li key={type} className="flex items-center gap-1.5 text-[var(--muted-foreground)]">
-                  <span
-                    aria-hidden
-                    className="inline-block size-2.5 rounded-full"
-                    style={{ backgroundColor: `var(--org-${type})` }}
-                  />
-                  <span className="text-[var(--foreground)]">{labels.orgType(type)}</span>
-                  <span className="tabular-nums">{format.number(inView.byType[type] ?? 0)}</span>
-                </li>
-              ))}
+            <ul className="flex flex-wrap items-center gap-1.5" aria-label={t("map.legend")}>
+              {TYPES.filter(
+                (type) => (inView.byType[type] ?? 0) > 0 || activeTypes.includes(type),
+              ).map((type) => {
+                const active = activeTypes.includes(type);
+                return (
+                  <li key={type}>
+                    <button
+                      type="button"
+                      disabled={!onToggleType}
+                      aria-pressed={active}
+                      title={t("map.legendHint")}
+                      onClick={() => onToggleType?.(type)}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${
+                        active
+                          ? "border-[var(--brand-tint-border)] bg-[var(--brand-tint-bg)] font-medium text-[var(--primary-text)]"
+                          : "border-transparent text-[var(--muted-foreground)] hover:border-[var(--border)] hover:text-[var(--foreground)]"
+                      }`}
+                    >
+                      <span
+                        aria-hidden
+                        className="inline-block size-2.5 rounded-full"
+                        style={{ backgroundColor: `var(--org-${type})` }}
+                      />
+                      <span className={active ? "" : "text-[var(--foreground)]"}>
+                        {labels.orgType(type)}
+                      </span>
+                      <span className="tabular-nums">
+                        {format.number(inView.byType[type] ?? 0)}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </>

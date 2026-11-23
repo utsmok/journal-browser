@@ -1,12 +1,91 @@
 "use client";
 
+import { ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
+import * as React from "react";
 
 import { OjbWordmark } from "@/components/logo";
 import { NavLink } from "@/components/nav-link";
 import { instFromSegment } from "@/lib/global-segments";
+import { cn } from "@/lib/utils";
+
+/** Dropdown menu for broad bibliometric / research-intelligence views
+ * (currently Collaboration partners, with room for future explorer modules). */
+function DataExplorerMenu({ prefix }: { prefix: string }) {
+  const t = useTranslations("common");
+  const pathname = usePathname() ?? "/";
+  const [open, setOpen] = React.useState(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  const partnersHref = `${prefix}/collaborations`;
+  const active = pathname.startsWith(partnersHref);
+
+  React.useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "inline-flex items-center gap-1 rounded-sm py-1.5 underline-offset-4 hover:text-white/80 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
+          active ? "font-semibold text-white underline" : "text-white/85",
+        )}
+      >
+        {t("nav.dataExplorer")}
+        <ChevronDown
+          aria-hidden
+          className={cn("size-3.5 transition-transform", open && "rotate-180")}
+        />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute left-0 top-full z-50 mt-1.5 w-64 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-1.5 text-[var(--card-foreground)] shadow-lg"
+        >
+          <Link
+            role="menuitem"
+            href={partnersHref}
+            onClick={() => setOpen(false)}
+            className={cn(
+              "block rounded-[calc(var(--radius)-2px)] px-3 py-2 text-left transition-colors hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
+              active && "bg-[var(--muted)]",
+            )}
+          >
+            <span className="block text-sm font-medium text-[var(--foreground)]">
+              {t("nav.dataExplorerPartners")}
+            </span>
+            <span className="block whitespace-normal text-xs text-[var(--muted-foreground)]">
+              {t("nav.dataExplorerPartnersDesc")}
+            </span>
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** Nav links scoped to the current institution segment; the "All
  * universities" link reaches the global landing chooser from any uni page.
@@ -20,8 +99,6 @@ export function SiteNav() {
   const inst = instFromSegment(seg);
   const prefix = inst && `/${inst}`;
   if (!prefix) {
-    // The chooser is the nav target itself; other global pages (such as
-    // /data-pipeline) keep one visible way back.
     if (pathname === "/") return null;
     return (
       <nav
@@ -46,8 +123,8 @@ export function SiteNav() {
         <NavLink href={`${prefix}/funders`} label={t("nav.funders")} />
         <NavLink href={`${prefix}/publisher`} label={t("nav.publishers")} />
         <NavLink href={`${prefix}/author`} label={t("nav.authors")} />
-        <NavLink href={`${prefix}/collaborations`} label={t("nav.collaborations")} />
         <NavLink href={`${prefix}/orgunit`} label={t("nav.faculties")} />
+        <DataExplorerMenu prefix={prefix} />
         <NavLink href={`${prefix}/about`} label={t("nav.about")} />
         <NavLink href="/" label={t("nav.allUniversities")} />
       </div>

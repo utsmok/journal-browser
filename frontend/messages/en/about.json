@@ -32,6 +32,7 @@
     "openapc": "APC price aggregates and per-article cost evidence.",
     "jiscOpf": "Policies for green open access, also called self-archiving. They say which article version a publisher allows to be archived where, and under which licence and embargo.",
     "scimago": "SJR indicator, best quartile, and SJR h-index.",
+    "ror": "Research Organization Registry (CC0): canonical names, aliases, organisation types, hierarchies, and map coordinates for collaboration partners.",
     "footnote": "Harvest jobs run when the library refreshes the data. Per-run status is listed below. The deal register is maintained by hand, so a re-ingest cannot overwrite reviewed deal information.",
     "statsWindow": "Publication statistics cover works published in {window} or later. The search lists journals with more than 3 publications in that window.",
     "statsWindowFallback": "the institution's data window"

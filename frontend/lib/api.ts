@@ -49,20 +49,31 @@ export type CollaborationMapResponse = Schemas["CollaborationMapResponse"];
 export type CollaborationDetailResponse = Schemas["CollaborationDetailResponse"];
 export type CollaborationWork = Schemas["CollaborationWork"];
 export type CollaborationWorksResponse = Schemas["CollaborationWorksResponse"];
+export type CollaborationTrendYear = Schemas["CollaborationTrendYear"];
+export type PartnerSummary = Schemas["PartnerSummary"];
 
 /** Multi-select filters. The API splits each of them on "|". */
 export const COLLAB_MULTI_KEYS = [
   "type",
   "country",
   "faculty",
+  "oa_status",
+  "topic",
   "funder",
   "project",
   "source",
 ] as const;
 export type CollabMultiKey = (typeof COLLAB_MULTI_KEYS)[number];
 
-export type CollaborationSort = "works" | "name" | "corresponding_works";
+export type CollaborationSort =
+  | "works"
+  | "name"
+  | "corresponding_works"
+  | "home_corresponding_works"
+  | "oa_share";
 export type CollaborationLevel = "faculty" | "group" | "institute";
+export type CollaborationSize = "standard" | "small" | "all";
+export type CollaborationLead = "all" | "home" | "partner";
 
 /** Filters shared by the partner list, map, detail and works endpoints. */
 export type CollaborationSearchParams = {
@@ -70,14 +81,16 @@ export type CollaborationSearchParams = {
   year_from?: number;
   year_to?: number;
   level?: CollaborationLevel;
+  size?: CollaborationSize;
+  rollup?: boolean;
+  lead?: CollaborationLead;
+  min_works?: number;
+  shares_deals?: boolean;
   sort?: CollaborationSort;
   dir?: "asc" | "desc";
 } & Partial<Record<CollabMultiKey, string[]>>;
 
 export const COLLAB_PAGE_SIZE = 25;
-
-/** Years of the partner pages when the header's year control is off. */
-export const COLLAB_DEFAULT_YEARS = { year_from: 2020, year_to: new Date().getFullYear() };
 
 function collabParams(p: CollaborationSearchParams): Record<string, string | undefined> {
   return {
@@ -85,11 +98,18 @@ function collabParams(p: CollaborationSearchParams): Record<string, string | und
     year_from: p.year_from === undefined ? undefined : String(p.year_from),
     year_to: p.year_to === undefined ? undefined : String(p.year_to),
     level: p.level,
+    size: p.size && p.size !== "standard" ? p.size : undefined,
+    rollup: p.rollup === false ? "false" : undefined,
+    lead: p.lead && p.lead !== "all" ? p.lead : undefined,
+    min_works: p.min_works && p.min_works > 1 ? String(p.min_works) : undefined,
+    shares_deals: p.shares_deals ? "true" : undefined,
     sort: p.sort,
     dir: p.dir,
     type: p.type?.join("|"),
     country: p.country?.join("|"),
     faculty: p.faculty?.join("|"),
+    oa_status: p.oa_status?.join("|"),
+    topic: p.topic?.join("|"),
     funder: p.funder?.join("|"),
     project: p.project?.join("|"),
     source: p.source?.join("|"),
@@ -101,6 +121,7 @@ export function fetchCollaborations(inst: string, p: CollaborationSearchParams, 
     ...collabParams(p),
     offset,
     limit: COLLAB_PAGE_SIZE,
+    include_credits: "false",
   });
 }
 
@@ -109,10 +130,10 @@ export function fetchCollaborationMap(inst: string, p: CollaborationSearchParams
 }
 
 export function fetchCollaboration(inst: string, ror: string, p: CollaborationSearchParams) {
-  return apiGet<CollaborationDetailResponse>(
-    `/${inst}/collaborations/${encodeURIComponent(ror)}`,
-    collabParams(p),
-  );
+  return apiGet<CollaborationDetailResponse>(`/${inst}/collaborations/${encodeURIComponent(ror)}`, {
+    ...collabParams(p),
+    include_works: "false",
+  });
 }
 
 export function fetchCollaborationWorks(

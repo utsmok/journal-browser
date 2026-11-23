@@ -25,6 +25,9 @@
     "publishers": "Publishers",
     "authors": "Authors",
     "collaborations": "Partners",
+    "dataExplorer": "Data explorer",
+    "dataExplorerPartners": "Collaboration partners",
+    "dataExplorerPartnersDesc": "Organisations we co-publish with",
     "faculties": "Faculties",
     "about": "About",
     "allUniversities": "All universities"
@@ -37,7 +40,7 @@
     "sourceLink": "Source code on GitHub",
     "dataPipelineLink": "Data pipeline",
     "docsLink": "Documentation",
-    "dataSources": "Data: OpenAlex, the cOAlition S Journal Checker Tool, openaccess.nl, OpenAPC, Scimago, and the Jisc Open Policy Finder. Links on every page lead to the upstream source."
+    "dataSources": "Data: OpenAlex, OpenAIRE, ROR, the cOAlition S Journal Checker Tool, openaccess.nl, OpenAPC, Scimago, and the Jisc Open Policy Finder. Links on every page lead to the upstream source."
   },
 
   "theme": {

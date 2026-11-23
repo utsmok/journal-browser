@@ -83,6 +83,12 @@ const SOURCES: SourceInfo[] = [
     roleKey: "scimago",
     table: "scimagojr_metrics",
   },
+  {
+    name: "ROR",
+    url: "https://ror.org",
+    roleKey: "ror",
+    table: "partner_institutions",
+  },
 ];
 
 /** Dates render with a fixed locale; unknown values fall back to the label

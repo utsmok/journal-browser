@@ -1,45 +1,108 @@
 {
   "title": "Collaboration partners",
   "titleTemplate": "%s · Partners",
-  "intro": "Organisations that {inst} published with, matched on organisation identifiers. Open a partner for the funders, projects and works you share.",
+  "intro": "Organisations that {inst} co-published with, matched on ROR identifiers. Filter by faculty, country, sector, topic, funder or open access status, and open any partner for full faculty, researcher, journal and publication breakdowns.",
   "years": {
-    "default": "Works published from {from} to {to}. Partners start in {from}. The year control at the top of the page sets another range.",
-    "selected": "Works published from {from} to {to}, as set in the year control at the top of the page."
+    "range": "Showing works published from {from} to {to} (controlled by the year selector in the top bar)."
   },
   "search": {
-    "placeholder": "Search partner names",
-    "aria": "Search partners by name",
+    "placeholder": "Search by name, acronym (e.g. TU Delft, UMCG, MST) or city",
+    "aria": "Search partners by name, acronym, alias or city",
     "clear": "Clear filters",
+    "clearAll": "Clear all filters",
     "retry": "Try again"
+  },
+  "modes": {
+    "sizeLabel": "Collaboration size",
+    "sizeStandard": "Standard (≤20 partners)",
+    "sizeStandardHint": "Excludes mega-consortia (>20 partner organisations per work) so strategic collaborations stand out.",
+    "sizeSmall": "Small teams (≤5)",
+    "sizeSmallHint": "Bilateral and small-team works with at most 5 partner organisations.",
+    "sizeAll": "All incl. mega-collabs",
+    "sizeAllHint": "Includes large multi-centre and global consortium publications.",
+    "rollupLabel": "Entity grouping",
+    "rollupOn": "Roll up sub-units",
+    "rollupOff": "Raw RORs",
+    "rollupHint": "Combines same-city hospital locations, embedded university institutes, and inactive ROR successors under one organisation while keeping distinct universities separate.",
+    "leadLabel": "Corresponding lead",
+    "leadAll": "Any lead",
+    "leadHome": "{inst} corresponding",
+    "leadPartner": "Partner corresponding",
+    "minWorksLabel": "Min. works",
+    "minWorksAny": "1+ works",
+    "minWorks5": "5+ works",
+    "minWorks20": "20+ works",
+    "sharesDeals": "Shares OA deals"
+  },
+  "overview": {
+    "partners": "Partners",
+    "partnersSub": "distinct organisations",
+    "collabWorks": "Collaborative works",
+    "collabShare": "{share}% of {total} {inst} works",
+    "international": "International works",
+    "internationalSub": "{share}% of collab works · {domestic} domestic",
+    "oaRate": "Open access share",
+    "oaSub": "{oa} open · {closed} closed",
+    "trendTitle": "Collaboration trend over time",
+    "trendModeGeo": "Domestic vs. international",
+    "trendModeOa": "Open access mix",
+    "domestic": "Domestic",
+    "internationalLabel": "International",
+    "totalWorks": "All {inst} works"
+  },
+  "activeFilters": {
+    "label": "Active filters",
+    "detailNotice": "This partner view is narrowed by filters from the partners overview.",
+    "showAll": "Show all {inst} works with this partner",
+    "search": "Search: {value}",
+    "size": "Size: {value}",
+    "rollupRaw": "Raw RORs (no roll-up)",
+    "lead": "Lead: {value}",
+    "minWorks": "At least {count} works",
+    "sharesDeals": "Shares OA deals",
+    "remove": "Remove filter {label}"
   },
   "facets": {
     "type": "Organisation type",
     "country": "Country",
+    "oaStatus": "Open access status",
+    "topic": "Research topic",
     "funder": "Funder",
-    "project": "Project",
-    "source": "Source",
-    "level": "Group the units by",
+    "project": "Project / grant",
+    "source": "Data source",
+    "level": "Unit level",
     "level_faculty": "Faculty",
-    "level_group": "Group",
-    "level_institute": "Institute"
+    "level_group": "Research group",
+    "level_institute": "Institute",
+    "filterPlaceholder": "Filter {label}…",
+    "showMore": "Show {count} more",
+    "showLess": "Show fewer"
   },
   "map": {
     "title": "Where the partners are",
     "description": "Map of the partner organisations. Each circle is one partner in the colour of its organisation type, and a larger circle marks more shared works. A numbered circle groups the partners of one area. The table below lists the same partners.",
     "point": "{works, plural, one {# shared work} other {# shared works}}",
     "works": "{works, plural, one {# work} other {# works}}",
+    "oaPct": "{pct}% OA",
+    "corrMeta": "{home} {inst}-led · {partner} partner-led",
     "group": "{count, plural, one {# partner} other {# partners}} in this area",
     "groupHint": "Select to zoom in, or to list partners that share one place.",
     "listTitle": "{count, plural, one {# partner} other {# partners}} at this place",
+    "listFilterPlaceholder": "Filter partners here…",
     "inView": "{count, plural, =0 {No partners in view} one {# partner in view} other {# partners in view}}",
-    "legend": "Partners in view per organisation type",
-    "caption": "Each circle is one partner, coloured by organisation type; larger circles mark more shared works. A numbered circle counts the partners of an area: select it to zoom in, or to list the partners that share one place. Select a partner to open it.",
+    "legend": "Partners in view per organisation type (select to filter)",
+    "legendHint": "Click a type to toggle filter",
+    "presetWorld": "World",
+    "presetEurope": "Europe",
+    "presetNl": "Netherlands",
+    "presetFit": "Fit results",
+    "caption": "Circle colour shows organisation type and size reflects shared works. Click a legend type to filter, or click a partner to open its profile.",
     "unmapped": "{count, plural, one {# partner has no coordinates and is not on the map.} other {# partners have no coordinates and are not on the map.}}",
     "failed": "The map did not load. The table below lists every partner."
   },
   "summary": {
     "line": "{partners, plural, one {One partner appears} other {# partners appear}} on {withPartner, plural, one {one} other {#}} of the {works} works that {inst} published from {from} to {to}.",
-    "bySource": "OpenAlex supplied the partner links for {openalex, plural, one {one work} other {# works}} and OpenAIRE for {openaire, plural, one {one work} other {# works}}."
+    "bySource": "OpenAlex supplied links for {openalex, plural, one {one work} other {# works}} and OpenAIRE for {openaire, plural, one {one work} other {# works}}."
   },
   "table": {
     "title": "Partners",
@@ -47,10 +110,14 @@
     "type": "Type",
     "country": "Country",
     "works": "Shared works",
-    "corresponding": "Corresponding author",
-    "authorships": "Author positions",
+    "oa": "Open access",
+    "homeCorr": "{inst} corr.",
+    "corresponding": "Partner corr.",
+    "authorships": "Partner authors",
     "sort": "Sort by {column}",
     "partOf": "Part of {name}",
+    "mergedSubunits": "Includes {count, plural, one {# sub-unit} other {# sub-units}}",
+    "sharesDeals": "Shared OA deals",
     "viaOpenaire": "Linked by OpenAIRE only",
     "empty": "No partner matches these filters."
   },
@@ -63,7 +130,7 @@
     "openaire": "OpenAIRE",
     "ror": "ROR"
   },
-  "methodology": "How partners are matched and counted",
+  "methodology": "How partners are matched, rolled up and counted",
   "types": {
     "education": "Education",
     "nonprofit": "Nonprofit",
@@ -75,6 +142,14 @@
     "funder": "Funder",
     "other": "Other",
     "unknown": "Not recorded"
+  },
+  "oaStatuses": {
+    "diamond": "Diamond OA",
+    "gold": "Gold OA",
+    "hybrid": "Hybrid OA",
+    "green": "Green OA",
+    "bronze": "Bronze OA",
+    "closed": "Closed"
   },
   "detail": {
     "back": "All partners",
@@ -89,7 +164,9 @@
       "aliases": "Also known as",
       "links": "Profiles",
       "relationships": "Related organisations",
-      "inactive": "Inactive in ROR"
+      "inactive": "Inactive in ROR",
+      "sharesDeals": "Shares national OA deals",
+      "viewInBrowser": "Partner profile"
     },
     "linkTypes": {
       "website": "Website",
@@ -108,10 +185,50 @@
       "successor": "Successor",
       "predecessor": "Predecessor"
     },
-    "stats": "{works, plural, one {# work names} other {# works name}} both organisations, published from {from} to {to}. On {corresponding} of them a corresponding author is affiliated with the partner. The partner's authors hold {authorships} positions on these works.",
-    "share": "{share}% of the works that {inst} published in these years name this partner.",
+    "kpi": {
+      "works": "Shared works",
+      "share": "{share}% of {inst} output ({from}–{to})",
+      "oa": "Open access",
+      "oaSub": "{oa} open · {closed} closed",
+      "lead": "Corresponding lead",
+      "leadSub": "{home} {inst} · {partner} partner",
+      "authorships": "Partner author positions",
+      "authorshipsSub": "across shared works"
+    },
+    "dealClosedAlert": "{count, plural, one {# shared work was} other {# shared works were}} published closed in a journal covered by a {inst} OA deal. When an external co-author is corresponding author, Dutch deals do not apply — these works are strong candidates for repository deposit (Taverne / Green OA).",
+    "merged": {
+      "title": "Included sub-units & former records",
+      "description": "Entity roll-up combines these same-city sub-units or inactive ROR predecessors into this partner's totals. Open any entry to view its raw ROR record on its own.",
+      "works": "{count, plural, one {# work} other {# works}}"
+    },
+    "trend": {
+      "title": "Output & open access over time",
+      "byType": "Shared works by type"
+    },
+    "utCollab": {
+      "title": "Who at {inst} collaborates with {partner}",
+      "faculties": "Faculties",
+      "groups": "Research groups",
+      "authors": "Key researchers",
+      "empty": "No linked {inst} unit or author records found for these works."
+    },
+    "journals": {
+      "title": "Top shared journals & topics",
+      "topicsHeading": "Main research topics",
+      "colJournal": "Journal",
+      "colWorks": "Shared works",
+      "colClosed": "Closed",
+      "colAccess": "Access",
+      "colQuartile": "Q",
+      "colDeal": "Deal",
+      "empty": "No journal-matched shared works in this selection."
+    },
+    "credits": {
+      "title": "Funders & projects",
+      "viewFunder": "Policy"
+    },
     "funders": "Funders of the shared works",
-    "projects": "Projects linked to the shared works",
+    "projects": "Projects & grants linked to the shared works",
     "noFunders": "None of the shared works lists a funder.",
     "noProjects": "None of the shared works lists a project.",
     "byType": "Shared works by type",
@@ -120,11 +237,17 @@
       "title": "Shared works",
       "work": "Title",
       "year": "Year",
+      "journal": "Journal",
+      "oa": "OA",
       "type": "Type",
-      "authors": "Authors",
+      "authors": "{inst} authors",
+      "lead": "Lead",
+      "leadHome": "{inst}",
+      "leadPartner": "Partner",
+      "leadBoth": "Both",
       "corresponding": "Corresponding author",
       "correspondingYes": "Yes",
-      "source": "Partner link from",
+      "source": "Source",
       "moreAuthors": "and {count} more"
     }
   }

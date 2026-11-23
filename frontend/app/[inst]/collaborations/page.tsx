@@ -1,16 +1,21 @@
 "use client";
 
-import { X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 
+import { ActiveFiltersBar } from "@/components/collaborations/active-filters";
 import { CollaborationFacets } from "@/components/collaborations/facets";
+import { CollaborationOverview } from "@/components/collaborations/overview-strip";
 import { Pager } from "@/components/collaborations/pager";
 import { PartnerTable, readSorting } from "@/components/collaborations/partner-list";
 import { CollaborationSources } from "@/components/collaborations/sources";
-import { useCollabParams, writeCollabParams } from "@/components/collaborations/use-collab-params";
+import {
+  EMPTY_COLLAB_FILTERS,
+  useCollabParams,
+  writeCollabParams,
+} from "@/components/collaborations/use-collab-params";
 import { GapCsvButton } from "@/components/gap-csv-button";
 import { ListSkeletonRows } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -22,15 +27,13 @@ import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { useYearRange } from "@/hooks/use-year-filter";
 import {
-  COLLAB_DEFAULT_YEARS,
-  COLLAB_MULTI_KEYS,
   COLLAB_PAGE_SIZE,
   collaborationCsvHref,
   errorMessage,
+  type CollaborationLead,
+  type CollaborationSize,
 } from "@/lib/api";
 
-/** The map and its library load in the browser only; the spacer keeps the
- * page from jumping while they arrive. */
 const PartnerMap = dynamic(
   () => import("@/components/collaborations/partner-map").then((m) => m.PartnerMap),
   {
@@ -38,6 +41,9 @@ const PartnerMap = dynamic(
     loading: () => <div aria-hidden className="h-[22rem] sm:h-[26rem]" />,
   },
 );
+
+const selectClass =
+  "h-8 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 text-xs text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]";
 
 function PartnersPageInner() {
   const t = useTranslations("collaborations");
@@ -48,21 +54,26 @@ function PartnersPageInner() {
   const { year_from, year_to } = useYearRange();
   const [filters, update] = useCollabParams();
 
-  // The name search stays in page state, as it does in the other directories.
-  const [input, setInput] = React.useState("");
-  const q = useDebounced(input.trim(), 250);
+  // Keep search input synced with URL `q` so refresh & Back nav preserve it.
+  const [input, setInput] = React.useState(filters.q ?? "");
+  React.useEffect(() => {
+    setInput(filters.q ?? "");
+  }, [filters.q]);
+  const debouncedInput = useDebounced(input.trim(), 250);
+  React.useEffect(() => {
+    if (debouncedInput !== (filters.q ?? "")) {
+      update({ q: debouncedInput || undefined });
+    }
+  }, [debouncedInput, filters.q, update]);
+
   const [offset, setOffset] = React.useState(0);
 
-  // Without a range in the header's year control, partners start in 2020.
+  // Respect the global year header directly (no hidden 2020 override).
   const params = React.useMemo(
-    () =>
-      year_from === undefined
-        ? { ...filters, ...COLLAB_DEFAULT_YEARS, q: q || undefined }
-        : { ...filters, year_from, year_to, q: q || undefined },
-    [filters, year_from, year_to, q],
+    () => ({ ...filters, year_from, year_to }),
+    [filters, year_from, year_to],
   );
 
-  // A new filter set starts at the first page.
   React.useEffect(() => {
     setOffset(0);
   }, [params]);
@@ -71,48 +82,45 @@ function PartnersPageInner() {
   const map = useCollaborationMap(params);
   const sorting = readSorting(filters);
 
-  const from = params.year_from ?? COLLAB_DEFAULT_YEARS.year_from;
-  const to = params.year_to ?? COLLAB_DEFAULT_YEARS.year_to;
+  const from = list.data?.year_from ?? year_from ?? site.windowStart ?? 2010;
+  const to = list.data?.year_to ?? year_to ?? new Date().getFullYear();
   const listQuery = writeCollabParams(filters);
   const query = listQuery ? `?${listQuery}` : "";
-  const filtered =
-    input !== "" ||
-    filters.level !== undefined ||
-    COLLAB_MULTI_KEYS.some((key) => filters[key]?.length);
   const shown = list.data?.items.length ?? 0;
   const total = list.data?.total_partners ?? 0;
 
-  const search = (
-    <div className="space-y-2">
-      <Input
-        type="search"
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        placeholder={t("search.placeholder")}
-        aria-label={t("search.aria")}
-      />
-      {filtered && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="-ml-3"
-          onClick={() => {
-            setInput("");
-            update({
-              type: undefined,
-              country: undefined,
-              faculty: undefined,
-              funder: undefined,
-              project: undefined,
-              source: undefined,
-              level: undefined,
-            });
-          }}
-        >
-          <X aria-hidden className="size-3.5" /> {t("search.clear")}
-        </Button>
-      )}
-    </div>
+  // Auto-fit map when country or search filters narrow the geographic footprint.
+  const autoFitKey = React.useMemo(() => {
+    const parts = [
+      filters.q ?? "",
+      (filters.country ?? []).join(","),
+      (filters.faculty ?? []).join(","),
+    ].filter(Boolean);
+    return parts.length ? parts.join("|") : undefined;
+  }, [filters.q, filters.country, filters.faculty]);
+
+  const toggleMapType = React.useCallback(
+    (typeValue: string) => {
+      const next = new Set(filters.type ?? []);
+      if (!next.delete(typeValue)) next.add(typeValue);
+      update({ type: next.size ? [...next] : undefined });
+    },
+    [filters.type, update],
+  );
+
+  const size: CollaborationSize = filters.size ?? "standard";
+  const rollup = filters.rollup !== false;
+  const lead: CollaborationLead = filters.lead ?? "all";
+  const minWorks = filters.min_works ?? 1;
+
+  const searchBox = (
+    <Input
+      type="search"
+      value={input}
+      onChange={(e) => setInput(e.target.value)}
+      placeholder={t("search.placeholder")}
+      aria-label={t("search.aria")}
+    />
   );
 
   return (
@@ -123,16 +131,117 @@ function PartnersPageInner() {
           <p className="mt-1 max-w-prose text-sm text-[var(--muted-foreground)]">
             {t("intro", { inst: site.short })}
           </p>
-          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            {t(year_from === undefined ? "years.default" : "years.selected", { from, to })}
+          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+            {t("years.range", { from: String(from), to: String(to) })}
           </p>
         </div>
         <GapCsvButton href={collaborationCsvHref(inst, params)} />
       </header>
 
-      {/* Stacked filters: the only filter UI below 960px. */}
-      <section className="mt-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
-        {search}
+      {/* Analytical mode bar: mega-collab size, conservative roll-up, lead, min works, deals */}
+      <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2.5 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-3.5 py-2.5 text-xs">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="font-medium text-[var(--muted-foreground)]">{t("modes.sizeLabel")}</span>
+          <div
+            role="group"
+            aria-label={t("modes.sizeLabel")}
+            className="flex overflow-hidden rounded-[var(--radius)] border border-[var(--input)]"
+          >
+            {(
+              [
+                {
+                  value: "standard",
+                  label: t("modes.sizeStandard"),
+                  title: t("modes.sizeStandardHint"),
+                },
+                { value: "small", label: t("modes.sizeSmall"), title: t("modes.sizeSmallHint") },
+                { value: "all", label: t("modes.sizeAll"), title: t("modes.sizeAllHint") },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                aria-pressed={size === opt.value}
+                title={opt.title}
+                onClick={() => update({ size: opt.value === "standard" ? undefined : opt.value })}
+                className={`px-2.5 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${
+                  size === opt.value
+                    ? "bg-[var(--secondary)] font-medium text-[var(--secondary-foreground)]"
+                    : "bg-[var(--card)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <label
+          className="inline-flex cursor-pointer items-center gap-1.5 select-none"
+          title={t("modes.rollupHint")}
+        >
+          <input
+            type="checkbox"
+            checked={rollup}
+            onChange={(e) => update({ rollup: e.target.checked ? undefined : false })}
+            className="size-3.5 accent-[var(--primary)]"
+          />
+          <span className="font-medium text-[var(--foreground)]">{t("modes.rollupOn")}</span>
+        </label>
+
+        <div className="flex items-center gap-1.5">
+          <label htmlFor="collab-lead" className="text-[var(--muted-foreground)]">
+            {t("modes.leadLabel")}
+          </label>
+          <select
+            id="collab-lead"
+            value={lead}
+            onChange={(e) =>
+              update({
+                lead: e.target.value === "all" ? undefined : (e.target.value as CollaborationLead),
+              })
+            }
+            className={selectClass}
+          >
+            <option value="all">{t("modes.leadAll")}</option>
+            <option value="home">{t("modes.leadHome", { inst: site.short })}</option>
+            <option value="partner">{t("modes.leadPartner")}</option>
+          </select>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <label htmlFor="collab-min-works" className="text-[var(--muted-foreground)]">
+            {t("modes.minWorksLabel")}
+          </label>
+          <select
+            id="collab-min-works"
+            value={String(minWorks)}
+            onChange={(e) => {
+              const v = Number.parseInt(e.target.value, 10);
+              update({ min_works: v > 1 ? v : undefined });
+            }}
+            className={selectClass}
+          >
+            <option value="1">{t("modes.minWorksAny")}</option>
+            <option value="5">{t("modes.minWorks5")}</option>
+            <option value="20">{t("modes.minWorks20")}</option>
+          </select>
+        </div>
+
+        <label className="inline-flex cursor-pointer items-center gap-1.5 select-none">
+          <input
+            type="checkbox"
+            checked={Boolean(filters.shares_deals)}
+            onChange={(e) => update({ shares_deals: e.target.checked ? true : undefined })}
+            className="size-3.5 accent-[var(--primary)]"
+          />
+          <span className="text-[var(--foreground)]">{t("modes.sharesDeals")}</span>
+        </label>
+      </div>
+
+      {/* Stacked filters on smaller viewports */}
+      <section className="mt-5 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
+        {searchBox}
         <div className="mt-4">
           <CollaborationFacets
             params={filters}
@@ -145,9 +254,8 @@ function PartnersPageInner() {
       </section>
 
       <div className="mt-6 flex flex-col gap-6 min-[960px]:flex-row min-[960px]:items-start">
-        {/* Wide-screen sidebar: sticky, scrolls on its own when long. */}
         <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] w-72 shrink-0 overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:block">
-          {search}
+          {searchBox}
           <div className="mt-4">
             <CollaborationFacets
               params={filters}
@@ -159,7 +267,19 @@ function PartnersPageInner() {
           </div>
         </aside>
 
-        <div className="min-w-0 flex-1 space-y-8">
+        <div className="min-w-0 flex-1 space-y-6">
+          <ActiveFiltersBar
+            params={filters}
+            facets={list.data?.facets}
+            onChange={update}
+            onResetAll={() => {
+              setInput("");
+              update(EMPTY_COLLAB_FILTERS);
+            }}
+          />
+
+          {list.data && <CollaborationOverview data={list.data} />}
+
           <section aria-labelledby="partners-map-title">
             <h2 id="partners-map-title" className="text-base font-semibold">
               {t("map.title")}
@@ -178,13 +298,16 @@ function PartnersPageInner() {
                   description={t("map.description")}
                   failedText={t("map.failed")}
                   retryText={t("search.retry")}
+                  activeTypes={filters.type ?? []}
+                  onToggleType={toggleMapType}
+                  autoFitKey={autoFitKey}
                   onSelect={(ror) =>
                     router.push(`/${inst}/collaborations/${encodeURIComponent(ror)}${query}`)
                   }
                 />
               )}
             </div>
-            <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+            <p className="mt-2 text-xs text-[var(--muted-foreground)]">
               {t("map.caption")}{" "}
               {(map.data?.unmapped ?? 0) > 0 &&
                 t("map.unmapped", { count: map.data?.unmapped ?? 0 })}
@@ -192,30 +315,19 @@ function PartnersPageInner() {
           </section>
 
           <section aria-labelledby="partners-table-title">
-            <h2 id="partners-table-title" className="text-base font-semibold">
-              {t("table.title")}
-            </h2>
-            {/* Counts of the whole filter set, not only of the page shown. */}
-            {list.data && (
-              <div className="mt-2 text-sm">
-                <p>
-                  {t("summary.line", {
-                    partners: list.data.total_partners,
-                    withPartner: list.data.works_with_partner,
-                    works: list.data.total_works.toLocaleString("en"),
-                    inst: site.short,
-                    from,
-                    to,
-                  })}
-                </p>
-                <p className="mt-1 text-[var(--muted-foreground)]">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 id="partners-table-title" className="text-base font-semibold">
+                {t("table.title")}
+              </h2>
+              {list.data && (
+                <p className="text-xs text-[var(--muted-foreground)]">
                   {t("summary.bySource", {
                     openalex: list.data.works_by_source.openalex ?? 0,
                     openaire: list.data.works_by_source.openaire ?? 0,
                   })}
                 </p>
-              </div>
-            )}
+              )}
+            </div>
             <div className="mt-3">
               {list.isPending && <ListSkeletonRows rows={8} />}
               {list.isError && (
@@ -266,7 +378,6 @@ function PartnersPageInner() {
   );
 }
 
-/** useSearchParams needs a Suspense boundary during prerender. */
 export default function CollaborationsPage() {
   return (
     <React.Suspense fallback={null}>

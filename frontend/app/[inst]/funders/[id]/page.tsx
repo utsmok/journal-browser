@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ExternalLink } from "lucide-react";
+import { ArrowRight, Check, ExternalLink } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -317,6 +317,15 @@ export default function FunderPage() {
                 </Button>
               );
             })()}
+            {data.openalex_funder_id && (
+              <Link
+                href={`/${inst}/collaborations?funder=${encodeURIComponent(`openalex:${data.openalex_funder_id.replace(/^https?:\/\/openalex\.org\//, "")}`)}`}
+                className="inline-flex h-8 items-center gap-1 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-3 text-xs font-medium hover:border-[var(--primary)] hover:text-[var(--primary-text)]"
+              >
+                {t("detail.explorePartners")}
+                <ArrowRight aria-hidden className="size-3.5" />
+              </Link>
+            )}
           </div>
 
           {data.top_journals.length > 0 && (

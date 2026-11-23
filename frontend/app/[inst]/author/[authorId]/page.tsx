@@ -9,6 +9,7 @@ import * as React from "react";
 
 import { DealBadge, OaStatusChip, OaTypeBadge } from "@/components/badges";
 import { CardPager } from "@/components/card-pager";
+import { orgTypeCssVar } from "@/components/collaborations/labels";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import {
   doiHref,
@@ -211,7 +212,17 @@ export default function AuthorPage() {
     );
   if (isError || !data) return <ErrorPanel message={errorMessage(tc, error)} backHref={backHref} />;
 
-  const { author, oa_by_year, journals, topics, similar, alternatives, works } = data;
+  const { author, oa_by_year, journals, topics, similar, alternatives, works, top_partners } = data;
+  const partners = top_partners ?? [];
+  const regions = new Intl.DisplayNames(["en"], { type: "region" });
+  const regionName = (code: string | null | undefined) => {
+    if (!code) return "—";
+    try {
+      return regions.of(code.toUpperCase()) ?? code;
+    } catch {
+      return code;
+    }
+  };
   const journalPages = Math.max(1, Math.ceil(journals.length / PAGE_SIZE));
   const workPages = Math.max(1, Math.ceil(works.length / PAGE_SIZE));
   const journalRows = journals.slice((journalPage - 1) * PAGE_SIZE, journalPage * PAGE_SIZE);
@@ -231,6 +242,7 @@ export default function AuthorPage() {
     ...(trendStats.length > 0 ? [{ id: "oa-over-time", label: t("sections.oaOverTime") }] : []),
     ...(journals.length > 0 ? [{ id: "journals", label: t("sections.journals") }] : []),
     ...(topics.length > 0 ? [{ id: "topics", label: t("sections.topics") }] : []),
+    ...(partners.length > 0 ? [{ id: "partners", label: t("sections.partners") }] : []),
     ...(hasSimilar ? [{ id: "next", label: t("sections.publishNext") }] : []),
     ...(alternatives.length > 0 ? [{ id: "alternatives", label: t("sections.alternatives") }] : []),
     ...(works.length > 0 ? [{ id: "publications", label: t("sections.publications") }] : []),
@@ -399,6 +411,56 @@ export default function AuthorPage() {
                     : t("detail.showMore", { count: topics.length - TOPICS_LIMIT })}
                 </button>
               )}
+            </CollapsibleCard>
+          )}
+
+          {partners.length > 0 && (
+            <CollapsibleCard
+              id="partners"
+              title={t("sections.partners")}
+              contentClassName="text-sm"
+            >
+              <Table>
+                <caption className="sr-only">{t("tables.partnersCaption")}</caption>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("tables.colPartner")}</TableHead>
+                    <TableHead>{t("tables.colCountry")}</TableHead>
+                    <TableHead className="text-right">{t("tables.colWorks")}</TableHead>
+                    <TableHead className="text-right">{t("tables.colOa")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {partners.map((p) => (
+                    <TableRow key={p.ror}>
+                      <TableCell className="font-medium">
+                        <span className="inline-flex items-center gap-2">
+                          <span
+                            aria-hidden
+                            className="inline-block size-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: orgTypeCssVar(p.org_type) }}
+                          />
+                          <Link
+                            href={`/${inst}/collaborations/${encodeURIComponent(p.ror)}`}
+                            className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                          >
+                            {p.name}
+                          </Link>
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-[var(--muted-foreground)]">
+                        {regionName(p.country_code)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {p.works.toLocaleString("en")}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {p.oa_share != null ? `${Math.round(p.oa_share * 100)}%` : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </CollapsibleCard>
           )}
 

@@ -88,6 +88,7 @@
     "oaOverTime": "Open access over time",
     "journals": "Where they publish",
     "topics": "Topics",
+    "partners": "Collaboration partners",
     "publishNext": "Where to publish next",
     "alternatives": "Alternatives",
     "publications": "Publications",
@@ -117,7 +118,11 @@
     "colVenue": "Published in",
     "colPublisher": "Publisher",
     "colType": "Type",
-    "colLinks": "Links"
+    "colLinks": "Links",
+    "colPartner": "Partner",
+    "colCountry": "Country",
+    "colOa": "Open access",
+    "partnersCaption": "Top external organisations this researcher co-publishes with"
   },
   "gap": {
     "found": "OpenAlex attributes {count, plural, one {# work} other {# works}} to this author; {missing, plural, one {# is} other {# are}} not linked in Pure.",

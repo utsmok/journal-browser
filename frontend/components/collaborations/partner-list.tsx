@@ -4,7 +4,8 @@ import { ArrowDown, ArrowUp } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 
-import { useCollabLabels } from "@/components/collaborations/labels";
+import { orgTypeCssVar, useCollabLabels } from "@/components/collaborations/labels";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -13,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useSiteMeta } from "@/hooks/use-site-meta";
 import type { CollaborationPartner, CollaborationSearchParams, CollaborationSort } from "@/lib/api";
 
 export type Sorting = { sort: CollaborationSort; dir: "asc" | "desc" };
@@ -36,7 +38,6 @@ function SortHead({
 }) {
   const t = useTranslations("collaborations");
   const active = sorting.sort === column.key;
-  // A column sorts first in its natural order; selecting it again reverses that.
   const next = active
     ? { sort: column.key, dir: sorting.dir === "asc" ? ("desc" as const) : ("asc" as const) }
     : { sort: column.key, dir: column.key === "name" ? ("asc" as const) : ("desc" as const) };
@@ -59,6 +60,12 @@ function SortHead({
   );
 }
 
+function fmtShare(share: number | null | undefined): string | null {
+  if (share == null) return null;
+  const pct = share * 100;
+  return pct < 0.1 && pct > 0 ? "<0.1%" : `${pct.toFixed(1).replace(/\.0$/, "")}%`;
+}
+
 /** The paged partner list. Each row opens the partner, carrying the list
  * filters along in `query`. */
 export function PartnerTable({
@@ -73,15 +80,15 @@ export function PartnerTable({
   sorting: Sorting;
   onSort: (next: Sorting) => void;
   inst: string;
-  /** Query string of the list filters, "" when none is set. */
   query: string;
-  /** A new page is loading and these rows are the previous result. */
   pending?: boolean;
 }) {
   const t = useTranslations("collaborations");
   const labels = useCollabLabels();
+  const site = useSiteMeta();
   const linkClass =
-    "font-medium underline decoration-dotted underline-offset-2 hover:decoration-solid";
+    "font-medium underline-offset-2 hover:text-[var(--primary-text)] hover:underline";
+
   return (
     <Table className={pending ? "opacity-60" : undefined} aria-busy={pending || undefined}>
       <TableHeader>
@@ -99,58 +106,99 @@ export function PartnerTable({
             onSort={onSort}
           />
           <SortHead
+            column={{ key: "oa_share", label: t("table.oa"), numeric: true }}
+            sorting={sorting}
+            onSort={onSort}
+          />
+          <SortHead
+            column={{
+              key: "home_corresponding_works",
+              label: t("table.homeCorr", { inst: site.short }),
+              numeric: true,
+            }}
+            sorting={sorting}
+            onSort={onSort}
+          />
+          <SortHead
             column={{ key: "corresponding_works", label: t("table.corresponding"), numeric: true }}
             sorting={sorting}
             onSort={onSort}
           />
-          <TableHead className="text-right">{t("table.authorships")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {items.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={6} className="text-[var(--muted-foreground)]">
+            <TableCell colSpan={7} className="text-[var(--muted-foreground)]">
               {t("table.empty")}
             </TableCell>
           </TableRow>
         ) : (
-          items.map((p) => (
-            <TableRow key={p.ror}>
-              <TableCell>
-                <Link
-                  href={`/${inst}/collaborations/${encodeURIComponent(p.ror)}${query}`}
-                  className={linkClass}
-                >
-                  {p.name}
-                </Link>
-                {p.parent_name && (
-                  <span className="block text-xs text-[var(--muted-foreground)]">
-                    {t("table.partOf", { name: p.parent_name })}
-                  </span>
-                )}
-                {p.sources.length === 1 && p.sources[0] === "openaire" && (
-                  <span className="block text-xs text-[var(--muted-foreground)]">
-                    {t("table.viaOpenaire")}
-                  </span>
-                )}
-              </TableCell>
-              <TableCell className="text-[var(--muted-foreground)]">
-                {p.org_type ? labels.orgType(p.org_type) : "—"}
-              </TableCell>
-              <TableCell className="text-[var(--muted-foreground)]">
-                {p.country_code ? labels.region(p.country_code) : "—"}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {p.works.toLocaleString("en")}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {p.corresponding_works.toLocaleString("en")}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {p.authorships.toLocaleString("en")}
-              </TableCell>
-            </TableRow>
-          ))
+          items.map((p) => {
+            const shareText = fmtShare(p.share);
+            const oaPct = p.oa_share != null ? `${Math.round(p.oa_share * 100)}%` : "—";
+            return (
+              <TableRow key={p.ror}>
+                <TableCell>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <Link
+                      href={`/${inst}/collaborations/${encodeURIComponent(p.ror)}${query}`}
+                      className={linkClass}
+                    >
+                      {p.name}
+                    </Link>
+                    {p.shares_deals && (
+                      <Badge variant="muted" className="text-[10px] font-normal">
+                        {t("table.sharesDeals")}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-[var(--muted-foreground)]">
+                    {p.city && <span>{p.city}</span>}
+                    {p.merged_count > 0 && (
+                      <span>{t("table.mergedSubunits", { count: p.merged_count })}</span>
+                    )}
+                    {p.parent_name && <span>{t("table.partOf", { name: p.parent_name })}</span>}
+                    {p.sources.length === 1 && p.sources[0] === "openaire" && (
+                      <span>{t("table.viaOpenaire")}</span>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-[var(--muted-foreground)]">
+                  {p.org_type ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <span
+                        aria-hidden
+                        className="inline-block size-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: orgTypeCssVar(p.org_type) }}
+                      />
+                      {labels.orgType(p.org_type)}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-[var(--muted-foreground)]">
+                  {p.country_code ? labels.region(p.country_code) : "—"}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  <span className="font-medium">{p.works.toLocaleString("en")}</span>
+                  {shareText && (
+                    <span className="ml-1.5 text-xs text-[var(--muted-foreground)]">
+                      ({shareText})
+                    </span>
+                  )}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">{oaPct}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {(p.home_corresponding_works ?? 0).toLocaleString("en")}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {p.corresponding_works.toLocaleString("en")}
+                </TableCell>
+              </TableRow>
+            );
+          })
         )}
       </TableBody>
     </Table>
