@@ -20,23 +20,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useFunderDirectory } from "@/hooks/use-api";
+import { useDebounced } from "@/hooks/use-debounced";
 import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { errorMessage, type FunderListItem } from "@/lib/api";
 
 const OPF_URL = "https://openpolicyfinder.jisc.ac.uk/";
 const PAGE_SIZE = 50;
-
-/** Debounced state mirror: returns q only after the input settles, so
- * typing does not fire a request per keystroke. */
-function useDebounced(value: string, delayMs: number) {
-  const [debounced, setDebounced] = React.useState(value);
-  React.useEffect(() => {
-    const t = setTimeout(() => setDebounced(value), delayMs);
-    return () => clearTimeout(t);
-  }, [value, delayMs]);
-  return debounced;
-}
 
 function FunderRow({ funder, inst }: { funder: FunderListItem; inst: string }) {
   const t = useTranslations("funders");
