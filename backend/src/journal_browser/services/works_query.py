@@ -2,6 +2,7 @@
 the OA year buckets. New queries touching author works import these; inline
 copies get rejected in review."""
 
+from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import and_, false, func, or_
@@ -96,6 +97,30 @@ def unit_author_join(institution_id: int) -> ColumnElement:
 def unit_work_join(institution_id: int) -> ColumnElement:
     """Work join completing unit_author_join."""
     return (Work.institution_id == institution_id) & (Work.pure_uuid == AuthorWork.work_pure_uuid)
+
+
+def unit_key(level: str) -> Any:
+    """Author column that names the unit at `level`: the research group,
+    the institute (MESA+ / TechMed / DSI, not a faculty or a group), or
+    the faculty."""
+    if level == "group":
+        return Author.research_group
+    return Author.institute if level == "institute" else Author.faculty
+
+
+def unit_work_conditions(institution: Any, level: str, names: Sequence[str] | None = None):
+    """Conditions that tie a Work to one of the institution's authors and,
+    with `names`, to a unit that author belongs to. Use them in a join of
+    AuthorWork and Author onto Work; the author gate follows the
+    institution's require_confirmed_affiliation."""
+    return [
+        Work.institution_id == AuthorWork.institution_id,
+        Work.pure_uuid == AuthorWork.work_pure_uuid,
+        AuthorWork.author_pure_uuid == Author.pure_uuid,
+        Author.institution_id == AuthorWork.institution_id,
+        *([Author.confirmed.is_(True)] if institution.require_confirmed_affiliation else []),
+        *([unit_key(level).in_(list(names))] if names else []),
+    ]
 
 
 def work_window(institution: Any) -> tuple[ColumnElement, ColumnElement]:

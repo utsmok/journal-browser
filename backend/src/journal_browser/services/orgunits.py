@@ -49,6 +49,7 @@ from .works_query import (
     empty_year_buckets,
     strata_match,
     unit_author_join,
+    unit_key,
     unit_work_join,
     work_type_not_excluded,
     work_window,
@@ -86,14 +87,6 @@ class _Unit:
     apc_n: int
 
 
-def _unit_key(level: str) -> Any:
-    # Institutes are their own unit level (MESA+ / TechMed / DSI), not a
-    # faculty or a research group — the author's institute attribute.
-    if level == "group":
-        return Author.research_group
-    return Author.institute if level == "institute" else Author.faculty
-
-
 def _author_base(iid: int, require_confirmed: bool) -> list[Any]:
     """Author-set gate shared by every unit query."""
     return [
@@ -106,7 +99,7 @@ def _unit_rows(institution: Institution, level: str) -> Any:
     """Unit aggregates with deal/APC rollups outer-joined on the name."""
     iid = institution.id
     require_confirmed = institution.require_confirmed_affiliation
-    key = _unit_key(level)
+    key = unit_key(level)
     agg_cols: list[Any] = [
         key.label("name"),
         func.max(Author.faculty).label("faculty"),
@@ -247,7 +240,7 @@ async def _unit_topics(
     top: int,
 ) -> dict[str, list[dict[str, Any]]]:
     """Author-count topic distribution per unit (authors.primary_topic)."""
-    key = _unit_key(level)
+    key = unit_key(level)
     conds = [*_author_base(iid, require_confirmed), Author.primary_topic.is_not(None)]
     if names:
         conds.append(key.in_(names))
@@ -314,7 +307,7 @@ def _scoped_unit_rows(institution: Institution, level: str, year_range: tuple[in
     flags row still fill n_works/n_authors."""
     iid = institution.id
     require_confirmed = institution.require_confirmed_affiliation
-    key = _unit_key(level)
+    key = unit_key(level)
     edges = (
         select(
             key.label("name"),
@@ -622,7 +615,7 @@ async def _build_unit_bundle(
         )
         groups = child["items"]
 
-    membership = [*_author_base(iid, require_confirmed), _unit_key(level) == name]
+    membership = [*_author_base(iid, require_confirmed), unit_key(level) == name]
 
     # The unit's venues: distinct works per journal, window-bounded; the
     # admin ignore-list removes venues just like the author profile.
