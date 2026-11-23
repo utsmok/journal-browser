@@ -27,7 +27,7 @@ from typing import Any
 
 from sqlalchemy import and_, delete, func, insert, literal_column, select
 from sqlalchemy import cast as sql_cast
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import FunderAlias, OpenaireWorkFacts, OpenalexFunder, WorkFunder
@@ -92,7 +92,7 @@ async def _by_name(session: AsyncSession, names: Any) -> Any:
     stmt = (
         select(names.c.funder_name, openalex_funders.c.funder_openalex_id)
         .join(openalex_funders, openalex_funders.c.name == func.lower(names.c.funder_name))
-        .distinct_on(names.c.funder_name)
+        .ext(distinct_on(names.c.funder_name))
         .order_by(
             names.c.funder_name,
             openalex_funders.c.works_count.desc().nulls_last(),
