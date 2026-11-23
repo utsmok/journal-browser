@@ -62,7 +62,7 @@ in citation links on journal pages. Set it in `.env` before the first
 | `OPENALEX_API_KEY` | Free OpenAlex key. Listing/cursor sweeps (institution stats, the author sweep, `--sweep-all`) refuse to start without it — keyless requests serve only the first cursor page | unset |
 | `JB_OPENALEX_RESERVE_USD` | Daily-budget floor in USD: OpenAlex stages stop cleanly, with a stats note, once the remaining budget falls below it (see `harvest.common.openalex_budget_ok`) | `0.25` |
 | `JB_JISC_API_KEY` | Jisc Open Policy Finder API key; without it the JISC sweep skips cleanly | unset |
-| `JB_CONTACT_EMAIL` | Polite-pool identification sent to OpenAlex. Set it in `.env`; an empty value sends anonymous requests | empty (the live deployment sets `s.f.abma@utwente.nl`) |
+| `JB_CONTACT_EMAIL` | Polite-pool identification sent to OpenAlex, and the contact in the ROR harvest's User-Agent. Set it in `.env`; an empty value sends anonymous requests | empty (the live deployment sets `s.f.abma@utwente.nl`) |
 | `JB_DATA_WINDOW_START` / `JB_DATA_WINDOW_END` | Inclusive publication-year window for the default institution's harvests. `END=0` = open (to now). A smaller window makes a deployment lighter (Groningen runs 2025/2025; additional institutions carry their window on their row) | `2020` / `0` |
 
 ### Operations
@@ -171,6 +171,9 @@ wave (see "Daily refresh wave" below) repeats a subset of these stages.
 | `harvest_work_funders` | OpenAlex ($0 single-entity GETs per DOI, staleness-gated: only works whose last fetch is older than 30 days) | `work_funders`: grant lines per work |
 | `harvest_openalex_funders` | OpenAlex ($0 singleton GETs) | `openalex_funders` gap-filled from works-linked funder ids |
 | `harvest_openaire_funders` | OpenAIRE Graph | Curated funder canon pull |
+| `derive_work_partners` | stored OpenAlex and OpenAIRE work payloads | `work_partners` (one row per work and partner ROR id) and stub `partner_institutions` rows for the Partners page |
+| `derive_funder_aliases` | stored `work_funders` and OpenAIRE projects | `funder_aliases`: OpenAIRE funder names resolved to OpenAlex funders, by display name or by shared grant numbers |
+| `harvest_ror` | ROR API (free, no key) | `partner_institutions`: name, type, place and coordinates per partner; refreshes records older than 30 days |
 | `harvest_people_utwente` | people.utwente.nl directory (its own JSON-RPC search endpoint) | Per-author people profile: portrait, canonical name, email, org list, org edges resolved onto `pure_orgs` (`people_utwente_person_orgs`, gap-fill evidence like `pure_person_orgs`), and the profile's research.utwente.nl portal link as the match oracle. Runs 20 author pipelines in flight (`--concurrency`), so the confirmed roster takes roughly 30-45 minutes; external — keep it out of the daily wave. Outcomes are stamped in batches of 50, so re-runs only see new authors (`--retry-missed` / `--refresh` re-open old ones) |
 | `embed_journals` | stats-built text | Journal embeddings for similar-journals |
 
@@ -358,12 +361,22 @@ The stages, in order:
    rows and stay in the sweep. `harvest_openalex_funders` fetches full
    funder payloads only for ids the table lacks. `harvest_openaire_funders`
    pulls the curated funder canon from the OpenAIRE graph.
-5. `harvest_publishers`. It resolves journal host organizations in
+5. The collaboration partners. `derive_work_partners` rebuilds
+   `work_partners` from the stored OpenAlex and OpenAIRE work payloads
+   (OpenAlex first, OpenAIRE for works OpenAlex links to no partner).
+   `derive_funder_aliases` resolves OpenAIRE funder names to OpenAlex
+   funders, so the Partners page shows each funder once. Both make no API
+   calls. `harvest_ror` then fetches the ROR records of new partners and
+   refreshes records older than 30 days (`--ttl-days`), paced under ROR's
+   limit of 2000 requests per 5 minutes. The first run on an install
+   fetches about 9,000 records for the UT works and takes about 30
+   minutes; later runs fetch only the new and stale ones.
+6. `harvest_publishers`. It resolves journal host organizations in
    credit-priced 50-id pipe-filter batches ($0.0001 per page), gated by
    the budget reserve. Results cache in
    `openalex_publishers`, so only a fresh install pays for the full
    ~16k-host sweep once.
-6. `embed_journals` last. It re-embeds journals from the stats-built text,
+7. `embed_journals` last. It re-embeds journals from the stats-built text,
    and on CPU it is the slow step of the wave, at about 45 minutes for a
    full run.
 

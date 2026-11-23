@@ -56,7 +56,8 @@ institution-locked journal finders cannot truthfully copy either claim.
 
 - Surfaces: institution chooser (`/`), search + journal browse
   (`/{inst}`), journal pages, author, org unit, publisher, funder pages,
-  deals overview, docs, about, admin panel.
+  collaboration partners (`/{inst}/collaborations`: map, partner list,
+  partner pages), deals overview, docs, about, admin panel.
 - No accounts and no cookies; only a localStorage session id that rotates
   after 30 idle minutes.
 - Raw IPs are nulled after a retention window; countries and events stay.
