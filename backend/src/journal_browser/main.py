@@ -70,11 +70,11 @@ async def healthz(session: AsyncSession = Depends(get_session)) -> dict:
 
 
 class RequestObservabilityMiddleware:
-    """Outermost ASGI middleware: adopt an inbound X-Request-ID (or mint
-    one), echo it on the response, and write one line per request with
-    method, path, status, and duration. configure_logging() puts the id on
-    every log line emitted while the request runs, so server errors and
-    harvest logs become greppable to the same id."""
+    """ASGI middleware: adopt an inbound X-Request-ID (or mint one), echo
+    it on the response, and write one line per request with method, path,
+    status, and duration. configure_logging() puts the id on every log
+    line emitted while the request runs, so server errors and harvest
+    logs become greppable to the same id."""
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -116,6 +116,37 @@ def _inbound_request_id(scope: Scope) -> str | None:
             if candidate and len(candidate) <= 128:
                 return candidate
     return None
+
+
+class SecurityHeadersMiddleware:
+    """Security headers on every API response, 429s and CORS rejections
+    included. next.config.mjs sets them on the pages Next.js serves; /api/*
+    is proxied to this app, so it sets its own. HSTS stays out: the edge
+    sets it."""
+
+    HEADERS = (
+        ("x-content-type-options", "nosniff"),
+        ("x-frame-options", "DENY"),
+        ("referrer-policy", "strict-origin-when-cross-origin"),
+        ("permissions-policy", "camera=(), microphone=(), geolocation=()"),
+    )
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_security_headers(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                for key, value in self.HEADERS:
+                    headers.setdefault(key, value)
+            await send(message)
+
+        await self.app(scope, receive, send_with_security_headers)
 
 
 def _warm_embedding_model() -> None:
@@ -313,9 +344,10 @@ def create_app() -> "FastAPI":
     settings = get_settings()
     configure_logging()
     app = FastAPI(title="Journal Browser API", version=__version__, lifespan=_lifespan)
-    # Rate limit innermost, CORS next, observability outermost: add_middleware
-    # prepends, so the request-id middleware runs first, even CORS-rejected
-    # requests get a request id, and 429s still carry CORS headers.
+    # Rate limit innermost, then CORS, then observability: add_middleware
+    # prepends, so the request-id middleware runs before them, even
+    # CORS-rejected requests get a request id, and 429s still carry CORS
+    # headers. Security headers come last, so they wrap every response.
     app.add_middleware(RateLimitMiddleware)
     app.add_middleware(
         CORSMiddleware,
@@ -325,6 +357,7 @@ def create_app() -> "FastAPI":
         expose_headers=["X-Request-ID"],
     )
     app.add_middleware(RequestObservabilityMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
     app.include_router(api_router)
 
     # parse_cursor and friends raise ValueError for malformed input; map it
