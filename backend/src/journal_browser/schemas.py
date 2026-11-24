@@ -195,11 +195,12 @@ class FunderListItem(BaseModel):
     url: str | None
     ror: str | None
     fundref: str | None
-    # ROR-preferred link into openalex_funders; None when neither id links.
+    # Bare OpenAlex id ("F4320320300") of the linked funder the
+    # institution's works cite most; None when neither id links.
     openalex_funder_id: str | None = None
     policy_structured: bool = False
     # Normalized JISC OPF requirement levels (requires / encourages /
-    # no_policy_for / does_no_mention) extracted from publications_policy and
+    # no_policy_for / does_not_mention) extracted from publications_policy and
     # data_archiving_policy.
     oa_publishing_req: str | None = None
     green_archiving_req: str | None = None

@@ -16,7 +16,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..identifiers import normalize_ror
+from ..identifiers import normalize_policy_requirements, normalize_ror
 from ..models import (
     IssnMap,
     JiscFunder,
@@ -209,7 +209,8 @@ def _funder_ids(identifiers: Any) -> tuple[str | None, str | None]:
 
 
 def _funder_row(pk: str, p: dict[str, Any]) -> dict[str, Any] | None:
-    """jisc_funders row; both OA policy blocks kept verbatim (stripped)."""
+    """jisc_funders row; both OA policy blocks kept as Jisc sends them
+    (phrases stripped, requirement spellings normalized)."""
     funder_id = _int_or_none(p.get("id", pk))
     if funder_id is None:
         return None
@@ -224,8 +225,12 @@ def _funder_row(pk: str, p: dict[str, Any]) -> dict[str, Any] | None:
         "identifiers": idents,
         "ror": ror,
         "fundref": fundref,
-        "publications_policy": _strip_phrases(p.get("open_access_publications_policy")),
-        "data_archiving_policy": _strip_phrases(p.get("open_access_data_archiving_policy")),
+        "publications_policy": normalize_policy_requirements(
+            _strip_phrases(p.get("open_access_publications_policy"))
+        ),
+        "data_archiving_policy": normalize_policy_requirements(
+            _strip_phrases(p.get("open_access_data_archiving_policy"))
+        ),
         "date_modified": _date_modified(p),
     }
 

@@ -12,6 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
 from ..deps import InstitutionDep
+from ..identifiers import (
+    REQUIREMENT_ORDER,
+    normalize_policy_requirements,
+    normalize_requirement,
+)
 from ..models import Institution, JiscFunder
 from ..queries import cache_epoch
 from ..schemas import (
@@ -33,13 +38,16 @@ DEFAULT_LIMIT = 25
 
 
 def _norm_req(block: Any) -> str | None:
+    """Requirement level of one policy sub-block, in canonical spelling
+    (rows normalized before the Jisc misspelling was mapped still carry it)."""
     if not isinstance(block, dict):
         return None
-    val = block.get("requirement")
-    if not isinstance(val, str):
-        return None
-    cleaned = val.strip().lower()
-    return cleaned or None
+    return normalize_requirement(block.get("requirement"))
+
+
+def _req_filter(raw: str | None) -> set[str]:
+    """Requirement levels of one multi-value filter, in canonical spelling."""
+    return {req for v in (split_multi(raw) or []) if (req := normalize_requirement(v))}
 
 
 def _to_item(
@@ -136,9 +144,9 @@ async def search_funders(
         )
 
     countries = {c.strip().upper() for c in (split_multi(country) or []) if c.strip()}
-    oa_pub_reqs = {v.strip().lower() for v in (split_multi(oa_publishing) or []) if v.strip()}
-    green_reqs = {v.strip().lower() for v in (split_multi(green_archiving) or []) if v.strip()}
-    data_reqs = {v.strip().lower() for v in (split_multi(data_policy) or []) if v.strip()}
+    oa_pub_reqs = _req_filter(oa_publishing)
+    green_reqs = _req_filter(green_archiving)
+    data_reqs = _req_filter(data_policy)
 
     def _matches(
         item: FunderListItem,
@@ -200,10 +208,8 @@ async def search_funders(
             key = item.data_policy_req or "none"
             data_counts[key] = data_counts.get(key, 0) + 1
 
-    req_order = ("requires", "encourages", "no_policy_for", "does_no_mention", "none")
-
     def _ordered_req(counts_map: dict[str, int]) -> dict[str, int]:
-        ranked = {k: counts_map[k] for k in req_order if k in counts_map}
+        ranked = {k: counts_map[k] for k in REQUIREMENT_ORDER if k in counts_map}
         for k, v in sorted(counts_map.items()):
             if k not in ranked:
                 ranked[k] = v
@@ -319,8 +325,8 @@ async def _build_funder_detail(
     yearly = await funders_service.works_by_year(session, institution, ids, year_range)
     return await cache_epoch(session), FunderDetailResponse(
         **item.model_dump(),
-        publications_policy=funder.publications_policy,
-        data_archiving_policy=funder.data_archiving_policy,
+        publications_policy=normalize_policy_requirements(funder.publications_policy),
+        data_archiving_policy=normalize_policy_requirements(funder.data_archiving_policy),
         openaire=canon.openaire.get(funder_id),
         top_journals=[FunderTopJournal(**j) for j in deduped[:25]],
         works_by_year=yearly,

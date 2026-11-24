@@ -920,6 +920,12 @@ async def test_funder_normalization_idempotent(db):
     assert (await normalize_jisc(db))["jisc_funders"] == 1
     funder = await db.get(JiscFunder, 701)
     assert (funder.ror, funder.fundref) == ("04ad7pn51", "100009795")
+    # Jisc's misspelling of one level is normalised at ingest.
+    assert funder.publications_policy == {
+        "publishing_policy": {"requirement": "does_not_mention"},
+        "archiving_policy": {"requirement": "requires"},
+    }
+    assert funder.data_archiving_policy == {"requirement": "does_not_mention"}
     await db.commit()
     assert (await normalize_jisc(db))["jisc_funders"] == 1  # rerun: still one row
     await db.commit()
