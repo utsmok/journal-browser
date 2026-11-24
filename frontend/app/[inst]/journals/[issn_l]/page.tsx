@@ -515,7 +515,7 @@ function JournalPageInner() {
           <div
             className={
               (deals.length > 0 ? deals.length : 1) + (greenOa ? 1 : 0) > 1
-                ? "grid gap-4 lg:grid-cols-2"
+                ? "grid grid-cols-1 gap-4 lg:grid-cols-2"
                 : ""
             }
           >
