@@ -9,6 +9,7 @@
     "placeholder": "Search funders…",
     "searchAria": "Search funders by name",
     "retry": "Retry",
+    "searchButton": "Search",
     "funder": "Funder",
     "country": "Country",
     "empty": "No funder matches “{q}”.",
