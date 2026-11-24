@@ -9,7 +9,12 @@ import { ActiveFiltersBar, type ActiveFilterChip } from "@/components/active-fil
 import { DealBadge } from "@/components/badges";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { DealCapUsage } from "@/components/deal-cap-usage";
-import { FacetGroupList, FilterSidebarCard, type FacetGroupDef } from "@/components/filter-panel";
+import {
+  FacetGroupList,
+  FilterSidebarCard,
+  hasVisibleGroups,
+  type FacetGroupDef,
+} from "@/components/filter-panel";
 import { PageTabs } from "@/components/page-tabs";
 import { SourceNote } from "@/components/source-note";
 import { Badge } from "@/components/ui/badge";
@@ -611,7 +616,7 @@ export default function DealsPage() {
       </header>
 
       {/* Stacked filters (<960px) */}
-      {activeQuery.data != null && (
+      {activeQuery.data != null && hasVisibleGroups(groups) && (
         <section className="mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
           <FacetGroupList groups={groups} onToggle={toggleFacet} variant="chips" />
         </section>
@@ -619,7 +624,7 @@ export default function DealsPage() {
 
       <div className="flex flex-col gap-6 min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
         {/* Sticky sidebar (>=960px) */}
-        {activeQuery.data != null ? (
+        {activeQuery.data != null && hasVisibleGroups(groups) ? (
           <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto min-[960px]:block">
             <FilterSidebarCard activeCount={chips.length} onReset={clearAll}>
               <FacetGroupList groups={groups} onToggle={toggleFacet} variant="rows" />

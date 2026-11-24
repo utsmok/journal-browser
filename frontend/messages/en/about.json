@@ -37,6 +37,9 @@
     "statsWindow": "Publication statistics cover works published in {window} or later. The search lists journals with more than 3 publications in that window.",
     "statsWindowFallback": "the institution's data window"
   },
+  "privacy": {
+    "note": "Privacy on this page: your browser loads everything on this site from this server. The one exception is the collaboration map, which loads its background map tiles directly from OpenFreeMap (tiles.openfreemap.org); your browser contacts that service whenever a map is shown."
+  },
   "harvests": {
     "heading": "Harvest runs",
     "tableCaption": "Most recent harvest runs per source, entity, and filter set, with status and finish time",

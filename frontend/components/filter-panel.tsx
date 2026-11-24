@@ -439,6 +439,21 @@ function FacetGroup({
   );
 }
 
+/** A group is worth showing when it has an active selection, or when two or
+ * more of its options have a non-zero count: fewer cannot narrow anything. */
+function groupIsVisible(group: FacetGroupDef): boolean {
+  return group.activeValues.length > 0 || group.values.filter((v) => (v.count ?? 0) > 0).length > 1;
+}
+
+/**
+ * True when at least one facet group can render usefully. Pages use it to
+ * drop the whole filter card when every group fails the test (e.g. all
+ * options but one sit at zero), instead of showing an empty card.
+ */
+export function hasVisibleGroups(groups: FacetGroupDef[], loading?: boolean): boolean {
+  return loading || groups.some(groupIsVisible);
+}
+
 /** Render caller-built facet groups; FilterPanel supplies the journal's own. */
 export function FacetGroupList({
   groups,
@@ -451,6 +466,10 @@ export function FacetGroupList({
   variant: "chips" | "rows";
   loading?: boolean;
 }) {
+  // Groups that cannot discriminate (fewer than two non-zero options) only
+  // add noise; hide them until the data distinguishes two options. A group
+  // with an active selection stays visible so the selection can be cleared.
+  const visibleGroups = loading ? groups : groups.filter(groupIsVisible);
   return (
     <div
       className={
@@ -460,7 +479,7 @@ export function FacetGroupList({
       }
       aria-busy={loading || undefined}
     >
-      {groups.map((group) => (
+      {visibleGroups.map((group) => (
         <FacetGroup
           key={group.key}
           group={group}

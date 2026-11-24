@@ -10,6 +10,7 @@ import { DirectoryPager } from "@/components/directory-pager";
 import {
   FacetGroupList,
   FilterSidebarCard,
+  hasVisibleGroups,
   type FacetGroupDef,
   type FacetValue,
 } from "@/components/filter-panel";
@@ -517,7 +518,7 @@ function PublishersView() {
       </header>
 
       {/* Stacked filter card: the only filter UI below 960px. */}
-      {data != null && (
+      {data != null && hasVisibleGroups(groups) && (
         <section className="mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
           <FacetGroupList groups={groups} onToggle={toggleFacet} variant="chips" />
         </section>
@@ -525,7 +526,7 @@ function PublishersView() {
 
       <div className="flex flex-col gap-6 min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
         {/* Wide-screen sidebar: sticky, scrolls on its own when long. */}
-        {data != null ? (
+        {data != null && hasVisibleGroups(groups) ? (
           <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto min-[960px]:block">
             <FilterSidebarCard
               activeCount={filterChips.length}

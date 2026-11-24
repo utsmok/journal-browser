@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { useCollaborationMap, useCollaborations } from "@/hooks/use-api";
 import { useDebounced } from "@/hooks/use-debounced";
 import { useInstitution } from "@/hooks/use-institution";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { useYearRange } from "@/hooks/use-year-filter";
 import {
@@ -123,6 +124,12 @@ function PartnersPageInner() {
       aria-label={t("search.aria")}
     />
   );
+
+  // Mount only the filter layout for the current viewport: the chips card
+  // below 960px, the sidebar above. While the media query is still unknown
+  // (server render and first client frame) both mount and CSS hides one,
+  // which keeps the markup identical to the server's and avoids a flash.
+  const wide = useMediaQuery("(min-width: 960px)");
 
   return (
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
@@ -241,32 +248,36 @@ function PartnersPageInner() {
       </div>
 
       {/* Stacked filters on smaller viewports */}
-      <section className="mt-5 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
-        {searchBox}
-        <div className="mt-4">
-          <CollaborationFacets
-            params={filters}
-            facets={list.data?.facets}
-            onChange={update}
-            variant="chips"
-            loading={list.isPending}
-          />
-        </div>
-      </section>
-
-      <div className="mt-6 flex flex-col gap-6 min-[960px]:flex-row min-[960px]:items-start">
-        <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] w-72 shrink-0 overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:block">
+      {wide === false && (
+        <section className="mt-5 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
           {searchBox}
           <div className="mt-4">
             <CollaborationFacets
               params={filters}
               facets={list.data?.facets}
               onChange={update}
-              variant="rows"
+              variant="chips"
               loading={list.isPending}
             />
           </div>
-        </aside>
+        </section>
+      )}
+
+      <div className="mt-6 flex flex-col gap-6 min-[960px]:flex-row min-[960px]:items-start">
+        {wide !== false && (
+          <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] w-72 shrink-0 overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:block">
+            {searchBox}
+            <div className="mt-4">
+              <CollaborationFacets
+                params={filters}
+                facets={list.data?.facets}
+                onChange={update}
+                variant="rows"
+                loading={list.isPending}
+              />
+            </div>
+          </aside>
+        )}
 
         <div className="min-w-0 flex-1 space-y-6">
           <ActiveFiltersBar
