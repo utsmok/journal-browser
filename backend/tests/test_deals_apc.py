@@ -134,7 +134,10 @@ async def deals_api(client, db_engine):
         session.add_all([twente_deal, foreign_deal])
         await session.flush()
         session.add(DealInstitution(deal_id=twente_deal.id, institution_id=home.id))
-        journal = Journal(issn_l="1111-1111", title="Shared", type="journal")
+        # Active + listed so the default eligibility toggles keep the deal
+        # fixture browsable; these tests are about deal scoping, not the
+        # toggles.
+        journal = journal_factory("1111-1111", title="Shared")
         session.add(journal)
         await session.flush()
         session.add_all(
@@ -1281,7 +1284,11 @@ async def test_journals_filter_by_deal_id(db, client, deals_api):
     db.add(
         JournalFlags(institution_id=inst.id, issn_l=issn, deal_covered=True, works_window_plus=10)
     )
-    db.add(Journal(issn_l="2222-2222", title="Other", type="journal"))
+    db.add(
+        # Active + Scimago-listed so the default eligibility toggles keep it
+        # browsable; this test is about the deal_id cut, not the toggles.
+        journal_factory("2222-2222", title="Other")
+    )
     db.add(
         JournalFlags(
             institution_id=inst.id, issn_l="2222-2222", deal_covered=False, works_window_plus=10

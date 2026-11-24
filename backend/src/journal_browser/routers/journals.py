@@ -215,6 +215,17 @@ async def search_journals(
             "institution's data window; default: the full window)",
         ),
     ] = None,
+    active: Annotated[
+        bool,
+        Query(description="Only journals with works in the current or previous year"),
+    ] = True,
+    vouched: Annotated[
+        bool,
+        Query(
+            description="Only journals on a curated list (Scimago, DOAJ, a deal, "
+            "or a national/indexing list)"
+        ),
+    ] = True,
 ) -> JournalSearchResponse:
     # oa_type is a comma-separated multi-select, OR'd together server-side;
     # values validate against OaType at the boundary (422).
@@ -247,6 +258,8 @@ async def search_journals(
         funder_fit=funder_fit if funder_policy is not None else None,
         year_from=year_range[0] if year_range else None,
         year_to=year_range[1] if year_range else None,
+        active=active,
+        vouched=vouched,
     )
     return JournalSearchResponse(
         items=[_to_list_item(item) for item in result["items"]],
@@ -264,9 +277,22 @@ async def semantic_search_journals(
     q: Annotated[str, Query(min_length=2, max_length=512)],
     limit: Annotated[int, Query(ge=1, le=100)] = 40,
     cursor: Annotated[str | None, Query(max_length=512, pattern=r"^[A-Za-z0-9_-]*={0,2}$")] = None,
+    active: Annotated[
+        bool,
+        Query(description="Only journals with works in the current or previous year"),
+    ] = True,
+    vouched: Annotated[
+        bool,
+        Query(
+            description="Only journals on a curated list (Scimago, DOAJ, a deal, "
+            "or a national/indexing list)"
+        ),
+    ] = True,
 ) -> JournalSearchResponse:
     """Free-text "journals like this description" search over embeddings."""
-    result = await search_service.semantic_search(session, q, institution.id, limit, cursor)
+    result = await search_service.semantic_search(
+        session, q, institution.id, limit, cursor, active=active, vouched=vouched
+    )
     return JournalSearchResponse(
         items=[_to_list_item(item) for item in result["items"]],
         total=result["total"],

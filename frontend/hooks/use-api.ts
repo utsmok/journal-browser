@@ -109,6 +109,8 @@ const FILTER_KEYS = [
   "green_oa",
   "funder",
   "funder_fit",
+  "active",
+  "vouched",
 ] as const;
 
 function usageFilters(params: JournalSearchParams): Record<string, unknown> | undefined {
@@ -134,6 +136,10 @@ export function useJournals(params: JournalSearchParams, semantic?: boolean) {
             q: params.q ?? "",
             limit: params.limit ?? 40,
             cursor: params.cursor,
+            // The eligibility toggles apply to semantic search too; both are
+            // server-side defaults, so they travel only when switched off.
+            active: params.active,
+            vouched: params.vouched,
           })
         : await apiGet<JournalSearchResponse>(`/${inst}/journals`, {
             ...params,

@@ -46,8 +46,13 @@ def active_since(now: datetime | None = None) -> int:
     return (now or datetime.now(UTC)).year - (ACTIVE_YEARS - 1)
 
 
-def recommendable_clause(deal_covered: Any) -> ColumnElement[bool]:
-    """SQL condition: the Journal row may appear in a recommendation list.
+def active_clause() -> ColumnElement[bool]:
+    """SQL condition: the Journal row published within the active window."""
+    return Journal.last_active_year >= active_since()
+
+
+def vouched_clause(deal_covered: Any) -> ColumnElement[bool]:
+    """SQL condition: at least one curated source lists the Journal row.
 
     ``deal_covered`` is the institution-scoped coverage column (journal_flags)."""
     J = Journal
@@ -56,14 +61,11 @@ def recommendable_clause(deal_covered: Any) -> ColumnElement[bool]:
         func.jsonb_array_length(J.listed_in) > 0,
         ~J.listed_in.contained_by(weak),
     )
-    return and_(
-        J.last_active_year >= active_since(),
-        or_(
-            J.type != "journal",
-            deal_covered.is_(True),
-            J.in_scimago.is_(True),
-            J.doaj_in_doaj.is_(True),
-            J.is_in_doaj.is_(True),
-            listed,
-        ),
+    return or_(
+        J.type != "journal",
+        deal_covered.is_(True),
+        J.in_scimago.is_(True),
+        J.doaj_in_doaj.is_(True),
+        J.is_in_doaj.is_(True),
+        listed,
     )

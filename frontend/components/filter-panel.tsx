@@ -473,6 +473,64 @@ export function FacetGroupList({
   );
 }
 
+/**
+ * Eligibility toggles for the journal browse: both default on server-side,
+ * so a toggle only writes state when switched off. Clicking clears the
+ * toggle (back to the default).
+ */
+export function QualityToggles({
+  active,
+  vouched,
+  onToggle,
+}: {
+  active: boolean;
+  vouched: boolean;
+  onToggle: (key: "active" | "vouched") => void;
+}) {
+  const t = useTranslations("common");
+  const year = new Date().getFullYear() - 1;
+  const focus =
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2";
+  const items = [
+    {
+      key: "active" as const,
+      on: active,
+      label: t("facets.qualityActive", { year: String(year) }),
+    },
+    { key: "vouched" as const, on: vouched, label: t("facets.qualityVouched") },
+  ];
+  return (
+    <div className="space-y-1.5" role="group" aria-label={t("facets.qualityGroup")}>
+      {items.map((item) => (
+        <button
+          key={item.key}
+          type="button"
+          onClick={() => onToggle(item.key)}
+          aria-pressed={item.on}
+          title={item.label}
+          className={`flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs ${focus} ${
+            item.on
+              ? "border border-[var(--border)] font-medium text-[var(--foreground)]"
+              : "border border-dashed border-[var(--border)] text-[var(--muted-foreground)] hover:border-[var(--primary)] hover:text-[var(--foreground)]"
+          }`}
+        >
+          <span
+            aria-hidden
+            className={`inline-flex size-3.5 shrink-0 items-center justify-center rounded-[3px] border ${
+              item.on
+                ? "border-current bg-current/15"
+                : "border-[var(--border)] bg-[var(--background)]"
+            }`}
+          >
+            {item.on && <Check className="size-2.5 stroke-[2.5]" />}
+          </span>
+          <span className="min-w-0 flex-1 text-left leading-snug">{item.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** Shared sticky filter sidebar container with unified header + Reset affordance. */
 export function FilterSidebarCard({
   activeCount = 0,

@@ -363,7 +363,7 @@ def _similar_item(row: Any) -> dict[str, Any]:
 def _candidate_subquery(institution_id: int, exclude_issns: list[str], vector: Any) -> Any:
     """Recommendable base_query + cosine distance to `vector`, author journals excluded."""
     return (
-        base_query(institution_id=institution_id, recommendable=True)
+        base_query(institution_id=institution_id, active=True, vouched=True)
         .add_columns(Journal.embedding.cosine_distance(vector).label("dist"))
         .where(Journal.embedding.is_not(None), Journal.issn_l.not_in(exclude_issns))
         .subquery()

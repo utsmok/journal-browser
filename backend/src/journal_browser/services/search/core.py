@@ -39,6 +39,8 @@ async def search_journals(
     funder_fit: str | None = None,
     year_from: int | None = None,
     year_to: int | None = None,
+    active: bool = True,
+    vouched: bool = True,
 ) -> dict[str, Any]:
     # Kwargs bag forwarded to base_query/facet_counts; Any value type keeps
     # the **-unpack out of ty's per-key argument checks (the bag is keyed).
@@ -62,6 +64,8 @@ async def search_journals(
         "funder_fit_value": funder_fit,
         "year_from": year_from,
         "year_to": year_to,
+        "active": active,
+        "vouched": vouched,
     }
     fuzzy = False
     subq = base_query(**filters).subquery()

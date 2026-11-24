@@ -44,8 +44,9 @@ async def similar_journals(
 
     Falls back to shared-topic ranking (same three lists) when the journal
     has no embedding yet. None when the journal itself is unknown. Shares
-    base_query in recommendable mode, so the corpus cutoff, proceedings
-    exclusion and recommendation eligibility (active, vouched for) apply.
+    base_query with both eligibility filters on, so the corpus cutoff,
+    proceedings exclusion and recommendation eligibility (active, vouched
+    for) apply.
     """
     self_row = (
         await session.execute(
@@ -78,7 +79,7 @@ async def similar_journals(
         distance = Journal.embedding.cosine_distance(self_row.embedding).label("dist")
         for key, (cond, limit) in scopes.items():
             subq = (
-                base_query(institution_id=institution_id, recommendable=True)
+                base_query(institution_id=institution_id, active=True, vouched=True)
                 .add_columns(distance)
                 .where(Journal.issn_l != self_row.issn_l, Journal.embedding.is_not(None))
                 .subquery()
@@ -103,7 +104,7 @@ async def similar_journals(
     )
     for key, (cond, limit) in scopes.items():
         subq = (
-            base_query(institution_id=institution_id, recommendable=True)
+            base_query(institution_id=institution_id, active=True, vouched=True)
             .add_columns(shared)
             .where(Journal.issn_l != self_row.issn_l, shared > 0)
             .subquery()
@@ -138,6 +139,8 @@ async def semantic_search(
     institution_id: int,
     limit: int = 40,
     cursor: str | None = None,
+    active: bool = True,
+    vouched: bool = True,
 ) -> dict[str, Any]:
     """Free-text "find journals like this description": encode the query with
     the embedding model (fastembed ONNX, CPU) and rank by cosine distance.
@@ -167,7 +170,7 @@ async def semantic_search(
     dist_expr = Journal.embedding.cosine_distance(query_vec)
     distance = dist_expr.label("dist")
     subq = (
-        base_query(institution_id=institution_id)
+        base_query(institution_id=institution_id, active=active, vouched=vouched)
         .add_columns(distance)
         .where(
             Journal.embedding.is_not(None),

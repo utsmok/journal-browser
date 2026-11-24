@@ -29,7 +29,7 @@ from ..deal_coverage import dj_scope
 from ..funder_fit import fit_case
 from .classify import oa_type_case
 from .currency import to_eur
-from .recommendable import recommendable_clause
+from .recommendable import active_clause, vouched_clause
 
 # Sort keys: relevance | title | publisher | institution_works | quartile |
 # topic | apc | 2yr_mean_citedness
@@ -149,7 +149,8 @@ def base_query(
     languages: list[str] | None = None,
     year_from: int | None = None,
     year_to: int | None = None,
-    recommendable: bool = False,
+    active: bool = False,
+    vouched: bool = False,
 ):
     """Filtered select with computed columns; search + facet counts share it.
 
@@ -169,8 +170,10 @@ def base_query(
     attributes, the corpus cutoff (works_window_plus) and the relevance
     rank's global-prominence term stay unfiltered.
 
-    recommendable=True narrows the corpus to journals the recommendation
-    surfaces may suggest (active and vouched for; see recommendable.py)."""
+    ``active`` and ``vouched`` narrow the corpus to journals the
+    recommendation surfaces may suggest (see recommendable.py); both are on
+    for every recommendation surface, and the browse list, facets and
+    semantic search expose them as user toggles."""
     J = Journal
     F = JournalFlags
     # Admin ignore-list (settings.yaml): hidden from every listing, detail
@@ -304,8 +307,10 @@ def base_query(
             *([J.issn_l.not_in(sorted(set(ignored)))] if ignored else []),
         )
     )
-    if recommendable:
-        query = query.where(recommendable_clause(covered))
+    if active:
+        query = query.where(active_clause())
+    if vouched:
+        query = query.where(vouched_clause(covered))
     if yearly is not None:
         # Journals without in-range stats rows must stay listed (works: 0),
         # so the year sum joins outside.

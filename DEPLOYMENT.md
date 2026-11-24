@@ -182,8 +182,9 @@ alternatives, the journal finder) only offer journals with OpenAlex works in
 the current or previous year that Scimago, DOAJ, an institutional deal, or an
 OpenAlex `listed_in` entry vouches for (`services/search/recommendable.py`).
 `harvest_journals` refreshes `journals.listed_in` and `last_active_year`, so
-run it with `--refresh` when those inputs look stale. Browse and search keep
-the full corpus.
+run it with `--refresh` when those inputs look stale. Browse and semantic
+search apply the same two filters by default; users can switch each off
+(`active=false`, `vouched=false`).
 
 ### Manual and repair jobs
 

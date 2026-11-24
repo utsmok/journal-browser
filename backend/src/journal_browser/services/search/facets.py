@@ -45,6 +45,8 @@ async def facet_counts(
     funder_fit_value: str | None = None,
     year_from: int | None = None,
     year_to: int | None = None,
+    active: bool = True,
+    vouched: bool = True,
 ) -> tuple[dict[str, dict[str, int]], int]:
     """Facet counts over the query-filtered set. Each facet's own filter is
     excluded so a chip shows what selecting it would yield; all other active
@@ -89,6 +91,10 @@ async def facet_counts(
                     json.dumps(funder_struct, sort_keys=True) if funder_struct else None,
                 ),
                 ("funder_fit_value", funder_fit_value),
+                # Global eligibility toggles, not facets: counts only change
+                # when one is off, so the key carries them only then.
+                ("active", None if active else active),
+                ("vouched", None if vouched else vouched),
             )
         )
     )
@@ -131,6 +137,8 @@ async def facet_counts(
         "funder_fit_value": funder_fit_value,
         "year_from": year_from,
         "year_to": year_to,
+        "active": active,
+        "vouched": vouched,
     }
 
     def base_sub(**override: Any) -> Any:

@@ -102,6 +102,9 @@
     "filterBy": "Filter by {label}",
 
     "groupVenueType": "Venue type",
+    "qualityGroup": "Journal scope",
+    "qualityActive": "Only active journals (works in {year} or later)",
+    "qualityVouched": "Only journals on a curated list (Scimago, DOAJ, deal, national/indexing lists)",
     "groupDeal": "Deal",
     "groupOpenAccess": "Open access",
     "groupOaType": "OA type",

@@ -2041,6 +2041,30 @@
               "title": "Year To"
             },
             "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "active",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Only journals with works in the current or previous year",
+              "default": true,
+              "title": "Active"
+            },
+            "description": "Only journals with works in the current or previous year"
+          },
+          {
+            "name": "vouched",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Only journals on a curated list (Scimago, DOAJ, a deal, or a national/indexing list)",
+              "default": true,
+              "title": "Vouched"
+            },
+            "description": "Only journals on a curated list (Scimago, DOAJ, a deal, or a national/indexing list)"
           }
         ],
         "responses": {
@@ -2125,6 +2149,30 @@
               ],
               "title": "Cursor"
             }
+          },
+          {
+            "name": "active",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Only journals with works in the current or previous year",
+              "default": true,
+              "title": "Active"
+            },
+            "description": "Only journals with works in the current or previous year"
+          },
+          {
+            "name": "vouched",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Only journals on a curated list (Scimago, DOAJ, a deal, or a national/indexing list)",
+              "default": true,
+              "title": "Vouched"
+            },
+            "description": "Only journals on a curated list (Scimago, DOAJ, a deal, or a national/indexing list)"
           }
         ],
         "responses": {

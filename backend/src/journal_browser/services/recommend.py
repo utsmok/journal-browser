@@ -792,7 +792,8 @@ async def recommend_journals(
         base_query(
             institution_id=institution.id,
             pub_type=None if req.include_non_journals else "journal",
-            recommendable=True,
+            active=True,
+            vouched=True,
         )
         .add_columns(
             dist_expr.label("dist"),

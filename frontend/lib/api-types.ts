@@ -6340,6 +6340,10 @@ export interface operations {
                 year_from?: number | null;
                 /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
                 year_to?: number | null;
+                /** @description Only journals with works in the current or previous year */
+                active?: boolean;
+                /** @description Only journals on a curated list (Scimago, DOAJ, a deal, or a national/indexing list) */
+                vouched?: boolean;
             };
             header?: never;
             path: {
@@ -6375,6 +6379,10 @@ export interface operations {
                 q: string;
                 limit?: number;
                 cursor?: string | null;
+                /** @description Only journals with works in the current or previous year */
+                active?: boolean;
+                /** @description Only journals on a curated list (Scimago, DOAJ, a deal, or a national/indexing list) */
+                vouched?: boolean;
             };
             header?: never;
             path: {

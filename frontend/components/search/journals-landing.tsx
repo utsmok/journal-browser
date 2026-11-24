@@ -9,7 +9,7 @@ import * as React from "react";
 
 import { ActiveFiltersBar, type ActiveFilterChip } from "@/components/active-filters-bar";
 import { DealBadge, FunderFitBadge, OaTypeBadge, QuartileBadge } from "@/components/badges";
-import { FilterPanel, FilterSidebarCard } from "@/components/filter-panel";
+import { FilterPanel, FilterSidebarCard, QualityToggles } from "@/components/filter-panel";
 import { GuideWizard } from "@/components/guide/guide-wizard";
 import { rememberDirectoryUrl } from "@/components/journal/section-nav";
 import { OnboardingBanner, useOnboardingState } from "@/components/onboarding-banner";
@@ -90,6 +90,10 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
   const hasApc = sp.get("has_apc");
   const hasWorks = sp.get("has_works");
   const greenOa = sp.get("green_oa");
+  // Eligibility toggles: both on by default, URL param only when off so
+  // default URLs stay clean.
+  const active = sp.get("active") !== "false";
+  const vouched = sp.get("vouched") !== "false";
   const searchIn = (sp.get("search_in") ?? "all") as JournalsSearchIn;
   const oaTypes = (sp.get("oa_type") ?? "").split(",").filter(Boolean);
   const pubType = sp.get("pub_type") ?? "";
@@ -198,6 +202,9 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
     language: language || undefined,
     year_from,
     year_to,
+    // Off travels to the API; on stays out (server defaults to on).
+    active: active ? undefined : false,
+    vouched: vouched ? undefined : false,
     sort,
     dir: dir ?? undefined,
     cursor,
@@ -229,6 +236,9 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
 
   const toggleFilter = (key: string, value: string) =>
     update({ [key]: sp.get(key) === value ? undefined : value });
+
+  const toggleQuality = (key: "active" | "vouched") =>
+    update({ [key]: (key === "active" ? active : vouched) ? undefined : "false" });
 
   const toggleOaType = (value: string) => {
     const next = oaTypes.includes(value) ? oaTypes.filter((v) => v !== value) : [...oaTypes, value];
@@ -499,7 +509,9 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
       funderFit ||
       oaTypes.length > 0 ||
       pubType ||
-      language,
+      language ||
+      !active ||
+      !vouched,
   );
   const hasFilters = Boolean(spQ) || hasNonQueryFilters;
 
@@ -523,6 +535,8 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
       oa_type: undefined,
       pub_type: undefined,
       language: undefined,
+      active: undefined,
+      vouched: undefined,
     });
   };
 
@@ -866,6 +880,9 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
                 </p>
                 <FunderPicker fullWidth />
               </div>
+              <div className="mb-3 border-b border-[var(--border)] pb-3">
+                <QualityToggles active={active} vouched={vouched} onToggle={toggleQuality} />
+              </div>
               <FilterPanel
                 facets={facets}
                 selection={filterSelection}
@@ -894,6 +911,9 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
                     </div>
                   }
                 >
+                  <div className="mb-3 border-b border-[var(--border)] pb-3">
+                    <QualityToggles active={active} vouched={vouched} onToggle={toggleQuality} />
+                  </div>
                   <FilterPanel
                     facets={facets}
                     selection={filterSelection}

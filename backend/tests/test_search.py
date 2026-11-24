@@ -8,9 +8,10 @@ and test_route_precedence.py (scenario map: .audit/2026-11-19-sweep/p2-tests-pla
 
 import base64
 import json
+from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from conftest import journal_factory, requires_db
@@ -378,6 +379,55 @@ async def test_corpus_cutoff_boundary(api):
     scoped = (await api.get("/api/v1/ut/journals", params={"scope": "all"})).json()
     assert scoped["total"] == plain["total"] > 0
     assert "in_quality_bar" not in plain["items"][0]
+
+
+@requires_db
+async def test_eligibility_toggles(api, db_engine):
+    """The default browse view applies both eligibility toggles: an inactive
+    journal and an active-but-unlisted one are hidden, `active=false &
+    vouched=false` shows both, and the reported total matches the facet
+    pass under the same toggles."""
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with maker() as session:
+        inst = (
+            await session.execute(select(Institution).where(Institution.code == "ut"))
+        ).scalar_one()
+        year = datetime.now(UTC).year
+        session.add_all(
+            [
+                journal_factory("7070-7070", title="Ceased Journal", last_active_year=year - 5),
+                journal_factory("7373-7373", title="Unlisted Journal", listed_in=[]),
+                JournalFlags(institution_id=inst.id, issn_l="7070-7070", works_window_plus=10),
+                JournalFlags(institution_id=inst.id, issn_l="7373-7373", works_window_plus=10),
+            ]
+        )
+        await session.commit()
+
+    default = (await api.get("/api/v1/ut/journals", params={"limit": 100})).json()
+    assert "7070-7070" not in _issns(default)
+    assert "7373-7373" not in _issns(default)
+
+    off = (
+        await api.get(
+            "/api/v1/ut/journals", params={"active": "false", "vouched": "false", "limit": 100}
+        )
+    ).json()
+    assert {"7070-7070", "7373-7373"} <= _issns(off)
+    assert off["total"] == len(_issns(off))
+    assert default["total"] == len(_issns(default))
+    assert off["total"] - default["total"] == 2
+
+    # One toggle at a time: each filter hides exactly its own fixture.
+    active_only = (
+        await api.get("/api/v1/ut/journals", params={"vouched": "false", "limit": 100})
+    ).json()
+    assert "7070-7070" not in _issns(active_only)
+    assert "7373-7373" in _issns(active_only)
+    vouched_only = (
+        await api.get("/api/v1/ut/journals", params={"active": "false", "limit": 100})
+    ).json()
+    assert "7070-7070" in _issns(vouched_only)
+    assert "7373-7373" not in _issns(vouched_only)
 
 
 @requires_db
