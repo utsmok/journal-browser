@@ -33,13 +33,15 @@ All commands run from the repo root unless noted.
 | Backend lint | `cd backend && uv run ruff check src tests jobs scripts` |
 | Backend format | `cd backend && uv run ruff format src tests jobs scripts` |
 | Backend types | `cd backend && uv run ty check src jobs tests scripts --exit-zero-on-warning` |
+| Backend import layers | `cd backend && uv run lint-imports` (contracts in `[tool.importlinter]`: harvest and services never import each other; shared helpers live in `identifiers.py`, `queries.py`, `topics.py`; sibling modules import in one direction only) |
 | Frontend deps | `cd frontend && npm install` |
 | Frontend lint (ESLint) | `cd frontend && npm run lint` |
 | Frontend format (Biome) | `cd frontend && npm run format` |
 | Frontend format check (CI) | `cd frontend && npm run format:check` |
+| Frontend import cycles | `cd frontend && npm run lint:cycles` (madge) |
 | Frontend build | `cd frontend && npm run build` |
 | Refresh API types | `cd backend && uv run python scripts/dump_openapi.py && cd ../frontend && npm run generate` |
-| Setup git hooks | `pre-commit install` plus `pre-commit install --hook-type commit-msg` (ruff + format + eslint/biome + file-length gate on staged files; commit-msg gate on conventional subjects) |
+| Setup git hooks | `pre-commit install` plus `pre-commit install --hook-type commit-msg` (ruff + format + eslint/biome + import layers/cycles + file-length gate on staged files; commit-msg gate on conventional subjects) |
 
 ## Test setup
 
@@ -54,9 +56,10 @@ All commands run from the repo root unless noted.
   skips DB tests explicitly.
 - `pytest -m "not live"` is the CI default; `-m live` hits real network
   APIs and must be run deliberately.
-- CI (`.github/workflows/ci.yml`) runs: ruff check + format, ty, alembic
-  upgrade, pytest, the openapi drift check, eslint, biome format:check, the
-  vitest suite (`npm run test`), and `next build`. The `deps-hygiene` job
+- CI (`.github/workflows/ci.yml`) runs: ruff check + format, ty,
+  lint-imports, alembic upgrade, pytest, the openapi drift check, eslint,
+  madge (`lint:cycles`), biome format:check, the vitest suite
+  (`npm run test`), and `next build`. The `deps-hygiene` job
   (deptry + depcheck) reports unused or unlisted dependencies and is
   advisory: it never blocks a merge.
 - Logging: `logging_setup.configure_logging()` runs at app start; every

@@ -31,6 +31,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "import-linter>=2.17",
     "pytest>=8.3",
     # <1.5: 1.5.0's auto-mode fixture binding runs async fixtures on a
     # pytest-asyncio loop while anyio-marked tests run on anyio's own loop,
@@ -94,6 +95,37 @@ unsupported-operator = "warn"
 invalid-explicit-return = "warn"
 not-subscriptable = "warn"
 invalid-type-form = "warn"
+
+# `uv run lint-imports` (CI + pre-commit). harvest writes data and services
+# read it; shared helpers live below both (identifiers, queries, topics).
+[tool.importlinter]
+root_packages = ["journal_browser"]
+
+[[tool.importlinter.contracts]]
+name = "harvest and services do not import each other"
+type = "independence"
+modules = ["journal_browser.harvest", "journal_browser.services"]
+
+[[tool.importlinter.contracts]]
+name = "shared helpers stay below harvest, services and routers"
+type = "forbidden"
+source_modules = [
+    "journal_browser.config",
+    "journal_browser.identifiers",
+    "journal_browser.models",
+    "journal_browser.queries",
+    "journal_browser.topics",
+]
+forbidden_modules = [
+    "journal_browser.harvest",
+    "journal_browser.routers",
+    "journal_browser.services",
+]
+
+[[tool.importlinter.contracts]]
+name = "sibling modules import each other in one direction only"
+type = "acyclic_siblings"
+ancestors = ["journal_browser", "journal_browser.**"]
 
 [tool.deptry]
 known_first_party = ["journal_browser"]

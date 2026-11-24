@@ -32,6 +32,20 @@ repos:
         files: ^frontend/.*\.(ts|tsx|js|jsx|mjs|json|css)$
         pass_filenames: false
 
+      - id: backend-import-layers
+        name: backend import layers (import-linter)
+        entry: bash -c 'cd backend && uv run lint-imports'
+        language: system
+        files: ^backend/(src|jobs)/.*\.py$
+        pass_filenames: false
+
+      - id: frontend-import-cycles
+        name: frontend import cycles (madge)
+        entry: bash -c 'cd frontend && npm run --silent lint:cycles'
+        language: system
+        files: ^frontend/.*\.(ts|tsx)$
+        pass_filenames: false
+
       - id: check-file-length
         name: check file length (2000 lines)
         entry: python3 dev/hooks/check_file_length.py

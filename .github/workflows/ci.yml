@@ -36,6 +36,9 @@ jobs:
       - run: uv run ruff check src tests jobs scripts
       - run: uv run ruff format --check src tests jobs scripts
       - run: uv run ty check src jobs tests scripts --exit-zero-on-warning
+      # Module layering (harvest and services stay independent; see
+      # [tool.importlinter] in pyproject.toml).
+      - run: uv run lint-imports
       - run: uv run alembic upgrade head
       - run: uv run pytest -m "not live"
       # The committed openapi.json must match the routes; regenerating it
@@ -57,6 +60,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - run: npm run lint:cycles
       - run: npm run format:check
       - run: npm run test
       - run: npm run build
