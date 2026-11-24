@@ -43,10 +43,10 @@ from ..models import (
 from ..queries import cache_epoch
 from .authorship import (
     chapter_rollup,
-    local_store_ready,
     venue_authorship,
     venue_gap_predicate,
     venue_openalex_only,
+    venue_openalex_only_counts,
 )
 from .cache import (
     SNAPSHOT_CACHE,
@@ -762,6 +762,9 @@ async def _build_publisher_bundle(
             }
         )
 
+    async def _q_authorship(own: AsyncSession):
+        return await venue_authorship(own, institution, issns=issns, year_range=years)
+
     if include_gaps:
 
         async def _q_gaps(own: AsyncSession):
@@ -774,16 +777,17 @@ async def _build_publisher_bundle(
                 own, institution, venue_gap_predicate(institution, issns, years), parts=None
             )
 
-        openalex_only, chapters = await together(session, [_q_gaps, _q_chapters])
+        openalex_only, chapters, ut_authorship = await together(
+            session, [_q_gaps, _q_chapters, _q_authorship]
+        )
     else:
-        ready = await local_store_ready(session, institution)
-        openalex_only = {
-            "total": 0,
-            "entries_total": 0,
-            "items": [],
-            "available": ready,
-            "parts_counts": {},
-        }
+
+        async def _q_gaps_counts(own: AsyncSession):
+            return await venue_openalex_only_counts(
+                own, institution, issns=issns, year_range=years, parts=parts
+            )
+
+        openalex_only, ut_authorship = await together(session, [_q_gaps_counts, _q_authorship])
         chapters = {"chapters_total": 0, "books_total": 0, "books": []}
 
     return await cache_epoch(session), {
@@ -804,9 +808,7 @@ async def _build_publisher_bundle(
         ],
         "n_discrepancies": len(latest),
         "works_by_year": works_by_year,
-        "ut_authorship": await venue_authorship(
-            session, institution, issns=issns, year_range=years
-        ),
+        "ut_authorship": ut_authorship,
         "openalex_only": openalex_only,
         "chapter_rollup": chapters,
     }

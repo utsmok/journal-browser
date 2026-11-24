@@ -776,13 +776,9 @@ async def _build_journal_detail(
             return await authorship.venue_openalex_only(
                 own, institution, issn_l=journal.issn_l, year_range=year_range
             )
-        return {
-            "total": 0,
-            "entries_total": 0,
-            "items": [],
-            "available": await authorship.local_store_ready(own, institution),
-            "parts_counts": {},
-        }
+        return await authorship.venue_openalex_only_counts(
+            own, institution, issn_l=journal.issn_l, year_range=year_range
+        )
 
     openalex_info, openaire_dict, inst_metrics_dict, ut_auth_dict, gaps_dict = await together(
         session,

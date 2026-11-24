@@ -549,24 +549,16 @@ def _gap_entry_stubs(rows: list[Any]) -> tuple[list[dict[str, Any]], int]:
     return entries[:GAP_ITEM_CAP], len(entries)
 
 
-async def _store_gap_payload(
+async def _store_gap_counts(
     session: AsyncSession,
     institution: Institution,
     predicate: list[Any],
+    *,
     parts: list[str] | None = None,
-) -> dict[str, Any]:
-    """Shared shape: exact work total + per-part counts + capped grouped
-    entries over one store predicate (gates + attribution + anti-join).
-
-    Two-pass execution avoids pulling thousands of authorships JSONB blobs
-    or running Pure-match/roster enrichment beyond GAP_ITEM_CAP:
-    1. Count all / standalone / chapter / part totals in one SQL pass, and
-       fetch lightweight columns (w_id, title, year, parent_works, is_part)
-       only to determine exact grouping order and `entries_total`.
-    2. Hydrate full row details, UT author roster, publisher map, Pure-match
-       tags, and parent registry ONLY for the `w_id`s inside top `entries[:GAP_ITEM_CAP]`."""
+) -> tuple[bool, int, dict[str, int]]:
+    """Return (available, total, parts_counts) without hydrating any gap rows."""
     if not await local_store_ready(session, institution):
-        return _unavailable()
+        return False, 0, {}
     base_where = [OpenalexWork.institution_id == institution.id, *predicate]
     parts_sql = parts_predicate(parts)
     count_cols = [
@@ -584,6 +576,30 @@ async def _store_gap_payload(
         "part": int(counts_row.part or 0),
     }
     total = int(counts_row.filtered or 0) if parts_sql is not None else parts_counts["all"]
+    return True, total, parts_counts
+
+
+async def _store_gap_payload(
+    session: AsyncSession,
+    institution: Institution,
+    predicate: list[Any],
+    parts: list[str] | None = None,
+) -> dict[str, Any]:
+    """Shared shape: exact work total + per-part counts + capped grouped
+    entries over one store predicate (gates + attribution + anti-join).
+
+    Two-pass execution avoids pulling thousands of authorships JSONB blobs
+    or running Pure-match/roster enrichment beyond GAP_ITEM_CAP:
+    1. Count all / standalone / chapter / part totals in one SQL pass, and
+       fetch lightweight columns (w_id, title, year, parent_works, is_part)
+       only to determine exact grouping order and `entries_total`.
+    2. Hydrate full row details, UT author roster, publisher map, Pure-match
+       tags, and parent registry ONLY for the `w_id`s inside top `entries[:GAP_ITEM_CAP]`."""
+    ready, total, parts_counts = await _store_gap_counts(
+        session, institution, predicate, parts=parts
+    )
+    if not ready:
+        return _unavailable()
     if total == 0:
         return {
             "total": 0,
@@ -592,8 +608,12 @@ async def _store_gap_payload(
             "available": True,
             "parts_counts": parts_counts,
         }
-
-    where = [*base_where, *([parts_sql] if parts_sql is not None else [])]
+    parts_sql = parts_predicate(parts)
+    where = [
+        OpenalexWork.institution_id == institution.id,
+        *predicate,
+        *([parts_sql] if parts_sql is not None else []),
+    ]
     stub_rows = (
         await session.execute(
             select(
@@ -867,6 +887,69 @@ async def author_ids_openalex_only(
         aids_gap_predicate(institution, aids, year_range),
         parts=parts,
     )
+
+
+async def venue_openalex_only_counts(
+    session: AsyncSession,
+    institution: Institution,
+    *,
+    issn_l: str | None = None,
+    issns: list[str] | None = None,
+    year_range: tuple[int, int] | None = None,
+    parts: list[str] | None = None,
+) -> dict[str, Any]:
+    """Count-only counterpart to `venue_openalex_only` when entries are deferred."""
+    venue_issns = [issn_l] if issn_l is not None else sorted(set(issns or []))
+    if not venue_issns:
+        return {"total": 0, "entries_total": 0, "items": [], "available": True, "parts_counts": {}}
+    ready, total, parts_counts = await _store_gap_counts(
+        session,
+        institution,
+        venue_gap_predicate(institution, venue_issns, year_range),
+        parts=parts,
+    )
+    if not ready:
+        return _unavailable()
+    return {
+        "total": total,
+        "entries_total": 0,
+        "items": [],
+        "available": True,
+        "parts_counts": parts_counts,
+    }
+
+
+async def author_ids_openalex_only_counts(
+    session: AsyncSession,
+    institution: Institution,
+    aids: list[str],
+    year_range: tuple[int, int] | None = None,
+    parts: list[str] | None = None,
+) -> dict[str, Any]:
+    """Count-only counterpart to `author_ids_openalex_only` when entries are deferred."""
+    if not _flat_aids(aids):
+        return {
+            "total": 0,
+            "entries_total": 0,
+            "items": [],
+            "available": await local_store_ready(session, institution),
+            "parts_counts": {},
+        }
+    ready, total, parts_counts = await _store_gap_counts(
+        session,
+        institution,
+        aids_gap_predicate(institution, aids, year_range),
+        parts=parts,
+    )
+    if not ready:
+        return _unavailable()
+    return {
+        "total": total,
+        "entries_total": 0,
+        "items": [],
+        "available": True,
+        "parts_counts": parts_counts,
+    }
 
 
 async def venue_authorship(

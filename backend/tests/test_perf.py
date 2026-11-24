@@ -164,23 +164,34 @@ async def test_lazy_cris_gaps_and_scoped_unit_cache(client, db, institution_fact
     )
     await db.commit()
 
-    # include_gaps=false skips heavy gap fetch while signaling availability=True.
+    # include_gaps=false skips heavy gap fetch while returning exact counts & parts_counts.
     fast_j = (
         await client.get(f"/api/v1/{inst.code}/journals/{j.issn_l}?include_gaps=false")
     ).json()
     assert fast_j["openalex_only"]["available"] is True
     assert fast_j["openalex_only"]["items"] == []
+    assert fast_j["openalex_only"]["total"] == 2
+    assert fast_j["openalex_only"]["parts_counts"] == {
+        "all": 2,
+        "standalone": 1,
+        "chapter": 1,
+        "part": 0,
+    }
 
     fast_p = (
         await client.get(f"/api/v1/{inst.code}/publishers/Gap%20Press?include_gaps=false")
     ).json()
     assert fast_p["openalex_only"]["available"] is True
     assert fast_p["openalex_only"]["items"] == []
+    assert fast_p["openalex_only"]["total"] == 2
+    assert fast_p["openalex_only"]["parts_counts"]["all"] == 2
 
     fast_u = (
         await client.get(f"/api/v1/{inst.code}/orgunits/faculty/Science?include_gaps=false")
     ).json()
     assert fast_u["openalex_only"]["available"] is True
+    assert fast_u["openalex_only"]["items"] == []
+    assert fast_u["openalex_only"]["total"] == 0
 
     # Lazy /cris-gaps endpoint returns parts_counts + unfiltered chapter_rollup even when filtered.
     gaps_standalone = (

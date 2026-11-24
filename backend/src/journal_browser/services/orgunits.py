@@ -34,8 +34,8 @@ from ..queries import cache_epoch, work_type_not_excluded
 from .authorship import (
     aids_gap_predicate,
     author_ids_openalex_only,
+    author_ids_openalex_only_counts,
     chapter_rollup,
-    local_store_ready,
 )
 from .cache import (
     SNAPSHOT_CACHE,
@@ -881,11 +881,13 @@ async def _build_unit_bundle(
     async def _q_partners(own: AsyncSession):
         return await top_partners_for_orgunit(own, institution, level, name, year_range)
 
-    usage_rows, partners = await together(session, [_q_deal_usage, _q_partners])
+    aid_rows = (await session.execute(select(Author.openalex_ids).where(*membership))).all()
+    member_aids = [aid for (ids,) in aid_rows for aid in (ids or [])]
+
+    async def _q_gaps_counts(own: AsyncSession):
+        return await author_ids_openalex_only_counts(own, institution, member_aids, year_range)
 
     if include_gaps:
-        aid_rows = (await session.execute(select(Author.openalex_ids).where(*membership))).all()
-        member_aids = [aid for (ids,) in aid_rows for aid in (ids or [])]
 
         async def _q_gaps(own: AsyncSession):
             return await author_ids_openalex_only(own, institution, member_aids, year_range)
@@ -895,16 +897,13 @@ async def _build_unit_bundle(
                 own, institution, aids_gap_predicate(institution, member_aids, year_range)
             )
 
-        openalex_only, chapters = await together(session, [_q_gaps, _q_chapters])
+        usage_rows, partners, openalex_only, chapters = await together(
+            session, [_q_deal_usage, _q_partners, _q_gaps, _q_chapters]
+        )
     else:
-        ready = await local_store_ready(session, institution)
-        openalex_only = {
-            "total": 0,
-            "entries_total": 0,
-            "items": [],
-            "available": ready,
-            "parts_counts": {},
-        }
+        usage_rows, partners, openalex_only = await together(
+            session, [_q_deal_usage, _q_partners, _q_gaps_counts]
+        )
         chapters = {"chapters_total": 0, "books_total": 0, "books": []}
 
     bundle = {
