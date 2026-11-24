@@ -108,13 +108,13 @@ export function CopyButton({ text, label }: { text: string; label: string }) {
   );
 }
 
-export const WORKS_PAGE_SIZE = 20;
+export const WORKS_PAGE_SIZE = 10;
 
 /** List caps: reference-data sections show the top slice and reveal the
  * rest on demand (limit, don't delete). */
 export const TOPICS_LIMIT = 8;
-export const NAMES_LIMIT = 12;
-export const SIMILAR_LIMIT = 12;
+export const NAMES_LIMIT = 10;
+export const SIMILAR_LIMIT = 10;
 
 export type GreenOaPolicy = NonNullable<JournalDetailResponse["green_oa"]>;
 export type UtAuthorship = JournalDetailResponse["ut_authorship"];

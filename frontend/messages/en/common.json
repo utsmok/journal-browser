@@ -190,6 +190,9 @@
   },
 
   "trend": {
+    "heading": "Open access over time",
+    "expand": "Expand chart",
+    "compact": "Compact view",
     "noWorks": "No works recorded for this period.",
     "chartLabel": "Open access status of {short} publications per year",
     "yearTitle": "{year}: {count} works",
@@ -288,6 +291,22 @@
     "sortedDescReset": "Sorted Z to A, high to low. Click to reset."
   },
 
+  "list": {
+    "showLess": "Show less",
+    "showMore": "+{count} more",
+    "showAll": "Show all ({count})"
+  },
+  "crisGaps": {
+    "loadHint": "Open to check OpenAlex works missing from Pure",
+    "loading": "Checking OpenAlex works missing from Pure…",
+    "filtering": "Updating…",
+    "all": "All",
+    "chapters": "Chapters",
+    "parts": "Other parts",
+    "standalone": "Standalone",
+    "pagerLabel": "entries",
+    "filterLabel": "Filter by part kind"
+  },
   "feedback": {
     "reportIssue": "Report an issue",
     "close": "Close",

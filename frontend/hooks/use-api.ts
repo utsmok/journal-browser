@@ -12,11 +12,15 @@ import {
   fetchCollaborationMap,
   fetchCollaborations,
   fetchCollaborationWorks,
+  fetchJournalCrisGaps,
   fetchOrgUnit,
+  fetchOrgUnitCrisGaps,
   fetchOrgUnits,
   fetchPublisher,
+  fetchPublisherCrisGaps,
   fetchPublishers,
   type CollaborationSearchParams,
+  type CrisGapsResponse,
   type DealOut,
   type FreshnessResponse,
   type FunderDetailResponse,
@@ -44,6 +48,7 @@ const qk = {
   journals: (i: string, params: JournalSearchParams) => ["journals", i, params] as const,
   facets: (i: string, filters: JournalSearchParams) => ["facets", i, filters] as const,
   journal: (i: string, issnL: string) => ["journal", i, issnL] as const,
+  journalGaps: (i: string, issnL: string) => ["journal-gaps", i, issnL] as const,
   similar: (i: string, issnL: string) => ["similar", i, issnL] as const,
   works: (i: string, issnL: string, page: number) => ["works", i, issnL, page] as const,
   deals: (i: string, status: "current" | "archive" | "all") => ["deals", i, status] as const,
@@ -51,8 +56,11 @@ const qk = {
   freshness: (i: string) => ["freshness", i] as const,
   publishers: (i: string, params: PublisherSearchParams) => ["publishers", i, params] as const,
   publisher: (i: string, name: string) => ["publisher", i, name] as const,
+  publisherGaps: (i: string, name: string) => ["publisher-gaps", i, name] as const,
   orgunits: (i: string, params: OrgUnitSearchParams) => ["orgunits", i, params] as const,
   orgunit: (i: string, level: OrgUnitLevel, name: string) => ["orgunit", i, level, name] as const,
+  orgunitGaps: (i: string, level: OrgUnitLevel, name: string) =>
+    ["orgunit-gaps", i, level, name] as const,
   funders: (i: string, q: string) => ["funders", i, q] as const,
   funder: (i: string, id: number) => ["funder", i, id] as const,
   collaborations: (i: string, p: CollaborationSearchParams, offset: number) =>
@@ -184,8 +192,30 @@ export function useJournal(issnL: string | undefined, funderId?: number, years?:
         funder: funderId,
         year_from: years?.year_from,
         year_to: years?.year_to,
+        include_gaps: "false",
       }),
     enabled: Boolean(issnL),
+  });
+}
+
+export function useJournalCrisGaps(
+  issnL: string | undefined,
+  years?: YearParams,
+  parts?: PublisherPartsFilter,
+  enabled: boolean = true,
+) {
+  const inst = useInstitution();
+  return useQuery<CrisGapsResponse>({
+    queryKey: [
+      ...qk.journalGaps(inst, issnL ?? ""),
+      years?.year_from ?? null,
+      years?.year_to ?? null,
+      parts ?? null,
+    ] as const,
+    queryFn: () => fetchJournalCrisGaps(inst, issnL ?? "", years, parts),
+    enabled: Boolean(issnL) && inst !== "" && enabled,
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
   });
 }
 
@@ -221,7 +251,7 @@ export function useJournalWorks(issnL: string | undefined, page: number, years?:
     queryFn: () =>
       apiGet<WorksPage>(`/${inst}/journals/${issnL}/works`, {
         page,
-        page_size: 20,
+        page_size: 10,
         year_from: years?.year_from,
         year_to: years?.year_to,
       }),
@@ -286,14 +316,13 @@ export function usePublishers(params: PublisherSearchParams) {
 }
 
 /**
- * Publisher detail bundle. The year lens, when set, scopes the works
- * numbers (header sum + journal table) and joins the cache key; the
- * gap-card parts filter joins it too.
+ * Publisher detail bundle (loads fast with include_gaps=false; CRIS gaps are
+ * fetched lazily via usePublisherCrisGaps when the section is opened).
  */
 export function usePublisher(
   name: string | undefined,
   years?: YearParams,
-  parts?: PublisherPartsFilter,
+  _parts?: PublisherPartsFilter,
 ) {
   const inst = useInstitution();
   return useQuery({
@@ -301,10 +330,30 @@ export function usePublisher(
       ...qk.publisher(inst, name ?? ""),
       years?.year_from ?? null,
       years?.year_to ?? null,
+    ] as const,
+    queryFn: () => fetchPublisher(inst, name ?? "", years, undefined, false),
+    enabled: Boolean(name),
+  });
+}
+
+export function usePublisherCrisGaps(
+  name: string | undefined,
+  years?: YearParams,
+  parts?: PublisherPartsFilter,
+  enabled: boolean = true,
+) {
+  const inst = useInstitution();
+  return useQuery<CrisGapsResponse>({
+    queryKey: [
+      ...qk.publisherGaps(inst, name ?? ""),
+      years?.year_from ?? null,
+      years?.year_to ?? null,
       parts ?? null,
     ] as const,
-    queryFn: () => fetchPublisher(inst, name ?? "", years, parts),
-    enabled: Boolean(name),
+    queryFn: () => fetchPublisherCrisGaps(inst, name ?? "", years, parts),
+    enabled: Boolean(name) && inst !== "" && enabled,
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
   });
 }
 
@@ -332,8 +381,31 @@ export function useOrgUnit(
       years?.year_to ?? null,
       sort ?? "share",
     ] as const,
-    queryFn: () => fetchOrgUnit(inst, level ?? "faculty", name ?? "", years, sort),
+    queryFn: () => fetchOrgUnit(inst, level ?? "faculty", name ?? "", years, sort, false),
     enabled: Boolean(level && name),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useOrgUnitCrisGaps(
+  level: OrgUnitLevel | undefined,
+  name: string | undefined,
+  years?: YearParams,
+  parts?: PublisherPartsFilter,
+  enabled: boolean = true,
+) {
+  const inst = useInstitution();
+  return useQuery<CrisGapsResponse>({
+    queryKey: [
+      ...qk.orgunitGaps(inst, level ?? "faculty", name ?? ""),
+      years?.year_from ?? null,
+      years?.year_to ?? null,
+      parts ?? null,
+    ] as const,
+    queryFn: () => fetchOrgUnitCrisGaps(inst, level ?? "faculty", name ?? "", years, parts),
+    enabled: Boolean(level && name) && inst !== "" && enabled,
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
   });
 }
 
@@ -451,11 +523,12 @@ export function useCollaborationWorks(
   ror: string,
   params: CollaborationSearchParams,
   offset: number,
+  limit?: number,
 ) {
   const inst = useInstitution();
   return useQuery({
-    queryKey: qk.collaborationWorks(inst, ror, params, offset),
-    queryFn: () => fetchCollaborationWorks(inst, ror, params, offset),
+    queryKey: [...qk.collaborationWorks(inst, ror, params, offset), limit ?? null] as const,
+    queryFn: () => fetchCollaborationWorks(inst, ror, params, offset, limit),
     enabled: inst !== "",
     placeholderData: keepPreviousData,
   });

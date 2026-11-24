@@ -4,7 +4,16 @@ import { Check, ChevronDown } from "lucide-react";
 import * as React from "react";
 import { useTranslations } from "next-intl";
 
-import { ACCESS_TEXT, DealGlyph, LockIcon, QuartileGlyph } from "@/components/badges";
+import {
+  ACCESS_TEXT,
+  ApcGlyph,
+  DealGlyph,
+  DoajGlyph,
+  LockIcon,
+  NoDealGlyph,
+  QuartileGlyph,
+  WorksGlyph,
+} from "@/components/data-icons";
 import { Card } from "@/components/ui/card";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { PUB_TYPE_LABELS } from "@/lib/search-config";
@@ -75,92 +84,6 @@ function topValues(
   return values;
 }
 
-/** No deal: the agreement document with a slash through it. */
-function NoDealGlyph() {
-  return (
-    <>
-      <rect
-        x={1.6}
-        y={2.6}
-        width={9.4}
-        height={11}
-        rx={1.6}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.8}
-      />
-      <path
-        d="M3.8 4.4 L9.8 13.2"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.8}
-        strokeLinecap="round"
-      />
-    </>
-  );
-}
-
-/** DOAJ: the directory volume it is registered in. */
-function DoajGlyph() {
-  return (
-    <>
-      <rect
-        x={2.2}
-        y={2.2}
-        width={9.6}
-        height={11.6}
-        rx={1.6}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.8}
-      />
-      <path d="M5.4 2.2 V13.8" stroke="currentColor" strokeWidth={1.8} />
-    </>
-  );
-}
-
-/** APC: the fee note. */
-function ApcGlyph() {
-  return (
-    <>
-      <rect
-        x={1.2}
-        y={4.6}
-        width={13.6}
-        height={6.8}
-        rx={1.6}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.8}
-      />
-      <circle cx={8} cy={8} r={1.7} fill="currentColor" />
-    </>
-  );
-}
-
-function WorksGlyph() {
-  return (
-    <>
-      <rect
-        x={2.8}
-        y={1.6}
-        width={10.4}
-        height={12.8}
-        rx={1.6}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.8}
-      />
-      <path
-        d="M5.6 5.4h4.8M5.6 8h4.8M5.6 10.6h3"
-        stroke="currentColor"
-        strokeWidth={1.8}
-        strokeLinecap="round"
-      />
-    </>
-  );
-}
-
 /**
  * Active-state tints reuse the AA-audited hue pairs from the status chips:
  * idle options show a colored icon on neutral ground, selected options fill
@@ -229,12 +152,9 @@ function facetLook(key: string, value: string): { icon: React.ReactNode; tint: s
     case "has_works:true":
     case "has_works:false":
       return { icon: <WorksGlyph />, tint: value === "true" ? TINTS.brand : TINTS.slate };
-    // Positive green-OA values ride the default icon-less brand look, like topic/publisher.
     case "green_oa:none":
       return { icon: null, tint: TINTS.slate };
     default:
-      // The deal facet's negative value is backend-defined; anything that is
-      // not "covered" is a no-deal option.
       if (key === "deal") return { icon: <NoDealGlyph />, tint: TINTS.slate };
       if (key === "quartile")
         return {
@@ -245,8 +165,6 @@ function facetLook(key: string, value: string): { icon: React.ReactNode; tint: s
   }
 }
 
-/** How each facet group behaves; shown as hover text on the group header.
- * Groups without an entry render no hover text. */
 const GROUP_HINT_KEYS: Record<string, string> = {
   pub_type: "facets.hintVenueType",
   oa: "facets.hintOpenAccess",
@@ -259,7 +177,6 @@ const GROUP_HINT_KEYS: Record<string, string> = {
   publisher: "facets.hintPublisher",
 };
 
-/** Hints that name the institution or window, resolved per render. */
 function groupHint(
   t: Translator,
   key: string,
@@ -276,7 +193,6 @@ function groupHint(
   return hintKey ? t(hintKey) : undefined;
 }
 
-/** Definitions per facet option, shown as hover text on the control. */
 const FACET_TITLE_KEYS: Record<string, string> = {
   "pub_type:journal": "facets.titleVenueTypeJournal",
   "pub_type:book series": "facets.titleVenueTypeBookSeries",

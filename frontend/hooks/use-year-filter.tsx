@@ -124,10 +124,16 @@ export function useYearRange(): {
   const { inst, range, setRange } = React.useContext(YearRangeContext);
   const bounds = useYearBounds();
   const active = effectiveYearRange(range, bounds);
+  const isFullWindow =
+    active !== null &&
+    bounds.start !== undefined &&
+    bounds.end !== undefined &&
+    active.from <= bounds.start &&
+    active.to >= bounds.end;
   return {
     inst,
-    year_from: active?.from,
-    year_to: active?.to,
+    year_from: isFullWindow ? undefined : active?.from,
+    year_to: isFullWindow ? undefined : active?.to,
     range,
     setRange,
   };

@@ -9,14 +9,14 @@ import * as React from "react";
 import { DealBadge, OaTypeBadge, QuartileBadge } from "@/components/badges";
 import { CardPager } from "@/components/card-pager";
 import { CollapsibleCard } from "@/components/collapsible-card";
-import { DetailKpiStrip } from "@/components/detail-kpi-strip";
-import { GapEntryList } from "@/components/gap-entries";
-import { GapCsvButton } from "@/components/gap-csv-button";
+import { CrisGapsSection } from "@/components/cris-gaps-section";
+import { ACCESS_TEXT, ApcGlyph, DataIcon, DealGlyph, WorksGlyph } from "@/components/data-icons";
+import { DetailSummaryPanel } from "@/components/detail-summary";
 import { SectionNav } from "@/components/journal/section-nav";
+import { MoreToggle } from "@/components/journal/shared";
 import { OaCompositionBar, OaCompositionLegend } from "@/components/oa-composition";
-import { OaTrend } from "@/components/oa-trend";
 import { DetailSkeleton, ErrorPanel } from "@/components/states";
-import { Button } from "@/components/ui/button";
+import { TopicChipList } from "@/components/topic-chips";
 import {
   Table,
   TableBody,
@@ -28,21 +28,21 @@ import {
 import { usePublisher } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
-import { useYearRange, yearQuery } from "@/hooks/use-year-filter";
+import { useYearRange } from "@/hooks/use-year-filter";
 import {
   errorMessage,
   encodeNamePath,
   type DealOut,
   type PublisherDetailResponse,
   type PublisherListItem,
-  type PublisherPartsFilter,
 } from "@/lib/api";
 import { capReached, latestYearUsage } from "@/lib/deal-caps";
 import { formatEur, journalApcText } from "@/lib/format";
 import { dealLinkLabel, displayPublisherName, orderedDealLinks } from "@/lib/deal-links";
-import { entriesTotal, toGapEntries } from "@/lib/gap-entries";
 
-/** First curated link for a deal ("conditions" / contract document). */
+const PAGE_SIZE = 10;
+const SUBTABLE_CAP = 10;
+
 function dealConditionsUrl(deal: DealOut): string | null {
   const links = deal.links ? orderedDealLinks(deal.links) : [];
   return links[0]?.url ?? deal.contract_url ?? null;
@@ -55,7 +55,7 @@ function DealRow({ deal }: { deal: DealOut }) {
   const capUsage = latestYearUsage(deal.cap_usage);
   const capUsageReached = capUsage.some(capReached);
   return (
-    <li className="py-2.5 first:pt-0 last:pb-0">
+    <li className="py-2 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <DealBadge covered capped={capUsageReached} />
         <span className="font-medium">
@@ -79,12 +79,12 @@ function DealRow({ deal }: { deal: DealOut }) {
             href={conditionsUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline"
+            className="inline-flex items-center gap-1 text-xs text-[var(--primary-text)] underline-offset-2 hover:underline"
           >
             {deal.links?.length
               ? dealLinkLabel(tc, orderedDealLinks(deal.links)[0])
               : t("detail.contract")}{" "}
-            <ExternalLink aria-hidden className="size-3.5 shrink-0" />
+            <ExternalLink aria-hidden className="size-3 shrink-0" />
           </a>
         )}
       </div>
@@ -97,60 +97,43 @@ function DealRow({ deal }: { deal: DealOut }) {
   );
 }
 
-/** The three headline aggregates: access mix, quartile spread, APC. */
-function AggregateCards({ publisher }: { publisher: PublisherListItem }) {
+/** Slim composition bar + compact quartile pill row embedded inside Overview. */
+function PublisherBreakdowns({ publisher }: { publisher: PublisherListItem }) {
   const t = useTranslations("publishers");
-  const { n_journals, eur_min: min, eur_max: max } = publisher.apc;
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4">
-        <h2 className="mb-3 text-sm font-semibold">{t("detail.composition")}</h2>
-        <div className="mb-3">
-          <OaCompositionBar
-            counts={publisher.oa_types}
-            total={publisher.n_journals}
-            className="h-3"
-          />
+    <div className="space-y-2.5 border-t border-[var(--border)] pt-3">
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2 text-xs font-medium text-[var(--muted-foreground)]">
+          <span>{t("detail.composition")}</span>
+          <span className="tabular-nums">{publisher.n_journals.toLocaleString("en")}</span>
         </div>
+        <OaCompositionBar
+          counts={publisher.oa_types}
+          total={publisher.n_journals}
+          className="h-2.5"
+        />
         <OaCompositionLegend counts={publisher.oa_types} />
       </div>
-      <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4">
-        <h2 className="mb-3 text-sm font-semibold">{t("detail.quartiles")}</h2>
-        <ul className="space-y-1 text-sm tabular-nums">
-          {(["q1", "q2", "q3", "q4", "none"] as const).map((q) => {
-            const n = publisher.quartiles[q] ?? 0;
-            return (
-              <li
-                key={q}
-                className={
-                  n
-                    ? "flex items-center justify-between gap-4"
-                    : "flex items-center justify-between gap-4 text-[var(--muted-foreground)]"
-                }
-              >
-                <span>{q === "none" ? t("detail.notRanked") : q.toUpperCase()}</span>
-                <span>{n.toLocaleString("en")}</span>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-      <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4">
-        <h2 className="mb-3 text-sm font-semibold">{t("detail.apcCosts")}</h2>
-        {n_journals === 0 || (min == null && max == null) ? (
-          <p className="text-sm text-[var(--muted-foreground)]">{t("detail.noApcPrice")}</p>
-        ) : (
-          <>
-            <p className="text-2xl font-semibold tabular-nums">
-              {min != null && max != null && min !== max
-                ? `€${formatEur(min)}–${formatEur(max)}`
-                : `€${formatEur(max ?? (min as number))}`}
-            </p>
-            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-              {t("apcCoverage", { count: n_journals })}
-            </p>
-          </>
-        )}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs tabular-nums">
+        <span className="font-medium text-[var(--muted-foreground)]">{t("detail.quartiles")}:</span>
+        {(["q1", "q2", "q3", "q4", "none"] as const).map((q) => {
+          const n = publisher.quartiles[q] ?? 0;
+          return (
+            <span
+              key={q}
+              className={`inline-flex items-center gap-1 rounded-md border border-[var(--border)] px-2 py-0.5 ${
+                n ? "bg-[var(--card)]" : "opacity-50"
+              }`}
+            >
+              {q === "none" ? (
+                <span>{t("detail.notRanked")}</span>
+              ) : (
+                <QuartileBadge quartile={q.toUpperCase()} />
+              )}
+              <span className="text-[var(--muted-foreground)]">{n.toLocaleString("en")}</span>
+            </span>
+          );
+        })}
       </div>
     </div>
   );
@@ -158,13 +141,10 @@ function AggregateCards({ publisher }: { publisher: PublisherListItem }) {
 
 type UtAuthorship = PublisherDetailResponse["ut_authorship"];
 type UtAuthorRow = UtAuthorship["top_authors"][number];
-type OpenalexOnly = PublisherDetailResponse["openalex_only"];
 
-/** Who at this institution authors the publisher's journals' works:
- * distinct works per faculty and research group, plus the most prolific
- * UT authors. */
 function UtAuthorshipCard({ authorship, inst }: { authorship: UtAuthorship; inst: string }) {
   const t = useTranslations("publishers");
+  const [showAll, setShowAll] = React.useState<Record<string, boolean>>({});
   const empty =
     authorship.faculties.length === 0 &&
     authorship.research_groups.length === 0 &&
@@ -173,12 +153,15 @@ function UtAuthorshipCard({ authorship, inst }: { authorship: UtAuthorship; inst
     <CollapsibleCard
       id="ut-authorship"
       title={t("detail.authorship")}
+      count={authorship.n_ut_works > 0 ? authorship.n_ut_works : undefined}
+      defaultOpen={false}
+      compact
       description={
-        <p className="text-sm text-[var(--muted-foreground)]">
+        <p className="text-xs text-[var(--muted-foreground)]">
           {t("detail.authorshipIntro", { count: authorship.n_ut_works })}
         </p>
       }
-      contentClassName="space-y-5 text-sm"
+      contentClassName="space-y-4 text-sm [&_td]:py-1.5 [&_th]:h-8"
     >
       {empty ? (
         <p className="text-[var(--muted-foreground)]">{t("detail.authorshipEmpty")}</p>
@@ -187,55 +170,72 @@ function UtAuthorshipCard({ authorship, inst }: { authorship: UtAuthorship; inst
           {(
             [
               {
+                key: "faculties",
                 level: "faculty" as const,
                 heading: t("detail.faculties"),
                 caption: t("detail.authorshipCaptionFaculty"),
                 rows: authorship.faculties,
               },
               {
+                key: "groups",
                 level: "group" as const,
                 heading: t("detail.researchGroups"),
                 caption: t("detail.authorshipCaptionGroup"),
                 rows: authorship.research_groups,
               },
             ] as const
-          ).map(
-            (section) =>
-              section.rows.length > 0 && (
-                <div key={section.heading}>
-                  <h3 className="mb-1 text-sm font-semibold">{section.heading}</h3>
-                  <Table>
-                    <caption className="sr-only">{section.caption}</caption>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>{t("detail.name")}</TableHead>
-                        <TableHead className="text-right">{t("detail.works")}</TableHead>
+          ).map((section) => {
+            if (section.rows.length === 0) return null;
+            const expanded = !!showAll[section.key];
+            const visible = expanded ? section.rows : section.rows.slice(0, SUBTABLE_CAP);
+            return (
+              <div key={section.heading}>
+                <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                  {section.heading}
+                </h3>
+                <Table>
+                  <caption className="sr-only">{section.caption}</caption>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t("detail.name")}</TableHead>
+                      <TableHead className="text-right">{t("detail.works")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {visible.map((row) => (
+                      <TableRow key={row.name}>
+                        <TableCell className="font-medium">
+                          <Link
+                            href={`/${inst}/orgunit/${section.level}/${encodeNamePath(row.name)}`}
+                            className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                          >
+                            {row.name}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {row.works.toLocaleString("en")}
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {section.rows.map((row) => (
-                        <TableRow key={row.name}>
-                          <TableCell className="font-medium">
-                            <Link
-                              href={`/${inst}/orgunit/${section.level}/${encodeNamePath(row.name)}`}
-                              className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-                            >
-                              {row.name}
-                            </Link>
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {row.works.toLocaleString("en")}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              ),
-          )}
+                    ))}
+                  </TableBody>
+                </Table>
+                {section.rows.length > SUBTABLE_CAP && (
+                  <div className="mt-1.5">
+                    <MoreToggle
+                      open={expanded}
+                      onToggle={() => setShowAll((s) => ({ ...s, [section.key]: !s[section.key] }))}
+                      moreLabel={t("detail.showAllCount", { count: section.rows.length })}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
           {authorship.top_authors.length > 0 && (
             <div>
-              <h3 className="mb-1 text-sm font-semibold">{t("detail.topAuthors")}</h3>
+              <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                {t("detail.topAuthors")}
+              </h3>
               <Table>
                 <caption className="sr-only">{t("detail.topAuthorsCaption")}</caption>
                 <TableHeader>
@@ -246,7 +246,10 @@ function UtAuthorshipCard({ authorship, inst }: { authorship: UtAuthorship; inst
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {authorship.top_authors.map((a: UtAuthorRow) => (
+                  {(showAll.authors
+                    ? authorship.top_authors
+                    : authorship.top_authors.slice(0, SUBTABLE_CAP)
+                  ).map((a: UtAuthorRow) => (
                     <TableRow key={a.pure_uuid}>
                       <TableCell className="font-medium">
                         <Link
@@ -268,142 +271,18 @@ function UtAuthorshipCard({ authorship, inst }: { authorship: UtAuthorship; inst
                   ))}
                 </TableBody>
               </Table>
+              {authorship.top_authors.length > SUBTABLE_CAP && (
+                <div className="mt-1.5">
+                  <MoreToggle
+                    open={!!showAll.authors}
+                    onToggle={() => setShowAll((s) => ({ ...s, authors: !s.authors }))}
+                    moreLabel={t("detail.showAllCount", { count: authorship.top_authors.length })}
+                  />
+                </div>
+              )}
             </div>
           )}
         </>
-      )}
-    </CollapsibleCard>
-  );
-}
-
-/** OpenAlex works attributed to this publisher's journals that match no
- * Pure record: candidates missing from the research information system.
- * `parts` filters the underlying fetch by work-part kind. */
-function CrisGapsCard({
-  openalexOnly,
-  inst,
-  name,
-  parts,
-  onPartsChange,
-}: {
-  openalexOnly: OpenalexOnly;
-  inst: string;
-  name: string;
-  parts: PublisherPartsFilter | undefined;
-  onPartsChange: (parts: PublisherPartsFilter | undefined) => void;
-}) {
-  const { year_from, year_to } = useYearRange();
-  const { total } = openalexOnly;
-  const entries = toGapEntries(openalexOnly.items);
-  const shownTotal = entriesTotal(openalexOnly);
-  const t = useTranslations("publishers");
-  const yearQs = yearQuery("?", year_from, year_to);
-  const csvHref = `/api/v1/${inst}/publishers/${encodeNamePath(name)}/openalex-only.csv${yearQs}${parts ? `${yearQs ? "&" : "?"}parts=${parts}` : ""}`;
-  return (
-    <CollapsibleCard
-      id="cris-gaps"
-      title={t("detail.crisGaps")}
-      description={
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <p className="text-sm text-[var(--muted-foreground)]">
-            {t("detail.crisGapsIntro", { count: total })}
-            {shownTotal > entries.length && t("detail.crisGapsShowing", { count: entries.length })}
-          </p>
-          {total > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              <div
-                role="group"
-                aria-label={t("detail.partsFilter.label")}
-                className="flex overflow-hidden rounded-[var(--radius)] border border-[var(--input)]"
-              >
-                {(
-                  [
-                    { value: undefined, label: t("detail.partsFilter.all") },
-                    { value: "chapter", label: t("detail.partsFilter.chapters") },
-                    { value: "part", label: t("detail.partsFilter.parts") },
-                    { value: "standalone", label: t("detail.partsFilter.standalone") },
-                  ] as { value: PublisherPartsFilter | undefined; label: string }[]
-                ).map((opt) => {
-                  const selected = parts === opt.value;
-                  return (
-                    <Button
-                      key={opt.value ?? "all"}
-                      variant={selected ? "secondary" : "ghost"}
-                      size="sm"
-                      className="rounded-none"
-                      aria-pressed={selected}
-                      onClick={() => onPartsChange(opt.value)}
-                    >
-                      {opt.label}
-                    </Button>
-                  );
-                })}
-              </div>
-              <GapCsvButton href={csvHref} />
-            </div>
-          )}
-        </div>
-      }
-      contentClassName="text-sm"
-    >
-      {total === 0 ? (
-        <p className="text-[var(--muted-foreground)]">{t("detail.crisGapsEmpty")}</p>
-      ) : (
-        <GapEntryList
-          entries={entries}
-          inst={inst}
-          untitledLabel={t("detail.untitled")}
-          showJournalLinks
-          showUtAuthors
-        />
-      )}
-    </CollapsibleCard>
-  );
-}
-
-/** Chapter/book rollup over the gap population: how many of the works
- * OpenAlex attributes to this publisher's journals are book chapters,
- * and which books hold the most of them. Hidden when there are none. */
-function ChapterRollupCard({ rollup }: { rollup: PublisherDetailResponse["chapter_rollup"] }) {
-  const t = useTranslations("publishers");
-  if (rollup.chapters_total <= 0) return null;
-  return (
-    <CollapsibleCard
-      id="book-chapters"
-      title={t("detail.bookChapters")}
-      description={
-        <p className="text-sm text-[var(--muted-foreground)]">
-          {t("detail.bookChaptersIntro", {
-            chapters: rollup.chapters_total,
-            books: rollup.books_total,
-          })}
-        </p>
-      }
-      contentClassName="text-sm"
-    >
-      <ul className="divide-y divide-[var(--border)]">
-        {rollup.books.map((b) => (
-          <li key={b.parent_id ?? b.name} className="py-2 first:pt-0 last:pb-0">
-            <div className="flex flex-wrap items-baseline justify-between gap-x-2.5 gap-y-1">
-              <span className="font-medium">{b.name}</span>
-              <span className="tabular-nums text-[var(--muted-foreground)]">
-                {t("detail.chapterCount", { count: b.chapters })}
-              </span>
-            </div>
-            {b.sample.length > 0 && (
-              <ul className="mt-1 space-y-0.5 text-xs text-[var(--muted-foreground)]">
-                {b.sample.map((title, i) => (
-                  <li key={i}>{title}</li>
-                ))}
-              </ul>
-            )}
-          </li>
-        ))}
-      </ul>
-      {rollup.books_total > rollup.books.length && (
-        <p className="mt-3 border-t border-[var(--border)] pt-3 text-xs text-[var(--muted-foreground)]">
-          {t("detail.bookChaptersMore", { count: rollup.books.length })}
-        </p>
       )}
     </CollapsibleCard>
   );
@@ -418,19 +297,14 @@ export default function PublisherPage() {
   const backHref = `/${inst}/publisher`;
   const name = params?.slug?.map(decodeURIComponent).join("/") ?? "";
   const { year_from, year_to } = useYearRange();
-  const [parts, setParts] = React.useState<PublisherPartsFilter | undefined>(undefined);
-  const { data, isPending, isError, error } = usePublisher(
-    name || undefined,
-    { year_from, year_to },
-    parts,
-  );
+  const { data, isPending, isError, error } = usePublisher(name || undefined, {
+    year_from,
+    year_to,
+  });
 
-  // Per-card pagination, author-detail style (the list is capped at 200).
-  const PAGE_SIZE = 20;
   const [journalPage, setJournalPage] = React.useState(1);
   React.useEffect(() => {
     setJournalPage(1);
-    setParts(undefined);
   }, [name]);
 
   if (isPending)
@@ -450,9 +324,6 @@ export default function PublisherPage() {
     );
 
   const { publisher, journals, deals, deal_discrepancies, n_discrepancies, works_by_year } = data;
-  // works_by_year stays full-window rows; the trend filters to the lens
-  // client-side (orgunit/author convention). OaTrend shows its empty
-  // state when the span holds no years.
   const trendYears = works_by_year.filter(
     (s) =>
       (year_from === undefined || s.year >= year_from) &&
@@ -474,14 +345,13 @@ export default function PublisherPage() {
       ? [{ id: "deals", label: t("detail.navDeals") }]
       : []),
     ...(publisher.topics.length > 0 ? [{ id: "topics", label: t("detail.topics") }] : []),
-    ...(trendYears.length > 0 ? [{ id: "oa-over-time", label: t("detail.navTrend") }] : []),
     ...(journals.length > 0 ? [{ id: "journals", label: t("detail.navJournals") }] : []),
     { id: "ut-authorship", label: t("detail.navAuthorship", { inst: site.short }) },
-    ...(data.chapter_rollup.chapters_total > 0
-      ? [{ id: "book-chapters", label: t("detail.bookChapters") }]
-      : []),
     ...(data.openalex_only.available ? [{ id: "cris-gaps", label: t("detail.navCrisGaps") }] : []),
   ];
+
+  const hasDealsCard = deals.length > 0 || n_discrepancies > 0;
+  const hasTopicsCard = publisher.topics.length > 0;
 
   return (
     <>
@@ -491,44 +361,44 @@ export default function PublisherPage() {
         backStorageKey="jb-last-publishers"
         backLabel={t("detail.backToList")}
       />
-      <div className="mx-auto max-w-screen-2xl px-4 py-10">
-        <header className="mb-6">
-          <h1 className="text-3xl font-bold text-balance">
+      <div className="mx-auto max-w-screen-2xl px-4 py-6">
+        <header className="mb-4">
+          <h1 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl">
             {displayPublisherName(publisher.name)}
           </h1>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-[var(--muted-foreground)]">
-            {publisher.external_ids?.openaccess_nl_slug && (
-              <a
-                href={`https://openaccess.nl/en/publisher/${publisher.external_ids.openaccess_nl_slug}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline"
-                title={t("detail.openAccessNlHint")}
-              >
-                {t("detail.openAccessNl")}{" "}
-                <ExternalLink aria-hidden className="size-3.5 shrink-0" />
-              </a>
-            )}
-            {publisher.external_ids?.openaccess_nl_slug && publisher.external_ids?.ror && (
-              <span aria-hidden>·</span>
-            )}
-            {publisher.external_ids?.ror && (
-              <a
-                href={publisher.external_ids.ror}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline"
-                title={t("detail.rorHint")}
-              >
-                {t("detail.ror")} <ExternalLink aria-hidden className="size-3.5 shrink-0" />
-              </a>
-            )}
-          </div>
+          {(publisher.external_ids?.openaccess_nl_slug || publisher.external_ids?.ror) && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-[var(--muted-foreground)]">
+              {publisher.external_ids?.openaccess_nl_slug && (
+                <a
+                  href={`https://openaccess.nl/en/publisher/${publisher.external_ids.openaccess_nl_slug}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline"
+                  title={t("detail.openAccessNlHint")}
+                >
+                  {t("detail.openAccessNl")}{" "}
+                  <ExternalLink aria-hidden className="size-3.5 shrink-0" />
+                </a>
+              )}
+              {publisher.external_ids?.ror && (
+                <a
+                  href={publisher.external_ids.ror}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline"
+                  title={t("detail.rorHint")}
+                >
+                  {t("detail.ror")} <ExternalLink aria-hidden className="size-3.5 shrink-0" />
+                </a>
+              )}
+            </div>
+          )}
         </header>
 
-        <section id="overview">
-          <DetailKpiStrip
-            items={[
+        <div className="space-y-4">
+          <DetailSummaryPanel
+            id="overview"
+            stats={[
               {
                 label: t("detail.kpiJournals"),
                 value: publisher.n_journals.toLocaleString("en"),
@@ -536,89 +406,110 @@ export default function PublisherPage() {
               {
                 label: t("detail.kpiWorks", { inst: site.short }),
                 value: publisher.n_works.toLocaleString("en"),
+                icon: (
+                  <DataIcon className={`size-3.5 ${ACCESS_TEXT.brand}`}>
+                    <WorksGlyph />
+                  </DataIcon>
+                ),
               },
               {
                 label: t("detail.kpiDeals"),
                 value: publisher.deal_journals.toLocaleString("en"),
+                icon: (
+                  <DataIcon className={`size-3.5 ${ACCESS_TEXT.deal}`}>
+                    <DealGlyph />
+                  </DataIcon>
+                ),
               },
               {
                 label: t("detail.kpiApc"),
                 value: apcValue,
+                icon: (
+                  <DataIcon className={`size-3.5 ${ACCESS_TEXT.brand}`}>
+                    <ApcGlyph />
+                  </DataIcon>
+                ),
                 hint: apcJournals > 0 ? t("apcCoverage", { count: apcJournals }) : undefined,
+                sub: apcJournals > 0 ? `${apcJournals} journals` : undefined,
               },
             ]}
+            belowStats={<PublisherBreakdowns publisher={publisher} />}
+            trendStats={trendYears}
+            trendTitle={t("detail.oaOverTime")}
           />
-          <AggregateCards publisher={publisher} />
-        </section>
 
-        <div className="mt-6 space-y-6">
-          {(deals.length > 0 || n_discrepancies > 0) && (
-            <CollapsibleCard id="deals" title={t("detail.deals")} contentClassName="text-sm">
-              {deals.length > 0 && (
-                <ul className="divide-y divide-[var(--border)]">
-                  {deals.map((deal) => (
-                    <DealRow key={deal.id} deal={deal} />
-                  ))}
-                </ul>
-              )}
-              {n_discrepancies > 0 && (
-                <div className="mt-3 border-t border-[var(--border)] pt-3 text-xs text-[var(--muted-foreground)]">
-                  <p>{t("detail.discrepancies", { count: n_discrepancies })}</p>
-                  <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
-                    {deal_discrepancies.map((d) => (
-                      <li key={d.title ?? d.publisher_name}>
-                        {d.title}
-                        {d.publisher_name && (
-                          <span className="text-[var(--muted-foreground)]">
-                            {" "}
-                            ({d.publisher_name})
-                          </span>
-                        )}{" "}
-                        {t("detail.discrepancyCovered", {
-                          publisher: d.deal_publisher ?? t("detail.anotherPublisher"),
-                        })}
-                      </li>
-                    ))}
-                    {n_discrepancies > deal_discrepancies.length && (
-                      <li>
-                        {t("detail.moreDiscrepancies", {
-                          count: n_discrepancies - deal_discrepancies.length,
-                        })}
-                      </li>
-                    )}
-                  </ul>
-                </div>
-              )}
-            </CollapsibleCard>
-          )}
-
-          {publisher.topics.length > 0 && (
-            <CollapsibleCard
-              id="topics"
-              title={t("detail.topics")}
-              contentClassName="flex flex-wrap gap-1.5"
-            >
-              {publisher.topics.map((topic) => (
-                <Link
-                  key={topic.name}
-                  href={`/${inst}/?publisher=${encodeURIComponent(publisher.name)}&topic=${encodeURIComponent(topic.name)}`}
-                  className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--muted)] px-2.5 py-1 text-xs text-[var(--foreground)] underline-offset-2 hover:border-[var(--primary)] hover:text-[var(--primary-text)] hover:underline"
-                  title={t("detail.topicHint", { count: Math.round(topic.n) })}
+          {(hasDealsCard || hasTopicsCard) && (
+            <div className={hasDealsCard && hasTopicsCard ? "grid gap-4 lg:grid-cols-2" : ""}>
+              {hasDealsCard && (
+                <CollapsibleCard
+                  id="deals"
+                  title={t("detail.deals")}
+                  count={deals.length > 0 ? deals.length : undefined}
+                  compact
+                  contentClassName="text-sm"
                 >
-                  {topic.name}
-                </Link>
-              ))}
-            </CollapsibleCard>
-          )}
+                  {deals.length > 0 && (
+                    <ul className="divide-y divide-[var(--border)]">
+                      {deals.map((deal) => (
+                        <DealRow key={deal.id} deal={deal} />
+                      ))}
+                    </ul>
+                  )}
+                  {n_discrepancies > 0 && (
+                    <div className="mt-3 border-t border-[var(--border)] pt-2.5 text-xs text-[var(--muted-foreground)]">
+                      <p>{t("detail.discrepancies", { count: n_discrepancies })}</p>
+                      <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                        {deal_discrepancies.map((d) => (
+                          <li key={d.title ?? d.publisher_name}>
+                            {d.title}
+                            {d.publisher_name && <span> ({d.publisher_name})</span>}{" "}
+                            {t("detail.discrepancyCovered", {
+                              publisher: d.deal_publisher ?? t("detail.anotherPublisher"),
+                            })}
+                          </li>
+                        ))}
+                        {n_discrepancies > deal_discrepancies.length && (
+                          <li>
+                            {t("detail.moreDiscrepancies", {
+                              count: n_discrepancies - deal_discrepancies.length,
+                            })}
+                          </li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+                </CollapsibleCard>
+              )}
 
-          {trendYears.length > 0 && (
-            <CollapsibleCard id="oa-over-time" title={t("detail.oaOverTime")}>
-              <OaTrend stats={trendYears} />
-            </CollapsibleCard>
+              {hasTopicsCard && (
+                <CollapsibleCard
+                  id="topics"
+                  title={t("detail.topics")}
+                  count={publisher.topics.length}
+                  compact
+                >
+                  <TopicChipList
+                    items={publisher.topics.map((topic) => ({
+                      name: topic.name,
+                      count: Math.round(topic.n),
+                      href: `/${inst}/?publisher=${encodeURIComponent(publisher.name)}&topic=${encodeURIComponent(topic.name)}`,
+                      title: t("detail.topicHint", { count: Math.round(topic.n) }),
+                    }))}
+                    limit={8}
+                  />
+                </CollapsibleCard>
+              )}
+            </div>
           )}
 
           {journals.length > 0 && (
-            <CollapsibleCard id="journals" title={t("detail.journals")} contentClassName="text-sm">
+            <CollapsibleCard
+              id="journals"
+              title={t("detail.journals")}
+              count={publisher.n_journals}
+              compact
+              contentClassName="space-y-3 text-sm [&_td]:py-1.5 [&_th]:h-8"
+            >
               <Table>
                 <caption className="sr-only">{t("detail.journalsCaption")}</caption>
                 <TableHeader>
@@ -661,7 +552,7 @@ export default function PublisherPage() {
                 </TableBody>
               </Table>
               {publisher.n_journals > journals.length && (
-                <p className="mt-3 text-xs text-[var(--muted-foreground)]">
+                <p className="text-xs text-[var(--muted-foreground)]">
                   {t("detail.showingTopJournals", {
                     count: journals.length,
                     total: publisher.n_journals,
@@ -688,17 +579,10 @@ export default function PublisherPage() {
 
           <UtAuthorshipCard authorship={data.ut_authorship} inst={inst} />
 
-          <ChapterRollupCard rollup={data.chapter_rollup} />
-
-          {data.openalex_only.available && (
-            <CrisGapsCard
-              openalexOnly={data.openalex_only}
-              inst={inst}
-              name={name}
-              parts={parts}
-              onPartsChange={setParts}
-            />
-          )}
+          <CrisGapsSection
+            target={{ kind: "publisher", name }}
+            available={data.openalex_only.available}
+          />
         </div>
       </div>
     </>

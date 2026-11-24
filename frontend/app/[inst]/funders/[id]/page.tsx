@@ -6,10 +6,11 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
+import { CardPager } from "@/components/card-pager";
 import { CollapsibleCard } from "@/components/collapsible-card";
-import { DetailKpiStrip } from "@/components/detail-kpi-strip";
+import { ACCESS_TEXT, DataIcon, WorksGlyph } from "@/components/data-icons";
+import { DetailSummaryPanel } from "@/components/detail-summary";
 import { SectionNav, useLastDirectoryHref } from "@/components/journal/section-nav";
-import { OaTrend } from "@/components/oa-trend";
 import { SourceNote } from "@/components/source-note";
 import { DetailSkeleton, ErrorPanel } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ const ROR_URL = "https://ror.org/";
 const FUNDREF_URL = "https://doi.org/10.13039/";
 const OPF_URL = "https://openpolicyfinder.jisc.ac.uk/";
 const OPENAIRE_URL = "https://openaire.eu";
+const PAGE_SIZE = 10;
 
 function CanonLinks({ funder }: { funder: FunderDetailResponse }) {
   const t = useTranslations("funders");
@@ -44,7 +46,7 @@ function CanonLinks({ funder }: { funder: FunderDetailResponse }) {
     links.push({ label: t("detail.openalex"), href: funder.openalex_funder_id });
   if (funder.url) links.push({ label: t("detail.website"), href: funder.url });
   return (
-    <p className="flex flex-wrap gap-3 text-sm">
+    <p className="flex flex-wrap gap-3 text-xs">
       {links.map((l) => (
         <a
           key={l.label}
@@ -61,9 +63,6 @@ function CanonLinks({ funder }: { funder: FunderDetailResponse }) {
   );
 }
 
-/** Values inside the OPF policy sub-blocks use short codes
- * ("requires", "national_repository"); humanize before showing.
- * Boolean values render as the given Yes/No labels. */
 function policyValue(v: unknown, yesLabel: string, noLabel: string): string {
   if (typeof v === "boolean") return v ? yesLabel : noLabel;
   if (typeof v === "string") return v.replaceAll("_", " ");
@@ -74,6 +73,21 @@ function policyValue(v: unknown, yesLabel: string, noLabel: string): string {
       .join("; ");
   }
   return String(v ?? "");
+}
+
+function reqSummary(t: (key: string) => string, req: string | null | undefined): string {
+  switch (req) {
+    case "requires":
+      return t("search.facets.reqRequires");
+    case "encourages":
+      return t("search.facets.reqEncourages");
+    case "no_policy_for":
+      return t("search.facets.reqNone");
+    case "does_no_mention":
+      return t("search.facets.reqNotMentioned");
+    default:
+      return "—";
+  }
 }
 
 const POLICY_LABEL_KEYS: Record<string, string> = {
@@ -105,7 +119,7 @@ function PolicyRules({ rules }: { rules: Record<string, unknown> }) {
   }
   if (rows.length === 0) return null;
   return (
-    <dl className="grid grid-cols-[10rem_1fr] gap-x-3 gap-y-1.5 text-sm">
+    <dl className="grid grid-cols-[8.5rem_1fr] gap-x-3 gap-y-1 text-xs sm:text-sm">
       {rows.map(([label, value]) => (
         <React.Fragment key={label}>
           <dt className="text-[var(--muted-foreground)]">{label}</dt>
@@ -119,7 +133,7 @@ function PolicyRules({ rules }: { rules: Record<string, unknown> }) {
 function PolicyUrls({ urls }: { urls: unknown }) {
   if (!Array.isArray(urls) || urls.length === 0) return null;
   return (
-    <ul className="mb-3 space-y-1 text-sm">
+    <ul className="mb-2.5 space-y-1 text-xs">
       {urls.map((u: { url?: string; description?: string }, i: React.Key) =>
         u?.url ? (
           <li key={i}>
@@ -167,12 +181,12 @@ function PolicyBlock({ data }: { data: Record<string, unknown> | null | undefine
     <div className="text-sm">
       <PolicyUrls urls={data.urls} />
       {notes.map((n, i) => (
-        <p key={i} className="mb-2 last:mb-0">
+        <p key={i} className="mb-2 text-xs last:mb-0 sm:text-sm">
           {n}
         </p>
       ))}
       {scope.length > 0 && (
-        <p className="mt-3 text-xs text-[var(--muted-foreground)]">
+        <p className="mt-2.5 text-xs text-[var(--muted-foreground)]">
           {t("detail.policy.scope", {
             scope: scope
               .map((v) => policyValue(v, t("detail.policy.yes"), t("detail.policy.no")))
@@ -181,18 +195,20 @@ function PolicyBlock({ data }: { data: Record<string, unknown> | null | undefine
         </p>
       )}
       {flat && (
-        <div className="mt-4 border-t border-[var(--border)] pt-3">
+        <div className="mt-3 border-t border-[var(--border)] pt-2.5">
           <PolicyRules rules={flat} />
         </div>
       )}
       {rules.map(([label, block]) => (
-        <div key={label} className="mt-4 border-t border-[var(--border)] pt-3">
-          <p className="mb-2 text-sm font-medium">{label}</p>
+        <div key={label} className="mt-3 border-t border-[var(--border)] pt-2.5">
+          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+            {label}
+          </p>
           <PolicyRules rules={block} />
         </div>
       ))}
       {!flat && rules.length === 0 && (
-        <div className="mt-3">
+        <div className="mt-2.5">
           <PolicyRules rules={data} />
         </div>
       )}
@@ -203,9 +219,15 @@ function PolicyBlock({ data }: { data: Record<string, unknown> | null | undefine
 function OpenaireCard({ oa }: { oa: NonNullable<FunderDetailResponse["openaire"]> }) {
   const t = useTranslations("funders");
   return (
-    <CollapsibleCard id="funder-openaire" title={t("detail.openaire.title")}>
+    <CollapsibleCard
+      id="funder-openaire"
+      title={t("detail.openaire.title")}
+      count={oa.streams.length > 0 ? oa.streams.length : undefined}
+      defaultOpen={false}
+      compact
+    >
       <div className="text-sm">
-        <dl className="grid grid-cols-[10rem_1fr] gap-x-3 gap-y-1.5">
+        <dl className="grid grid-cols-[9rem_1fr] gap-x-3 gap-y-1 text-xs sm:text-sm">
           <dt className="text-[var(--muted-foreground)]">{t("detail.openaire.name")}</dt>
           <dd>{oa.name ?? "—"}</dd>
           {oa.short_name && (
@@ -226,11 +248,13 @@ function OpenaireCard({ oa }: { oa: NonNullable<FunderDetailResponse["openaire"]
           <dd className="break-all">{oa.openaire_id}</dd>
         </dl>
         {oa.streams.length > 0 && (
-          <div className="mt-3 border-t border-[var(--border)] pt-3">
-            <p className="mb-1.5 text-sm font-medium">{t("detail.openaire.streams")}</p>
-            <ul className="space-y-1">
+          <div className="mt-3 border-t border-[var(--border)] pt-2.5">
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+              {t("detail.openaire.streams")}
+            </p>
+            <ul className="divide-y divide-[var(--border)] text-xs">
               {oa.streams.map((s) => (
-                <li key={s.level0_id} className="flex justify-between gap-3">
+                <li key={s.level0_id} className="flex justify-between gap-3 py-1">
                   <span className="min-w-0 truncate">{s.name ?? s.level0_id}</span>
                   <span className="shrink-0 tabular-nums text-[var(--muted-foreground)]">
                     {s.n_projects.toLocaleString()}
@@ -240,7 +264,7 @@ function OpenaireCard({ oa }: { oa: NonNullable<FunderDetailResponse["openaire"]
             </ul>
           </div>
         )}
-        <div className="mt-2">
+        <div className="mt-2.5">
           <SourceNote
             source={t("detail.openaire.source")}
             url={OPENAIRE_URL}
@@ -263,6 +287,11 @@ export default function FunderPage() {
   const { year_from, year_to } = useYearRange();
   const backHref = useLastDirectoryHref("jb-last-funders", `/${inst}/funders`);
   const { data, isPending, isError, error } = useFunder(id, { year_from, year_to });
+  const [journalPage, setJournalPage] = React.useState(1);
+
+  React.useEffect(() => {
+    setJournalPage(1);
+  }, [id]);
 
   if (isPending) {
     return (
@@ -287,14 +316,19 @@ export default function FunderPage() {
 
   const trendYears = [...(data.works_by_year ?? [])].sort((a, b) => a.year - b.year);
   const mine = funder?.id === data.id;
+  const journalPages = Math.max(1, Math.ceil(data.top_journals.length / PAGE_SIZE));
+  const journalRows = data.top_journals.slice(
+    (journalPage - 1) * PAGE_SIZE,
+    journalPage * PAGE_SIZE,
+  );
 
   const sections: { id: string; label: string }[] = [
-    ...(trendYears.length > 0 ? [{ id: "funder-oa-trend", label: t("detail.navTrend") }] : []),
+    { id: "overview", label: t("detail.navOverview") },
+    { id: "funder-publications-policy", label: t("detail.navPubPolicy") },
+    { id: "funder-data-policy", label: t("detail.navDataPolicy") },
     ...(data.top_journals.length > 0
       ? [{ id: "funder-top-journals", label: t("detail.navJournals") }]
       : []),
-    { id: "funder-publications-policy", label: t("detail.navPubPolicy") },
-    { id: "funder-data-policy", label: t("detail.navDataPolicy") },
     ...(data.openaire ? [{ id: "funder-openaire", label: t("detail.navOpenaire") }] : []),
   ];
 
@@ -306,84 +340,132 @@ export default function FunderPage() {
         backStorageKey="jb-last-funders"
         backLabel={t("detail.backToList")}
       />
-      <div className="mx-auto max-w-screen-2xl px-4 py-10">
-        <header className="mb-6">
-          <h1 className="mb-2 text-3xl font-bold text-balance">{data.name}</h1>
-          <div className="flex flex-wrap items-center gap-4">
-            <CanonLinks funder={data} />
-            <Button
-              variant={mine ? "default" : "outline"}
-              size="sm"
-              aria-pressed={mine}
-              onClick={() =>
-                setFunder(
-                  mine
-                    ? null
-                    : { id: data.id, name: data.name ?? t("unnamedFunder", { id: data.id }) },
-                )
-              }
-              title={mine ? t("detail.myFunderHintOn") : t("detail.myFunderHintOff")}
-            >
-              {mine ? (
-                <>
-                  <Check aria-hidden className="size-4" />
-                  {t("detail.yourFunder")}
-                </>
-              ) : (
-                t("detail.useAsMyFunder")
-              )}
-            </Button>
-            {data.openalex_funder_id && (
-              <Link
-                href={`/${inst}/collaborations?funder=${encodeURIComponent(`openalex:${data.openalex_funder_id.replace(/^https?:\/\/openalex\.org\//, "")}`)}`}
-                className="inline-flex h-8 items-center gap-1 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-3 text-xs font-medium hover:border-[var(--primary)] hover:text-[var(--primary-text)]"
+      <div className="mx-auto max-w-screen-2xl px-4 py-6">
+        <header className="mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl">
+              {data.name}
+            </h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant={mine ? "default" : "outline"}
+                size="sm"
+                aria-pressed={mine}
+                onClick={() =>
+                  setFunder(
+                    mine
+                      ? null
+                      : { id: data.id, name: data.name ?? t("unnamedFunder", { id: data.id }) },
+                  )
+                }
+                title={mine ? t("detail.myFunderHintOn") : t("detail.myFunderHintOff")}
               >
-                {t("detail.explorePartners")}
-                <ArrowRight aria-hidden className="size-3.5" />
-              </Link>
-            )}
+                {mine ? (
+                  <>
+                    <Check aria-hidden className="size-4" />
+                    {t("detail.yourFunder")}
+                  </>
+                ) : (
+                  t("detail.useAsMyFunder")
+                )}
+              </Button>
+              {data.openalex_funder_id && (
+                <Link
+                  href={`/${inst}/collaborations?funder=${encodeURIComponent(`openalex:${data.openalex_funder_id.replace(/^https?:\/\/openalex\.org\//, "")}`)}`}
+                  className="inline-flex h-8 items-center gap-1 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-3 text-xs font-medium hover:border-[var(--primary)] hover:text-[var(--primary-text)]"
+                >
+                  {t("detail.explorePartners")}
+                  <ArrowRight aria-hidden className="size-3.5" />
+                </Link>
+              )}
+            </div>
+          </div>
+          <div className="mt-1.5">
+            <CanonLinks funder={data} />
           </div>
         </header>
 
-        <DetailKpiStrip
-          items={[
-            { label: t("detail.kpiCountry"), value: countryName(data.country) },
-            {
-              label: t("detail.kpiWorks", { inst: site.short }),
-              value: data.n_ut_works.toLocaleString("en"),
-            },
-            {
-              label: t("detail.kpiPolicy"),
-              value: data.policy_structured
-                ? t("detail.policyShortStructured")
-                : t("detail.policyShortText"),
-            },
-            {
-              label: t("detail.kpiTopJournals"),
-              value: data.top_journals.length.toLocaleString("en"),
-            },
-          ]}
-        />
+        <div className="space-y-4">
+          <DetailSummaryPanel
+            id="overview"
+            stats={[
+              { label: t("detail.kpiCountry"), value: countryName(data.country) },
+              {
+                label: t("detail.kpiWorks", { inst: site.short }),
+                value: data.n_ut_works.toLocaleString("en"),
+                icon: (
+                  <DataIcon className={`size-3.5 ${ACCESS_TEXT.brand}`}>
+                    <WorksGlyph />
+                  </DataIcon>
+                ),
+              },
+              {
+                label: t("detail.kpiPolicy"),
+                value: data.policy_structured
+                  ? t("detail.policyShortStructured")
+                  : t("detail.policyShortText"),
+              },
+              {
+                label: t("detail.kpiOaPub"),
+                value: reqSummary(t, data.oa_publishing_req),
+              },
+              {
+                label: t("detail.kpiGreen"),
+                value: reqSummary(t, data.green_archiving_req),
+              },
+              {
+                label: t("detail.kpiData"),
+                value: reqSummary(t, data.data_policy_req),
+              },
+            ]}
+            trendStats={trendYears}
+            trendTitle={t("detail.oaTrendTitle")}
+            trendFooter={
+              <SourceNote
+                source={t("detail.worksSource", { inst: site.short })}
+                url={OPENAIRE_URL}
+                codes={["openalex-coverage", "openaire-enrichment"]}
+              />
+            }
+          />
 
-        <div className="space-y-6">
-          {trendYears.length > 0 && (
-            <CollapsibleCard id="funder-oa-trend" title={t("detail.oaTrendTitle")}>
-              <OaTrend stats={trendYears} />
-              <div className="mt-2">
+          {/* Block 3: Side-by-side Policies */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <CollapsibleCard
+              id="funder-publications-policy"
+              title={t("detail.publicationsPolicy")}
+              compact
+            >
+              <PolicyBlock data={data.publications_policy} />
+              <div className="mt-2.5 border-t border-[var(--border)] pt-2">
                 <SourceNote
-                  source={t("detail.worksSource", { inst: site.short })}
-                  url={OPENAIRE_URL}
-                  codes={["openalex-coverage", "openaire-enrichment"]}
+                  source={t("sourceJisc")}
+                  url={OPF_URL}
+                  codes={["jisc-policy-currency"]}
                 />
               </div>
             </CollapsibleCard>
-          )}
 
+            <CollapsibleCard id="funder-data-policy" title={t("detail.dataPolicy")} compact>
+              <PolicyBlock data={data.data_archiving_policy} />
+              <div className="mt-2.5 border-t border-[var(--border)] pt-2">
+                <SourceNote
+                  source={t("sourceJisc")}
+                  url={OPF_URL}
+                  codes={["jisc-policy-currency"]}
+                />
+              </div>
+            </CollapsibleCard>
+          </div>
+
+          {/* Block 4: Top Journals */}
           {data.top_journals.length > 0 && (
             <CollapsibleCard
               id="funder-top-journals"
               title={t("instWorks", { inst: site.short })}
-              contentClassName="text-sm"
+              count={data.top_journals.length}
+              compact
+              contentClassName="space-y-3 text-sm [&_td]:py-1.5 [&_th]:h-8"
             >
               <Table>
                 <TableHeader>
@@ -394,7 +476,7 @@ export default function FunderPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.top_journals.map((j) => (
+                  {journalRows.map((j) => (
                     <TableRow key={j.issn_l}>
                       <TableCell className="font-medium">
                         <Link
@@ -414,7 +496,16 @@ export default function FunderPage() {
                   ))}
                 </TableBody>
               </Table>
-              <div className="mt-3">
+              {journalPages > 1 && (
+                <CardPager
+                  page={journalPage}
+                  pages={journalPages}
+                  total={data.top_journals.length}
+                  onPage={setJournalPage}
+                  label={t("detail.pagerJournals")}
+                />
+              )}
+              <div className="border-t border-[var(--border)] pt-2.5">
                 <SourceNote
                   source={t("detail.worksSource", { inst: site.short })}
                   url={OPENAIRE_URL}
@@ -424,20 +515,7 @@ export default function FunderPage() {
             </CollapsibleCard>
           )}
 
-          <CollapsibleCard id="funder-publications-policy" title={t("detail.publicationsPolicy")}>
-            <PolicyBlock data={data.publications_policy} />
-            <div className="mt-2">
-              <SourceNote source={t("sourceJisc")} url={OPF_URL} codes={["jisc-policy-currency"]} />
-            </div>
-          </CollapsibleCard>
-
-          <CollapsibleCard id="funder-data-policy" title={t("detail.dataPolicy")}>
-            <PolicyBlock data={data.data_archiving_policy} />
-            <div className="mt-2">
-              <SourceNote source={t("sourceJisc")} url={OPF_URL} codes={["jisc-policy-currency"]} />
-            </div>
-          </CollapsibleCard>
-
+          {/* Block 5: OpenAIRE Reference */}
           {data.openaire && <OpenaireCard oa={data.openaire} />}
         </div>
       </div>

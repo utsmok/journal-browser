@@ -91,6 +91,7 @@ export function GreenOaPanel({
   return (
     <CollapsibleCard
       id="green-oa"
+      compact
       title={t("greenOa.title")}
       description={
         <p className="text-sm text-[var(--muted-foreground)]">{t("greenOa.description")}</p>

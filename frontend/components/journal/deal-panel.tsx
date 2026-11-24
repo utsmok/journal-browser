@@ -34,6 +34,7 @@ export function DealPanel({
   return (
     <CollapsibleCard
       id={id}
+      compact
       title={
         <>
           {t("deal.title")}

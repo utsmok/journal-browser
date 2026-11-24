@@ -17,8 +17,11 @@ export function OtherNamesCard({ names }: { names: string[] }) {
     <CollapsibleCard
       id="names"
       title={t("names.title")}
+      count={names.length}
+      defaultOpen={false}
+      compact
       description={
-        <p className="text-sm text-[var(--muted-foreground)]">{t("names.description")}</p>
+        <p className="text-xs text-[var(--muted-foreground)]">{t("names.description")}</p>
       }
       contentClassName="flex flex-wrap items-center gap-1.5"
     >

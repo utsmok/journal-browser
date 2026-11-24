@@ -8,13 +8,23 @@ import * as React from "react";
 
 import { DealBadge, OaTypeBadge, QuartileBadge } from "@/components/badges";
 import { CollapsibleCard } from "@/components/collapsible-card";
+import { CrisGapsSection } from "@/components/cris-gaps-section";
+import {
+  ACCESS_TEXT,
+  ApcGlyph,
+  DataIcon,
+  DoajGlyph,
+  QuartileGlyph,
+  WorksGlyph,
+} from "@/components/data-icons";
+import { DetailSummaryPanel, type DetailStatItem } from "@/components/detail-summary";
 import { CitationCard } from "@/components/journal/citation-card";
-import { CrisGapsCard } from "@/components/journal/cris-gaps-card";
 import { DealPanel } from "@/components/journal/deal-panel";
 import { FunderFitCard } from "@/components/journal/funder-fit-card";
 import { GreenOaPanel } from "@/components/journal/green-oa-panel";
 import { IdentifiersCard } from "@/components/journal/identifiers-card";
 import {
+  CopyButton,
   External,
   Metric,
   MoreToggle,
@@ -23,13 +33,13 @@ import {
   TOPICS_LIMIT,
 } from "@/components/journal/shared";
 import { OpenaireCard } from "@/components/journal/openaire-card";
-import { UtAuthorshipCard } from "@/components/journal/ut-authorship-card";
 import { OtherNamesCard } from "@/components/journal/other-names-card";
-import { OaTrend } from "@/components/oa-trend";
 import { PublicationsCard } from "@/components/journal/publications-card";
 import { SectionNav, useLastSearchHref } from "@/components/journal/section-nav";
+import { UtAuthorshipCard } from "@/components/journal/ut-authorship-card";
 import { SourceNote } from "@/components/source-note";
 import { ErrorPanel, JournalDetailSkeleton } from "@/components/states";
+import { TopicChipList } from "@/components/topic-chips";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -43,7 +53,7 @@ import { useJournal, useJournalWorks, useSimilar } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { useYearRange } from "@/hooks/use-year-filter";
-import { errorMessage, type OpenalexTopic, encodeNamePath } from "@/lib/api";
+import { encodeNamePath, errorMessage, type OpenalexTopic } from "@/lib/api";
 import { useFunderPrefs } from "@/lib/funder-prefs";
 
 function JournalPageInner() {
@@ -56,18 +66,13 @@ function JournalPageInner() {
   const backHref = useLastSearchHref();
   const [funder] = useFunderPrefs();
   const { year_from, year_to } = useYearRange();
-  // Expanded-list state: topics chips and similar-journal groups.
-  const [allTopics, setAllTopics] = React.useState(false);
   const [openSimilar, setOpenSimilar] = React.useState<Record<string, boolean>>({});
   const { data, isPending, isError, error } = useJournal(issnL, funder?.id, {
     year_from,
     year_to,
   });
-  // Old backends lack /similar; the section simply stays hidden then.
   const similarQuery = useSimilar(issnL);
   const similar = similarQuery.data;
-  // Hoisted so the works request races the detail request instead of
-  // waiting for it; the card below renders whatever has arrived.
   const searchParams = useSearchParams();
   const pParam = parseInt(searchParams.get("page") ?? "", 10);
   const requestedWorksPage = Number.isFinite(pParam) && pParam > 0 ? pParam : 1;
@@ -87,9 +92,6 @@ function JournalPageInner() {
       (year_from === undefined || s.year >= year_from) &&
       (year_to === undefined || s.year <= year_to),
   );
-  // With the year lens on, the Pure total is the sum over the visible
-  // years; the OpenAlex cross-check total stays a full-window figure and
-  // is not shown then.
   const pureTotal =
     year_from === undefined ? totals.pure_canon : recent.reduce((acc, s) => acc + s.works_count, 0);
   const openalex = data.openalex ?? null;
@@ -102,29 +104,109 @@ function JournalPageInner() {
   const topics = Array.from(
     new Set(
       (data.topics as NamedTopic[])
-        .map((t) => t?.display_name)
+        .map((tp) => tp?.display_name)
         .filter((n): n is string => Boolean(n)),
     ),
   );
   const oaTopics = (openalex?.topics ?? []).filter(
-    (t): t is OpenalexTopic & { display_name: string } => Boolean(t?.display_name),
+    (tp): tp is OpenalexTopic & { display_name: string } => Boolean(tp?.display_name),
   );
   const hasApc = data.apc_aggregates.length > 0 || data.apc_evidence.length > 0;
-  // One nav entry per rendered section, in DOM order.
+
+  const latestApcAgg = data.apc_aggregates[0];
+  const latestApcPrice = data.apc_prices[0] as { price?: number; currency?: string } | undefined;
+  const apcHeadline =
+    latestApcAgg?.euro_mean != null
+      ? `€${Math.round(latestApcAgg.euro_mean).toLocaleString("en")}`
+      : latestApcPrice?.price != null
+        ? `${latestApcPrice.currency ?? "€"} ${Math.round(latestApcPrice.price).toLocaleString("en")}`
+        : "—";
+
+  const summaryStats: DetailStatItem[] = [
+    {
+      label: t("header.kpiWorks", { inst: site.short }),
+      value: pureTotal.toLocaleString("en"),
+      icon: (
+        <DataIcon className={`size-3.5 ${ACCESS_TEXT.brand}`}>
+          <WorksGlyph />
+        </DataIcon>
+      ),
+      sub:
+        year_from === undefined
+          ? `OpenAlex: ${totals.openalex_institution_filter.toLocaleString("en")}`
+          : undefined,
+    },
+    {
+      label: t("header.kpiCitedness"),
+      value: journal.twoyr_mean_citedness != null ? journal.twoyr_mean_citedness.toFixed(1) : "—",
+      hint: t("metrics.citednessHint"),
+      sub: num("h_index") != null ? `h-index ${num("h_index")?.toLocaleString("en")}` : undefined,
+    },
+    {
+      label: t("header.kpiQuartile"),
+      value: latestSjr?.best_quartile ?? journal.quartile ?? "—",
+      icon: (
+        <DataIcon className={`size-3.5 ${ACCESS_TEXT.brand}`}>
+          <QuartileGlyph />
+        </DataIcon>
+      ),
+      hint: t("metrics.sjrHint"),
+      sub:
+        latestSjr?.sjr != null ? `SJR ${latestSjr.sjr.toFixed(3)} (${latestSjr.year})` : undefined,
+    },
+    {
+      label: t("header.kpiFwci", { short: site.short }),
+      value: metrics?.fwci_avg != null && metrics.fwci_n > 0 ? metrics.fwci_avg.toFixed(2) : "—",
+      hint: t("metrics.fwciHint", { short: site.short }),
+      sub:
+        metrics && metrics.fwci_n > 0 ? t("metrics.fwciN", { count: metrics.fwci_n }) : undefined,
+    },
+    {
+      label: t("header.kpiApc"),
+      value: apcHeadline,
+      icon: (
+        <DataIcon className={`size-3.5 ${ACCESS_TEXT.brand}`}>
+          <ApcGlyph />
+        </DataIcon>
+      ),
+      sub: latestApcAgg ? `OpenAPC ${latestApcAgg.period}` : undefined,
+    },
+    {
+      label: t("header.kpiTotalWorks"),
+      value: openalex?.works_count != null ? openalex.works_count.toLocaleString("en") : "—",
+      hint: t("metrics.worksCountHint"),
+      sub:
+        openalex?.cited_by_count != null
+          ? `${openalex.cited_by_count.toLocaleString("en")} citations`
+          : undefined,
+    },
+  ];
+
+  const trendSubtitle =
+    year_from !== undefined
+      ? t("oaPerYear.titleSuffixYears", {
+          short: site.short,
+          from: String(year_from),
+          to: String(year_to),
+        })
+      : site.windowStart === undefined
+        ? t("oaPerYear.titleSuffixShort", { short: site.short })
+        : t("oaPerYear.titleSuffixWindow", {
+            short: site.short,
+            window: String(site.windowStart),
+          });
+
   const sections: { id: string; label: string; hint?: string }[] = [
-    { id: "oa-per-year", label: t("oaPerYear.title") },
+    { id: "overview", label: t("nav.overview") },
     ...(deals.length > 0
-      ? deals.map((deal) => ({
-          id: `deal-${deal.id}`,
-          label: t("deal.title"),
-        }))
+      ? deals.map((deal) => ({ id: `deal-${deal.id}`, label: t("deal.title") }))
       : [{ id: "deal", label: t("deal.title") }]),
     ...(greenOa ? [{ id: "green-oa", label: t("greenOa.title") }] : []),
     ...(hasApc ? [{ id: "apc", label: t("apc.title"), hint: t("apc.hint") }] : []),
-    ...(!similarEmpty ? [{ id: "similar", label: t("similar.title") }] : []),
     ...(topics.length > 0 || oaTopics.length > 0
       ? [{ id: "topics", label: t("topics.title") }]
       : []),
+    ...(!similarEmpty ? [{ id: "similar", label: t("similar.title") }] : []),
     { id: "metrics", label: t("metrics.title") },
     { id: "ut-authorship", label: t("utAuthorship.title") },
     { id: "publications", label: t("publications.navLabel") },
@@ -132,18 +214,38 @@ function JournalPageInner() {
       ? [{ id: "openaire", label: t("openaire.title") }]
       : []),
     ...(data.openalex_only.available ? [{ id: "cris-gaps", label: t("crisGaps.title") }] : []),
-    ...(data.alternate_titles.length > 0 ? [{ id: "names", label: t("names.title") }] : []),
     { id: "identifiers", label: t("identifiers.title") },
-    { id: "cite", label: t("citation.title") },
   ];
+
+  const topicChipItems =
+    oaTopics.length > 0
+      ? oaTopics.map((topic) => ({
+          key: topic.id ?? topic.display_name,
+          name: topic.display_name,
+          count: topic.count ?? 0,
+          href: `/${inst}/?topic=${encodeURIComponent(topic.display_name)}&search_in=topic`,
+          title: [
+            [topic.subfield?.display_name, topic.field?.display_name, topic.domain?.display_name]
+              .filter(Boolean)
+              .join(" → "),
+            t("topics.worksCount", { count: topic.count ?? 0 }),
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        }))
+      : topics.map((topic) => ({
+          key: topic,
+          name: topic.replace(/^\d+\s+/, ""),
+          title: topic,
+        }));
 
   return (
     <>
       <SectionNav sections={sections} />
-      <div className="mx-auto max-w-screen-2xl px-4 py-10">
-        <header className="mb-8">
+      <div className="mx-auto max-w-screen-2xl px-4 py-6">
+        <header className="mb-4">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-3xl font-bold">
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
               {data.homepage_url ? (
                 <a
                   href={data.homepage_url}
@@ -155,7 +257,7 @@ function JournalPageInner() {
                   className="inline-flex items-center gap-1.5 underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
                 >
                   {journal.title ?? journal.issn_l}
-                  <ExternalLink aria-hidden className="size-5 text-[var(--muted-foreground)]" />
+                  <ExternalLink aria-hidden className="size-4 text-[var(--muted-foreground)]" />
                 </a>
               ) : (
                 (journal.title ?? journal.issn_l)
@@ -165,225 +267,265 @@ function JournalPageInner() {
             <QuartileBadge quartile={journal.quartile ?? null} />
             <DealBadge covered={journal.deal_covered} capped={journal.deal_cap_reached} />
             {journal.is_in_doaj && (
-              <Badge variant="outline" title={t("header.doajHint")}>
+              <Badge
+                variant="outline"
+                className="inline-flex items-center gap-1"
+                title={t("header.doajHint")}
+              >
+                <DataIcon className={`size-3.5 ${ACCESS_TEXT.doaj}`}>
+                  <DoajGlyph />
+                </DataIcon>
                 {t("header.doajBadge")}
               </Badge>
             )}
-            <Badge
-              variant="muted"
-              className="font-normal tabular-nums"
-              title={t("header.issnLHint")}
-            >
-              ISSN-L {journal.issn_l}
-            </Badge>
-          </div>
-          <p className="mt-1.5 text-[var(--muted-foreground)]">
-            {journal.publisher_canonical || journal.publisher_name ? (
-              <Link
-                href={`/${inst}/publisher/${encodeNamePath(
-                  journal.publisher_canonical ?? journal.publisher_name ?? "",
-                )}`}
-                className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+            <span className="inline-flex items-center gap-1">
+              <Badge
+                variant="muted"
+                className="font-normal tabular-nums"
+                title={t("header.issnLHint")}
               >
-                {journal.publisher_canonical ?? journal.publisher_name}
-              </Link>
-            ) : (
-              t("header.unknownPublisher")
-            )}
-            {journal.publisher_canonical &&
-              journal.publisher_name &&
-              journal.publisher_canonical !== journal.publisher_name && (
-                <span className="text-sm">
-                  {" · "}
-                  {t("header.imprint", { name: journal.publisher_name })}
-                </span>
+                ISSN-L {journal.issn_l}
+              </Badge>
+              <CopyButton text={journal.issn_l} label={`ISSN-L ${journal.issn_l}`} />
+            </span>
+          </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted-foreground)]">
+            <span>
+              {journal.publisher_canonical || journal.publisher_name ? (
+                <Link
+                  href={`/${inst}/publisher/${encodeNamePath(
+                    journal.publisher_canonical ?? journal.publisher_name ?? "",
+                  )}`}
+                  className="font-medium text-[var(--foreground)] underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                >
+                  {journal.publisher_canonical ?? journal.publisher_name}
+                </Link>
+              ) : (
+                t("header.unknownPublisher")
               )}
-            {data.type ? ` · ${data.type.charAt(0).toUpperCase()}${data.type.slice(1)}` : ""}
-          </p>
-          {data.homepage_url && (
-            <p className="mt-1.5 text-xs">
+              {journal.publisher_canonical &&
+                journal.publisher_name &&
+                journal.publisher_canonical !== journal.publisher_name && (
+                  <span>
+                    {" · "}
+                    {t("header.imprint", { name: journal.publisher_name })}
+                  </span>
+                )}
+              {data.type ? ` · ${data.type.charAt(0).toUpperCase()}${data.type.slice(1)}` : ""}
+            </span>
+            {data.homepage_url && (
               <External href={data.homepage_url}>{t("header.homepage")}</External>
-            </p>
-          )}
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+            )}
             <SourceNote
               source={t("header.metadataSource")}
               url={attribution.title?.url ?? undefined}
               howBuilt={tc("sourceNote.explain.journals")}
             />
-          </p>
+          </div>
         </header>
 
-        <div className="space-y-6">
-          <CollapsibleCard
-            id="oa-per-year"
-            title={
-              <>
-                {t("oaPerYear.title")}{" "}
-                <span className="text-sm font-normal text-[var(--muted-foreground)]">
-                  (
-                  {year_from !== undefined
-                    ? t("oaPerYear.titleSuffixYears", {
+        <div className="space-y-4">
+          <DetailSummaryPanel
+            id="overview"
+            stats={summaryStats}
+            trendStats={recent}
+            trendTitle={t("oaPerYear.title")}
+            trendSubtitle={trendSubtitle}
+            trendEmpty={
+              <p className="py-4 text-xs text-[var(--muted-foreground)]">{t("oaPerYear.empty")}</p>
+            }
+            trendFooter={
+              <div className="space-y-1.5 text-xs">
+                <p>
+                  {year_from === undefined
+                    ? t.rich("oaPerYear.totals", {
+                        pure: totals.pure_canon.toLocaleString("en"),
+                        short: site.short,
+                        since: site.windowStart === undefined ? "" : ` since ${site.windowStart}`,
+                        openalex: totals.openalex_institution_filter.toLocaleString("en"),
+                        pureLabel: (chunks) => (
+                          <span className="text-[var(--muted-foreground)]">{chunks}</span>
+                        ),
+                        openalexLabel: (chunks) => (
+                          <span className="whitespace-nowrap">{chunks}</span>
+                        ),
+                        crossLabel: (chunks) => (
+                          <span className="text-[var(--muted-foreground)]">{chunks}</span>
+                        ),
+                      })
+                    : t.rich("oaPerYear.totalsYears", {
+                        pure: pureTotal.toLocaleString("en"),
                         short: site.short,
                         from: String(year_from),
                         to: String(year_to),
-                      })
-                    : site.windowStart === undefined
-                      ? t("oaPerYear.titleSuffixShort", { short: site.short })
-                      : t("oaPerYear.titleSuffixWindow", {
-                          short: site.short,
-                          window: String(site.windowStart),
-                        })}
-                  )
-                </span>
-              </>
-            }
-          >
-            {recent.length > 0 ? (
-              <OaTrend stats={recent} />
-            ) : (
-              <p className="text-sm text-[var(--muted-foreground)]">{t("oaPerYear.empty")}</p>
-            )}
-            <p className="mt-3 text-sm">
-              {year_from === undefined
-                ? t.rich("oaPerYear.totals", {
-                    pure: totals.pure_canon.toLocaleString("en"),
-                    short: site.short,
-                    since: site.windowStart === undefined ? "" : ` since ${site.windowStart}`,
-                    openalex: totals.openalex_institution_filter.toLocaleString("en"),
-                    pureLabel: (chunks) => (
-                      <span className="text-[var(--muted-foreground)]">{chunks}</span>
-                    ),
-                    openalexLabel: (chunks) => <span className="whitespace-nowrap">{chunks}</span>,
-                    crossLabel: (chunks) => (
-                      <span className="text-[var(--muted-foreground)]">{chunks}</span>
-                    ),
-                  })
-                : t.rich("oaPerYear.totalsYears", {
-                    pure: pureTotal.toLocaleString("en"),
-                    short: site.short,
-                    from: String(year_from),
-                    to: String(year_to),
-                    pureLabel: (chunks) => (
-                      <span className="text-[var(--muted-foreground)]">{chunks}</span>
-                    ),
-                  })}
-            </p>
-            <div className="mt-2 flex flex-wrap gap-x-4">
-              <SourceNote
-                {...(attribution.stats ?? {})}
-                codes={attribution.stats?.caveat_codes}
-                howBuilt={tc("sourceNote.explain.works")}
-              />
-              <SourceNote
-                {...(attribution.oa_status ?? {})}
-                codes={attribution.oa_status?.caveat_codes}
-                howBuilt={tc("sourceNote.explain.journals")}
-              />
-            </div>
-          </CollapsibleCard>
-
-          {deals.length > 0 ? (
-            deals.map((deal) => (
-              <DealPanel
-                key={deal.id}
-                id={`deal-${deal.id}`}
-                deal={deal}
-                attribution={attribution.deals ?? {}}
-              />
-            ))
-          ) : (
-            <CollapsibleCard
-              id="deal"
-              title={t("deal.title")}
-              contentClassName="text-sm text-[var(--muted-foreground)]"
-            >
-              {t.rich("deal.noDeal", {
-                name: site.name,
-                oaNl: (chunks) => <External href="https://www.openaccess.nl">{chunks}</External>,
-                jct: (chunks) => (
-                  <External href="https://journalcheckertool.org">{chunks}</External>
-                ),
-              })}
-              <div className="mt-2">
-                <SourceNote
-                  {...(attribution.deals ?? {})}
-                  codes={attribution.deals?.caveat_codes}
-                  howBuilt={tc("sourceNote.explain.deals")}
-                />
+                        pureLabel: (chunks) => (
+                          <span className="text-[var(--muted-foreground)]">{chunks}</span>
+                        ),
+                      })}
+                </p>
+                <div className="flex flex-wrap gap-x-4">
+                  <SourceNote
+                    {...(attribution.stats ?? {})}
+                    codes={attribution.stats?.caveat_codes}
+                    howBuilt={tc("sourceNote.explain.works")}
+                  />
+                  <SourceNote
+                    {...(attribution.oa_status ?? {})}
+                    codes={attribution.oa_status?.caveat_codes}
+                    howBuilt={tc("sourceNote.explain.journals")}
+                  />
+                </div>
               </div>
-            </CollapsibleCard>
-          )}
+            }
+          />
 
-          {greenOa && <GreenOaPanel greenOa={greenOa} attribution={attribution.green_oa ?? {}} />}
+          {/* Block 3: Publishing routes & costs */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            {deals.length > 0 ? (
+              deals.map((deal) => (
+                <DealPanel
+                  key={deal.id}
+                  id={`deal-${deal.id}`}
+                  deal={deal}
+                  attribution={attribution.deals ?? {}}
+                />
+              ))
+            ) : (
+              <CollapsibleCard
+                id="deal"
+                title={t("deal.title")}
+                compact
+                contentClassName="text-sm text-[var(--muted-foreground)]"
+              >
+                {t.rich("deal.noDeal", {
+                  name: site.name,
+                  oaNl: (chunks) => <External href="https://www.openaccess.nl">{chunks}</External>,
+                  jct: (chunks) => (
+                    <External href="https://journalcheckertool.org">{chunks}</External>
+                  ),
+                })}
+                <div className="mt-2">
+                  <SourceNote
+                    {...(attribution.deals ?? {})}
+                    codes={attribution.deals?.caveat_codes}
+                    howBuilt={tc("sourceNote.explain.deals")}
+                  />
+                </div>
+              </CollapsibleCard>
+            )}
+
+            {greenOa && <GreenOaPanel greenOa={greenOa} attribution={attribution.green_oa ?? {}} />}
+          </div>
 
           {funder && <FunderFitCard fit={data.funder_fit ?? null} funder={funder} inst={inst} />}
 
-          {hasApc && (
-            <CollapsibleCard id="apc" title={t("apc.title")} contentClassName="text-sm">
-              {data.apc_aggregates.length > 0 && (
-                <Table>
-                  <caption className="sr-only">{t("apc.caption")}</caption>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead title={t("apc.yearColHint")}>{t("apc.yearCol")}</TableHead>
-                      <TableHead className="text-right" title={t("apc.countColHint")}>
-                        {t("apc.countCol")}
-                      </TableHead>
-                      <TableHead className="text-right" title={t("apc.meanColHint")}>
-                        {t("apc.meanCol")}
-                      </TableHead>
-                      <TableHead className="text-right" title={t("apc.rangeColHint")}>
-                        {t("apc.rangeCol")}
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.apc_aggregates.map((a) => (
-                      <TableRow key={a.period}>
-                        <TableCell className="tabular-nums">{a.period}</TableCell>
-                        <TableCell className="text-right tabular-nums">{a.article_count}</TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {a.euro_mean !== null
-                            ? `€${Math.round(a.euro_mean).toLocaleString("en")}`
-                            : "—"}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {a.euro_min !== null && a.euro_max !== null
-                            ? `€${Math.round(a.euro_min).toLocaleString("en")}–€${Math.round(a.euro_max).toLocaleString("en")}`
-                            : "—"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+          {(hasApc || topicChipItems.length > 0) && (
+            <div className={hasApc && topicChipItems.length > 0 ? "grid gap-4 lg:grid-cols-2" : ""}>
+              {hasApc && (
+                <CollapsibleCard
+                  id="apc"
+                  title={t("apc.title")}
+                  count={data.apc_aggregates.length}
+                  compact
+                  contentClassName="text-sm [&_td]:py-1.5 [&_th]:h-8"
+                >
+                  {data.apc_aggregates.length > 0 && (
+                    <Table>
+                      <caption className="sr-only">{t("apc.caption")}</caption>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead title={t("apc.yearColHint")}>{t("apc.yearCol")}</TableHead>
+                          <TableHead className="text-right" title={t("apc.countColHint")}>
+                            {t("apc.countCol")}
+                          </TableHead>
+                          <TableHead className="text-right" title={t("apc.meanColHint")}>
+                            {t("apc.meanCol")}
+                          </TableHead>
+                          <TableHead className="text-right" title={t("apc.rangeColHint")}>
+                            {t("apc.rangeCol")}
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {data.apc_aggregates.map((a) => (
+                          <TableRow key={a.period}>
+                            <TableCell className="tabular-nums">{a.period}</TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {a.article_count}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {a.euro_mean !== null
+                                ? `€${Math.round(a.euro_mean).toLocaleString("en")}`
+                                : "—"}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {a.euro_min !== null && a.euro_max !== null
+                                ? `€${Math.round(a.euro_min).toLocaleString("en")}–€${Math.round(a.euro_max).toLocaleString("en")}`
+                                : "—"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                  {data.apc_evidence.length > 0 && (
+                    <p className="mt-2.5 text-xs text-[var(--muted-foreground)]">
+                      {t("apc.evidence", {
+                        count: data.apc_evidence.length,
+                        short: site.short,
+                        period: data.apc_evidence[0].period ?? "—",
+                        amount:
+                          data.apc_evidence[0].euro !== null
+                            ? `€${Math.round(data.apc_evidence[0].euro!)}`
+                            : t("apc.amountUnknown"),
+                      })}
+                    </p>
+                  )}
+                  <div className="mt-2.5">
+                    <SourceNote
+                      {...(attribution.apc_evidence ?? {})}
+                      codes={attribution.apc_evidence?.caveat_codes}
+                      howBuilt={tc("sourceNote.explain.apc")}
+                    />
+                  </div>
+                </CollapsibleCard>
               )}
-              {data.apc_evidence.length > 0 && (
-                <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-                  {t("apc.evidence", {
-                    count: data.apc_evidence.length,
-                    short: site.short,
-                    period: data.apc_evidence[0].period ?? "—",
-                    amount:
-                      data.apc_evidence[0].euro !== null
-                        ? `€${Math.round(data.apc_evidence[0].euro!)}`
-                        : t("apc.amountUnknown"),
-                  })}
-                </p>
+
+              {topicChipItems.length > 0 && (
+                <CollapsibleCard
+                  id="topics"
+                  title={t("topics.title")}
+                  count={topicChipItems.length}
+                  compact
+                  description={
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      {oaTopics.length > 0
+                        ? t("topics.descriptionWithCounts")
+                        : t("topics.description")}
+                    </p>
+                  }
+                  contentClassName="space-y-2.5"
+                >
+                  <TopicChipList
+                    items={topicChipItems}
+                    limit={TOPICS_LIMIT}
+                    showCounts={oaTopics.length > 0}
+                  />
+                  {oaTopics.length > 0 && (
+                    <SourceNote
+                      {...(attribution.openalex ?? {})}
+                      codes={attribution.openalex?.caveat_codes}
+                    />
+                  )}
+                </CollapsibleCard>
               )}
-              <div className="mt-3">
-                <SourceNote
-                  {...(attribution.apc_evidence ?? {})}
-                  codes={attribution.apc_evidence?.caveat_codes}
-                  howBuilt={tc("sourceNote.explain.apc")}
-                />
-              </div>
-            </CollapsibleCard>
+            </div>
           )}
 
+          {/* Block 4: Similar & Detailed Metrics & UT Authorship */}
           {similar && !similarEmpty && (
-            <CollapsibleCard id="similar" title={t("similar.title")}>
-              <div className="space-y-5">
+            <CollapsibleCard id="similar" title={t("similar.title")} compact>
+              <div className="space-y-4">
                 {(
                   [
                     {
@@ -406,7 +548,9 @@ function JournalPageInner() {
                   (group) =>
                     similar[group.key].length > 0 && (
                       <div key={group.key}>
-                        <h3 className="text-sm font-semibold">{group.heading}</h3>
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                          {group.heading}
+                        </h3>
                         {group.note && (
                           <p className="mb-1 text-xs text-[var(--muted-foreground)]">
                             {group.note}
@@ -419,7 +563,7 @@ function JournalPageInner() {
                           ).map((s) => (
                             <li
                               key={s.issn_l}
-                              className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-2 text-sm first:pt-0 last:pb-0"
+                              className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-1.5 text-sm first:pt-0 last:pb-0"
                             >
                               <Link
                                 href={`/${inst}/journals/${s.issn_l}`}
@@ -478,7 +622,7 @@ function JournalPageInner() {
                     ),
                 )}
               </div>
-              <div className="mt-4 border-t border-[var(--border)] pt-3">
+              <div className="mt-3 border-t border-[var(--border)] pt-2.5">
                 <SourceNote
                   source={tc("sourceNote.howListLabel")}
                   howBuilt={tc("sourceNote.explain.similar")}
@@ -487,79 +631,11 @@ function JournalPageInner() {
             </CollapsibleCard>
           )}
 
-          {(oaTopics.length > 0 || topics.length > 0) && (
-            <CollapsibleCard
-              id="topics"
-              title={t("topics.title")}
-              description={
-                <p className="text-sm text-[var(--muted-foreground)]">
-                  {oaTopics.length > 0
-                    ? t("topics.descriptionWithCounts")
-                    : t("topics.description")}
-                </p>
-              }
-              contentClassName="flex flex-wrap items-center gap-1.5"
-            >
-              {oaTopics.length > 0
-                ? (allTopics ? oaTopics : oaTopics.slice(0, TOPICS_LIMIT)).map((topic) => (
-                    <Link
-                      key={topic.id}
-                      href={`/${inst}/?topic=${encodeURIComponent(topic.display_name)}&search_in=topic`}
-                      className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--muted)] px-2.5 py-1 text-sm font-normal normal-case underline-offset-2 hover:border-[var(--primary)] hover:text-[var(--primary-text)] hover:underline"
-                      title={[
-                        [
-                          topic.subfield?.display_name,
-                          topic.field?.display_name,
-                          topic.domain?.display_name,
-                        ]
-                          .filter(Boolean)
-                          .join(" → "),
-                        t("topics.worksCount", { count: topic.count ?? 0 }),
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    >
-                      {topic.display_name}
-                      <span className="tabular-nums text-[var(--muted-foreground)]">
-                        {(topic.count ?? 0).toLocaleString("en")}
-                      </span>
-                    </Link>
-                  ))
-                : (allTopics ? topics : topics.slice(0, TOPICS_LIMIT)).map((topic) => (
-                    // Pure topic names carry a field code ("01 natural
-                    // sciences"); show the words, keep the code on hover.
-                    <Badge
-                      key={topic}
-                      variant="muted"
-                      className="font-normal normal-case"
-                      title={topic}
-                    >
-                      {topic.replace(/^\d+\s+/, "")}
-                    </Badge>
-                  ))}
-              {(oaTopics.length > 0 ? oaTopics.length : topics.length) > TOPICS_LIMIT && (
-                <MoreToggle
-                  open={allTopics}
-                  onToggle={() => setAllTopics((v) => !v)}
-                  moreLabel={t("topics.showMore", {
-                    count: String(
-                      (oaTopics.length > 0 ? oaTopics.length : topics.length) - TOPICS_LIMIT,
-                    ),
-                  })}
-                />
-              )}
-              {oaTopics.length > 0 && (
-                <SourceNote
-                  {...(attribution.openalex ?? {})}
-                  codes={attribution.openalex?.caveat_codes}
-                />
-              )}
-            </CollapsibleCard>
-          )}
-
           <CollapsibleCard
             id="metrics"
             title={t("metrics.title")}
+            defaultOpen={false}
+            compact
             contentClassName="space-y-4 text-sm"
           >
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -590,7 +666,7 @@ function JournalPageInner() {
               codes={attribution.metrics?.caveat_codes}
             />
             {(openalex || metrics || openaire) && (
-              <div className="border-t border-[var(--border)] pt-4">
+              <div className="border-t border-[var(--border)] pt-3">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   {openalex?.cited_by_count != null && (
                     <Metric
@@ -668,7 +744,7 @@ function JournalPageInner() {
               </div>
             )}
             {latestSjr && (
-              <div className="border-t border-[var(--border)] pt-4">
+              <div className="border-t border-[var(--border)] pt-3">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   <Metric
                     label={t("metrics.sjrLabel")}
@@ -687,7 +763,7 @@ function JournalPageInner() {
                     value={latestSjr.h_index?.toLocaleString("en") ?? "—"}
                   />
                 </div>
-                <div className="mt-3">
+                <div className="mt-2.5">
                   <SourceNote
                     {...(attribution.scimagojr ?? {})}
                     codes={attribution.scimagojr?.caveat_codes}
@@ -699,6 +775,7 @@ function JournalPageInner() {
 
           <UtAuthorshipCard authorship={data.ut_authorship} inst={inst} />
 
+          {/* Block 5: Evidence & Reference */}
           <PublicationsCard
             key={journal.issn_l}
             title={journal.title ?? journal.issn_l}
@@ -712,13 +789,14 @@ function JournalPageInner() {
             <OpenaireCard openaire={openaire} note={attribution.openaire ?? {}} />
           )}
 
-          {data.openalex_only.available && (
-            <CrisGapsCard openalexOnly={data.openalex_only} inst={inst} issnL={journal.issn_l} />
-          )}
+          <CrisGapsSection
+            target={{ kind: "journal", issnL: journal.issn_l }}
+            available={data.openalex_only.available}
+          />
 
           {data.alternate_titles.length > 0 && <OtherNamesCard names={data.alternate_titles} />}
 
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-2">
             <IdentifiersCard
               issnL={journal.issn_l}
               issns={data.issns}
@@ -736,8 +814,6 @@ function JournalPageInner() {
 }
 
 export default function JournalPage() {
-  // PublicationsCard reads the page param via useSearchParams, which needs a
-  // Suspense boundary during prerender.
   return (
     <React.Suspense fallback={null}>
       <JournalPageInner />

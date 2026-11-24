@@ -1,5 +1,6 @@
 {
   "nav": {
+    "overview": "Overview",
     "sections": "Page sections",
     "backToSearch": "Back to search"
   },
@@ -11,7 +12,13 @@
     "metadataSource": "Metadata: OpenAlex",
     "doajBadge": "DOAJ",
     "doajHint": "Listed in DOAJ, the Directory of Open Access Journals",
-    "issnLHint": "ISSN-L links the print and online ISSNs of one journal into a single identifier"
+    "issnLHint": "ISSN-L links the print and online ISSNs of one journal into a single identifier",
+    "kpiWorks": "{inst} works",
+    "kpiCitedness": "2yr citedness",
+    "kpiQuartile": "SJR / Quartile",
+    "kpiFwci": "FWCI ({short})",
+    "kpiApc": "Latest APC",
+    "kpiTotalWorks": "Total works"
   },
   "oaPerYear": {
     "title": "Open access per year",
@@ -232,6 +239,7 @@
     "copyLabel": "citation"
   },
   "list": {
+    "showAllCount": "Show all ({count})",
     "showLess": "Show less",
     "copy": "Copy",
     "copied": "Copied",

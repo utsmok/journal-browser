@@ -26,9 +26,11 @@ export function OpenaireCard({
     <CollapsibleCard
       id="openaire"
       title={t("openaire.title")}
+      count={openaire.matched_works}
       defaultOpen={false}
+      compact
       description={
-        <p className="text-sm text-[var(--muted-foreground)]">{t("openaire.description")}</p>
+        <p className="text-xs text-[var(--muted-foreground)]">{t("openaire.description")}</p>
       }
       contentClassName="space-y-4 text-sm"
     >

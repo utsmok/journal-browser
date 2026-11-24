@@ -22,6 +22,7 @@ export function YearFilterControl() {
   const { inst, range, setRange } = useYearRange();
   const { start, end } = useYearBounds();
   const [mounted, setMounted] = React.useState(false);
+  const [customOpen, setCustomOpen] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
   if (!inst || !mounted) return null;
 
@@ -32,11 +33,13 @@ export function YearFilterControl() {
 
   const active = effectiveYearRange(range, { start, end });
   const last5From = Math.max(start ?? 1900, (end ?? new Date().getFullYear()) - (LAST5_SPAN - 1));
-  const preset = !active
-    ? "all"
-    : active.to === end && active.from === last5From
-      ? "last5"
-      : "custom";
+  const preset = customOpen
+    ? "custom"
+    : !active
+      ? "all"
+      : active.to === end && active.from === last5From
+        ? "last5"
+        : "custom";
 
   // Selectable years span the data window; before it resolves, fall back to
   // a wide list so the control still works.
@@ -50,8 +53,15 @@ export function YearFilterControl() {
 
   const setCustom = (from: number, to: number) => {
     if (from > to) [from, to] = [to, from];
+    if (start !== undefined && end !== undefined && from <= start && to >= end) {
+      setRange(null);
+      return;
+    }
     setRange({ from, to });
   };
+
+  const displayFrom = active?.from ?? fromYear;
+  const displayTo = active?.to ?? toYear;
 
   return (
     <div
@@ -75,24 +85,30 @@ export function YearFilterControl() {
         value={preset}
         onChange={(event) => {
           const v = event.target.value;
-          if (v === "all") setRange(null);
-          else if (v === "last5") setRange({ from: last5From, to: end });
-          // Seed the custom selects with the full window; picking a
-          // narrower span keeps the menu on "Custom range…".
-          else setRange({ from: fromYear, to: toYear });
+          if (v === "all") {
+            setCustomOpen(false);
+            setRange(null);
+          } else if (v === "last5") {
+            setCustomOpen(false);
+            setRange({ from: last5From, to: end });
+          } else {
+            // Open custom year selectors without writing a redundant full-window
+            // query to storage until the user actually narrows a bound.
+            setCustomOpen(true);
+          }
         }}
       >
         <option value="all">{t("yearFilter.allYears")}</option>
         <option value="last5">{t("yearFilter.last5Years")}</option>
         <option value="custom">{t("yearFilter.customRange")}</option>
       </select>
-      {preset === "custom" && active && (
+      {preset === "custom" && (
         <>
           <select
             aria-label={t("yearFilter.fromYear")}
             className={selectClass}
-            value={active.from}
-            onChange={(event) => setCustom(Number(event.target.value), active.to)}
+            value={displayFrom}
+            onChange={(event) => setCustom(Number(event.target.value), displayTo)}
           >
             {years.map((y) => (
               <option key={y} value={y}>
@@ -106,8 +122,8 @@ export function YearFilterControl() {
           <select
             aria-label={t("yearFilter.toYear")}
             className={selectClass}
-            value={active.to}
-            onChange={(event) => setCustom(active.from, Number(event.target.value))}
+            value={displayTo}
+            onChange={(event) => setCustom(displayFrom, Number(event.target.value))}
           >
             {years.map((y) => (
               <option key={y} value={y}>

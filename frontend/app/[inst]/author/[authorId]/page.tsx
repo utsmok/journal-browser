@@ -10,7 +10,8 @@ import { DealBadge, OaStatusChip, OaTypeBadge } from "@/components/badges";
 import { CardPager } from "@/components/card-pager";
 import { orgTypeCssVar } from "@/components/collaborations/labels";
 import { CollapsibleCard } from "@/components/collapsible-card";
-import { DetailKpiStrip } from "@/components/detail-kpi-strip";
+import { ACCESS_TEXT, DataIcon, LockIcon, WorksGlyph } from "@/components/data-icons";
+import { DetailSummaryPanel } from "@/components/detail-summary";
 import {
   doiHref,
   External,
@@ -20,8 +21,9 @@ import {
 } from "@/components/gap-entries";
 import { GapCsvButton } from "@/components/gap-csv-button";
 import { SectionNav, useLastDirectoryHref } from "@/components/journal/section-nav";
-import { OaTrend } from "@/components/oa-trend";
 import { SourceNote } from "@/components/source-note";
+import { DetailSkeleton, ErrorPanel } from "@/components/states";
+import { TopicChipList } from "@/components/topic-chips";
 import {
   Table,
   TableBody,
@@ -30,7 +32,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { DetailSkeleton, ErrorPanel } from "@/components/states";
 import { useInstitution } from "@/hooks/use-institution";
 import { useYearRange, yearQuery } from "@/hooks/use-year-filter";
 import {
@@ -44,14 +45,13 @@ import {
 import { countryName } from "@/lib/format";
 import { entriesTotal, toGapEntries } from "@/lib/gap-entries";
 
-/** Chip cloud cap before the "+N more" expander. */
+const PAGE_SIZE = 10;
 const TOPICS_LIMIT = 8;
 
-/** One candidate venue: journal link, access + deal badges, similarity %. */
 function SimilarRow({ inst, s }: { inst: string; s: AuthorSimilarJournal }) {
   const t = useTranslations("authors");
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm first:pt-0 last:pb-0">
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-sm first:pt-0 last:pb-0">
       <Link
         href={`/${inst}/journals/${s.issn_l}`}
         className="font-medium underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
@@ -70,7 +70,6 @@ function SimilarRow({ inst, s }: { inst: string; s: AuthorSimilarJournal }) {
   );
 }
 
-/** Map the author's per-year OA counts onto the shared trend chart shape. */
 function toStatsYear(oa_by_year: AuthorProfile["oa_by_year"]): StatsYear[] {
   return [...oa_by_year]
     .sort((a, b) => a.year - b.year)
@@ -101,15 +100,13 @@ export default function AuthorPage() {
     enabled: Boolean(authorId),
   });
 
-  // Per-card pagination; back to page 1 when another author is opened.
-  const PAGE_SIZE = 20;
   const [journalPage, setJournalPage] = React.useState(1);
   const [workPage, setWorkPage] = React.useState(1);
-  const [allTopics, setAllTopics] = React.useState(false);
+  const [gapPage, setGapPage] = React.useState(1);
   React.useEffect(() => {
     setJournalPage(1);
     setWorkPage(1);
-    setAllTopics(false);
+    setGapPage(1);
   }, [authorId]);
 
   if (isPending)
@@ -133,17 +130,26 @@ export default function AuthorPage() {
   );
   const gapEntries = toGapEntries(data.openalex_only.items);
   const gapShownTotal = entriesTotal(data.openalex_only);
+  const gapPages = Math.max(1, Math.ceil(gapEntries.length / PAGE_SIZE));
+  const gapRows = gapEntries.slice((gapPage - 1) * PAGE_SIZE, gapPage * PAGE_SIZE);
   const hasSimilar =
     similar.all.length > 0 || similar.deals.length > 0 || similar.diamond.length > 0;
 
-  // One nav entry per rendered section, in DOM order.
+  const totalTrendWorks = trendStats.reduce((sum, s) => sum + s.works_count, 0);
+  const openTrendWorks = trendStats.reduce(
+    (sum, s) => sum + Math.max(0, s.works_count - (s.oa_closed ?? 0)),
+    0,
+  );
+  const oaShare =
+    totalTrendWorks > 0 ? `${Math.round((openTrendWorks / totalTrendWorks) * 100)}%` : "—";
+
   const sections = [
-    ...(trendStats.length > 0 ? [{ id: "oa-over-time", label: t("sections.oaOverTime") }] : []),
-    ...(journals.length > 0 ? [{ id: "journals", label: t("sections.journals") }] : []),
+    { id: "overview", label: t("sections.overview") },
     ...(topics.length > 0 ? [{ id: "topics", label: t("sections.topics") }] : []),
-    ...(partners.length > 0 ? [{ id: "partners", label: t("sections.partners") }] : []),
     ...(hasSimilar ? [{ id: "next", label: t("sections.publishNext") }] : []),
     ...(alternatives.length > 0 ? [{ id: "alternatives", label: t("sections.alternatives") }] : []),
+    ...(journals.length > 0 ? [{ id: "journals", label: t("sections.journals") }] : []),
+    ...(partners.length > 0 ? [{ id: "partners", label: t("sections.partners") }] : []),
     ...(works.length > 0 ? [{ id: "publications", label: t("sections.publications") }] : []),
     ...(data.openalex_only.available
       ? [{ id: "openalex-only", label: t("sections.notInPure") }]
@@ -158,54 +164,56 @@ export default function AuthorPage() {
         backStorageKey="jb-last-authors"
         backLabel={t("detail.backToSearch")}
       />
-      <div className="mx-auto max-w-screen-2xl px-4 py-10">
-        <header className="mb-6">
-          <div className="flex items-center gap-4">
+      <div className="mx-auto max-w-screen-2xl px-4 py-6">
+        <header className="mb-4">
+          <div className="flex items-center gap-3.5">
             {author.people?.has_photo && (
               // eslint-disable-next-line @next/next/no-img-element -- same-origin API bytes, no optimization pipeline wanted
               <img
                 src={`/api/v1/${inst}/authors/${encodeURIComponent(authorId ?? "")}/avatar`}
                 alt={author.name}
-                width={72}
-                height={72}
-                className="size-[72px] shrink-0 rounded-full object-cover"
+                width={56}
+                height={56}
+                className="size-14 shrink-0 rounded-full object-cover"
               />
             )}
-            <div>
-              <h1 className="text-3xl font-bold">{author.name}</h1>
-              {author.people?.canonical_name &&
-                author.people.canonical_name.toLowerCase() !== author.name.toLowerCase() && (
-                  <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                    {author.people.canonical_name}
-                  </p>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+                <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{author.name}</h1>
+                {author.people?.canonical_name &&
+                  author.people.canonical_name.toLowerCase() !== author.name.toLowerCase() && (
+                    <span className="text-xs text-[var(--muted-foreground)]">
+                      {author.people.canonical_name}
+                    </span>
+                  )}
+              </div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                {author.faculty && (
+                  <Link
+                    href={`/${inst}/orgunit/faculty/${encodeNamePath(author.faculty)}`}
+                    className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--muted)] px-2 py-0.5 text-xs text-[var(--foreground)] underline-offset-2 hover:border-[var(--primary)] hover:text-[var(--primary-text)] hover:underline"
+                  >
+                    {author.faculty}
+                  </Link>
                 )}
+                {author.research_group && (
+                  <Link
+                    href={`/${inst}/orgunit/group/${encodeNamePath(author.research_group)}`}
+                    className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--muted)] px-2 py-0.5 text-xs text-[var(--foreground)] underline-offset-2 hover:border-[var(--primary)] hover:text-[var(--primary-text)] hover:underline"
+                  >
+                    {author.research_group}
+                  </Link>
+                )}
+                {author.institute && (
+                  <Link
+                    href={`/${inst}/orgunit/institute/${encodeNamePath(author.institute)}`}
+                    className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--muted)] px-2 py-0.5 text-xs text-[var(--foreground)] underline-offset-2 hover:border-[var(--primary)] hover:text-[var(--primary-text)] hover:underline"
+                  >
+                    {author.institute}
+                  </Link>
+                )}
+              </div>
             </div>
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {author.faculty && (
-              <Link
-                href={`/${inst}/orgunit/faculty/${encodeNamePath(author.faculty)}`}
-                className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--muted)] px-2.5 py-0.5 text-xs text-[var(--foreground)] underline-offset-2 hover:border-[var(--primary)] hover:text-[var(--primary-text)] hover:underline"
-              >
-                {author.faculty}
-              </Link>
-            )}
-            {author.research_group && (
-              <Link
-                href={`/${inst}/orgunit/group/${encodeNamePath(author.research_group)}`}
-                className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--muted)] px-2.5 py-0.5 text-xs text-[var(--foreground)] underline-offset-2 hover:border-[var(--primary)] hover:text-[var(--primary-text)] hover:underline"
-              >
-                {author.research_group}
-              </Link>
-            )}
-            {author.institute && (
-              <Link
-                href={`/${inst}/orgunit/institute/${encodeNamePath(author.institute)}`}
-                className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--muted)] px-2.5 py-0.5 text-xs text-[var(--foreground)] underline-offset-2 hover:border-[var(--primary)] hover:text-[var(--primary-text)] hover:underline"
-              >
-                {author.institute}
-              </Link>
-            )}
           </div>
           {(author.orcid ||
             author.openalex_author_id ||
@@ -238,222 +246,261 @@ export default function AuthorPage() {
           )}
         </header>
 
-        <DetailKpiStrip
-          items={[
-            { label: t("results.colWorks"), value: author.n_works.toLocaleString("en") },
-            { label: t("sections.journals"), value: journals.length.toLocaleString("en") },
-            { label: t("sections.topics"), value: topics.length.toLocaleString("en") },
-            { label: t("sections.partners"), value: partners.length.toLocaleString("en") },
-          ]}
-        />
+        <div className="space-y-4">
+          <DetailSummaryPanel
+            id="overview"
+            stats={[
+              {
+                label: t("detail.kpiWorks"),
+                value: author.n_works.toLocaleString("en"),
+                icon: (
+                  <DataIcon className={`size-3.5 ${ACCESS_TEXT.brand}`}>
+                    <WorksGlyph />
+                  </DataIcon>
+                ),
+              },
+              {
+                label: t("detail.kpiOaShare"),
+                value: oaShare,
+                icon: (
+                  <DataIcon className={`size-3.5 ${ACCESS_TEXT.gold}`}>
+                    <LockIcon state="open" />
+                  </DataIcon>
+                ),
+                sub:
+                  totalTrendWorks > 0
+                    ? `${openTrendWorks.toLocaleString("en")}/${totalTrendWorks.toLocaleString("en")}`
+                    : undefined,
+              },
+              {
+                label: t("detail.kpiJournals"),
+                value: journals.length.toLocaleString("en"),
+              },
+              {
+                label: t("detail.kpiTopics"),
+                value: topics.length.toLocaleString("en"),
+              },
+              {
+                label: t("detail.kpiPartners"),
+                value: partners.length.toLocaleString("en"),
+              },
+            ]}
+            trendStats={trendStats}
+            trendTitle={t("sections.oaOverTime")}
+          />
 
-        <div className="space-y-6">
-          {trendStats.length > 0 && (
-            <CollapsibleCard id="oa-over-time" title={t("sections.oaOverTime")}>
-              <OaTrend stats={trendStats} />
-            </CollapsibleCard>
-          )}
-
-          {journals.length > 0 && (
-            <CollapsibleCard
-              id="journals"
-              title={t("sections.journals")}
-              contentClassName="text-sm"
-            >
-              <Table>
-                <caption className="sr-only">{t("tables.journalsCaption")}</caption>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t("tables.colJournal")}</TableHead>
-                    <TableHead className="text-right">{t("tables.colWorks")}</TableHead>
-                    <TableHead>{t("tables.colAccess")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {journalRows.map((j) => (
-                    <TableRow key={j.issn_l}>
-                      <TableCell className="font-medium">
-                        <Link
-                          href={`/${inst}/journals/${j.issn_l}`}
-                          className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-                        >
-                          {j.title || j.issn_l}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {j.n_works.toLocaleString("en")}
-                      </TableCell>
-                      <TableCell>
-                        <OaTypeBadge oaType={j.oa_type} />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              {journalPages > 1 && (
-                <CardPager
-                  page={journalPage}
-                  pages={journalPages}
-                  total={journals.length}
-                  onPage={setJournalPage}
-                  label={t("detail.pagerJournals")}
-                />
-              )}
-            </CollapsibleCard>
-          )}
-
+          {/* Block 3: Topics & Recommendations */}
           {topics.length > 0 && (
-            <CollapsibleCard
-              id="topics"
-              title={t("sections.topics")}
-              contentClassName="flex flex-wrap items-center gap-1.5"
+            <CollapsibleCard id="topics" title={t("sections.topics")} count={topics.length} compact>
+              <TopicChipList
+                items={topics.map((topic) => ({
+                  name: topic.name,
+                  count: topic.n,
+                  href: `/${inst}/author?topic=${encodeURIComponent(topic.name)}`,
+                  title: t("worksCount", { count: topic.n }),
+                }))}
+                limit={TOPICS_LIMIT}
+              />
+            </CollapsibleCard>
+          )}
+
+          {(hasSimilar || alternatives.length > 0) && (
+            <div
+              className={hasSimilar && alternatives.length > 0 ? "grid gap-4 lg:grid-cols-2" : ""}
             >
-              {(allTopics ? topics : topics.slice(0, TOPICS_LIMIT)).map((topic) => (
-                <Link
-                  key={topic.name}
-                  href={`/${inst}/author?topic=${encodeURIComponent(topic.name)}`}
-                  className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--muted)] px-2.5 py-1 text-xs text-[var(--foreground)] underline-offset-2 hover:border-[var(--primary)] hover:text-[var(--primary-text)] hover:underline"
-                  title={t("worksCount", { count: topic.n })}
+              {hasSimilar && (
+                <CollapsibleCard
+                  id="next"
+                  title={t("sections.publishNext")}
+                  compact
+                  contentClassName="space-y-4 text-sm"
                 >
-                  {topic.name}
-                </Link>
-              ))}
-              {topics.length > TOPICS_LIMIT && (
-                <button
-                  type="button"
-                  className="text-sm text-[var(--muted-foreground)] underline-offset-2 hover:underline"
-                  aria-expanded={allTopics}
-                  onClick={() => setAllTopics((v) => !v)}
-                >
-                  {allTopics
-                    ? t("detail.showLess")
-                    : t("detail.showMore", { count: topics.length - TOPICS_LIMIT })}
-                </button>
+                  {(
+                    [
+                      { key: "all", heading: t("similar.mostSimilar") },
+                      { key: "deals", heading: t("similar.dealCovered") },
+                      { key: "diamond", heading: t("similar.diamond") },
+                    ] as const
+                  ).map(
+                    (g) =>
+                      similar[g.key].length > 0 && (
+                        <div key={g.key}>
+                          <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                            {g.heading}
+                          </h3>
+                          <ul className="divide-y divide-[var(--border)]">
+                            {similar[g.key].map((s) => (
+                              <SimilarRow key={s.issn_l} inst={inst} s={s} />
+                            ))}
+                          </ul>
+                        </div>
+                      ),
+                  )}
+                </CollapsibleCard>
               )}
-            </CollapsibleCard>
-          )}
 
-          {partners.length > 0 && (
-            <CollapsibleCard
-              id="partners"
-              title={t("sections.partners")}
-              contentClassName="text-sm"
-            >
-              <Table>
-                <caption className="sr-only">{t("tables.partnersCaption")}</caption>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t("tables.colPartner")}</TableHead>
-                    <TableHead>{t("tables.colCountry")}</TableHead>
-                    <TableHead className="text-right">{t("tables.colWorks")}</TableHead>
-                    <TableHead className="text-right">{t("tables.colOa")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {partners.map((p) => (
-                    <TableRow key={p.ror}>
-                      <TableCell className="font-medium">
-                        <span className="inline-flex items-center gap-2">
-                          <span
-                            aria-hidden
-                            className="inline-block size-2.5 shrink-0 rounded-full"
-                            style={{ backgroundColor: orgTypeCssVar(p.org_type) }}
-                          />
-                          <Link
-                            href={`/${inst}/collaborations/${encodeURIComponent(p.ror)}`}
-                            className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-                          >
-                            {p.name}
-                          </Link>
+              {alternatives.length > 0 && (
+                <CollapsibleCard
+                  id="alternatives"
+                  title={t("cards.alternatives")}
+                  count={alternatives.length}
+                  compact
+                  contentClassName="space-y-4 text-sm"
+                  description={
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      {t("cards.alternativesIntro")}
+                    </p>
+                  }
+                >
+                  {alternatives.map((alt) => (
+                    <div key={alt.issn_l}>
+                      <div className="flex flex-wrap items-baseline gap-x-2">
+                        <Link
+                          href={`/${inst}/journals/${alt.issn_l}`}
+                          className="font-semibold underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                        >
+                          {alt.title || alt.issn_l}
+                        </Link>
+                        <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
+                          {t("worksCount", { count: alt.n_works })}
                         </span>
-                      </TableCell>
-                      <TableCell className="text-[var(--muted-foreground)]">
-                        {countryName(p.country_code)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {p.works.toLocaleString("en")}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {p.oa_share != null ? `${Math.round(p.oa_share * 100)}%` : "—"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CollapsibleCard>
-          )}
-
-          {hasSimilar && (
-            <CollapsibleCard
-              id="next"
-              title={t("sections.publishNext")}
-              contentClassName="space-y-5 text-sm"
-            >
-              {(
-                [
-                  { key: "all", heading: t("similar.mostSimilar") },
-                  { key: "deals", heading: t("similar.dealCovered") },
-                  { key: "diamond", heading: t("similar.diamond") },
-                ] as const
-              ).map(
-                (g) =>
-                  similar[g.key].length > 0 && (
-                    <div key={g.key}>
-                      <h3 className="text-sm font-semibold">{g.heading}</h3>
-                      <ul className="divide-y divide-[var(--border)]">
-                        {similar[g.key].map((s) => (
-                          <SimilarRow key={s.issn_l} inst={inst} s={s} />
+                      </div>
+                      <ul className="mt-1 divide-y divide-[var(--border)]">
+                        {alt.options.map((o) => (
+                          <SimilarRow key={o.issn_l} inst={inst} s={o} />
                         ))}
                       </ul>
                     </div>
-                  ),
+                  ))}
+                </CollapsibleCard>
               )}
-            </CollapsibleCard>
+            </div>
           )}
 
-          {alternatives.length > 0 && (
-            <CollapsibleCard
-              id="alternatives"
-              title={t("cards.alternatives")}
-              contentClassName="space-y-5 text-sm"
-              description={
-                <p className="text-sm text-[var(--muted-foreground)]">
-                  {t("cards.alternativesIntro")}
-                </p>
+          {/* Block 4: Venues & Partners */}
+          {(journals.length > 0 || partners.length > 0) && (
+            <div
+              className={
+                journals.length > 0 && partners.length > 0 ? "grid gap-4 lg:grid-cols-2" : ""
               }
             >
-              {alternatives.map((alt) => (
-                <div key={alt.issn_l}>
-                  <div className="flex flex-wrap items-baseline gap-x-2">
-                    <Link
-                      href={`/${inst}/journals/${alt.issn_l}`}
-                      className="font-semibold underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-                    >
-                      {alt.title || alt.issn_l}
-                    </Link>
-                    <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
-                      {t("worksCount", { count: alt.n_works })}
-                    </span>
-                  </div>
-                  <ul className="mt-1 divide-y divide-[var(--border)]">
-                    {alt.options.map((o) => (
-                      <SimilarRow key={o.issn_l} inst={inst} s={o} />
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </CollapsibleCard>
+              {journals.length > 0 && (
+                <CollapsibleCard
+                  id="journals"
+                  title={t("sections.journals")}
+                  count={journals.length}
+                  compact
+                  contentClassName="space-y-3 text-sm [&_td]:py-1.5 [&_th]:h-8"
+                >
+                  <Table>
+                    <caption className="sr-only">{t("tables.journalsCaption")}</caption>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t("tables.colJournal")}</TableHead>
+                        <TableHead className="text-right">{t("tables.colWorks")}</TableHead>
+                        <TableHead>{t("tables.colAccess")}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {journalRows.map((j) => (
+                        <TableRow key={j.issn_l}>
+                          <TableCell className="font-medium">
+                            <Link
+                              href={`/${inst}/journals/${j.issn_l}`}
+                              className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                            >
+                              {j.title || j.issn_l}
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {j.n_works.toLocaleString("en")}
+                          </TableCell>
+                          <TableCell>
+                            <OaTypeBadge oaType={j.oa_type} />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {journalPages > 1 && (
+                    <CardPager
+                      page={journalPage}
+                      pages={journalPages}
+                      total={journals.length}
+                      onPage={setJournalPage}
+                      label={t("detail.pagerJournals")}
+                    />
+                  )}
+                </CollapsibleCard>
+              )}
+
+              {partners.length > 0 && (
+                <CollapsibleCard
+                  id="partners"
+                  title={t("sections.partners")}
+                  count={partners.length}
+                  compact
+                  contentClassName="text-sm [&_td]:py-1.5 [&_th]:h-8"
+                >
+                  <Table>
+                    <caption className="sr-only">{t("tables.partnersCaption")}</caption>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t("tables.colPartner")}</TableHead>
+                        <TableHead>{t("tables.colCountry")}</TableHead>
+                        <TableHead className="text-right">{t("tables.colWorks")}</TableHead>
+                        <TableHead className="text-right">{t("tables.colOa")}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {partners.map((p) => (
+                        <TableRow key={p.ror}>
+                          <TableCell className="font-medium">
+                            <span className="inline-flex items-center gap-2">
+                              <span
+                                aria-hidden
+                                className="inline-block size-2.5 shrink-0 rounded-full"
+                                style={{ backgroundColor: orgTypeCssVar(p.org_type) }}
+                              />
+                              <Link
+                                href={`/${inst}/collaborations/${encodeURIComponent(p.ror)}`}
+                                className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                              >
+                                {p.name}
+                              </Link>
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-[var(--muted-foreground)]">
+                            {countryName(p.country_code)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {p.works.toLocaleString("en")}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {p.oa_share != null ? `${Math.round(p.oa_share * 100)}%` : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CollapsibleCard>
+              )}
+            </div>
           )}
 
+          {/* Block 5: Publications & CRIS gaps (default collapsed) */}
           {works.length > 0 && (
             <CollapsibleCard
               id="publications"
               title={t("sections.publications")}
-              contentClassName="text-sm"
+              count={works.length}
+              defaultOpen={false}
+              compact
+              contentClassName="space-y-3 text-sm [&_td]:py-1.5 [&_th]:h-8"
               description={
                 <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                   {data.openalex_only_count != null && (
-                    <p className="text-sm text-[var(--muted-foreground)]">
+                    <p className="text-xs text-[var(--muted-foreground)]">
                       {t("cards.publicationsIntro", {
                         count: data.openalex_only_count,
                         section: t("sections.notInPure"),
@@ -529,11 +576,11 @@ export default function AuthorPage() {
                 />
               )}
               {works.length >= 200 && (
-                <p className="mt-3 text-xs text-[var(--muted-foreground)]">
+                <p className="text-xs text-[var(--muted-foreground)]">
                   {t("cards.publicationsCapped", { count: 200 })}
                 </p>
               )}
-              <div className="mt-3 border-t border-[var(--border)] pt-3">
+              <div className="border-t border-[var(--border)] pt-2.5">
                 <SourceNote
                   source={tc("sourceNote.howListLabel")}
                   howBuilt={tc("sourceNote.explain.authorWorks")}
@@ -546,9 +593,12 @@ export default function AuthorPage() {
             <CollapsibleCard
               id="openalex-only"
               title={t("cards.notInPure")}
+              count={data.openalex_only.total}
+              defaultOpen={false}
+              compact
               description={
                 <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-                  <p className="text-sm text-[var(--muted-foreground)]">
+                  <p className="text-xs text-[var(--muted-foreground)]">
                     {t("gap.found", {
                       count: data.openalex_only.total,
                       missing: data.openalex_only.likely_missing,
@@ -563,30 +613,41 @@ export default function AuthorPage() {
                   )}
                 </div>
               }
-              contentClassName="text-sm"
+              contentClassName="space-y-3 text-sm [&_td]:py-1.5 [&_th]:h-8"
             >
               {data.openalex_only.total === 0 ? (
                 <p className="text-[var(--muted-foreground)]">{t("gap.none")}</p>
               ) : (
-                <Table>
-                  <caption className="sr-only">{t("tables.gapCaption")}</caption>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t("tables.colYear")}</TableHead>
-                      <TableHead>{t("tables.colTitle")}</TableHead>
-                      <TableHead>{t("tables.colVenue")}</TableHead>
-                      <TableHead>{t("tables.colPublisher")}</TableHead>
-                      <TableHead>{t("tables.colType")}</TableHead>
-                      <TableHead>{t("tables.colAccess")}</TableHead>
-                      <TableHead>{t("tables.colLinks")}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <GapEntryTableRows entries={gapEntries} inst={inst} />
-                  </TableBody>
-                </Table>
+                <>
+                  <Table>
+                    <caption className="sr-only">{t("tables.gapCaption")}</caption>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t("tables.colYear")}</TableHead>
+                        <TableHead>{t("tables.colTitle")}</TableHead>
+                        <TableHead>{t("tables.colVenue")}</TableHead>
+                        <TableHead>{t("tables.colPublisher")}</TableHead>
+                        <TableHead>{t("tables.colType")}</TableHead>
+                        <TableHead>{t("tables.colAccess")}</TableHead>
+                        <TableHead>{t("tables.colLinks")}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <GapEntryTableRows entries={gapRows} inst={inst} />
+                    </TableBody>
+                  </Table>
+                  {gapPages > 1 && (
+                    <CardPager
+                      page={gapPage}
+                      pages={gapPages}
+                      total={gapEntries.length}
+                      onPage={setGapPage}
+                      label={t("detail.pagerGap")}
+                    />
+                  )}
+                </>
               )}
-              <div className="mt-3 border-t border-[var(--border)] pt-3">
+              <div className="border-t border-[var(--border)] pt-2.5">
                 <SourceNote
                   source={tc("sourceNote.howListLabel")}
                   howBuilt={tc("sourceNote.explain.crisGaps")}

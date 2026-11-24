@@ -44,8 +44,9 @@ export function IdentifiersCard({
     <CollapsibleCard
       id="identifiers"
       title={t("identifiers.title")}
+      compact
       description={
-        <p className="text-sm text-[var(--muted-foreground)]">{t("identifiers.description")}</p>
+        <p className="text-xs text-[var(--muted-foreground)]">{t("identifiers.description")}</p>
       }
       contentClassName="space-y-2 text-sm"
     >

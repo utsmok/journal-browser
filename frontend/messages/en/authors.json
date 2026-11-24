@@ -82,9 +82,16 @@
     "oaOnlyBadge": "OpenAlex only",
     "oaOnlyTitle": "OpenAlex attributes this work to the author. The university's Pure research information system has no record of it.",
     "pagerJournals": "journals",
-    "pagerPublications": "publications"
+    "pagerPublications": "publications",
+    "pagerGap": "entries",
+    "kpiWorks": "Works",
+    "kpiOaShare": "Open access",
+    "kpiJournals": "Journals",
+    "kpiTopics": "Topics",
+    "kpiPartners": "Partners"
   },
   "sections": {
+    "overview": "Overview",
     "oaOverTime": "Open access over time",
     "journals": "Where they publish",
     "topics": "Topics",

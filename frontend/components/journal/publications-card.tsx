@@ -72,7 +72,9 @@ export function PublicationsCard({
     <CollapsibleCard
       id="publications"
       title={t("publications.title", { short: site.short })}
+      count={data ? total : undefined}
       defaultOpen={false}
+      compact
       description={
         <p className="text-pretty text-sm text-[var(--muted-foreground)]">
           {t("publications.description", {

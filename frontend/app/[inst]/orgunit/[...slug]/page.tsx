@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -11,10 +11,10 @@ import { BackLink } from "@/components/back-link";
 import { CardPager } from "@/components/card-pager";
 import { orgTypeCssVar } from "@/components/collaborations/labels";
 import { CollapsibleCard } from "@/components/collapsible-card";
-import { DetailKpiStrip } from "@/components/detail-kpi-strip";
-import { GapEntryList } from "@/components/gap-entries";
+import { CrisGapsSection } from "@/components/cris-gaps-section";
+import { ACCESS_TEXT, ApcGlyph, DataIcon, DealGlyph, WorksGlyph } from "@/components/data-icons";
+import { DetailSummaryPanel } from "@/components/detail-summary";
 import { SectionNav } from "@/components/journal/section-nav";
-import { OaTrend } from "@/components/oa-trend";
 import { OrcidLink } from "@/components/orcid-link";
 import { DetailSkeleton, ErrorPanel } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
@@ -38,89 +38,8 @@ import {
   type OrgUnitLevel,
 } from "@/lib/api";
 import { countryName, formatEur } from "@/lib/format";
-import { entriesTotal, toGapEntries } from "@/lib/gap-entries";
 
-const PAGE_SIZE = 20;
-
-type OpenalexOnly = OrgUnitDetailResponse["openalex_only"];
-
-/** OpenAlex works attributed to this unit's members that match no Pure
- * record: candidates missing from the research information system. */
-function CrisGapsCard({ openalexOnly, inst }: { openalexOnly: OpenalexOnly; inst: string }) {
-  const t = useTranslations("orgunits");
-  const { total } = openalexOnly;
-  const entries = toGapEntries(openalexOnly.items);
-  const shownTotal = entriesTotal(openalexOnly);
-  return (
-    <CollapsibleCard
-      id="cris-gaps"
-      title={t("detail.crisGaps.title")}
-      description={
-        <p className="text-sm text-[var(--muted-foreground)]">
-          {t("detail.crisGaps.description", { count: total })}
-          {shownTotal > entries.length
-            ? ` ${t("detail.crisGaps.showing", { count: entries.length })}`
-            : ""}
-        </p>
-      }
-      contentClassName="text-sm"
-    >
-      {total === 0 ? (
-        <p className="text-[var(--muted-foreground)]">{t("detail.crisGaps.empty")}</p>
-      ) : (
-        <GapEntryList entries={entries} inst={inst} untitledLabel={t("detail.crisGaps.untitled")} />
-      )}
-    </CollapsibleCard>
-  );
-}
-
-/** Chapter/book rollup over the gap population: how many of the works
- * OpenAlex attributes to this unit's members are book chapters, and
- * which books hold the most of them. Hidden when there are none. */
-function ChapterRollupCard({ rollup }: { rollup: OrgUnitDetailResponse["chapter_rollup"] }) {
-  const t = useTranslations("orgunits");
-  if (rollup.chapters_total <= 0) return null;
-  return (
-    <CollapsibleCard
-      id="book-chapters"
-      title={t("detail.bookChapters")}
-      description={
-        <p className="text-sm text-[var(--muted-foreground)]">
-          {t("detail.bookChaptersIntro", {
-            chapters: rollup.chapters_total,
-            books: rollup.books_total,
-          })}
-        </p>
-      }
-      contentClassName="text-sm"
-    >
-      <ul className="divide-y divide-[var(--border)]">
-        {rollup.books.map((b) => (
-          <li key={b.parent_id ?? b.name} className="py-2 first:pt-0 last:pb-0">
-            <div className="flex flex-wrap items-baseline justify-between gap-x-2.5 gap-y-1">
-              <span className="font-medium">{b.name}</span>
-              <span className="tabular-nums text-[var(--muted-foreground)]">
-                {t("detail.chapterCount", { count: b.chapters })}
-              </span>
-            </div>
-            {b.sample.length > 0 && (
-              <ul className="mt-1 space-y-0.5 text-xs text-[var(--muted-foreground)]">
-                {b.sample.map((title, i) => (
-                  <li key={i}>{title}</li>
-                ))}
-              </ul>
-            )}
-          </li>
-        ))}
-      </ul>
-      {rollup.books_total > rollup.books.length && (
-        <p className="mt-3 border-t border-[var(--border)] pt-3 text-xs text-[var(--muted-foreground)]">
-          {t("detail.bookChaptersMore", { count: rollup.books.length })}
-        </p>
-      )}
-    </CollapsibleCard>
-  );
-}
+const PAGE_SIZE = 10;
 
 export default function OrgUnitPage() {
   const t = useTranslations("orgunits");
@@ -138,7 +57,7 @@ export default function OrgUnitPage() {
   const backHref = level === "faculty" ? `/${inst}/orgunit` : `/${inst}/orgunit?level=${level}`;
   const { year_from, year_to } = useYearRange();
   const [authorSort, setAuthorSort] = React.useState<OrgUnitAuthorSort>("share");
-  const { data, isPending, isError, error } = useOrgUnit(
+  const { data, isPending, isFetching, isError, error } = useOrgUnit(
     level,
     level && name ? name : undefined,
     { year_from, year_to },
@@ -154,7 +73,7 @@ export default function OrgUnitPage() {
         </div>
       </div>
     );
-  if (isPending)
+  if (isPending && !data)
     return (
       <DetailSkeleton
         title={name}
@@ -176,13 +95,13 @@ export default function OrgUnitPage() {
       />
     );
 
-  // Keyed by unit so per-card pagination restarts on navigation.
   return (
     <OrgUnitDetail
       key={`${level}:${name}`}
       inst={inst}
       backHref={backHref}
       data={data}
+      isFetching={isFetching}
       authorSort={authorSort}
       onAuthorSortChange={setAuthorSort}
     />
@@ -193,12 +112,14 @@ function OrgUnitDetail({
   inst,
   backHref,
   data,
+  isFetching,
   authorSort,
   onAuthorSortChange,
 }: {
   inst: string;
   backHref: string;
   data: OrgUnitDetailResponse;
+  isFetching: boolean;
   authorSort: OrgUnitAuthorSort;
   onAuthorSortChange: (sort: OrgUnitAuthorSort) => void;
 }) {
@@ -212,10 +133,13 @@ function OrgUnitDetail({
       (year_to === undefined || s.year <= year_to),
   );
   const [groupPage, setGroupPage] = React.useState(1);
+  const [journalPage, setJournalPage] = React.useState(1);
   const [authorPage, setAuthorPage] = React.useState(1);
   const groupRows = (groups ?? []).slice((groupPage - 1) * PAGE_SIZE, groupPage * PAGE_SIZE);
+  const journalRows = journals.slice((journalPage - 1) * PAGE_SIZE, journalPage * PAGE_SIZE);
   const authorRows = authors.slice((authorPage - 1) * PAGE_SIZE, authorPage * PAGE_SIZE);
   const groupPages = Math.max(1, Math.ceil((groups ?? []).length / PAGE_SIZE));
+  const journalPages = Math.max(1, Math.ceil(journals.length / PAGE_SIZE));
   const authorPages = Math.max(1, Math.ceil(authors.length / PAGE_SIZE));
 
   const dealShare = unit.n_works > 0 ? Math.round((unit.deal_works / unit.n_works) * 100) : 0;
@@ -227,28 +151,38 @@ function OrgUnitDetail({
         : t("detail.back.institute");
 
   const sections: { id: string; label: string }[] = [
+    { id: "overview", label: t("detail.navOverview") },
     ...(groups != null && groups.length > 0
       ? [{ id: "groups", label: t("detail.navGroups") }]
       : []),
-    ...(authors.length > 0 ? [{ id: "authors", label: t("detail.navAuthors") }] : []),
-    ...(data.chapter_rollup.chapters_total > 0
-      ? [{ id: "book-chapters", label: t("detail.bookChapters") }]
-      : []),
-    ...(data.openalex_only.available ? [{ id: "cris-gaps", label: t("detail.navCrisGaps") }] : []),
-    ...(journals.length > 0 ? [{ id: "journals", label: t("detail.navJournals") }] : []),
-    ...(trendYears.length > 0 ? [{ id: "oa-over-time", label: t("detail.navTrend") }] : []),
     ...(deal_usage.length > 0 ? [{ id: "deal-usage", label: t("detail.navDeals") }] : []),
+    ...(journals.length > 0 ? [{ id: "journals", label: t("detail.navJournals") }] : []),
+    ...(authors.length > 0 ? [{ id: "authors", label: t("detail.navAuthors") }] : []),
     ...((top_partners?.length ?? 0) > 0
       ? [{ id: "collaboration-partners", label: t("detail.navPartners") }]
       : []),
+    ...(data.openalex_only.available ? [{ id: "cris-gaps", label: t("detail.navCrisGaps") }] : []),
   ];
 
   const kpis = [
     { label: t("detail.kpiAuthors"), value: unit.n_authors.toLocaleString("en") },
-    { label: t("detail.kpiWorks"), value: unit.n_works.toLocaleString("en") },
+    {
+      label: t("detail.kpiWorks"),
+      value: unit.n_works.toLocaleString("en"),
+      icon: (
+        <DataIcon className={`size-3.5 ${ACCESS_TEXT.brand}`}>
+          <WorksGlyph />
+        </DataIcon>
+      ),
+    },
     {
       label: t("detail.kpiDealWorks"),
       value: `${unit.deal_works.toLocaleString("en")}${unit.n_works > 0 ? ` (${dealShare}%)` : ""}`,
+      icon: (
+        <DataIcon className={`size-3.5 ${ACCESS_TEXT.deal}`}>
+          <DealGlyph />
+        </DataIcon>
+      ),
       hint: t("tooltips.dealWorks"),
     },
     ...(unit.apc_n > 0
@@ -256,12 +190,19 @@ function OrgUnitDetail({
           {
             label: t("detail.kpiApcSpend"),
             value: `€${formatEur(unit.apc_euro_total)}`,
+            icon: (
+              <DataIcon className={`size-3.5 ${ACCESS_TEXT.brand}`}>
+                <ApcGlyph />
+              </DataIcon>
+            ),
             hint: t("tooltips.apc", { count: unit.apc_n }),
+            sub: `${unit.apc_n} articles`,
           },
         ]
-      : unit.n_groups != null && unit.n_groups > 0
-        ? [{ label: t("detail.navGroups"), value: unit.n_groups.toLocaleString("en") }]
-        : []),
+      : []),
+    ...(unit.n_groups != null && unit.n_groups > 0
+      ? [{ label: t("detail.navGroups"), value: unit.n_groups.toLocaleString("en") }]
+      : []),
   ];
 
   return (
@@ -272,10 +213,12 @@ function OrgUnitDetail({
         backStorageKey="jb-last-orgunits"
         backLabel={backLabel}
       />
-      <div className="mx-auto max-w-screen-2xl px-4 py-10">
-        <header className="mb-6">
-          <h1 className="text-3xl font-bold text-balance">{unit.name}</h1>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+      <div className="mx-auto max-w-screen-2xl px-4 py-6">
+        <header className="mb-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl">
+              {unit.name}
+            </h1>
             <Badge variant="muted" className="font-normal">
               {unit.level === "group"
                 ? t("detail.badge.group")
@@ -294,14 +237,22 @@ function OrgUnitDetail({
           </div>
         </header>
 
-        <DetailKpiStrip items={kpis} />
+        <div className="space-y-4">
+          <DetailSummaryPanel
+            id="overview"
+            stats={kpis}
+            trendStats={trendYears}
+            trendTitle={t("detail.trendTitle")}
+          />
 
-        <div className="space-y-6">
+          {/* Block 3: Sub-units & Deal usage */}
           {groups != null && groups.length > 0 && (
             <CollapsibleCard
               id="groups"
               title={t("detail.groups.title")}
-              contentClassName="text-sm"
+              count={groups.length}
+              compact
+              contentClassName="space-y-3 text-sm [&_td]:py-1.5 [&_th]:h-8"
             >
               <Table>
                 <caption className="sr-only">{t("detail.groups.caption")}</caption>
@@ -355,21 +306,129 @@ function OrgUnitDetail({
             </CollapsibleCard>
           )}
 
+          {deal_usage.length > 0 && (
+            <CollapsibleCard
+              id="deal-usage"
+              title={t("detail.dealUsage.title")}
+              count={deal_usage.length}
+              compact
+              description={
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  {t("detail.dealUsage.description")}
+                </p>
+              }
+              contentClassName="text-sm [&_td]:py-1.5 [&_th]:h-8"
+            >
+              <Table>
+                <caption className="sr-only">{t("detail.dealUsage.caption")}</caption>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("columns.agreement")}</TableHead>
+                    <TableHead className="text-right">{t("columns.works")}</TableHead>
+                    <TableHead className="text-right">{t("columns.apc")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {deal_usage.map((d) => (
+                    <TableRow key={d.label}>
+                      <TableCell className="font-medium">
+                        <Link
+                          href={`/${inst}/deals`}
+                          className="block max-w-72 truncate underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                          title={d.label}
+                        >
+                          {d.label}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {d.n_works.toLocaleString("en")}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {d.euro ? `€${formatEur(d.euro)}` : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CollapsibleCard>
+          )}
+
+          {/* Block 4: Journals, Authors & Collaborators */}
+          {journals.length > 0 && (
+            <CollapsibleCard
+              id="journals"
+              title={t("detail.journals.title")}
+              count={journals.length}
+              compact
+              contentClassName="space-y-3 text-sm [&_td]:py-1.5 [&_th]:h-8"
+            >
+              <Table>
+                <caption className="sr-only">{t("detail.journals.caption")}</caption>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("columns.journal")}</TableHead>
+                    <TableHead className="text-right">{t("columns.works")}</TableHead>
+                    <TableHead>{t("columns.access")}</TableHead>
+                    <TableHead>{t("columns.quartile")}</TableHead>
+                    <TableHead>{t("columns.deal")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {journalRows.map((j) => (
+                    <TableRow key={j.issn_l}>
+                      <TableCell className="font-medium">
+                        <Link
+                          href={`/${inst}/journals/${j.issn_l}`}
+                          className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                        >
+                          {j.title || j.issn_l}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {j.n_works.toLocaleString("en")}
+                      </TableCell>
+                      <TableCell>
+                        <OaTypeBadge oaType={j.oa_type} />
+                      </TableCell>
+                      <TableCell>
+                        <QuartileBadge quartile={j.quartile} />
+                      </TableCell>
+                      <TableCell>
+                        <DealBadge covered={j.deal_covered} />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {journalPages > 1 && (
+                <CardPager
+                  page={journalPage}
+                  pages={journalPages}
+                  total={journals.length}
+                  onPage={setJournalPage}
+                  label={t("detail.journals.pager")}
+                />
+              )}
+            </CollapsibleCard>
+          )}
+
           {authors.length > 0 && (
             <CollapsibleCard
               id="authors"
               title={t("detail.authors.title")}
+              count={authors.length}
+              compact
               description={
                 <div
                   role="group"
                   aria-label={t("detail.authors.rankBy")}
-                  className="mt-2 flex flex-wrap items-center gap-2"
+                  className="mt-1 flex flex-wrap items-center gap-2"
                 >
                   <div className="flex overflow-hidden rounded-[var(--radius)] border border-[var(--input)]">
                     <Button
                       variant={authorSort === "share" ? "secondary" : "ghost"}
                       size="sm"
-                      className="rounded-none"
+                      className="h-7 rounded-none px-2.5 text-xs"
                       aria-pressed={authorSort === "share"}
                       title={t("detail.authors.shareSortTitle")}
                       onClick={() => onAuthorSortChange("share")}
@@ -379,18 +438,24 @@ function OrgUnitDetail({
                     <Button
                       variant={authorSort === "works" ? "secondary" : "ghost"}
                       size="sm"
-                      className="rounded-none"
+                      className="h-7 rounded-none px-2.5 text-xs"
                       aria-pressed={authorSort === "works"}
                       onClick={() => onAuthorSortChange("works")}
                     >
                       {t("detail.authors.worksSort")}
                     </Button>
                   </div>
+                  {isFetching && (
+                    <Loader2
+                      aria-hidden
+                      className="size-3.5 animate-spin text-[var(--muted-foreground)]"
+                    />
+                  )}
                 </div>
               }
-              contentClassName="text-sm"
+              contentClassName="space-y-3 text-sm [&_td]:py-1.5 [&_th]:h-8"
             >
-              <Table>
+              <Table className={isFetching ? "opacity-60 transition-opacity" : undefined}>
                 <caption className="sr-only">{t("detail.authors.caption")}</caption>
                 <TableHeader>
                   <TableRow>
@@ -455,119 +520,15 @@ function OrgUnitDetail({
             </CollapsibleCard>
           )}
 
-          <ChapterRollupCard rollup={data.chapter_rollup} />
-
-          {data.openalex_only.available && (
-            <CrisGapsCard openalexOnly={data.openalex_only} inst={inst} />
-          )}
-
-          {journals.length > 0 && (
-            <CollapsibleCard
-              id="journals"
-              title={t("detail.journals.title")}
-              contentClassName="text-sm"
-            >
-              <Table>
-                <caption className="sr-only">{t("detail.journals.caption")}</caption>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t("columns.journal")}</TableHead>
-                    <TableHead className="text-right">{t("columns.works")}</TableHead>
-                    <TableHead>{t("columns.access")}</TableHead>
-                    <TableHead>{t("columns.quartile")}</TableHead>
-                    <TableHead>{t("columns.deal")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {journals.map((j) => (
-                    <TableRow key={j.issn_l}>
-                      <TableCell className="font-medium">
-                        <Link
-                          href={`/${inst}/journals/${j.issn_l}`}
-                          className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-                        >
-                          {j.title || j.issn_l}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {j.n_works.toLocaleString("en")}
-                      </TableCell>
-                      <TableCell>
-                        <OaTypeBadge oaType={j.oa_type} />
-                      </TableCell>
-                      <TableCell>
-                        <QuartileBadge quartile={j.quartile} />
-                      </TableCell>
-                      <TableCell>
-                        <DealBadge covered={j.deal_covered} />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CollapsibleCard>
-          )}
-
-          {trendYears.length > 0 && (
-            <CollapsibleCard id="oa-over-time" title={t("detail.trendTitle")}>
-              <OaTrend stats={trendYears} />
-            </CollapsibleCard>
-          )}
-
-          {deal_usage.length > 0 && (
-            <CollapsibleCard
-              id="deal-usage"
-              title={t("detail.dealUsage.title")}
-              description={
-                <p className="text-sm text-[var(--muted-foreground)]">
-                  {t("detail.dealUsage.description")}
-                </p>
-              }
-              contentClassName="text-sm"
-            >
-              <Table>
-                <caption className="sr-only">{t("detail.dealUsage.caption")}</caption>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t("columns.agreement")}</TableHead>
-                    <TableHead className="text-right">{t("columns.works")}</TableHead>
-                    <TableHead className="text-right">{t("columns.apc")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {deal_usage.map((d) => (
-                    <TableRow key={d.label}>
-                      <TableCell className="font-medium">
-                        <Link
-                          href={`/${inst}/deals`}
-                          className="block max-w-72 truncate underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-                          title={d.label}
-                        >
-                          {d.label}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {d.n_works.toLocaleString("en")}
-                      </TableCell>
-                      {/* euro 0 with no evidence rows means "no amount data",
-                        not "free": sibling surfaces gate on apc_n > 0. */}
-                      <TableCell className="text-right tabular-nums">
-                        {d.euro ? `${formatEur(d.euro)} €` : "—"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CollapsibleCard>
-          )}
-
           {(top_partners?.length ?? 0) > 0 && (
             <CollapsibleCard
               id="collaboration-partners"
               title={t("detail.partners.title")}
+              count={(top_partners ?? []).length}
+              compact
               description={
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm text-[var(--muted-foreground)]">
+                  <p className="text-xs text-[var(--muted-foreground)]">
                     {t("detail.partners.description")}
                   </p>
                   <Link
@@ -579,7 +540,7 @@ function OrgUnitDetail({
                   </Link>
                 </div>
               }
-              contentClassName="text-sm"
+              contentClassName="text-sm [&_td]:py-1.5 [&_th]:h-8"
             >
               <Table>
                 <caption className="sr-only">{t("detail.partners.caption")}</caption>
@@ -624,6 +585,12 @@ function OrgUnitDetail({
               </Table>
             </CollapsibleCard>
           )}
+
+          {/* Block 5: Evidence & Data Quality */}
+          <CrisGapsSection
+            target={{ kind: "orgunit", level: unit.level, name: unit.name }}
+            available={data.openalex_only.available}
+          />
         </div>
       </div>
     </>

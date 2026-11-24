@@ -152,7 +152,8 @@
     },
     "journals": {
       "title": "Journals",
-      "caption": "Journals this unit publishes in"
+      "caption": "Journals this unit publishes in",
+      "pager": "journals"
     },
     "trendTitle": "Open access over time",
     "dealUsage": {

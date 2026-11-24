@@ -153,6 +153,16 @@
   },
   "detail": {
     "back": "All partners",
+    "navOverview": "Overview",
+    "navMerged": "Sub-units",
+    "navUtCollab": "Collaborators",
+    "navJournals": "Journals & topics",
+    "navCredits": "Funders & projects",
+    "navWorks": "Shared works",
+    "showAllCount": "Show all ({count})",
+    "showLess": "Show less",
+    "pagerJournals": "journals",
+    "pagerWorks": "works",
     "notFound": "This organisation is not a collaboration partner in the selected years.",
     "facts": {
       "type": "Type",

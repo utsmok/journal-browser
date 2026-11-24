@@ -131,6 +131,8 @@
     "faculties": "Faculties",
     "researchGroups": "Research groups",
     "topAuthors": "Top authors",
+    "showAllCount": "Show all ({count})",
+    "showLess": "Show less",
     "topAuthorsCaption": "The UT authors with the most works across this publisher's journals",
     "authorshipCaptionFaculty": "Distinct works with UT authors per faculty",
     "authorshipCaptionGroup": "Distinct works with UT authors per research group",

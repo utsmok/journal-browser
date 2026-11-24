@@ -33,6 +33,9 @@ export type OpenaireInfo = Schemas["OpenaireInfo"];
 export type LimitationOut = Schemas["LimitationOut"];
 export type FreshnessResponse = Schemas["FreshnessResponse"];
 export type StatsYear = Schemas["StatsYear"];
+export type OpenalexOnly = Schemas["OpenalexOnly"];
+export type PartsRollup = Schemas["PartsRollup"];
+export type CrisGapsResponse = Schemas["CrisGapsResponse"];
 export type FunderListItem = Schemas["FunderListItem"];
 export type FunderSearchResponse = Schemas["FunderSearchResponse"];
 export type FunderDetailResponse = Schemas["FunderDetailResponse"];
@@ -141,10 +144,11 @@ export function fetchCollaborationWorks(
   ror: string,
   p: CollaborationSearchParams,
   offset: number,
+  limit: number = COLLAB_PAGE_SIZE,
 ) {
   return apiGet<CollaborationWorksResponse>(
     `/${inst}/collaborations/${encodeURIComponent(ror)}/works`,
-    { ...collabParams(p), offset, limit: COLLAB_PAGE_SIZE },
+    { ...collabParams(p), offset, limit },
   );
 }
 
@@ -543,8 +547,23 @@ export async function fetchPublisher(
   name: string,
   years?: YearParams,
   parts?: PublisherPartsFilter,
+  includeGaps: boolean = false,
 ): Promise<PublisherDetailResponse> {
   return apiGet<PublisherDetailResponse>(`/${inst}/publishers/${encodeNamePath(name)}`, {
+    year_from: years?.year_from,
+    year_to: years?.year_to,
+    parts,
+    include_gaps: includeGaps ? undefined : "false",
+  });
+}
+
+export async function fetchPublisherCrisGaps(
+  inst: string,
+  name: string,
+  years?: YearParams,
+  parts?: PublisherPartsFilter,
+): Promise<CrisGapsResponse> {
+  return apiGet<CrisGapsResponse>(`/${inst}/publishers/${encodeNamePath(name)}/cris-gaps`, {
     year_from: years?.year_from,
     year_to: years?.year_to,
     parts,
@@ -584,10 +603,39 @@ export async function fetchOrgUnit(
   name: string,
   years?: YearParams,
   sort?: OrgUnitAuthorSort,
+  includeGaps: boolean = false,
 ): Promise<OrgUnitDetailResponse> {
   return apiGet<OrgUnitDetailResponse>(`/${inst}/orgunits/${level}/${encodeNamePath(name)}`, {
     year_from: years?.year_from,
     year_to: years?.year_to,
     sort,
+    include_gaps: includeGaps ? undefined : "false",
+  });
+}
+
+export async function fetchOrgUnitCrisGaps(
+  inst: string,
+  level: OrgUnitLevel,
+  name: string,
+  years?: YearParams,
+  parts?: PublisherPartsFilter,
+): Promise<CrisGapsResponse> {
+  return apiGet<CrisGapsResponse>(`/${inst}/orgunits/${level}/${encodeNamePath(name)}/cris-gaps`, {
+    year_from: years?.year_from,
+    year_to: years?.year_to,
+    parts,
+  });
+}
+
+export async function fetchJournalCrisGaps(
+  inst: string,
+  issnL: string,
+  years?: YearParams,
+  parts?: PublisherPartsFilter,
+): Promise<CrisGapsResponse> {
+  return apiGet<CrisGapsResponse>(`/${inst}/journals/${encodeURIComponent(issnL)}/cris-gaps`, {
+    year_from: years?.year_from,
+    year_to: years?.year_to,
+    parts,
   });
 }

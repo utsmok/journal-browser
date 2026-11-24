@@ -23,7 +23,12 @@ export function CitationCard({ data }: { data: JournalDetailResponse }) {
     date: today,
   });
   return (
-    <CollapsibleCard id="cite" title={t("citation.title")} contentClassName="space-y-2 text-sm">
+    <CollapsibleCard
+      id="cite"
+      title={t("citation.title")}
+      compact
+      contentClassName="space-y-2 text-sm"
+    >
       <div className="flex items-start gap-2">
         {/* anywhere (not break-words): only `anywhere` lets the long canonical URL
               count as breakable for the grid column's min-content, so mobile stays 390px. */}
