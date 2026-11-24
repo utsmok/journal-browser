@@ -16,11 +16,7 @@ from journal_browser.config import get_settings
 from journal_browser.harvest.common import resolve_institution
 from journal_browser.harvest.curation_report import render_curation_report
 from journal_browser.harvest.denorm import refresh_deal_flags
-from journal_browser.harvest.reconcile import (
-    derive_nl_deal_coverage,
-    enforce_unique_agreement_data,
-    reconcile_deals,
-)
+from journal_browser.harvest.reconcile import derive_nl_deal_coverage, reconcile_deals
 from journal_browser.queries import get_active_institutions
 
 
@@ -39,17 +35,14 @@ async def main(institution: str | None) -> None:
             await engine.dispose()
             return
         stats = await reconcile_deals(session)
-        actions = await enforce_unique_agreement_data(session)
         # Linkage/merges above can change per-institution coverage; keep
         # every hosted institution's search flags consistent.
         for inst in await get_active_institutions(session):
             await refresh_deal_flags(session, inst.id)
         await session.commit()
-        report = await render_curation_report(session, actions)
+        report = await render_curation_report(session)
     await engine.dispose()
     print(json.dumps(stats))
-    if actions:
-        print(json.dumps({"duplicate_data_guard": actions}, indent=1))
     print(f"curation report: {report}")
 
 

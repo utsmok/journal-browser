@@ -26,9 +26,7 @@ def _conf(value: float | None) -> str:
     return f"{value:.2f}" if value is not None else "—"
 
 
-async def render_curation_report(
-    session: AsyncSession, data_guard_actions: list[dict[str, str]] | None = None
-) -> Path:
+async def render_curation_report(session: AsyncSession) -> Path:
     """Read-only HTML report for library staff."""
     pub_names = await publisher_names(session)
     deals = list((await session.execute(select(Deal))).scalars())
@@ -40,6 +38,8 @@ async def render_curation_report(
         ).scalars()
     )
 
+    # A withheld JCT sheet (another publisher's) is listed under the flagged
+    # deals with its reason, like every other cause.
     sections: list[str] = []
 
     def deal_row(d: Deal) -> str:
@@ -95,8 +95,6 @@ async def render_curation_report(
             f"{_esc(get_settings().institution_name)} and are out of scope for this "
             "browser; they stay in the database for provenance.</p>"
         )
-    # Duplicate-agreement guard: enforce_unique_agreement_data runs before
-    # the report and returns the purge/flag actions it took.
     # Phase 10: trigram-matched work identities awaiting curation.
     candidate_rows = (
         await session.execute(
@@ -178,18 +176,6 @@ async def render_curation_report(
                 f"<li>{_esc((r.doi or '')[:60])} — “{_esc((r.title or '')[:80])}” "
                 f"in <em>{_esc(str(r.container)[:80])}</em></li>"
                 for r in unresolved
-            )
-            + "</ul>"
-        )
-    if data_guard_actions:
-        sections.append(
-            "<h2>Duplicate agreement data (auto-guarded)</h2><ul>"
-            + "".join(
-                f"<li>{_esc(a['keeper'])} vs {_esc(a['loser'])}: "
-                f"{_esc(a['overlap'])} identical ISSN sets — kept the former, "
-                f"{_esc(a['action'])}. The loser's JCT CSV is an upstream index "
-                "error; request the correct sheet from the JCT curators.</li>"
-                for a in data_guard_actions
             )
             + "</ul>"
         )

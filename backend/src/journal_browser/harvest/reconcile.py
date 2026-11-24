@@ -8,14 +8,23 @@ links. Duplicate narrative rows (a scrape fork that resolved to a
 different publisher row than the canonical agreement sits on) fold back
 into the canonical first. Unmatched rows land in the curation report,
 never silently dropped (limitation: jct-coverage).
+
+Precedence: openaccess.nl owns the deal-level facts (publisher, period,
+status, conditions); JCT adds what only it has (ESAC id, journal list,
+participants). restore_openaccess_nl_facts puts the owned facts back on
+rows an older JCT ingest overwrote, and a JCT journal list is attached
+only when its journals belong to the deal's own publisher
+(deal_publishers.py); any other list stays out or is flagged, never
+dropped without a flag.
 """
 
 import logging
 import re
+from collections import Counter, defaultdict
 from datetime import UTC, datetime
 
+from sqlalchemy import ColumnElement, func, literal, or_, select, text, update
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import func, literal, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,76 +33,33 @@ from ..models import (
     Deal,
     DealInstitution,
     DealJournal,
-    IssnMap,
+    Institution,
     Journal,
     ManualOverride,
     Publisher,
 )
 from ..queries import get_active_institutions
 from .common import get_home_institution
+from .deal_publishers import (
+    SHEET_REJECTED_KEY,
+    SheetPublishers,
+    canonical_name,
+    code_of,
+    dismissal_applies,
+    family_of,
+    flag,
+    is_list_reason,
+    judge,
+    load_sheet_publishers,
+    mismatch_reason,
+    name_matches,
+    publisher_counts,
+    rejected_sheet,
+    withheld,
+)
+from .openaccess_nl import parse_duration
 
 logger = logging.getLogger(__name__)
-
-#: ESAC ID code prefix -> canonical publisher name for auto-linking with
-#: openaccess.nl publisher names. Anything absent here flows to the
-#: curation report (manual esac_id overrides remain possible).
-CODE_ALIASES = {
-    "karger": "Karger",
-    "kar": "Karger",
-    "elsevier": "Elsevier",
-    "els": "Elsevier",
-    "oup": "Oxford University Press",
-    "oxford": "Oxford University Press",
-    "oxf": "Oxford University Press",
-    "plos": "Public Library of Science (PLOS)",
-    "thieme": "Thieme",
-    "wiley": "Wiley",
-    "springer": "Springer",
-    "sn": "Springer",
-    "sage": "SAGE",
-    "acs": "American Chemical Society (ACS)",
-    "acm": "ACM",
-    "aip": "AIP Publishing (AIPP)",
-    "iop": "IOP Publishing",
-    "rsc": "Royal Society of Chemistry (RSC)",
-    "tandf": "Taylor & Francis",
-    "tf": "Taylor & Francis",
-    "cambridge": "Cambridge University Press",
-    "cup": "Cambridge University Press",
-    "cam": "Cambridge University Press",
-    "emerald": "Emerald Publishing group",
-    "eme": "Emerald Publishing group",
-    "lww": "Lippincott Williams & Wilkins (LWW)",
-    "degruyter": "De Gruyter Brill",
-    "dgbrill": "De Gruyter Brill",
-    "dgb": "De Gruyter Brill",
-    "brill": "De Gruyter Brill",
-    "ios": "IOS Press",
-    "aup": "Amsterdam University Press (AUP)",
-    "aap": "Annual Reviews",
-    "annualreviews": "Annual Reviews",
-    "cob": "Company of Biologists",
-    "companyofbiologists": "Company of Biologists",
-}
-
-
-def _code_of(esac_id: str | None) -> str | None:
-    """'kar2026caul' -> 'kar'; digits start the year segment."""
-    if not esac_id:
-        return None
-    code = ""
-    for ch in esac_id:
-        if ch.isdigit():
-            break
-        code += ch
-    return code.lower() or None
-
-
-def _canonical_name(code: str | None, publisher_name: str | None) -> str | None:
-    if code and code in CODE_ALIASES:
-        return CODE_ALIASES[code]
-    return (publisher_name or "").strip() or None
-
 
 _DUTCH_CONSORTIA = {"ukb", "surf", "nl"}
 _ESAC_SUFFIX_RE = re.compile(r"^[A-Za-z]+(\d{4})([A-Za-z]*)$")
@@ -200,10 +166,11 @@ def _participation(conditions_text: str | None, home_name: str) -> str | None:
 
 
 async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
-    """Participation + journal coverage for openaccess.nl-only deals.
+    """Participation + journal coverage for deals without a usable JCT sheet.
 
-    These deals have no JCT sheet, but the deal pages state both facts:
-    participation as an institution list in the conditions text
+    These deals are openaccess.nl-only deals and deals whose JCT sheet was
+    withheld because it belongs to another publisher. The deal pages state
+    both facts: participation as an institution list in the conditions text
     ("Participating in the agreement are: ... <institution> ...") or, when
     no institutions are enumerated, as a national UKB-wide deal; and
     coverage as all journals of the publisher. Participation is derived
@@ -211,22 +178,23 @@ async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
     coverage rows are shared (institution_id NULL). Non-participating
     institutions simply get no deal_institutions row; publishers with no
     corpus match keep their needs_curation flag.
+
+    A deal whose JCT sheet was withheld keeps that flag whatever the
+    derivation finds: a list derived from the publisher's corpus does not
+    make the JCT index right.
     """
     hosted = await get_active_institutions(session)
     stats = {"nl_deals": 0, "linked": 0, "covered": 0, "pattern_journals": 0}
     if not hosted:
         return stats
-    deals = list(
+    pages = list(
         (
             await session.execute(
-                select(Deal).where(
-                    Deal.openaccess_nl_url.is_not(None),
-                    Deal.esac_id.is_(None),
-                    Deal.status == "current",
-                )
+                select(Deal).where(Deal.openaccess_nl_url.is_not(None), Deal.status == "current")
             )
         ).scalars()
     )
+    deals = [d for d in pages if d.esac_id is None or rejected_sheet(d.provenance) is not None]
     stats["nl_deals"] = len(deals)
     pub_names = await publisher_names(session)
     protected = await _override_protected(session, [d.id for d in deals])
@@ -273,7 +241,16 @@ async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
             )
             .limit(1)
         )
-        if linked is not None and has_journals and deal.id not in protected and deal.needs_curation:
+        # A withheld sheet keeps its flag: the deal has no journal list of
+        # its own, and the derivation below does not change that.
+        rejected = rejected_sheet(deal.provenance) is not None
+        if (
+            not rejected
+            and linked is not None
+            and has_journals
+            and deal.id not in protected
+            and deal.needs_curation
+        ):
             # Earlier reconcile already derived (or curated) this deal; the
             # flag pass above re-flagged it, so clear it again (idempotent
             # rerun). Pattern-derived deals keep deriving below.
@@ -320,11 +297,186 @@ async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
                 "at": datetime.now(UTC).isoformat(),
             },
         ]
-        if deal.id not in protected and deal.needs_curation:
+        if not rejected and deal.id not in protected and deal.needs_curation:
             deal.needs_curation = False
             deal.needs_curation_reason = None
         stats["covered"] += 1
     return stats
+
+
+def _in_register() -> ColumnElement[bool]:
+    """Deals the register shows: an openaccess.nl page, or a link to a
+    hosted institution."""
+    linked = (
+        select(DealInstitution.deal_id)
+        .join(Institution, Institution.id == DealInstitution.institution_id)
+        .where(Institution.active.is_(True))
+    )
+    return or_(Deal.openaccess_nl_url.is_not(None), Deal.id.in_(linked))
+
+
+async def restore_openaccess_nl_facts(session: AsyncSession) -> dict[str, int]:
+    """Put openaccess.nl's deal-level facts back on rows shared with JCT.
+
+    openaccess.nl is the primary source for the Dutch deals (publisher,
+    period, status). Its scrape rewrites status on every run, but an older
+    JCT ingest also wrote its placeholder publisher and End Date onto the
+    merged row, and nothing put them back. A deal with an openaccess.nl
+    page now sits on the openaccess.nl publisher row of its family when
+    that row exists (a JCT-only deal linked to a hosted institution moves
+    off a placeholder code the same way), and a plain "YYYY-YYYY" duration
+    text also sets start_year and end_year. A duration that carries an
+    owner annotation, and any field with a ManualOverride row, is left
+    alone."""
+    stats = {"publisher_restored": 0, "period_restored": 0}
+    rows = (
+        await session.execute(
+            select(Deal, Publisher.name, Publisher.openaccess_nl_slug)
+            .join(Publisher, Publisher.id == Deal.publisher_id)
+            .where(Deal.esac_id.is_not(None), _in_register())
+        )
+    ).all()
+    if not rows:
+        return stats
+    overridden: dict[int, set[str]] = defaultdict(set)
+    overrides = await session.execute(
+        select(ManualOverride.row_key, ManualOverride.field).where(
+            ManualOverride.table_name == "deals",
+            ManualOverride.field.in_(["publisher_id", "start_year", "end_year"]),
+            ManualOverride.row_key.in_([str(deal.id) for deal, _, _ in rows]),
+        )
+    )
+    for key, field in overrides.all():
+        overridden[int(key)].add(field)
+    openaccess_nl_rows = {
+        name.casefold(): publisher_id
+        for publisher_id, name in (
+            await session.execute(
+                select(Publisher.id, Publisher.name).where(
+                    Publisher.openaccess_nl_slug.is_not(None)
+                )
+            )
+        ).all()
+    }
+    for deal, publisher_name, slug in rows:
+        protected = overridden[deal.id]
+        placeholder = publisher_name == (code_of(deal.esac_id) or "").upper()
+        if (
+            slug is None
+            and (deal.openaccess_nl_url is not None or placeholder)
+            and "publisher_id" not in protected
+        ):
+            family = family_of(deal.esac_id, publisher_name)
+            row = openaccess_nl_rows.get(family)
+            if row is None and family:
+                # openaccess.nl spells the family name a little differently
+                # ("The Company of Biologists" vs "Company of Biologists").
+                row = next(
+                    (pid for name, pid in openaccess_nl_rows.items() if name_matches(family, name)),
+                    None,
+                )
+            if row is not None and row != deal.publisher_id:
+                deal.publisher_id = row
+                stats["publisher_restored"] += 1
+        years = parse_duration(deal.duration_text)
+        if (
+            deal.openaccess_nl_url is not None
+            and years != (None, None)
+            and years != (deal.start_year, deal.end_year)
+        ):
+            if "start_year" not in protected:
+                deal.start_year = years[0]
+            if "end_year" not in protected:
+                deal.end_year = years[1]
+            stats["period_restored"] += 1
+    await session.flush()
+    return stats
+
+
+async def check_journal_list_publishers(session: AsyncSession) -> dict[str, int]:
+    """Flag register deals whose journal list is mostly another publisher's.
+
+    The JCT ingest and the merge keep such a sheet out; this pass also
+    looks at rows that reached a deal another way (contract list, admin
+    import, a sheet attached before the check existed). It never drops
+    rows: the deal is flagged and the reason names the publisher.
+
+    A deal that carries a withheld-sheet marker in its provenance is
+    flagged with that marker's reason for as long as the marker stands,
+    whatever else its list looks like now: a hand-curated list of the
+    deal's own journals does not make the JCT index right. The flags are
+    derived again on every run (the openaccess.nl scrape wipes them) and
+    retired once the list no longer gives cause. An admin dismissal of
+    such a reason (deals.curation_resolved_reason) holds until then."""
+    stats = {"foreign_lists_flagged": 0, "rejected_sheets_flagged": 0, "list_flags_retired": 0}
+    deals = list((await session.execute(select(Deal).where(_in_register()))).scalars())
+    if not deals:
+        return stats
+    protected = await _override_protected(session, [d.id for d in deals])
+    sheets = await load_sheet_publishers(session)
+    counts = await publisher_counts(session, [d.id for d in deals])
+    for deal in deals:
+        # A dismissal of a journal-list reason is handled here, not by the
+        # blanket protection other dismissals get.
+        list_dismissal = is_list_reason(deal.curation_resolved_reason)
+        if deal.id in protected and not list_dismissal:
+            continue
+        verdict = judge(
+            counts.get(deal.id, Counter()),
+            family=sheets.families.get(deal.id, ""),
+            exclude=deal.id,
+            sheets=sheets,
+        )
+        marker = rejected_sheet(deal.provenance)
+        if marker is not None:
+            reason: str | None = marker
+        elif verdict.foreign is not None:
+            reason = mismatch_reason(verdict)
+        else:
+            reason = None
+        if reason is None or dismissal_applies(deal.curation_resolved_reason, reason):
+            # Nothing to flag, or the admin dismissed exactly this: retire
+            # what earlier runs left.
+            if deal.needs_curation and is_list_reason(deal.needs_curation_reason):
+                deal.needs_curation = False
+                deal.needs_curation_reason = None
+                stats["list_flags_retired"] += 1
+            elif list_dismissal and reason is None:
+                deal.curation_resolved_reason = None
+                stats["list_flags_retired"] += 1
+            continue
+        if not deal.needs_curation or deal.needs_curation_reason != reason:
+            flag(deal, reason)
+            key = "rejected_sheets_flagged" if marker is not None else "foreign_lists_flagged"
+            stats[key] += 1
+    return stats
+
+
+#: Reason prefix of the duplicate-sheet guard that check above replaces.
+_DUPLICATE_GUARD_PREFIX = "JCT data CSV is a duplicate of"
+
+
+async def retire_duplicate_guard_flags(session: AsyncSession) -> dict[str, int]:
+    """Retire the flags of the duplicate-sheet guard, which no longer runs.
+
+    That guard compared ESAC code spellings, so it took same-publisher
+    sheets ("degruy2025kemoe" vs "dgb2026malmad2") for duplicates and
+    purged their journal rows. The JCT ingest stores those rows again."""
+    deals = list(
+        (
+            await session.execute(
+                select(Deal).where(Deal.needs_curation_reason.startswith(_DUPLICATE_GUARD_PREFIX))
+            )
+        ).scalars()
+    )
+    protected = await _override_protected(session, [d.id for d in deals])
+    retired = 0
+    for deal in deals:
+        if deal.id not in protected:
+            deal.needs_curation = False
+            deal.needs_curation_reason = None
+            retired += 1
+    return {"duplicate_guard_flags_retired": retired}
 
 
 def _pick_keeper(group: list[Deal]) -> Deal:
@@ -446,7 +598,7 @@ async def dedupe_oanl_deals(session: AsyncSession, publisher_names: dict[int, st
         candidates = [
             c
             for c in canonicals
-            if (_canonical_name(_code_of(c.esac_id), publisher_names.get(c.publisher_id)) or "")
+            if (canonical_name(code_of(c.esac_id), publisher_names.get(c.publisher_id)) or "")
             .strip()
             .casefold()
             == name
@@ -461,9 +613,13 @@ async def dedupe_oanl_deals(session: AsyncSession, publisher_names: dict[int, st
 
 async def reconcile_deals(session: AsyncSession) -> dict[str, int]:
     """Match + merge; returns report counters."""
+    # Before the match reads publisher names and periods: put back what an
+    # older JCT ingest overwrote on rows shared with openaccess.nl.
+    restored = await restore_openaccess_nl_facts(session)
     pub_names = await publisher_names(session)
     merged_oanl = await dedupe_oanl_deals(session, pub_names)
     jct_deals = await _jct_deals(session)
+    sheets = await load_sheet_publishers(session)
     matched = unmatched_jct = 0
 
     oanl_deals = list(
@@ -506,7 +662,7 @@ async def reconcile_deals(session: AsyncSession) -> dict[str, int]:
             await session.delete(jct)
             matched += 1
             continue
-        name = _canonical_name(_code_of(jct.esac_id), pub_names.get(jct.publisher_id))
+        name = canonical_name(code_of(jct.esac_id), pub_names.get(jct.publisher_id))
         target = None
         for deal in oanl_deals:
             if target or deal.id in consumed or deal.esac_id:
@@ -524,7 +680,7 @@ async def reconcile_deals(session: AsyncSession) -> dict[str, int]:
             unmatched_jct += 1
             continue
         consumed.add(target.id)
-        await _merge(session, target, jct)
+        await _merge(session, target, jct, sheets)
         matched += 1
 
     # openaccess.nl deals with no JCT counterpart: flag for curation,
@@ -557,6 +713,7 @@ async def reconcile_deals(session: AsyncSession) -> dict[str, int]:
         retired_archive_flags += 1
 
     stats = {
+        **restored,
         "matched": matched,
         "unmatched_jct": unmatched_jct,
         "unmatched_oanl": len([d for d in candidates if d.id not in protected]),
@@ -597,21 +754,50 @@ async def reconcile_deals(session: AsyncSession) -> dict[str, int]:
                 f"verify {get_settings().institution_name} participation"
             )
         stats["consortium_needs_review"] = len(set(bare) - protected_bare)
-    # openaccess.nl-only deals: parse participation + derive publisher
-    # coverage before the commit (may clear the no-JCT curation flags).
+    # Deals without a JCT sheet of their own: parse participation + derive
+    # publisher coverage before the commit (may clear the no-JCT flags).
     stats.update(await derive_nl_deal_coverage(session))
+    stats.update(await check_journal_list_publishers(session))
+    stats.update(await retire_duplicate_guard_flags(session))
     await session.commit()
     logger.info("reconcile: %s", stats)
     return stats
 
 
-async def _merge(session: AsyncSession, canonical: Deal, jct: Deal) -> None:
-    """Absorb the JCT row into the openaccess.nl canonical row."""
+async def _merge(
+    session: AsyncSession, canonical: Deal, jct: Deal, sheets: SheetPublishers
+) -> None:
+    """Absorb the JCT row into the openaccess.nl canonical row.
+
+    The sheet's journals come along only when the sheet is the agreement's
+    own (deal_publishers); the participants always do. A sheet that
+    belongs to another publisher is dropped with the shadow row; the
+    canonical row gets the flag and the provenance marker instead, so the
+    next JCT ingest knows the sheet was already withheld."""
     esac_id = jct.esac_id
     data_url = jct.jct_data_url
     cao = jct.corresponding_authors_only
     reviewed = jct.last_reviewed
     status = jct.status
+    verdict = judge(
+        (await publisher_counts(session, [jct.id], jct_only=True)).get(jct.id, Counter()),
+        family=sheets.families.get(jct.id, ""),
+        exclude=jct.id,
+        sheets=sheets,
+    )
+    withheld_reason = withheld(verdict, rejected_sheet(jct.provenance))
+    if withheld_reason is not None:
+        # Not this agreement's sheet: its journals go. The participants
+        # stay: the agreement is the one the openaccess.nl page links (ESAC
+        # id and consortium agree), so its member list is the best evidence
+        # of participation until JCT publishes the right sheet.
+        await session.execute(
+            sa_delete(DealJournal).where(
+                DealJournal.deal_id == jct.id,
+                DealJournal.source == "jct",
+                DealJournal.institution_id.is_(None),
+            )
+        )
     # Drop the shadow row first: esac_id is UNIQUE, the canonical row
     # cannot take the value while this row holds it.
     dupes_j = select(DealJournal.issn).where(DealJournal.deal_id == canonical.id)
@@ -657,7 +843,7 @@ async def _merge(session: AsyncSession, canonical: Deal, jct: Deal) -> None:
     await session.flush()
 
     canonical.esac_id = esac_id
-    canonical.jct_data_url = data_url
+    canonical.jct_data_url = None if withheld_reason is not None else data_url
     canonical.corresponding_authors_only = cao
     canonical.last_reviewed = reviewed
     if canonical.status != status:
@@ -665,119 +851,10 @@ async def _merge(session: AsyncSession, canonical: Deal, jct: Deal) -> None:
         canonical.needs_curation_reason = (
             f"status conflict: openaccess.nl={canonical.status}, JCT={status}"
         )
-    canonical.provenance = [
-        *list(canonical.provenance or []),
-        {"source": "jct", "esac_id": esac_id, "merged_at": datetime.now(UTC).isoformat()},
-    ]
+    merged = {"source": "jct", "esac_id": esac_id, "merged_at": datetime.now(UTC).isoformat()}
+    if withheld_reason is not None:
+        merged["url"] = data_url
+        merged[SHEET_REJECTED_KEY] = withheld_reason
+        flag(canonical, withheld_reason)
+    canonical.provenance = [*list(canonical.provenance or []), merged]
     await session.flush()
-
-
-async def enforce_unique_agreement_data(session: AsyncSession) -> list[dict[str, str]]:
-    """Detect agreements whose JCT journal lists are near-identical and fix.
-
-    The JCT public dump sometimes links two agreements to the same Google
-    Sheet (live case 2026-10: eme2025ukb served the Elsevier UKB sheet, so
-    Emerald's coverage silently doubled as Elsevier). For each suspect pair,
-    the agreement whose publisher matches the shared list's dominant
-    publisher keeps its rows; the other loses its journal rows (verbatim
-    evidence stays in source_records + landing) and keeps a needs_curation
-    flag until the JCT curators publish the correct sheet. Institution
-    links survive: consortium participation is real even when the sheet
-    is wrong.
-
-    Returns the actions taken, for the curation report.
-    """
-    actions: list[dict[str, str]] = []
-    jct_deals = await _jct_deals(session)
-    if not jct_deals:
-        return actions
-    lists: dict[int, frozenset[str]] = {}
-    for d in jct_deals:
-        rows = await session.execute(select(DealJournal.issn).where(DealJournal.deal_id == d.id))
-        issns = frozenset(r[0] for r in rows.all() if r[0])
-        if len(issns) >= 50:
-            lists[d.id] = issns
-    items = sorted(lists.items())
-    by_id = {d.id: d for d in jct_deals}
-    # Collect cross-publisher suspect pairs, then resolve each deal once
-    # against its highest-overlap partner (a wrong sheet can duplicate
-    # several legitimate agreements of the same publisher).
-    best: dict[int, tuple[float, int]] = {}
-    for i, (ida, sa) in enumerate(items):
-        for idb, sb in items[i + 1 :]:
-            overlap = len(sa & sb) / max(1, min(len(sa), len(sb)))
-            if overlap < 0.9:
-                continue
-            # Same-publisher agreements legitimately share most of their
-            # journal corpus across consortia; only cross-publisher
-            # duplication signals a mis-linked sheet.
-            if _code_of(by_id[ida].esac_id) == _code_of(by_id[idb].esac_id):
-                continue
-            for low, high, o in ((ida, idb, overlap), (idb, ida, overlap)):
-                if low not in best or o > best[low][0]:
-                    best[low] = (o, high)
-    for loser_id, (overlap, keeper_id) in sorted(best.items()):
-        if loser_id not in by_id:
-            continue
-        keeper, loser = await _resolve_pair(
-            session, by_id[keeper_id], by_id[loser_id], lists[keeper_id] | lists[loser_id]
-        )
-        if loser is None:
-            continue
-        await session.execute(sa_delete(DealJournal).where(DealJournal.deal_id == loser.id))
-        reason = (
-            f"JCT data CSV is a duplicate of {keeper.esac_id} "
-            f"({overlap:.0%} identical ISSNs) - upstream index error; "
-            "awaiting the correct sheet from the JCT curators"
-        )
-        loser.needs_curation = True
-        loser.needs_curation_reason = reason
-        actions.append(
-            {
-                "keeper": keeper.esac_id or str(keeper.id),
-                "loser": loser.esac_id or str(loser.id),
-                "overlap": f"{overlap:.0%}",
-                "action": "purged derived rows + flagged needs_curation",
-            }
-        )
-    await session.commit()
-    return actions
-
-
-async def _resolve_pair(
-    session: AsyncSession, a: Deal, b: Deal, combined: frozenset[str]
-) -> tuple[Deal, Deal | None]:
-    """Pick keeper/loser for a duplicate pair by dominant publisher match.
-
-    Returns (a, b) ordered so the keeper comes first; (a, None) when the
-    dominant publisher cannot be determined (keep both, report only).
-    """
-    # Dominant publisher of the shared journal list, by journal count.
-    rows = await session.execute(
-        select(Journal.publisher_name, func.count())
-        .join(IssnMap, IssnMap.issn_l == Journal.issn_l)
-        .where(IssnMap.issn.in_(combined))
-        .group_by(Journal.publisher_name)
-        .order_by(func.count().desc())
-        .limit(1)
-    )
-    row = rows.first()
-    dominant = (row[0] or "").casefold() if row else ""
-    if not dominant:
-        return a, None
-    names = {
-        a.id: (await publisher_names(session)).get(a.publisher_id) or "",
-        b.id: (await publisher_names(session)).get(b.publisher_id) or "",
-    }
-
-    def _matches(d: Deal) -> bool:
-        name = names[d.id].casefold()
-        alias = (_canonical_name(_code_of(d.esac_id), name) or "").casefold()
-        return dominant in name or dominant in alias or alias in dominant
-
-    a_match, b_match = _matches(a), _matches(b)
-    if a_match and not b_match:
-        return a, b
-    if b_match and not a_match:
-        return b, a
-    return a, None

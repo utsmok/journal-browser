@@ -606,7 +606,7 @@ async def test_reconcile_retires_stale_archive_flags(db):
     other = await _deal(db, pub.id, openaccess_nl_url="https://oanl/karger-2020-2024")
     other.status = "archive"
     other.needs_curation = True
-    other.needs_curation_reason = "JCT data CSV is a duplicate of kar2026caul"
+    other.needs_curation_reason = "ambiguous cap numbers"
     overridden = await _deal(db, pub.id, openaccess_nl_url="https://oanl/karger-2021-2025")
     overridden.status = "archive"
     overridden.needs_curation = True
