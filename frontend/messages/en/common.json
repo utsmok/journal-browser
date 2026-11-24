@@ -296,8 +296,12 @@
     "showMore": "+{count} more",
     "showAll": "Show all ({count})"
   },
+  "topics": {
+    "label": "Topics"
+  },
   "crisGaps": {
     "loadHint": "Open to check OpenAlex works missing from Pure",
+    "loadHintCount": "{count, plural, one {# OpenAlex work not matched in Pure — open to inspect} other {# OpenAlex works not matched in Pure — open to inspect}}",
     "loading": "Checking OpenAlex works missing from Pure…",
     "filtering": "Updating…",
     "all": "All",

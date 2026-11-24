@@ -3,6 +3,7 @@
 import { OA_STATUS_META, OA_STATUS_ORDER } from "@/components/badges";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { useTranslations } from "next-intl";
+import * as React from "react";
 import type { StatsYear } from "@/lib/api";
 
 const STATUS_LABEL_KEYS: Record<string, string> = {
@@ -22,16 +23,17 @@ const STATUS_LABEL_KEYS: Record<string, string> = {
 export function OaTrend({ stats, compact = false }: { stats: StatsYear[]; compact?: boolean }) {
   const site = useSiteMeta();
   const t = useTranslations("common");
+  const ordered = React.useMemo(() => [...stats].sort((a, b) => a.year - b.year), [stats]);
   const total = (s: StatsYear) => OA_STATUS_ORDER.reduce((acc, k) => acc + (s[`oa_${k}`] ?? 0), 0);
-  const max = Math.max(1, ...stats.map(total));
+  const max = Math.max(1, ...ordered.map(total));
   const currentYear = new Date().getFullYear();
-  if (stats.length === 0 || stats.every((s) => total(s) === 0))
+  if (ordered.length === 0 || ordered.every((s) => total(s) === 0))
     return (
       <p className={`${compact ? "py-4" : "py-8"} text-sm text-[var(--muted-foreground)]`}>
         {t("trend.noWorks")}
       </p>
     );
-  const hideBarCounts = compact && stats.length > 8;
+  const hideBarCounts = compact && ordered.length > 8;
   return (
     <div>
       <div
@@ -39,7 +41,7 @@ export function OaTrend({ stats, compact = false }: { stats: StatsYear[]; compac
         role="img"
         aria-label={t("trend.chartLabel", { short: site.short })}
       >
-        {stats.map((s, i) => {
+        {ordered.map((s, i) => {
           const count = total(s);
           return (
             <div
@@ -76,7 +78,7 @@ export function OaTrend({ stats, compact = false }: { stats: StatsYear[]; compac
               <span
                 className={`max-w-full overflow-hidden ${compact ? "text-[10px]" : "text-[11px]"} tabular-nums text-[var(--muted-foreground)] ${i % 2 === 1 ? "max-sm:hidden" : ""}`}
               >
-                {compact && stats.length > 9 ? `'${String(s.year).slice(-2)}` : s.year}
+                {compact && ordered.length > 9 ? `'${String(s.year).slice(-2)}` : s.year}
                 {s.year === currentYear && <span title={t("trend.yearInProgress")}>*</span>}
               </span>
             </div>
@@ -84,7 +86,7 @@ export function OaTrend({ stats, compact = false }: { stats: StatsYear[]; compac
         })}
       </div>
       <ul className="sr-only">
-        {stats.map((s) => {
+        {ordered.map((s) => {
           const breakdown = OA_STATUS_ORDER.filter((k) => (s[`oa_${k}`] ?? 0) > 0)
             .map((k) =>
               t("trend.srStatus", {
@@ -117,7 +119,7 @@ export function OaTrend({ stats, compact = false }: { stats: StatsYear[]; compac
             {t(STATUS_LABEL_KEYS[status])}
           </li>
         ))}
-        {stats.some((s) => s.year === currentYear) && <li>{t("trend.yearInProgressLegend")}</li>}
+        {ordered.some((s) => s.year === currentYear) && <li>{t("trend.yearInProgressLegend")}</li>}
       </ul>
       {!compact && (
         <p className="mt-1.5 text-xs text-[var(--muted-foreground)]">{t("trend.bronzeNote")}</p>

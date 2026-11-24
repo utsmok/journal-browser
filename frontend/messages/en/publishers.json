@@ -94,6 +94,7 @@
     "kpiWorks": "{inst} works",
     "kpiDeals": "Deal-covered",
     "kpiApc": "APC range",
+    "apcJournalsCount": "{count, plural, one {# journal} other {# journals}}",
     "openAccessNl": "Open Access NL",
     "openAccessNlHint": "Publisher profile on Open Access NL, the Dutch deals registry",
     "ror": "ROR",

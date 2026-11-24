@@ -27,7 +27,7 @@ export function TopicChipList({
   if (items.length === 0) return null;
   const shown = expanded ? items : items.slice(0, limit);
   const chipClass =
-    "inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--muted)] px-2.5 py-1 text-xs text-[var(--foreground)]";
+    "inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--muted)] px-2 py-0.5 text-xs text-[var(--foreground)]";
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">

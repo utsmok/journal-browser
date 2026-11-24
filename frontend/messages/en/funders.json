@@ -84,6 +84,7 @@
       "jurisdiction": "Jurisdiction",
       "id": "OpenAIRE id",
       "streams": "Top funding streams (OpenAIRE projects)",
+      "showAllStreams": "Show all ({count})",
       "source": "OpenAIRE Graph"
     },
     "policy": {

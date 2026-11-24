@@ -8,11 +8,13 @@ import * as React from "react";
 
 import { CardPager } from "@/components/card-pager";
 import { CollapsibleCard } from "@/components/collapsible-card";
-import { ACCESS_TEXT, DataIcon, WorksGlyph } from "@/components/data-icons";
+import { ACCESS_TEXT, DataIcon, GreenGlyph, LockIcon, WorksGlyph } from "@/components/data-icons";
 import { DetailSummaryPanel } from "@/components/detail-summary";
 import { SectionNav, useLastDirectoryHref } from "@/components/journal/section-nav";
+import { MoreToggle } from "@/components/journal/shared";
 import { SourceNote } from "@/components/source-note";
 import { DetailSkeleton, ErrorPanel } from "@/components/states";
+import { InsetPanel } from "@/components/sub-panel";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -218,6 +220,8 @@ function PolicyBlock({ data }: { data: Record<string, unknown> | null | undefine
 
 function OpenaireCard({ oa }: { oa: NonNullable<FunderDetailResponse["openaire"]> }) {
   const t = useTranslations("funders");
+  const [showAllStreams, setShowAllStreams] = React.useState(false);
+  const visibleStreams = showAllStreams ? oa.streams : oa.streams.slice(0, PAGE_SIZE);
   return (
     <CollapsibleCard
       id="funder-openaire"
@@ -225,52 +229,58 @@ function OpenaireCard({ oa }: { oa: NonNullable<FunderDetailResponse["openaire"]
       count={oa.streams.length > 0 ? oa.streams.length : undefined}
       defaultOpen={false}
       compact
+      contentClassName="space-y-3 text-sm"
     >
-      <div className="text-sm">
-        <dl className="grid grid-cols-[9rem_1fr] gap-x-3 gap-y-1 text-xs sm:text-sm">
-          <dt className="text-[var(--muted-foreground)]">{t("detail.openaire.name")}</dt>
-          <dd>{oa.name ?? "—"}</dd>
-          {oa.short_name && (
-            <>
-              <dt className="text-[var(--muted-foreground)]">{t("detail.openaire.shortName")}</dt>
-              <dd>{oa.short_name}</dd>
-            </>
-          )}
-          {oa.jurisdiction && (
-            <>
-              <dt className="text-[var(--muted-foreground)]">
-                {t("detail.openaire.jurisdiction")}
-              </dt>
-              <dd>{oa.jurisdiction}</dd>
-            </>
-          )}
-          <dt className="text-[var(--muted-foreground)]">{t("detail.openaire.id")}</dt>
-          <dd className="break-all">{oa.openaire_id}</dd>
-        </dl>
-        {oa.streams.length > 0 && (
-          <div className="mt-3 border-t border-[var(--border)] pt-2.5">
-            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-              {t("detail.openaire.streams")}
-            </p>
-            <ul className="divide-y divide-[var(--border)] text-xs">
-              {oa.streams.map((s) => (
-                <li key={s.level0_id} className="flex justify-between gap-3 py-1">
-                  <span className="min-w-0 truncate">{s.name ?? s.level0_id}</span>
-                  <span className="shrink-0 tabular-nums text-[var(--muted-foreground)]">
-                    {s.n_projects.toLocaleString()}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
+      <dl className="grid grid-cols-[9rem_1fr] gap-x-3 gap-y-1 text-xs sm:text-sm">
+        <dt className="text-[var(--muted-foreground)]">{t("detail.openaire.name")}</dt>
+        <dd>{oa.name ?? "—"}</dd>
+        {oa.short_name && (
+          <>
+            <dt className="text-[var(--muted-foreground)]">{t("detail.openaire.shortName")}</dt>
+            <dd>{oa.short_name}</dd>
+          </>
         )}
-        <div className="mt-2.5">
-          <SourceNote
-            source={t("detail.openaire.source")}
-            url={OPENAIRE_URL}
-            codes={["openaire-enrichment"]}
-          />
-        </div>
+        {oa.jurisdiction && (
+          <>
+            <dt className="text-[var(--muted-foreground)]">{t("detail.openaire.jurisdiction")}</dt>
+            <dd>{oa.jurisdiction}</dd>
+          </>
+        )}
+        <dt className="text-[var(--muted-foreground)]">{t("detail.openaire.id")}</dt>
+        <dd className="break-all">{oa.openaire_id}</dd>
+      </dl>
+      {oa.streams.length > 0 && (
+        <InsetPanel title={t("detail.openaire.streams")} count={oa.streams.length}>
+          <ul className="divide-y divide-[var(--border)] text-xs sm:text-sm">
+            {visibleStreams.map((s) => (
+              <li
+                key={s.level0_id}
+                className="flex justify-between gap-3 py-1.5 first:pt-0 last:pb-0"
+              >
+                <span className="min-w-0 truncate">{s.name ?? s.level0_id}</span>
+                <span className="shrink-0 tabular-nums text-[var(--muted-foreground)]">
+                  {s.n_projects.toLocaleString()}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {oa.streams.length > PAGE_SIZE && (
+            <div className="mt-1.5 border-t border-[var(--border)] pt-1.5">
+              <MoreToggle
+                open={showAllStreams}
+                onToggle={() => setShowAllStreams((v) => !v)}
+                moreLabel={t("detail.openaire.showAllStreams", { count: oa.streams.length })}
+              />
+            </div>
+          )}
+        </InsetPanel>
+      )}
+      <div className="border-t border-[var(--border)] pt-2">
+        <SourceNote
+          source={t("detail.openaire.source")}
+          url={OPENAIRE_URL}
+          codes={["openaire-enrichment"]}
+        />
       </div>
     </CollapsibleCard>
   );
@@ -408,10 +418,20 @@ export default function FunderPage() {
               {
                 label: t("detail.kpiOaPub"),
                 value: reqSummary(t, data.oa_publishing_req),
+                icon: (
+                  <DataIcon className={`size-3.5 ${ACCESS_TEXT.gold}`}>
+                    <LockIcon state="open" />
+                  </DataIcon>
+                ),
               },
               {
                 label: t("detail.kpiGreen"),
                 value: reqSummary(t, data.green_archiving_req),
+                icon: (
+                  <DataIcon className={`size-3.5 ${ACCESS_TEXT.deal}`}>
+                    <GreenGlyph />
+                  </DataIcon>
+                ),
               },
               {
                 label: t("detail.kpiData"),

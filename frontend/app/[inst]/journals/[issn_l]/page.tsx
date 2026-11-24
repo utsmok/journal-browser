@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Quote, Sparkles, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
@@ -13,34 +13,31 @@ import {
   ACCESS_TEXT,
   ApcGlyph,
   DataIcon,
+  DealGlyph,
   DoajGlyph,
   QuartileGlyph,
   WorksGlyph,
 } from "@/components/data-icons";
 import { DetailSummaryPanel, type DetailStatItem } from "@/components/detail-summary";
-import { CitationCard } from "@/components/journal/citation-card";
 import { DealPanel } from "@/components/journal/deal-panel";
 import { FunderFitCard } from "@/components/journal/funder-fit-card";
 import { GreenOaPanel } from "@/components/journal/green-oa-panel";
-import { IdentifiersCard } from "@/components/journal/identifiers-card";
 import {
   CopyButton,
   External,
-  Metric,
   MoreToggle,
   NamedTopic,
-  SIMILAR_LIMIT,
   TOPICS_LIMIT,
 } from "@/components/journal/shared";
 import { OpenaireCard } from "@/components/journal/openaire-card";
-import { OtherNamesCard } from "@/components/journal/other-names-card";
 import { PublicationsCard } from "@/components/journal/publications-card";
 import { SectionNav, useLastSearchHref } from "@/components/journal/section-nav";
 import { UtAuthorshipCard } from "@/components/journal/ut-authorship-card";
 import { SourceNote } from "@/components/source-note";
 import { ErrorPanel, JournalDetailSkeleton } from "@/components/states";
-import { TopicChipList } from "@/components/topic-chips";
+import { InsetPanel } from "@/components/sub-panel";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -56,6 +53,9 @@ import { useYearRange } from "@/hooks/use-year-filter";
 import { encodeNamePath, errorMessage, type OpenalexTopic } from "@/lib/api";
 import { useFunderPrefs } from "@/lib/funder-prefs";
 
+const SIMILAR_PREVIEW = 5;
+const ALT_NAMES_PREVIEW = 6;
+
 function JournalPageInner() {
   const t = useTranslations("journals");
   const tc = useTranslations("common");
@@ -67,6 +67,8 @@ function JournalPageInner() {
   const [funder] = useFunderPrefs();
   const { year_from, year_to } = useYearRange();
   const [openSimilar, setOpenSimilar] = React.useState<Record<string, boolean>>({});
+  const [citeOpen, setCiteOpen] = React.useState(false);
+  const [altNamesExpanded, setAltNamesExpanded] = React.useState(false);
   const { data, isPending, isError, error } = useJournal(issnL, funder?.id, {
     year_from,
     year_to,
@@ -177,7 +179,7 @@ function JournalPageInner() {
       hint: t("metrics.worksCountHint"),
       sub:
         openalex?.cited_by_count != null
-          ? `${openalex.cited_by_count.toLocaleString("en")} citations`
+          ? t("header.kpiCitations", { count: openalex.cited_by_count.toLocaleString("en") })
           : undefined,
     },
   ];
@@ -203,9 +205,6 @@ function JournalPageInner() {
       : [{ id: "deal", label: t("deal.title") }]),
     ...(greenOa ? [{ id: "green-oa", label: t("greenOa.title") }] : []),
     ...(hasApc ? [{ id: "apc", label: t("apc.title"), hint: t("apc.hint") }] : []),
-    ...(topics.length > 0 || oaTopics.length > 0
-      ? [{ id: "topics", label: t("topics.title") }]
-      : []),
     ...(!similarEmpty ? [{ id: "similar", label: t("similar.title") }] : []),
     { id: "metrics", label: t("metrics.title") },
     { id: "ut-authorship", label: t("utAuthorship.title") },
@@ -214,8 +213,26 @@ function JournalPageInner() {
       ? [{ id: "openaire", label: t("openaire.title") }]
       : []),
     ...(data.openalex_only.available ? [{ id: "cris-gaps", label: t("crisGaps.title") }] : []),
-    { id: "identifiers", label: t("identifiers.title") },
   ];
+
+  const uniqueIssns = [`ISSN-L ${journal.issn_l}`, ...data.issns.map((i) => `ISSN ${i}`)].filter(
+    (v, i, a) => a.indexOf(v) === i,
+  );
+  const today = new Date().toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  const citation = t("citation.template", {
+    title: journal.title ?? journal.issn_l,
+    publisher: journal.publisher_name ?? t("header.unknownPublisher"),
+    issnL: journal.issn_l,
+    url: `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://journalbrowser.samuelmok.cc"}/${inst}/journals/${journal.issn_l}`,
+    date: today,
+  });
+  const visibleAltNames = altNamesExpanded
+    ? data.alternate_titles
+    : data.alternate_titles.slice(0, ALT_NAMES_PREVIEW);
 
   const topicChipItems =
     oaTopics.length > 0
@@ -244,50 +261,62 @@ function JournalPageInner() {
       <SectionNav sections={sections} />
       <div className="mx-auto max-w-screen-2xl px-4 py-6">
         <header className="mb-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-              {data.homepage_url ? (
-                <a
-                  href={data.homepage_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={t("header.websiteLabel", {
-                    title: journal.title ?? journal.issn_l,
-                  })}
-                  className="inline-flex items-center gap-1.5 underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                {data.homepage_url ? (
+                  <a
+                    href={data.homepage_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={t("header.websiteLabel", {
+                      title: journal.title ?? journal.issn_l,
+                    })}
+                    className="inline-flex items-center gap-1.5 underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                  >
+                    {journal.title ?? journal.issn_l}
+                    <ExternalLink aria-hidden className="size-4 text-[var(--muted-foreground)]" />
+                  </a>
+                ) : (
+                  (journal.title ?? journal.issn_l)
+                )}
+              </h1>
+              <OaTypeBadge oaType={journal.oa_type} isOa={journal.is_oa} />
+              <QuartileBadge quartile={journal.quartile ?? null} />
+              <DealBadge covered={journal.deal_covered} capped={journal.deal_cap_reached} />
+              {journal.is_in_doaj && (
+                <Badge
+                  variant="outline"
+                  className="inline-flex items-center gap-1"
+                  title={t("header.doajHint")}
                 >
-                  {journal.title ?? journal.issn_l}
-                  <ExternalLink aria-hidden className="size-4 text-[var(--muted-foreground)]" />
-                </a>
-              ) : (
-                (journal.title ?? journal.issn_l)
+                  <DataIcon className={`size-3.5 ${ACCESS_TEXT.doaj}`}>
+                    <DoajGlyph />
+                  </DataIcon>
+                  {t("header.doajBadge")}
+                </Badge>
               )}
-            </h1>
-            <OaTypeBadge oaType={journal.oa_type} isOa={journal.is_oa} />
-            <QuartileBadge quartile={journal.quartile ?? null} />
-            <DealBadge covered={journal.deal_covered} capped={journal.deal_cap_reached} />
-            {journal.is_in_doaj && (
-              <Badge
-                variant="outline"
-                className="inline-flex items-center gap-1"
-                title={t("header.doajHint")}
-              >
-                <DataIcon className={`size-3.5 ${ACCESS_TEXT.doaj}`}>
-                  <DoajGlyph />
-                </DataIcon>
-                {t("header.doajBadge")}
-              </Badge>
-            )}
-            <span className="inline-flex items-center gap-1">
-              <Badge
-                variant="muted"
-                className="font-normal tabular-nums"
-                title={t("header.issnLHint")}
-              >
-                ISSN-L {journal.issn_l}
-              </Badge>
-              <CopyButton text={journal.issn_l} label={`ISSN-L ${journal.issn_l}`} />
-            </span>
+              <span className="inline-flex items-center gap-1">
+                <Badge
+                  variant="muted"
+                  className="font-normal tabular-nums"
+                  title={t("header.issnLHint")}
+                >
+                  ISSN-L {journal.issn_l}
+                </Badge>
+                <CopyButton text={journal.issn_l} label={`ISSN-L ${journal.issn_l}`} />
+              </span>
+            </div>
+            <Button
+              variant={citeOpen ? "secondary" : "outline"}
+              size="sm"
+              aria-expanded={citeOpen}
+              onClick={() => setCiteOpen((v) => !v)}
+              className="shrink-0 gap-1.5"
+            >
+              <Quote aria-hidden className="size-3.5" />
+              {t("header.cite")}
+            </Button>
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted-foreground)]">
             <span>
@@ -322,6 +351,22 @@ function JournalPageInner() {
               howBuilt={tc("sourceNote.explain.journals")}
             />
           </div>
+          {citeOpen && (
+            <div className="mt-2.5 flex items-start gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-xs">
+              <p className="min-w-0 flex-1 text-pretty text-[var(--foreground)] [overflow-wrap:anywhere]">
+                {citation}
+              </p>
+              <CopyButton text={citation} label={t("citation.copyLabel")} />
+              <button
+                type="button"
+                onClick={() => setCiteOpen(false)}
+                aria-label={tc("feedback.close")}
+                className="inline-flex size-6 shrink-0 items-center justify-center rounded border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+              >
+                <X aria-hidden className="size-3.5" />
+              </button>
+            </div>
+          )}
         </header>
 
         <div className="space-y-4">
@@ -377,10 +422,99 @@ function JournalPageInner() {
                 </div>
               </div>
             }
+            topics={
+              topicChipItems.length > 0
+                ? {
+                    label: t("topics.title"),
+                    items: topicChipItems,
+                    showCounts: oaTopics.length > 0,
+                    limit: TOPICS_LIMIT,
+                    sourceNote:
+                      oaTopics.length > 0 ? (
+                        <SourceNote
+                          {...(attribution.openalex ?? {})}
+                          codes={attribution.openalex?.caveat_codes}
+                        />
+                      ) : undefined,
+                  }
+                : undefined
+            }
+            metaFooter={
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                  <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                    {t("identifiers.label")}
+                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {uniqueIssns.map((label) => (
+                      <span key={label} className="inline-flex items-center gap-1">
+                        <Badge variant="muted" className="font-normal tabular-nums">
+                          {label}
+                        </Badge>
+                        <CopyButton text={label.replace(/^ISSN(-L)? /, "")} label={label} />
+                      </span>
+                    ))}
+                  </div>
+                  {(data.doaj_homepage_url || openalex?.url || data.openaccess_nl_slug) && (
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      {data.doaj_homepage_url && (
+                        <span className="inline-flex items-center gap-1.5">
+                          <External href={data.doaj_homepage_url}>
+                            {t("identifiers.doajRecord")}
+                          </External>
+                          <SourceNote
+                            source={t("identifiers.viaDoaj")}
+                            url="https://doaj.org"
+                            codes={["doaj-canon"]}
+                          />
+                        </span>
+                      )}
+                      {openalex?.url && (
+                        <External href={openalex.url}>{t("identifiers.openalexSource")}</External>
+                      )}
+                      {data.openaccess_nl_slug && (
+                        <External
+                          href={`https://openaccess.nl/en/publisher/${data.openaccess_nl_slug}`}
+                        >
+                          {t("identifiers.oaNlPublisher")}
+                        </External>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {data.alternate_titles.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                      {t("names.inlineLabel")}
+                    </span>
+                    {visibleAltNames.map((name) => (
+                      <Badge key={name} variant="muted" className="font-normal normal-case">
+                        {name}
+                      </Badge>
+                    ))}
+                    {data.alternate_titles.length > ALT_NAMES_PREVIEW && (
+                      <MoreToggle
+                        open={altNamesExpanded}
+                        onToggle={() => setAltNamesExpanded((v) => !v)}
+                        moreLabel={t("names.showAll", {
+                          count: String(data.alternate_titles.length),
+                        })}
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+            }
           />
 
           {/* Block 3: Publishing routes & costs */}
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div
+            className={
+              (deals.length > 0 ? deals.length : 1) + (greenOa ? 1 : 0) > 1
+                ? "grid gap-4 lg:grid-cols-2"
+                : ""
+            }
+          >
             {deals.length > 0 ? (
               deals.map((deal) => (
                 <DealPanel
@@ -419,147 +553,126 @@ function JournalPageInner() {
 
           {funder && <FunderFitCard fit={data.funder_fit ?? null} funder={funder} inst={inst} />}
 
-          {(hasApc || topicChipItems.length > 0) && (
-            <div className={hasApc && topicChipItems.length > 0 ? "grid gap-4 lg:grid-cols-2" : ""}>
-              {hasApc && (
-                <CollapsibleCard
-                  id="apc"
-                  title={t("apc.title")}
-                  count={data.apc_aggregates.length}
-                  compact
-                  contentClassName="text-sm [&_td]:py-1.5 [&_th]:h-8"
-                >
-                  {data.apc_aggregates.length > 0 && (
-                    <Table>
-                      <caption className="sr-only">{t("apc.caption")}</caption>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead title={t("apc.yearColHint")}>{t("apc.yearCol")}</TableHead>
-                          <TableHead className="text-right" title={t("apc.countColHint")}>
-                            {t("apc.countCol")}
-                          </TableHead>
-                          <TableHead className="text-right" title={t("apc.meanColHint")}>
-                            {t("apc.meanCol")}
-                          </TableHead>
-                          <TableHead className="text-right" title={t("apc.rangeColHint")}>
-                            {t("apc.rangeCol")}
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {data.apc_aggregates.map((a) => (
-                          <TableRow key={a.period}>
-                            <TableCell className="tabular-nums">{a.period}</TableCell>
-                            <TableCell className="text-right tabular-nums">
-                              {a.article_count}
-                            </TableCell>
-                            <TableCell className="text-right tabular-nums">
-                              {a.euro_mean !== null
-                                ? `€${Math.round(a.euro_mean).toLocaleString("en")}`
-                                : "—"}
-                            </TableCell>
-                            <TableCell className="text-right tabular-nums">
-                              {a.euro_min !== null && a.euro_max !== null
-                                ? `€${Math.round(a.euro_min).toLocaleString("en")}–€${Math.round(a.euro_max).toLocaleString("en")}`
-                                : "—"}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                  {data.apc_evidence.length > 0 && (
-                    <p className="mt-2.5 text-xs text-[var(--muted-foreground)]">
-                      {t("apc.evidence", {
-                        count: data.apc_evidence.length,
-                        short: site.short,
-                        period: data.apc_evidence[0].period ?? "—",
-                        amount:
-                          data.apc_evidence[0].euro !== null
-                            ? `€${Math.round(data.apc_evidence[0].euro!)}`
-                            : t("apc.amountUnknown"),
-                      })}
-                    </p>
-                  )}
-                  <div className="mt-2.5">
-                    <SourceNote
-                      {...(attribution.apc_evidence ?? {})}
-                      codes={attribution.apc_evidence?.caveat_codes}
-                      howBuilt={tc("sourceNote.explain.apc")}
-                    />
-                  </div>
-                </CollapsibleCard>
+          {hasApc && (
+            <CollapsibleCard
+              id="apc"
+              title={t("apc.title")}
+              count={data.apc_aggregates.length > 0 ? data.apc_aggregates.length : undefined}
+              compact
+              contentClassName="text-sm [&_td]:py-1.5 [&_th]:h-8"
+            >
+              {data.apc_aggregates.length > 0 && (
+                <Table>
+                  <caption className="sr-only">{t("apc.caption")}</caption>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead title={t("apc.yearColHint")}>{t("apc.yearCol")}</TableHead>
+                      <TableHead className="text-right" title={t("apc.countColHint")}>
+                        {t("apc.countCol")}
+                      </TableHead>
+                      <TableHead className="text-right" title={t("apc.meanColHint")}>
+                        {t("apc.meanCol")}
+                      </TableHead>
+                      <TableHead className="text-right" title={t("apc.rangeColHint")}>
+                        {t("apc.rangeCol")}
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.apc_aggregates.map((a) => (
+                      <TableRow key={a.period}>
+                        <TableCell className="tabular-nums">{a.period}</TableCell>
+                        <TableCell className="text-right tabular-nums">{a.article_count}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {a.euro_mean !== null
+                            ? `€${Math.round(a.euro_mean).toLocaleString("en")}`
+                            : "—"}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {a.euro_min !== null && a.euro_max !== null
+                            ? `€${Math.round(a.euro_min).toLocaleString("en")}–€${Math.round(a.euro_max).toLocaleString("en")}`
+                            : "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
-
-              {topicChipItems.length > 0 && (
-                <CollapsibleCard
-                  id="topics"
-                  title={t("topics.title")}
-                  count={topicChipItems.length}
-                  compact
-                  description={
-                    <p className="text-xs text-[var(--muted-foreground)]">
-                      {oaTopics.length > 0
-                        ? t("topics.descriptionWithCounts")
-                        : t("topics.description")}
-                    </p>
-                  }
-                  contentClassName="space-y-2.5"
-                >
-                  <TopicChipList
-                    items={topicChipItems}
-                    limit={TOPICS_LIMIT}
-                    showCounts={oaTopics.length > 0}
-                  />
-                  {oaTopics.length > 0 && (
-                    <SourceNote
-                      {...(attribution.openalex ?? {})}
-                      codes={attribution.openalex?.caveat_codes}
-                    />
-                  )}
-                </CollapsibleCard>
+              {data.apc_evidence.length > 0 && (
+                <p className="mt-2.5 text-xs text-[var(--muted-foreground)]">
+                  {t("apc.evidence", {
+                    count: data.apc_evidence.length,
+                    short: site.short,
+                    period: data.apc_evidence[0].period ?? "—",
+                    amount:
+                      data.apc_evidence[0].euro !== null
+                        ? `€${Math.round(data.apc_evidence[0].euro!)}`
+                        : t("apc.amountUnknown"),
+                  })}
+                </p>
               )}
-            </div>
+              <div className="mt-2.5">
+                <SourceNote
+                  {...(attribution.apc_evidence ?? {})}
+                  codes={attribution.apc_evidence?.caveat_codes}
+                  howBuilt={tc("sourceNote.explain.apc")}
+                />
+              </div>
+            </CollapsibleCard>
           )}
 
           {/* Block 4: Similar & Detailed Metrics & UT Authorship */}
           {similar && !similarEmpty && (
             <CollapsibleCard id="similar" title={t("similar.title")} compact>
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {(
                   [
                     {
                       key: "institution",
                       heading: t("similar.institutionHeading", { short: site.short }),
                       note: t("similar.institutionNote", { name: site.name }),
+                      icon: (
+                        <DataIcon className={`size-3.5 ${ACCESS_TEXT.brand}`}>
+                          <WorksGlyph />
+                        </DataIcon>
+                      ),
                     },
                     {
                       key: "deals",
                       heading: t("similar.dealsHeading"),
                       note: t("similar.dealsNote", { short: site.short }),
+                      icon: (
+                        <DataIcon className={`size-3.5 ${ACCESS_TEXT.deal}`}>
+                          <DealGlyph />
+                        </DataIcon>
+                      ),
                     },
                     {
                       key: "all",
                       heading: t("similar.allHeading"),
                       note: t("similar.allNote", { short: site.short }),
+                      icon: (
+                        <Sparkles
+                          aria-hidden
+                          className="size-3.5 shrink-0 text-[var(--muted-foreground)]"
+                        />
+                      ),
                     },
                   ] as const
                 ).map(
                   (group) =>
                     similar[group.key].length > 0 && (
-                      <div key={group.key}>
-                        <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                          {group.heading}
-                        </h3>
-                        {group.note && (
-                          <p className="mb-1 text-xs text-[var(--muted-foreground)]">
-                            {group.note}
-                          </p>
-                        )}
+                      <InsetPanel
+                        key={group.key}
+                        title={group.heading}
+                        icon={group.icon}
+                        count={similar[group.key].length}
+                        subtitle={group.note}
+                      >
                         <ul className="divide-y divide-[var(--border)]">
                           {(openSimilar[group.key]
                             ? similar[group.key]
-                            : similar[group.key].slice(0, SIMILAR_LIMIT)
+                            : similar[group.key].slice(0, SIMILAR_PREVIEW)
                           ).map((s) => (
                             <li
                               key={s.issn_l}
@@ -607,18 +720,20 @@ function JournalPageInner() {
                             </li>
                           ))}
                         </ul>
-                        {similar[group.key].length > SIMILAR_LIMIT && (
-                          <MoreToggle
-                            open={!!openSimilar[group.key]}
-                            onToggle={() =>
-                              setOpenSimilar((m) => ({ ...m, [group.key]: !m[group.key] }))
-                            }
-                            moreLabel={t("similar.showAll", {
-                              count: String(similar[group.key].length),
-                            })}
-                          />
+                        {similar[group.key].length > SIMILAR_PREVIEW && (
+                          <div className="mt-1.5 border-t border-[var(--border)] pt-1.5">
+                            <MoreToggle
+                              open={!!openSimilar[group.key]}
+                              onToggle={() =>
+                                setOpenSimilar((m) => ({ ...m, [group.key]: !m[group.key] }))
+                              }
+                              moreLabel={t("similar.showAll", {
+                                count: String(similar[group.key].length),
+                              })}
+                            />
+                          </div>
                         )}
-                      </div>
+                      </InsetPanel>
                     ),
                 )}
               </div>
@@ -636,140 +751,197 @@ function JournalPageInner() {
             title={t("metrics.title")}
             defaultOpen={false}
             compact
-            contentClassName="space-y-4 text-sm"
+            contentClassName="space-y-3 text-sm"
           >
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <Metric
-                label={t("metrics.citednessLabel")}
-                hint={t("metrics.citednessHint")}
-                value={
-                  journal.twoyr_mean_citedness != null
-                    ? journal.twoyr_mean_citedness.toFixed(1)
-                    : "—"
-                }
-              />
-              <Metric
-                label={t("metrics.hIndexLabel")}
-                hint={t("metrics.hIndexHint")}
-                value={num("h_index")?.toLocaleString("en") ?? "—"}
-                note="OpenAlex"
-              />
-              <Metric
-                label={t("metrics.i10Label")}
-                hint={t("metrics.i10Hint")}
-                value={num("i10_index")?.toLocaleString("en") ?? "—"}
-                note="OpenAlex"
-              />
-            </div>
-            <SourceNote
-              {...(attribution.metrics ?? {})}
-              codes={attribution.metrics?.caveat_codes}
-            />
-            {(openalex || metrics || openaire) && (
-              <div className="border-t border-[var(--border)] pt-3">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  {openalex?.cited_by_count != null && (
-                    <Metric
-                      label={t("metrics.totalCitationsLabel")}
-                      hint={t("metrics.totalCitationsHint")}
-                      value={openalex.cited_by_count.toLocaleString("en")}
-                      note={
-                        <SourceNote
-                          {...(attribution.openalex ?? {})}
-                          codes={attribution.openalex?.caveat_codes}
-                        />
-                      }
-                    />
-                  )}
-                  {openalex?.works_count != null && (
-                    <Metric
-                      label={t("metrics.worksCountLabel")}
-                      hint={t("metrics.worksCountHint")}
-                      value={openalex.works_count.toLocaleString("en")}
-                      note={
-                        <SourceNote
-                          {...(attribution.openalex ?? {})}
-                          codes={attribution.openalex?.caveat_codes}
-                        />
-                      }
-                    />
-                  )}
+            <InsetPanel title={t("metrics.groupOpenAlex")}>
+              <dl className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
+                {[
+                  {
+                    label: t("metrics.citednessLabel"),
+                    hint: t("metrics.citednessHint"),
+                    value:
+                      journal.twoyr_mean_citedness != null
+                        ? journal.twoyr_mean_citedness.toFixed(1)
+                        : "—",
+                  },
+                  {
+                    label: t("metrics.hIndexLabel"),
+                    hint: t("metrics.hIndexHint"),
+                    value: num("h_index")?.toLocaleString("en") ?? "—",
+                  },
+                  {
+                    label: t("metrics.i10Label"),
+                    hint: t("metrics.i10Hint"),
+                    value: num("i10_index")?.toLocaleString("en") ?? "—",
+                  },
+                  ...(openalex?.cited_by_count != null
+                    ? [
+                        {
+                          label: t("metrics.totalCitationsLabel"),
+                          hint: t("metrics.totalCitationsHint"),
+                          value: openalex.cited_by_count.toLocaleString("en"),
+                        },
+                      ]
+                    : []),
+                  ...(openalex?.works_count != null
+                    ? [
+                        {
+                          label: t("metrics.worksCountLabel"),
+                          hint: t("metrics.worksCountHint"),
+                          value: openalex.works_count.toLocaleString("en"),
+                        },
+                      ]
+                    : []),
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    title={item.hint}
+                    tabIndex={item.hint ? 0 : undefined}
+                    className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)]/35 px-3 py-2"
+                  >
+                    <dt className="truncate text-[11px] font-medium text-[var(--muted-foreground)]">
+                      {item.label}
+                    </dt>
+                    <dd className="mt-0.5 text-lg font-bold leading-tight tabular-nums text-[var(--foreground)]">
+                      {item.value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1">
+                <SourceNote
+                  {...(attribution.metrics ?? {})}
+                  codes={attribution.metrics?.caveat_codes}
+                />
+                {openalex && (
+                  <SourceNote
+                    {...(attribution.openalex ?? {})}
+                    codes={attribution.openalex?.caveat_codes}
+                  />
+                )}
+              </div>
+            </InsetPanel>
+
+            {(metrics || openaire) && (
+              <InsetPanel title={t("metrics.groupInst", { short: site.short })}>
+                <dl className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
                   {metrics && (
-                    <Metric
-                      label={t("metrics.fwciLabel", { short: site.short })}
-                      hint={t("metrics.fwciHint", { short: site.short })}
-                      value={
-                        metrics.fwci_avg != null && metrics.fwci_n > 0
+                    <div
+                      title={t("metrics.fwciHint", { short: site.short })}
+                      tabIndex={0}
+                      className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)]/35 px-3 py-2"
+                    >
+                      <dt className="truncate text-[11px] font-medium text-[var(--muted-foreground)]">
+                        {t("metrics.fwciLabel", { short: site.short })}
+                      </dt>
+                      <dd className="mt-0.5 text-lg font-bold leading-tight tabular-nums text-[var(--foreground)]">
+                        {metrics.fwci_avg != null && metrics.fwci_n > 0
                           ? metrics.fwci_avg.toFixed(2)
-                          : "—"
-                      }
-                      note={
-                        <>
-                          {t("metrics.fwciN", { count: metrics.fwci_n })}{" "}
-                          <SourceNote
-                            {...(attribution.openalex ?? {})}
-                            codes={attribution.openalex?.caveat_codes}
-                          />
-                        </>
-                      }
-                    />
+                          : "—"}
+                      </dd>
+                      <div className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">
+                        {t("metrics.fwciN", { count: metrics.fwci_n })}
+                      </div>
+                    </div>
                   )}
                   {metrics && metrics.retracted > 0 && (
-                    <Metric
-                      label={t("metrics.retractedLabel", { short: site.short })}
-                      hint={t("metrics.retractedHint", { short: site.short })}
-                      value={metrics.retracted.toLocaleString("en")}
-                      note={
-                        <SourceNote
-                          {...(attribution.openalex ?? {})}
-                          codes={attribution.openalex?.caveat_codes}
-                        />
-                      }
+                    <div
+                      title={t("metrics.retractedHint", { short: site.short })}
+                      tabIndex={0}
+                      className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)]/35 px-3 py-2"
+                    >
+                      <dt className="truncate text-[11px] font-medium text-[var(--muted-foreground)]">
+                        {t("metrics.retractedLabel", { short: site.short })}
+                      </dt>
+                      <dd className="mt-0.5 text-lg font-bold leading-tight tabular-nums text-[var(--foreground)]">
+                        {metrics.retracted.toLocaleString("en")}
+                      </dd>
+                    </div>
+                  )}
+                  {openaire && (
+                    <div
+                      title={t("metrics.openaireHint", { name: site.name })}
+                      tabIndex={0}
+                      className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)]/35 px-3 py-2"
+                    >
+                      <dt className="truncate text-[11px] font-medium text-[var(--muted-foreground)]">
+                        {t("metrics.openaireLabel")}
+                      </dt>
+                      <dd className="mt-0.5 text-lg font-bold leading-tight tabular-nums text-[var(--foreground)]">
+                        {openaire.matched_works.toLocaleString("en")}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+                <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1">
+                  {metrics && (
+                    <SourceNote
+                      {...(attribution.openalex ?? {})}
+                      codes={attribution.openalex?.caveat_codes}
                     />
                   )}
                   {openaire && (
-                    <Metric
-                      label={t("metrics.openaireLabel")}
-                      hint={t("metrics.openaireHint", { name: site.name })}
-                      value={openaire.matched_works.toLocaleString("en")}
-                      note={
-                        <SourceNote
-                          {...(attribution.openaire ?? {})}
-                          codes={attribution.openaire?.caveat_codes}
-                        />
-                      }
+                    <SourceNote
+                      {...(attribution.openaire ?? {})}
+                      codes={attribution.openaire?.caveat_codes}
                     />
                   )}
                 </div>
-              </div>
+              </InsetPanel>
             )}
+
             {latestSjr && (
-              <div className="border-t border-[var(--border)] pt-3">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <Metric
-                    label={t("metrics.sjrLabel")}
-                    hint={t("metrics.sjrHint")}
-                    value={latestSjr.sjr !== null ? latestSjr.sjr.toFixed(3) : "—"}
-                    note={latestSjr.year ? String(latestSjr.year) : undefined}
-                  />
-                  <Metric
-                    label={t("metrics.bestQuartileLabel")}
-                    hint={t("metrics.bestQuartileHint")}
-                    value={latestSjr.best_quartile ?? "—"}
-                  />
-                  <Metric
-                    label={t("metrics.sjrHIndexLabel")}
-                    hint={t("metrics.sjrHIndexHint")}
-                    value={latestSjr.h_index?.toLocaleString("en") ?? "—"}
-                  />
-                </div>
+              <InsetPanel title={t("metrics.groupScimago")}>
+                <dl className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+                  <div
+                    title={t("metrics.sjrHint")}
+                    tabIndex={0}
+                    className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)]/35 px-3 py-2"
+                  >
+                    <dt className="truncate text-[11px] font-medium text-[var(--muted-foreground)]">
+                      {t("metrics.sjrLabel")}
+                    </dt>
+                    <dd className="mt-0.5 text-lg font-bold leading-tight tabular-nums text-[var(--foreground)]">
+                      {latestSjr.sjr !== null ? latestSjr.sjr.toFixed(3) : "—"}
+                    </dd>
+                    {latestSjr.year && (
+                      <div className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">
+                        {latestSjr.year}
+                      </div>
+                    )}
+                  </div>
+                  <div
+                    title={t("metrics.bestQuartileHint")}
+                    tabIndex={0}
+                    className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)]/35 px-3 py-2"
+                  >
+                    <dt className="truncate text-[11px] font-medium text-[var(--muted-foreground)]">
+                      {t("metrics.bestQuartileLabel")}
+                    </dt>
+                    <dd className="mt-0.5 text-lg font-bold leading-tight tabular-nums text-[var(--foreground)]">
+                      {latestSjr.best_quartile ?? "—"}
+                    </dd>
+                  </div>
+                  <div
+                    title={t("metrics.sjrHIndexHint")}
+                    tabIndex={0}
+                    className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)]/35 px-3 py-2"
+                  >
+                    <dt className="truncate text-[11px] font-medium text-[var(--muted-foreground)]">
+                      {t("metrics.sjrHIndexLabel")}
+                    </dt>
+                    <dd className="mt-0.5 text-lg font-bold leading-tight tabular-nums text-[var(--foreground)]">
+                      {latestSjr.h_index?.toLocaleString("en") ?? "—"}
+                    </dd>
+                  </div>
+                </dl>
                 <div className="mt-2.5">
                   <SourceNote
                     {...(attribution.scimagojr ?? {})}
                     codes={attribution.scimagojr?.caveat_codes}
                   />
                 </div>
-              </div>
+              </InsetPanel>
             )}
           </CollapsibleCard>
 
@@ -792,21 +964,9 @@ function JournalPageInner() {
           <CrisGapsSection
             target={{ kind: "journal", issnL: journal.issn_l }}
             available={data.openalex_only.available}
+            initialTotal={data.openalex_only.total}
+            initialPartsCounts={data.openalex_only.parts_counts}
           />
-
-          {data.alternate_titles.length > 0 && <OtherNamesCard names={data.alternate_titles} />}
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <IdentifiersCard
-              issnL={journal.issn_l}
-              issns={data.issns}
-              doajUrl={data.doaj_homepage_url}
-              openalexUrl={openalex?.url}
-              oaNlSlug={data.openaccess_nl_slug}
-            />
-
-            <CitationCard data={data} />
-          </div>
         </div>
       </div>
     </>

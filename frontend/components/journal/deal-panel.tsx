@@ -56,7 +56,7 @@ export function DealPanel({
         </>
       }
       description={
-        <p className="text-sm text-[var(--muted-foreground)]">
+        <p className="text-xs text-[var(--muted-foreground)]">
           {deal.publisher_name} · {deal.duration_text ?? deal.esac_id}
         </p>
       }

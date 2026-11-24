@@ -40,9 +40,13 @@ type CrisGapsTarget =
 export function CrisGapsSection({
   target,
   available,
+  initialTotal,
+  initialPartsCounts,
 }: {
   target: CrisGapsTarget;
   available: boolean;
+  initialTotal?: number;
+  initialPartsCounts?: Record<string, number>;
 }) {
   const tc = useTranslations("common");
   const tp = useTranslations("publishers");
@@ -99,10 +103,14 @@ export function CrisGapsSection({
   const data = activeQuery.data;
   const openalexOnly = data?.openalex_only;
   const chapters = data?.chapter_rollup;
-  const partsCounts = (openalexOnly as { parts_counts?: Record<string, number> } | undefined)
-    ?.parts_counts;
-  const unfilteredTotal = partsCounts?.all ?? openalexOnly?.total ?? 0;
-  const total = openalexOnly?.total ?? 0;
+  const partsCounts =
+    (openalexOnly as { parts_counts?: Record<string, number> } | undefined)?.parts_counts ??
+    (initialPartsCounts && Object.keys(initialPartsCounts).length > 0
+      ? initialPartsCounts
+      : undefined);
+  const unfilteredTotal = partsCounts?.all ?? openalexOnly?.total ?? initialTotal ?? 0;
+  const total = data ? (openalexOnly?.total ?? 0) : (initialTotal ?? 0);
+  const headerCount = data ? total : initialTotal;
   const entries = openalexOnly ? toGapEntries(openalexOnly.items) : [];
   const shownTotal = openalexOnly ? entriesTotal(openalexOnly) : 0;
   const pages = Math.max(1, Math.ceil(entries.length / GAP_PAGE_SIZE));
@@ -152,7 +160,11 @@ export function CrisGapsSection({
   ];
 
   const introText = !expanded
-    ? tc("crisGaps.loadHint")
+    ? initialTotal === 0
+      ? emptyLabel
+      : initialTotal !== undefined && initialTotal > 0
+        ? tc("crisGaps.loadHintCount", { count: initialTotal })
+        : tc("crisGaps.loadHint")
     : activeQuery.isPending && !data
       ? tc("crisGaps.loading")
       : target.kind === "publisher"
@@ -165,7 +177,7 @@ export function CrisGapsSection({
     <CollapsibleCard
       id="cris-gaps"
       title={title}
-      count={data ? total : undefined}
+      count={headerCount}
       defaultOpen={false}
       compact
       onOpenChange={setExpanded}

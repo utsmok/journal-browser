@@ -110,6 +110,8 @@
     "kpiWorks": "Works",
     "kpiDealWorks": "Deal-covered",
     "kpiApcSpend": "APC spend",
+    "apcArticlesCount": "{count, plural, one {# article} other {# articles}}",
+    "topics": "Topics",
     "back": {
       "faculty": "Back to faculties",
       "group": "Back to research groups",
@@ -159,7 +161,8 @@
     "dealUsage": {
       "title": "Deal usage",
       "description": "Publications in journals that are currently part of each deal. Historical deal usage is not shown.",
-      "caption": "Open access deals used by this unit"
+      "caption": "Open access deals used by this unit",
+      "pager": "agreements"
     },
     "partners": {
       "title": "Top collaboration partners",

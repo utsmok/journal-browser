@@ -94,7 +94,7 @@ export function GreenOaPanel({
       compact
       title={t("greenOa.title")}
       description={
-        <p className="text-sm text-[var(--muted-foreground)]">{t("greenOa.description")}</p>
+        <p className="text-xs text-[var(--muted-foreground)]">{t("greenOa.description")}</p>
       }
       contentClassName="space-y-4 text-sm"
     >

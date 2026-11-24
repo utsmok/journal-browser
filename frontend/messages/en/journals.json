@@ -18,7 +18,9 @@
     "kpiQuartile": "SJR / Quartile",
     "kpiFwci": "FWCI ({short})",
     "kpiApc": "Latest APC",
-    "kpiTotalWorks": "Total works"
+    "kpiTotalWorks": "Total works",
+    "kpiCitations": "{count} citations",
+    "cite": "Cite"
   },
   "oaPerYear": {
     "title": "Open access per year",
@@ -135,7 +137,10 @@
     "showMore": "+{count} more"
   },
   "metrics": {
-    "title": "Key stats",
+    "title": "Detailed metrics",
+    "groupOpenAlex": "OpenAlex",
+    "groupInst": "{short} corpus",
+    "groupScimago": "SCImagoJR",
     "citednessLabel": "2-year mean citedness",
     "citednessHint": "Average number of citations that works from the last two years have received, as counted by OpenAlex.",
     "hIndexLabel": "h-index",
@@ -209,6 +214,11 @@
     "usageHint": "Matched publications for which OpenAIRE has recorded views or downloads.",
     "diamondLabel": "Diamond works",
     "diamondHint": "Matched publications in diamond open-access venues (no article processing charge), evidenced by the journal's entry in the OpenAIRE journal registry.",
+    "pctOfMatched": "{pct}% of matched",
+    "colorAgreeAll": "OA status agrees across all {total} checked publications.",
+    "colorAgreement": "OA status agrees on {agree} of {total} publications ({pct}%); {disagree} differ.",
+    "subjectsHeading": "Fields of science",
+    "fundersHeading": "Credited funders",
     "colorCheck": "OpenAIRE records a different open access status for {disagree} of {total} publications.",
     "funderWorks": "{count, plural, one {# work} other {# works}}"
   },
@@ -221,11 +231,13 @@
   },
   "names": {
     "title": "Other names",
+    "inlineLabel": "Also known as",
     "description": "Other titles that this journal is published under.",
     "showAll": "Show all {count} names"
   },
   "identifiers": {
     "title": "Identifiers",
+    "label": "Identifiers & records",
     "description": "The journal's ISSNs and its records in DOAJ, OpenAlex, and Open Access NL.",
     "doajRecord": "DOAJ record",
     "openalexSource": "OpenAlex source",

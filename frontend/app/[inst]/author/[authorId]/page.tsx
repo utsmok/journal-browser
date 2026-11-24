@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { Sparkles } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -10,7 +11,7 @@ import { DealBadge, OaStatusChip, OaTypeBadge } from "@/components/badges";
 import { CardPager } from "@/components/card-pager";
 import { orgTypeCssVar } from "@/components/collaborations/labels";
 import { CollapsibleCard } from "@/components/collapsible-card";
-import { ACCESS_TEXT, DataIcon, LockIcon, WorksGlyph } from "@/components/data-icons";
+import { ACCESS_TEXT, DataIcon, DealGlyph, LockIcon, WorksGlyph } from "@/components/data-icons";
 import { DetailSummaryPanel } from "@/components/detail-summary";
 import {
   doiHref,
@@ -21,9 +22,10 @@ import {
 } from "@/components/gap-entries";
 import { GapCsvButton } from "@/components/gap-csv-button";
 import { SectionNav, useLastDirectoryHref } from "@/components/journal/section-nav";
+import { MoreToggle } from "@/components/journal/shared";
 import { SourceNote } from "@/components/source-note";
 import { DetailSkeleton, ErrorPanel } from "@/components/states";
-import { TopicChipList } from "@/components/topic-chips";
+import { InsetPanel } from "@/components/sub-panel";
 import {
   Table,
   TableBody,
@@ -47,6 +49,7 @@ import { entriesTotal, toGapEntries } from "@/lib/gap-entries";
 
 const PAGE_SIZE = 10;
 const TOPICS_LIMIT = 8;
+const SIMILAR_PREVIEW = 5;
 
 function SimilarRow({ inst, s }: { inst: string; s: AuthorSimilarJournal }) {
   const t = useTranslations("authors");
@@ -103,10 +106,12 @@ export default function AuthorPage() {
   const [journalPage, setJournalPage] = React.useState(1);
   const [workPage, setWorkPage] = React.useState(1);
   const [gapPage, setGapPage] = React.useState(1);
+  const [openSimilar, setOpenSimilar] = React.useState<Record<string, boolean>>({});
   React.useEffect(() => {
     setJournalPage(1);
     setWorkPage(1);
     setGapPage(1);
+    setOpenSimilar({});
   }, [authorId]);
 
   if (isPending)
@@ -145,7 +150,6 @@ export default function AuthorPage() {
 
   const sections = [
     { id: "overview", label: t("sections.overview") },
-    ...(topics.length > 0 ? [{ id: "topics", label: t("sections.topics") }] : []),
     ...(hasSimilar ? [{ id: "next", label: t("sections.publishNext") }] : []),
     ...(alternatives.length > 0 ? [{ id: "alternatives", label: t("sections.alternatives") }] : []),
     ...(journals.length > 0 ? [{ id: "journals", label: t("sections.journals") }] : []),
@@ -277,33 +281,29 @@ export default function AuthorPage() {
                 value: journals.length.toLocaleString("en"),
               },
               {
-                label: t("detail.kpiTopics"),
-                value: topics.length.toLocaleString("en"),
-              },
-              {
                 label: t("detail.kpiPartners"),
                 value: partners.length.toLocaleString("en"),
               },
             ]}
             trendStats={trendStats}
             trendTitle={t("sections.oaOverTime")}
+            topics={
+              topics.length > 0
+                ? {
+                    label: t("sections.topics"),
+                    items: topics.map((topic) => ({
+                      name: topic.name,
+                      count: topic.n,
+                      href: `/${inst}/author?topic=${encodeURIComponent(topic.name)}`,
+                      title: t("worksCount", { count: topic.n }),
+                    })),
+                    limit: TOPICS_LIMIT,
+                  }
+                : undefined
+            }
           />
 
-          {/* Block 3: Topics & Recommendations */}
-          {topics.length > 0 && (
-            <CollapsibleCard id="topics" title={t("sections.topics")} count={topics.length} compact>
-              <TopicChipList
-                items={topics.map((topic) => ({
-                  name: topic.name,
-                  count: topic.n,
-                  href: `/${inst}/author?topic=${encodeURIComponent(topic.name)}`,
-                  title: t("worksCount", { count: topic.n }),
-                }))}
-                limit={TOPICS_LIMIT}
-              />
-            </CollapsibleCard>
-          )}
-
+          {/* Block 3: Recommendations */}
           {(hasSimilar || alternatives.length > 0) && (
             <div
               className={hasSimilar && alternatives.length > 0 ? "grid gap-4 lg:grid-cols-2" : ""}
@@ -313,27 +313,68 @@ export default function AuthorPage() {
                   id="next"
                   title={t("sections.publishNext")}
                   compact
-                  contentClassName="space-y-4 text-sm"
+                  contentClassName="space-y-3 text-sm"
                 >
                   {(
                     [
-                      { key: "all", heading: t("similar.mostSimilar") },
-                      { key: "deals", heading: t("similar.dealCovered") },
-                      { key: "diamond", heading: t("similar.diamond") },
+                      {
+                        key: "all",
+                        heading: t("similar.mostSimilar"),
+                        icon: (
+                          <Sparkles
+                            aria-hidden
+                            className="size-3.5 shrink-0 text-[var(--muted-foreground)]"
+                          />
+                        ),
+                      },
+                      {
+                        key: "deals",
+                        heading: t("similar.dealCovered"),
+                        icon: (
+                          <DataIcon className={`size-3.5 ${ACCESS_TEXT.deal}`}>
+                            <DealGlyph />
+                          </DataIcon>
+                        ),
+                      },
+                      {
+                        key: "diamond",
+                        heading: t("similar.diamond"),
+                        icon: (
+                          <DataIcon className={`size-3.5 ${ACCESS_TEXT.diamond}`}>
+                            <LockIcon state="wide" />
+                          </DataIcon>
+                        ),
+                      },
                     ] as const
                   ).map(
                     (g) =>
                       similar[g.key].length > 0 && (
-                        <div key={g.key}>
-                          <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                            {g.heading}
-                          </h3>
+                        <InsetPanel
+                          key={g.key}
+                          title={g.heading}
+                          icon={g.icon}
+                          count={similar[g.key].length}
+                        >
                           <ul className="divide-y divide-[var(--border)]">
-                            {similar[g.key].map((s) => (
+                            {(openSimilar[g.key]
+                              ? similar[g.key]
+                              : similar[g.key].slice(0, SIMILAR_PREVIEW)
+                            ).map((s) => (
                               <SimilarRow key={s.issn_l} inst={inst} s={s} />
                             ))}
                           </ul>
-                        </div>
+                          {similar[g.key].length > SIMILAR_PREVIEW && (
+                            <div className="mt-1.5 border-t border-[var(--border)] pt-1.5">
+                              <MoreToggle
+                                open={!!openSimilar[g.key]}
+                                onToggle={() =>
+                                  setOpenSimilar((m) => ({ ...m, [g.key]: !m[g.key] }))
+                                }
+                                moreLabel={tc("list.showAll", { count: similar[g.key].length })}
+                              />
+                            </div>
+                          )}
+                        </InsetPanel>
                       ),
                   )}
                 </CollapsibleCard>
@@ -345,7 +386,7 @@ export default function AuthorPage() {
                   title={t("cards.alternatives")}
                   count={alternatives.length}
                   compact
-                  contentClassName="space-y-4 text-sm"
+                  contentClassName="space-y-3 text-sm"
                   description={
                     <p className="text-xs text-[var(--muted-foreground)]">
                       {t("cards.alternativesIntro")}
@@ -353,24 +394,24 @@ export default function AuthorPage() {
                   }
                 >
                   {alternatives.map((alt) => (
-                    <div key={alt.issn_l}>
-                      <div className="flex flex-wrap items-baseline gap-x-2">
+                    <InsetPanel
+                      key={alt.issn_l}
+                      title={
                         <Link
                           href={`/${inst}/journals/${alt.issn_l}`}
-                          className="font-semibold underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                          className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
                         >
                           {alt.title || alt.issn_l}
                         </Link>
-                        <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
-                          {t("worksCount", { count: alt.n_works })}
-                        </span>
-                      </div>
-                      <ul className="mt-1 divide-y divide-[var(--border)]">
+                      }
+                      count={t("worksCount", { count: alt.n_works })}
+                    >
+                      <ul className="divide-y divide-[var(--border)]">
                         {alt.options.map((o) => (
                           <SimilarRow key={o.issn_l} inst={inst} s={o} />
                         ))}
                       </ul>
-                    </div>
+                    </InsetPanel>
                   ))}
                 </CollapsibleCard>
               )}

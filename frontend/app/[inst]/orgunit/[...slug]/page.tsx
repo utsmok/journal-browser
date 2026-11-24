@@ -133,12 +133,15 @@ function OrgUnitDetail({
       (year_to === undefined || s.year <= year_to),
   );
   const [groupPage, setGroupPage] = React.useState(1);
+  const [dealPage, setDealPage] = React.useState(1);
   const [journalPage, setJournalPage] = React.useState(1);
   const [authorPage, setAuthorPage] = React.useState(1);
   const groupRows = (groups ?? []).slice((groupPage - 1) * PAGE_SIZE, groupPage * PAGE_SIZE);
+  const dealRows = deal_usage.slice((dealPage - 1) * PAGE_SIZE, dealPage * PAGE_SIZE);
   const journalRows = journals.slice((journalPage - 1) * PAGE_SIZE, journalPage * PAGE_SIZE);
   const authorRows = authors.slice((authorPage - 1) * PAGE_SIZE, authorPage * PAGE_SIZE);
   const groupPages = Math.max(1, Math.ceil((groups ?? []).length / PAGE_SIZE));
+  const dealPages = Math.max(1, Math.ceil(deal_usage.length / PAGE_SIZE));
   const journalPages = Math.max(1, Math.ceil(journals.length / PAGE_SIZE));
   const authorPages = Math.max(1, Math.ceil(authors.length / PAGE_SIZE));
 
@@ -196,7 +199,7 @@ function OrgUnitDetail({
               </DataIcon>
             ),
             hint: t("tooltips.apc", { count: unit.apc_n }),
-            sub: `${unit.apc_n} articles`,
+            sub: t("detail.apcArticlesCount", { count: unit.apc_n }),
           },
         ]
       : []),
@@ -204,6 +207,12 @@ function OrgUnitDetail({
       ? [{ label: t("detail.navGroups"), value: unit.n_groups.toLocaleString("en") }]
       : []),
   ];
+
+  const unitTopics = (unit.topics ?? []).map((topic) => ({
+    name: topic.name,
+    count: Math.round(topic.n),
+    href: `/${inst}/?topic=${encodeURIComponent(topic.name)}&search_in=topic`,
+  }));
 
   return (
     <>
@@ -243,6 +252,15 @@ function OrgUnitDetail({
             stats={kpis}
             trendStats={trendYears}
             trendTitle={t("detail.trendTitle")}
+            topics={
+              unitTopics.length > 0
+                ? {
+                    label: t("detail.topics"),
+                    items: unitTopics,
+                    limit: 8,
+                  }
+                : undefined
+            }
           />
 
           {/* Block 3: Sub-units & Deal usage */}
@@ -317,7 +335,7 @@ function OrgUnitDetail({
                   {t("detail.dealUsage.description")}
                 </p>
               }
-              contentClassName="text-sm [&_td]:py-1.5 [&_th]:h-8"
+              contentClassName="space-y-3 text-sm [&_td]:py-1.5 [&_th]:h-8"
             >
               <Table>
                 <caption className="sr-only">{t("detail.dealUsage.caption")}</caption>
@@ -329,7 +347,7 @@ function OrgUnitDetail({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {deal_usage.map((d) => (
+                  {dealRows.map((d) => (
                     <TableRow key={d.label}>
                       <TableCell className="font-medium">
                         <Link
@@ -350,6 +368,15 @@ function OrgUnitDetail({
                   ))}
                 </TableBody>
               </Table>
+              {dealPages > 1 && (
+                <CardPager
+                  page={dealPage}
+                  pages={dealPages}
+                  total={deal_usage.length}
+                  onPage={setDealPage}
+                  label={t("detail.dealUsage.pager")}
+                />
+              )}
             </CollapsibleCard>
           )}
 
@@ -590,6 +617,8 @@ function OrgUnitDetail({
           <CrisGapsSection
             target={{ kind: "orgunit", level: unit.level, name: unit.name }}
             available={data.openalex_only.available}
+            initialTotal={data.openalex_only.total}
+            initialPartsCounts={data.openalex_only.parts_counts}
           />
         </div>
       </div>

@@ -76,7 +76,7 @@ export function PublicationsCard({
       defaultOpen={false}
       compact
       description={
-        <p className="text-pretty text-sm text-[var(--muted-foreground)]">
+        <p className="text-pretty text-xs text-[var(--muted-foreground)]">
           {t("publications.description", {
             short: site.short,
             period:

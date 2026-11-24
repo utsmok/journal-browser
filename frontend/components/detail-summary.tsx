@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import { OaTrend } from "@/components/oa-trend";
+import { TopicChipList, type TopicChipItem } from "@/components/topic-chips";
 import { Card } from "@/components/ui/card";
 import type { StatsYear } from "@/lib/api";
 
@@ -16,10 +17,19 @@ export type DetailStatItem = {
   sub?: React.ReactNode;
 };
 
+export type DetailSummaryTopics = {
+  label?: string;
+  items: TopicChipItem[];
+  showCounts?: boolean;
+  limit?: number;
+  sourceNote?: React.ReactNode;
+};
+
 /**
  * Unified "At a Glance" summary block shared across all 6 detail views:
  * compact icon-annotated KPI tiles paired side-by-side with an embedded
- * compact OA trend (plus 1-click Expand toggle for full-width inspection).
+ * compact OA trend (plus 1-click Expand toggle for full-width inspection),
+ * optional inline topics, and optional compact entity metadata strip.
  */
 export function DetailSummaryPanel({
   id = "overview",
@@ -31,6 +41,8 @@ export function DetailSummaryPanel({
   trendEmpty,
   trendFooter,
   rightSlot,
+  topics,
+  metaFooter,
 }: {
   id?: string;
   stats: DetailStatItem[];
@@ -43,6 +55,10 @@ export function DetailSummaryPanel({
   trendFooter?: React.ReactNode;
   /** Optional secondary slot next to or below expanded trend (e.g. partner work types). */
   rightSlot?: React.ReactNode;
+  /** Optional compact topic strip folded into Overview instead of its own giant card. */
+  topics?: DetailSummaryTopics;
+  /** Optional compact reference strip (ISSNs, registry links, alternate names, ROR facts). */
+  metaFooter?: React.ReactNode;
 }) {
   const t = useTranslations("common");
   const [expanded, setExpanded] = React.useState(false);
@@ -53,7 +69,9 @@ export function DetailSummaryPanel({
       <dl
         className={`grid gap-2.5 ${
           hasTrendPanel && !expanded
-            ? "grid-cols-2 sm:grid-cols-3"
+            ? stats.length <= 2 || stats.length === 4
+              ? "grid-cols-2"
+              : "grid-cols-2 sm:grid-cols-3"
             : stats.length <= 2
               ? "grid-cols-2"
               : stats.length === 3
@@ -142,6 +160,31 @@ export function DetailSummaryPanel({
             {statsGrid}
             {trendBox}
           </div>
+        )}
+        {topics && topics.items.length > 0 && (
+          <div className="mt-3 border-t border-[var(--border)] pt-2.5">
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+              <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                {topics.label ?? t("topics.label")}
+                {topics.items.length > (topics.limit ?? 8) && (
+                  <span className="ml-1 font-normal tabular-nums">
+                    ({topics.items.length.toLocaleString("en")})
+                  </span>
+                )}
+              </span>
+              <div className="min-w-0 flex-1">
+                <TopicChipList
+                  items={topics.items}
+                  limit={topics.limit ?? 8}
+                  showCounts={topics.showCounts ?? true}
+                />
+              </div>
+              {topics.sourceNote && <div className="shrink-0">{topics.sourceNote}</div>}
+            </div>
+          </div>
+        )}
+        {metaFooter && (
+          <div className="mt-3 border-t border-[var(--border)] pt-2.5 text-xs">{metaFooter}</div>
         )}
       </Card>
     </section>

@@ -23,7 +23,7 @@ import { GapCsvButton } from "@/components/gap-csv-button";
 import { SectionNav } from "@/components/journal/section-nav";
 import { MoreToggle } from "@/components/journal/shared";
 import { ErrorPanel, ListSkeletonRows } from "@/components/states";
-import { TopicChipList } from "@/components/topic-chips";
+import { InsetPanel } from "@/components/sub-panel";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -72,19 +72,16 @@ function CreditsList({
   const [open, setOpen] = React.useState(false);
   const visible = open ? rows : rows.slice(0, SUBLIST_CAP);
   return (
-    <div>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-        {title}
-      </h3>
+    <InsetPanel title={title} count={rows.length > 0 ? rows.length : undefined}>
       {rows.length === 0 ? (
-        <p className="mt-2 text-sm text-[var(--muted-foreground)]">{empty}</p>
+        <p className="text-xs text-[var(--muted-foreground)]">{empty}</p>
       ) : (
         <>
-          <ol className="mt-1 divide-y divide-[var(--border)]">
+          <ol className="divide-y divide-[var(--border)]">
             {visible.map((row) => (
               <li
                 key={row.key}
-                className="flex items-baseline justify-between gap-3 py-1.5 text-sm"
+                className="flex items-baseline justify-between gap-3 py-1.5 text-sm first:pt-0 last:pb-0"
               >
                 <span className="min-w-0 truncate">
                   {row.href ? (
@@ -103,7 +100,7 @@ function CreditsList({
             ))}
           </ol>
           {rows.length > SUBLIST_CAP && (
-            <div className="mt-1.5">
+            <div className="mt-1.5 border-t border-[var(--border)] pt-1.5">
               <MoreToggle
                 open={open}
                 onToggle={() => setOpen((o) => !o)}
@@ -113,7 +110,7 @@ function CreditsList({
           )}
         </>
       )}
-    </div>
+    </InsetPanel>
   );
 }
 
@@ -310,7 +307,7 @@ function PartnerPageInner() {
     ? [
         { id: "overview", label: t("detail.navOverview") },
         ...(hasUtCollab ? [{ id: "ut-collaborators", label: t("detail.navUtCollab") }] : []),
-        ...(journalList.length > 0 || d.top_topics.length > 0
+        ...(journalList.length > 0
           ? [{ id: "journals-topics", label: t("detail.navJournals") }]
           : []),
         { id: "credits", label: t("detail.navCredits") },
@@ -375,15 +372,6 @@ function PartnerPageInner() {
                   </Badge>
                 )}
               </div>
-
-              <dl className="mt-3 grid gap-x-6 gap-y-1.5 text-xs sm:grid-cols-2 xl:grid-cols-3">
-                {facts.map((fact) => (
-                  <div key={fact.term} className="flex gap-2.5">
-                    <dt className="w-28 shrink-0 text-[var(--muted-foreground)]">{fact.term}</dt>
-                    <dd className="min-w-0">{fact.value}</dd>
-                  </div>
-                ))}
-              </dl>
             </header>
 
             <DetailSummaryPanel
@@ -449,6 +437,33 @@ function PartnerPageInner() {
                   <BarList title={t("detail.trend.byType")} rows={typeRows} />
                 ) : undefined
               }
+              topics={
+                d.top_topics.length > 0
+                  ? {
+                      label: t("detail.journals.topicsHeading"),
+                      items: d.top_topics.map((topic) => ({
+                        name: topic.value,
+                        count: topic.count,
+                        href: `/${inst}/collaborations?topic=${encodeURIComponent(topic.value)}`,
+                      })),
+                      limit: 8,
+                    }
+                  : undefined
+              }
+              metaFooter={
+                facts.length > 0 ? (
+                  <dl className="grid gap-x-6 gap-y-1.5 text-xs sm:grid-cols-2 xl:grid-cols-3">
+                    {facts.map((fact) => (
+                      <div key={fact.term} className="flex gap-2.5">
+                        <dt className="w-28 shrink-0 text-[var(--muted-foreground)]">
+                          {fact.term}
+                        </dt>
+                        <dd className="min-w-0">{fact.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : undefined
+              }
             />
 
             {(d.deal_closed_works ?? 0) > 0 && (
@@ -468,20 +483,20 @@ function PartnerPageInner() {
                 compact
                 contentClassName="text-sm"
               >
-                <div className="grid gap-6 lg:grid-cols-3">
+                <div className="grid gap-3 lg:grid-cols-3">
                   {d.ut_faculties.length > 0 && (
-                    <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                        {t("detail.utCollab.faculties")}
-                      </h3>
-                      <ol className="mt-1 divide-y divide-[var(--border)]">
+                    <InsetPanel
+                      title={t("detail.utCollab.faculties")}
+                      count={d.ut_faculties.length}
+                    >
+                      <ol className="divide-y divide-[var(--border)]">
                         {(collabExpanded.fac
                           ? d.ut_faculties
                           : d.ut_faculties.slice(0, SUBLIST_CAP)
                         ).map((u) => (
                           <li
                             key={u.name}
-                            className="flex items-baseline justify-between gap-3 py-1.5"
+                            className="flex items-baseline justify-between gap-3 py-1.5 first:pt-0 last:pb-0"
                           >
                             <Link
                               href={`/${inst}/orgunit/faculty/${encodeNamePath(u.name)}`}
@@ -496,7 +511,7 @@ function PartnerPageInner() {
                         ))}
                       </ol>
                       {d.ut_faculties.length > SUBLIST_CAP && (
-                        <div className="mt-1.5">
+                        <div className="mt-1.5 border-t border-[var(--border)] pt-1.5">
                           <MoreToggle
                             open={!!collabExpanded.fac}
                             onToggle={() => setCollabExpanded((m) => ({ ...m, fac: !m.fac }))}
@@ -504,20 +519,17 @@ function PartnerPageInner() {
                           />
                         </div>
                       )}
-                    </div>
+                    </InsetPanel>
                   )}
 
                   {d.ut_groups.length > 0 && (
-                    <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                        {t("detail.utCollab.groups")}
-                      </h3>
-                      <ol className="mt-1 divide-y divide-[var(--border)]">
+                    <InsetPanel title={t("detail.utCollab.groups")} count={d.ut_groups.length}>
+                      <ol className="divide-y divide-[var(--border)]">
                         {(collabExpanded.grp ? d.ut_groups : d.ut_groups.slice(0, SUBLIST_CAP)).map(
                           (u) => (
                             <li
                               key={u.name}
-                              className="flex items-baseline justify-between gap-3 py-1.5"
+                              className="flex items-baseline justify-between gap-3 py-1.5 first:pt-0 last:pb-0"
                             >
                               <Link
                                 href={`/${inst}/orgunit/group/${encodeNamePath(u.name)}`}
@@ -533,7 +545,7 @@ function PartnerPageInner() {
                         )}
                       </ol>
                       {d.ut_groups.length > SUBLIST_CAP && (
-                        <div className="mt-1.5">
+                        <div className="mt-1.5 border-t border-[var(--border)] pt-1.5">
                           <MoreToggle
                             open={!!collabExpanded.grp}
                             onToggle={() => setCollabExpanded((m) => ({ ...m, grp: !m.grp }))}
@@ -541,22 +553,19 @@ function PartnerPageInner() {
                           />
                         </div>
                       )}
-                    </div>
+                    </InsetPanel>
                   )}
 
                   {d.ut_authors.length > 0 && (
-                    <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                        {t("detail.utCollab.authors")}
-                      </h3>
-                      <ol className="mt-1 divide-y divide-[var(--border)]">
+                    <InsetPanel title={t("detail.utCollab.authors")} count={d.ut_authors.length}>
+                      <ol className="divide-y divide-[var(--border)]">
                         {(collabExpanded.auth
                           ? d.ut_authors
                           : d.ut_authors.slice(0, SUBLIST_CAP)
                         ).map((a) => (
                           <li
                             key={a.pure_uuid}
-                            className="flex items-baseline justify-between gap-3 py-1.5"
+                            className="flex items-baseline justify-between gap-3 py-1.5 first:pt-0 last:pb-0"
                           >
                             <span className="min-w-0">
                               <Link
@@ -578,7 +587,7 @@ function PartnerPageInner() {
                         ))}
                       </ol>
                       {d.ut_authors.length > SUBLIST_CAP && (
-                        <div className="mt-1.5">
+                        <div className="mt-1.5 border-t border-[var(--border)] pt-1.5">
                           <MoreToggle
                             open={!!collabExpanded.auth}
                             onToggle={() => setCollabExpanded((m) => ({ ...m, auth: !m.auth }))}
@@ -586,97 +595,73 @@ function PartnerPageInner() {
                           />
                         </div>
                       )}
-                    </div>
+                    </InsetPanel>
                   )}
                 </div>
               </CollapsibleCard>
             )}
 
-            {/* Block 4: Shared journals, Topics, Funders & Projects */}
-            {(journalList.length > 0 || d.top_topics.length > 0) && (
+            {/* Block 4: Shared journals, Funders & Projects */}
+            {journalList.length > 0 && (
               <CollapsibleCard
                 id="journals-topics"
                 title={t("detail.journals.title")}
-                count={journalList.length > 0 ? journalList.length : undefined}
+                count={journalList.length}
                 compact
-                contentClassName="space-y-4 text-sm [&_td]:py-1.5 [&_th]:h-8"
+                contentClassName="space-y-3 text-sm [&_td]:py-1.5 [&_th]:h-8"
               >
-                {d.top_topics.length > 0 && (
-                  <div>
-                    <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                      {t("detail.journals.topicsHeading")}
-                    </h3>
-                    <TopicChipList
-                      items={d.top_topics.map((topic) => ({
-                        name: topic.value,
-                        count: topic.count,
-                        href: `/${inst}/collaborations?topic=${encodeURIComponent(topic.value)}`,
-                      }))}
-                      limit={8}
-                    />
-                  </div>
-                )}
-
-                {journalList.length > 0 && (
-                  <>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>{t("detail.journals.colJournal")}</TableHead>
-                          <TableHead className="text-right">
-                            {t("detail.journals.colWorks")}
-                          </TableHead>
-                          <TableHead className="text-right">
-                            {t("detail.journals.colClosed")}
-                          </TableHead>
-                          <TableHead>{t("detail.journals.colAccess")}</TableHead>
-                          <TableHead>{t("detail.journals.colQuartile")}</TableHead>
-                          <TableHead>{t("detail.journals.colDeal")}</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {pagedJournals.map((j) => (
-                          <TableRow key={j.issn_l}>
-                            <TableCell className="font-medium">
-                              <Link href={`/${inst}/journals/${j.issn_l}`} className={linkClass}>
-                                {j.title}
-                              </Link>
-                            </TableCell>
-                            <TableCell className="text-right tabular-nums">
-                              {j.works.toLocaleString("en")}
-                            </TableCell>
-                            <TableCell className="text-right tabular-nums text-[var(--muted-foreground)]">
-                              {j.closed_works > 0 ? j.closed_works.toLocaleString("en") : "—"}
-                            </TableCell>
-                            <TableCell>
-                              <OaTypeBadge oaType={j.oa_type ?? null} />
-                            </TableCell>
-                            <TableCell>
-                              <QuartileBadge quartile={j.quartile ?? null} />
-                            </TableCell>
-                            <TableCell>
-                              <DealBadge covered={j.deal_covered} />
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                    {journalPages > 1 && (
-                      <CardPager
-                        page={journalPage}
-                        pages={journalPages}
-                        total={journalList.length}
-                        onPage={setJournalPage}
-                        label={t("detail.pagerJournals")}
-                      />
-                    )}
-                  </>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t("detail.journals.colJournal")}</TableHead>
+                      <TableHead className="text-right">{t("detail.journals.colWorks")}</TableHead>
+                      <TableHead className="text-right">{t("detail.journals.colClosed")}</TableHead>
+                      <TableHead>{t("detail.journals.colAccess")}</TableHead>
+                      <TableHead>{t("detail.journals.colQuartile")}</TableHead>
+                      <TableHead>{t("detail.journals.colDeal")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pagedJournals.map((j) => (
+                      <TableRow key={j.issn_l}>
+                        <TableCell className="font-medium">
+                          <Link href={`/${inst}/journals/${j.issn_l}`} className={linkClass}>
+                            {j.title}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {j.works.toLocaleString("en")}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-[var(--muted-foreground)]">
+                          {j.closed_works > 0 ? j.closed_works.toLocaleString("en") : "—"}
+                        </TableCell>
+                        <TableCell>
+                          <OaTypeBadge oaType={j.oa_type ?? null} />
+                        </TableCell>
+                        <TableCell>
+                          <QuartileBadge quartile={j.quartile ?? null} />
+                        </TableCell>
+                        <TableCell>
+                          <DealBadge covered={j.deal_covered} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                {journalPages > 1 && (
+                  <CardPager
+                    page={journalPage}
+                    pages={journalPages}
+                    total={journalList.length}
+                    onPage={setJournalPage}
+                    label={t("detail.pagerJournals")}
+                  />
                 )}
               </CollapsibleCard>
             )}
 
             <CollapsibleCard id="credits" title={t("detail.credits.title")} compact>
-              <div className="grid gap-6 lg:grid-cols-2">
+              <div className="grid gap-3 lg:grid-cols-2">
                 <CreditsList
                   title={t("detail.funders")}
                   empty={t("detail.noFunders")}
