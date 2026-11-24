@@ -234,6 +234,46 @@ the JCT/ESAC dump. Rules:
   2026-11-20) fold back into the canonical row: the keeper keeps its period,
   esac identity, and JCT journal list, and adopts the fork's page URL when
   it differed.
+- **openaccess.nl is the primary source.** It owns which deals exist for
+  your institutions and each deal's publisher, period, status, conditions,
+  caps and links. JCT is secondary: it adds what only it has, the ESAC id,
+  the journal list and the participants. The JCT ingest never writes its
+  placeholder publisher, its status or its End Date onto a deal row that
+  has an openaccess.nl page. `restore_openaccess_nl_facts` (the first
+  step of `reconcile`) puts those facts back on rows an older ingest
+  overwrote: the deal moves to the openaccess.nl publisher row of its ESAC
+  code family, and a plain `YYYY-YYYY` duration sets the start and end
+  year. A duration with an owner annotation and any field with a
+  `ManualOverride` row stay as they are.
+- **A JCT journal list is stored only when it is the deal's own.** The JCT
+  index can link an agreement to the sheet of another publisher (live
+  2026-11: `eme2025ukb`, the Emerald deal, pointed at the Elsevier UKB
+  sheet, so 2,572 Elsevier titles counted as Emerald coverage). Before it
+  stores a sheet, the ingest resolves the sheet's ISSNs against the
+  journal universe and takes the publisher of the majority (at least 50
+  journals, more than half of the resolved ones). That publisher must be
+  the deal's own family by name (company words such as "BV" or
+  "Publishing" are ignored), or the publisher of another stored sheet of
+  the same family. When another family's sheets own that publisher, the
+  sheet is withheld:
+  - no journal rows are stored, and rows an earlier JCT ingest stored
+    from it are removed; admin exclusions (`excluded`) and lists from
+    other sources (`manual`, `publisher-pattern`) stay;
+  - `jct_data_url` stays empty and the sheet's provenance entry carries
+    the reason under `sheet_rejected`;
+  - the deal is flagged `needs_curation` with a reason that starts with
+    `JCT journal list rejected`;
+  - the participants are stored anyway: the ESAC id and the consortium
+    are the agreement's own, and the openaccess.nl page links it.
+
+  `check_journal_list_publishers` runs in every `reconcile` over the whole
+  register and flags, never drops, a deal whose journal list is mostly
+  another publisher's (reason starts with `Journal list is mostly another
+  publisher's`). A flag with a `sheet_rejected` marker behind it stays
+  until the marker is gone, even when the deal carries a correct list from
+  another source. Dismissing one of these two reasons in the admin panel
+  holds until the cause is gone; the openaccess.nl scrape leaves such a
+  dismissal alone.
 - `ManualOverride` rows keep hand fixes winning over re-harvests. The
   curation report (`landing/reports/curation_report.html`) lists everything
   that needs a human.
