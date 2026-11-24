@@ -136,9 +136,10 @@ _YEAR_OR_SPAN = (
     r"^\(?" + _YEAR + r"\)?"
     r"(?:\s*[^0-9a-z]{1,6}\s*\(?" + _YEAR + r"\)?){0,2}[,.;]?$"
 )
-#: A programme label, one or more words followed by a year: "HORIZON2020",
-#: "Horizon 2020", "France2030".
-_PROGRAMME_LABEL = r"^(?:[a-z]+\s?)+" + _YEAR + r"$"
+#: A programme label, one or more words followed by a programme year
+#: (2000 to 2039): "HORIZON2020", "Horizon 2020", "France2030". The
+#: narrower year keeps grant numbers such as DFG "GRK 2073".
+_PROGRAMME_LABEL = r"^(?:[a-z]+\s?)+20[0-3][0-9]$"
 
 _PARTNER_CSV = (
     "ror",
@@ -248,8 +249,8 @@ def _valid_project_code(col: Any) -> Any:
     ("MCIN/AEI/10.13039/501100011033").
 
     The label pattern also takes grant numbers whose digits happen to be
-    a year (DFG "GRK 2073", JST "JPMJCR2014"): about 50 of 43,500 stored
-    awards on 2026-11-24, against about 1,250 programme labels. A short
+    a programme year (JST "JPMJCR2014"), against about 1,250 programme
+    labels on 2026-11-24. A short
     ordinal such as "FP7" cannot be told from grant numbers like FWF
     "Y 42" and passes."""
     trimmed = func.nullif(func.btrim(col), "")
