@@ -3,6 +3,10 @@
 # .env and re-runs docker compose up.
 x-backend-env: &backend-env
   JB_DATABASE_URL: postgresql+asyncpg://journal:journal@db:5432/journalbrowser
+  # API engine pool. 10 + 20 stays well inside Postgres's default
+  # max_connections (100), which the scheduler's job engines share.
+  JB_DB_POOL_SIZE: ${JB_DB_POOL_SIZE:-10}
+  JB_DB_MAX_OVERFLOW: ${JB_DB_MAX_OVERFLOW:-20}
   # Canonical publications from a ut-metadata Postgres (read-only).
   # Empty/unset = feature off; wrong/unreachable DSN degrades the same
   # way at runtime. Inside compose, localhost is the container — point

@@ -70,7 +70,8 @@ in citation links on journal pages. Set it in `.env` before the first
 | Variable | What it is | Default |
 |---|---|---|
 | `JB_DATABASE_URL` | Postgres DSN | local default |
-| `JB_CACHE_MAX_MB` | Serialised JSON bytes each in-process cache may hold (search facets, list snapshots, stale detail bundles); above it the least recently used entries are dropped. The cached Python objects take a few times this in RAM, so the backend's 2 GB container limit fits the default | `256` |
+| `JB_DB_POOL_SIZE` / `JB_DB_MAX_OVERFLOW` | API engine pool: connections kept open, and extra connections allowed under load (30 at most with the defaults). Postgres allows 97 ordinary connections by default (`max_connections` 100) and the scheduler's job engines draw from the same number, so raise `max_connections` before raising these. A connection running a sort may use `work_mem` (64 MB) | `10` / `20` |
+| `JB_DB_POOL_TIMEOUT` | Seconds a request waits for a pool connection before it fails | `30` |
 | `JB_ADMIN_PASSWORD` | Admin panel password (`/admin`); empty disables the panel | empty |
 | `JB_BOOTSTRAP` | `auto` (skips only a completed pipeline; refuses a partial one), `always`, or `off` | `auto` |
 | `JB_LANDING_DIR` | Raw landing zone for downloaded files. Compose pins the bind mount to `./backend/landing`; the variable applies to non-compose runs | `landing` |
