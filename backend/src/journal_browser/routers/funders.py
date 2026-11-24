@@ -4,6 +4,7 @@ Funders are canon (not institution-scoped); only the UT-work attribution
 is per institution. work_funders (migration 0049) may be absent — the
 counts degrade to zeros instead of erroring."""
 
+from collections.abc import Collection
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -12,6 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
 from ..deps import InstitutionDep
+from ..identifiers import (
+    REQUIREMENT_ORDER,
+    normalize_policy_requirements,
+    normalize_requirement,
+)
 from ..models import Institution, JiscFunder
 from ..queries import cache_epoch
 from ..schemas import (
@@ -33,32 +39,36 @@ DEFAULT_LIMIT = 25
 
 
 def _norm_req(block: Any) -> str | None:
+    """Requirement level of one policy sub-block, in canonical spelling
+    (rows normalized before the Jisc misspelling was mapped still carry it)."""
     if not isinstance(block, dict):
         return None
-    val = block.get("requirement")
-    if not isinstance(val, str):
-        return None
-    cleaned = val.strip().lower()
-    return cleaned or None
+    return normalize_requirement(block.get("requirement"))
+
+
+def _req_filter(raw: str | None) -> set[str]:
+    """Requirement levels of one multi-value filter, in canonical spelling."""
+    return {req for v in (split_multi(raw) or []) if (req := normalize_requirement(v))}
 
 
 def _to_item(
     funder: JiscFunder,
-    urls: list[str],
     ids: set[str],
     counts: dict[str, int],
     n_ut_works: int,
+    whole_ids: Collection[str] | None = None,
 ) -> FunderListItem:
     pub_policy = funder.publications_policy if isinstance(funder.publications_policy, dict) else {}
     data_policy = (
         funder.data_archiving_policy if isinstance(funder.data_archiving_policy, dict) else {}
     )
     structured = bool(pub_policy.get("archiving_policy"))
-    # Display the twin the works actually cite (per-id counts); bare-id
-    # keys everywhere. n_ut_works is the twin-set-deduped count from
-    # ut_funder_work_counts: one work crediting two stream twins of the
-    # same funder counts once.
-    openalex_url = max(urls, key=lambda u: counts.get(str(u).rsplit("/", 1)[-1], 0), default=None)
+    # Link to the twin that stands for the funder itself where programme
+    # records share its twins; elsewhere to the twin the works cite most,
+    # ties to the lowest id. Bare ids everywhere. n_ut_works is the
+    # twin-set-deduped count from ut_funder_work_counts: one work
+    # crediting two twins of the same funder counts once.
+    openalex_id = max(sorted(whole_ids or ids), key=lambda bare: counts.get(bare, 0), default=None)
     return FunderListItem(
         id=funder.id,
         name=funder.name,
@@ -66,7 +76,7 @@ def _to_item(
         url=funder.url,
         ror=funder.ror,
         fundref=funder.fundref,
-        openalex_funder_id=openalex_url,
+        openalex_funder_id=openalex_id,
         policy_structured=structured,
         oa_publishing_req=_norm_req(pub_policy.get("publishing_policy")),
         green_archiving_req=_norm_req(pub_policy.get("archiving_policy")),
@@ -128,17 +138,17 @@ async def search_funders(
         base_items.append(
             _to_item(
                 funder,
-                canon.urls.get(funder.id, []),
                 canon.bare_ids.get(funder.id, set()),
                 counts,
                 union_counts.get(funder.id, 0),
+                canon.whole_ids.get(funder.id),
             )
         )
 
     countries = {c.strip().upper() for c in (split_multi(country) or []) if c.strip()}
-    oa_pub_reqs = {v.strip().lower() for v in (split_multi(oa_publishing) or []) if v.strip()}
-    green_reqs = {v.strip().lower() for v in (split_multi(green_archiving) or []) if v.strip()}
-    data_reqs = {v.strip().lower() for v in (split_multi(data_policy) or []) if v.strip()}
+    oa_pub_reqs = _req_filter(oa_publishing)
+    green_reqs = _req_filter(green_archiving)
+    data_reqs = _req_filter(data_policy)
 
     def _matches(
         item: FunderListItem,
@@ -200,10 +210,8 @@ async def search_funders(
             key = item.data_policy_req or "none"
             data_counts[key] = data_counts.get(key, 0) + 1
 
-    req_order = ("requires", "encourages", "no_policy_for", "does_no_mention", "none")
-
     def _ordered_req(counts_map: dict[str, int]) -> dict[str, int]:
-        ranked = {k: counts_map[k] for k in req_order if k in counts_map}
+        ranked = {k: counts_map[k] for k in REQUIREMENT_ORDER if k in counts_map}
         for k, v in sorted(counts_map.items()):
             if k not in ranked:
                 ranked[k] = v
@@ -301,7 +309,9 @@ async def _build_funder_detail(
         session, institution, canon.bare_ids, year_range
     )
     ids = canon.bare_ids.get(funder_id, set())
-    item = _to_item(funder, sorted(ids), ids, counts, union_counts.get(funder_id, 0))
+    item = _to_item(
+        funder, ids, counts, union_counts.get(funder_id, 0), canon.whole_ids.get(funder_id)
+    )
     # Top journals across every twin the works may cite.
     top: list[dict[str, Any]] = []
     for bare in sorted(ids, key=lambda b: -counts.get(b, 0)):
@@ -319,8 +329,8 @@ async def _build_funder_detail(
     yearly = await funders_service.works_by_year(session, institution, ids, year_range)
     return await cache_epoch(session), FunderDetailResponse(
         **item.model_dump(),
-        publications_policy=funder.publications_policy,
-        data_archiving_policy=funder.data_archiving_policy,
+        publications_policy=normalize_policy_requirements(funder.publications_policy),
+        data_archiving_policy=normalize_policy_requirements(funder.data_archiving_policy),
         openaire=canon.openaire.get(funder_id),
         top_journals=[FunderTopJournal(**j) for j in deduped[:25]],
         works_by_year=yearly,

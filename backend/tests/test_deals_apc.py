@@ -45,6 +45,7 @@ from journal_browser.models import (
     Journal,
     JournalFlags,
     ManualOverride,
+    OpenalexFunder,
     Publisher,
     Work,
     WorkFunder,
@@ -1157,12 +1158,9 @@ async def funders_fixture(db, institution_factory):
     await db.flush()
     db.add_all(
         [
-            FunderLink(
-                funder_id=1, source="openalex", source_id="https://openalex.org/F-A", via="ror"
-            ),
-            FunderLink(
-                funder_id=1, source="openalex", source_id="https://openalex.org/F-B", via="ror"
-            ),
+            FunderLink(funder_id=1, source="openalex", source_id="F-A", via="ror"),
+            FunderLink(funder_id=1, source="openalex", source_id="F-B", via="ror"),
+            # One link stored before ids were normalised to bare.
             FunderLink(
                 funder_id=2, source="openalex", source_id="https://openalex.org/F-C", via="ror"
             ),
@@ -1274,6 +1272,233 @@ async def test_funder_counts_gate_dedupe_and_sort(db, client, funders_fixture):
     assert [i["id"] for i in only_green["items"]] == [2]
     only_data = (await client.get("/api/v1/ut/funders?data_policy=encourages")).json()
     assert [i["id"] for i in only_data["items"]] == [1]
+
+
+@pytest.fixture
+async def programme_funders(db, institution_factory):
+    """The Jisc records that share the ROR of the European Research Council,
+    their OpenAlex twins and the works crediting each, as stored on
+    2026-11-24 (ids kept). Funder 5 has no OpenAlex twin. Requirements cover
+    the five levels; funder 1387 is stored with Jisc's misspelling."""
+    ut = await institution_factory(code="ut", data_window_start=2020)
+    db.add(journal_factory("1234-5678"))
+    erc = "0472cxd90"
+    db.add_all(
+        [
+            JiscFunder(
+                id=31,
+                name="European Research Council",
+                country="be",
+                ror=erc,
+                fundref="501100000781",
+                publications_policy={
+                    "publishing_policy": {"requirement": "requires"},
+                    "archiving_policy": {"requirement": "encourages"},
+                },
+                data_archiving_policy={"requirement": "no_policy_for"},
+            ),
+            JiscFunder(
+                id=1387,
+                name="European Research Council (FP7)",
+                country="be",
+                ror=erc,
+                publications_policy={
+                    "publishing_policy": {"requirement": "does_no_mention"},
+                    "archiving_policy": {"requirement": "requires"},
+                },
+                data_archiving_policy={"requirement": "does_no_mention"},
+            ),
+            JiscFunder(
+                id=1388,
+                name="European Research Council (Horizon 2020)",
+                country="be",
+                ror=erc,
+                fundref="100010661",
+                publications_policy={
+                    "publishing_policy": {"requirement": "encourages"},
+                    "archiving_policy": {"requirement": "no_policy_for"},
+                },
+                data_archiving_policy={"requirement": "encourages"},
+            ),
+            JiscFunder(
+                id=1389,
+                name="European Research Council (Horizon Europe)",
+                country="be",
+                ror=erc,
+                fundref="100018693",
+                publications_policy={
+                    "publishing_policy": {"requirement": "no_policy_for"},
+                    "archiving_policy": {"requirement": "does_no_mention"},
+                },
+            ),
+            JiscFunder(
+                id=5,
+                name="Academy of Nowhere",
+                country="nl",
+                data_archiving_policy={"requirement": "requires"},
+            ),
+        ]
+    )
+    db.add_all(
+        [
+            OpenalexFunder(
+                openalex_id="F4320334678",
+                ror=erc,
+                fundref="501100000781",
+                display_name="European Research Council",
+            ),
+            OpenalexFunder(
+                openalex_id="F4320338352",
+                ror=erc,
+                fundref="100011199",
+                display_name="FP7 Ideas: European Research Council",
+            ),
+            OpenalexFunder(
+                openalex_id="F4320338335",
+                ror=erc,
+                fundref="100010663",
+                display_name="H2020 European Research Council",
+            ),
+            OpenalexFunder(
+                openalex_id="F4320332999",
+                fundref="100010661",
+                display_name="Horizon 2020 Framework Programme",
+            ),
+            # One row stored before ids were normalised to bare.
+            OpenalexFunder(
+                openalex_id="https://openalex.org/F4320334322",
+                fundref="100018693",
+                display_name="HORIZON EUROPE Framework Programme",
+            ),
+        ]
+    )
+    await db.flush()
+    streams = ("F4320334678", "F4320338352", "F4320338335")
+    db.add_all(
+        [
+            FunderLink(funder_id=funder_id, source="openalex", source_id=bare, via="ror")
+            for funder_id in (31, 1387, 1388, 1389)
+            for bare in streams
+        ]
+        + [
+            # One link stored before ids were normalised to bare.
+            FunderLink(
+                funder_id=1388,
+                source="openalex",
+                source_id="https://openalex.org/F4320332999",
+                via="fundref",
+            ),
+            FunderLink(funder_id=1389, source="openalex", source_id="F4320334322", via="fundref"),
+        ]
+    )
+    run = HarvestRun(source="pure", entity_type="works", status="completed", config_fingerprint="t")
+    db.add(run)
+    await db.flush()
+    works = [
+        ("w-fp7", ["F4320338352"]),
+        ("w-h2020", ["F4320338335"]),
+        ("w-he", ["F4320334678"]),
+        ("w-he-h2020", ["F4320334678", "F4320338335"]),
+        ("w-h2020-programme", ["F4320332999"]),
+        ("w-he-programme", ["F4320334322"]),
+    ]
+    db.add_all(
+        Work(
+            institution_id=ut.id,
+            pure_uuid=pure_uuid,
+            title=pure_uuid,
+            norm_title=pure_uuid,
+            year=2023,
+            work_type="article",
+            journal_issn_l="1234-5678",
+            first_seen_run=run.id,
+            last_seen_run=run.id,
+        )
+        for pure_uuid, _ in works
+    )
+    await db.flush()
+    db.add_all(
+        WorkFunder(institution_id=ut.id, pure_uuid=pure_uuid, funder_openalex_id=bare)
+        for pure_uuid, twins in works
+        for bare in twins
+    )
+    await db.commit()
+    return ut
+
+
+def test_funder_programme_split_rules():
+    """Which OpenAlex funders a record gets follows from its label and from
+    the records it shares a ROR with."""
+    # A label no OpenAlex funder names, next to a record without a label:
+    # that record is the funder; the other gets nothing through the ROR.
+    names = {1: "Cancer Research UK", 2: "Cancer Research UK (CRUK)"}
+    twins = {"F1": "Cancer Research UK", "F2": "Cancer Research UK"}
+    assert funders_service.programme_ids(names, twins) == ({1: {"F1", "F2"}, 2: set()}, {})
+    # No record without a label: the labelled records are one funder and
+    # each gets every twin.
+    names = {1: "Research England (UKRI)", 2: "Research England (REF 2021)"}
+    assert funders_service.programme_ids(names, {"F1": "Research England"}) == (
+        {1: {"F1"}, 2: {"F1"}},
+        {},
+    )
+    # No record stands for the whole funder: a twin that names no programme
+    # is kept by every record.
+    twins = {
+        "A": "FP7 Ideas: European Research Council",
+        "B": "H2020 European Research Council",
+        "C": "European Research Council",
+    }
+    assert funders_service.programme_ids({1: "ERC (FP7)", 2: "ERC (H2020)"}, twins) == (
+        {1: {"A", "C"}, 2: {"B", "C"}},
+        {},
+    )
+    # The parent keeps every twin; the ones no programme claimed are its own.
+    names = {1: "European Research Council", 2: "ERC (FP7)", 3: "ERC (Horizon Europe)"}
+    assert funders_service.programme_ids(names, twins) == (
+        {1: {"A", "B", "C"}, 2: {"A"}, 3: set()},
+        {1: {"B", "C"}},
+    )
+
+
+@requires_db
+async def test_funder_works_split_by_programme(db, client, programme_funders):
+    """Records sharing a ROR get the OpenAlex funders of the programmes
+    their names name. The record without a label keeps every twin and
+    links to the one no programme claimed. A record whose programme
+    OpenAlex has no funder for keeps what its own fundref links to."""
+    items = {i["id"]: i for i in (await client.get("/api/v1/ut/funders?limit=50")).json()["items"]}
+    assert {funder_id: i["n_ut_works"] for funder_id, i in items.items()} == {
+        31: 4,  # every stream; the work credited to two of them counts once
+        1387: 1,  # FP7 Ideas
+        1388: 3,  # H2020 stream plus the Horizon 2020 framework programme
+        1389: 1,  # no ERC funder for Horizon Europe: the framework programme only
+        5: 0,
+    }
+    # Bare ids; the funder itself where programmes share its twins, else the
+    # twin the works cite most, ties to the lowest id.
+    assert items[31]["openalex_funder_id"] == "F4320334678"
+    assert items[1387]["openalex_funder_id"] == "F4320338352"
+    assert items[1388]["openalex_funder_id"] == "F4320338335"
+    assert items[1389]["openalex_funder_id"] == "F4320334322"
+    assert items[5]["openalex_funder_id"] is None
+
+
+@requires_db
+async def test_funder_requirement_facets_order_and_spelling(db, client, programme_funders):
+    """Facets run strict to absent, and "not mentioned" reaches the API in
+    one spelling whether the stored row has Jisc's or ours."""
+    facets = (await client.get("/api/v1/ut/funders")).json()["facets"]
+    order = ["requires", "encourages", "no_policy_for", "does_not_mention", "none"]
+    for facet in ("oa_publishing", "green_archiving", "data_policy"):
+        assert list(facets[facet].items()) == [(level, 1) for level in order]
+    for spelling in ("does_no_mention", "does_not_mention"):
+        hit = (await client.get(f"/api/v1/ut/funders?oa_publishing={spelling}")).json()
+        assert [i["id"] for i in hit["items"]] == [1387]
+    detail = (await client.get("/api/v1/ut/funders/1387")).json()
+    assert detail["oa_publishing_req"] == "does_not_mention"
+    assert detail["publications_policy"]["publishing_policy"]["requirement"] == "does_not_mention"
+    assert detail["data_archiving_policy"]["requirement"] == "does_not_mention"
+    assert detail["green_archiving_req"] == "requires"
 
 
 @requires_db

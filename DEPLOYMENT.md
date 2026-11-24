@@ -464,6 +464,18 @@ The stages, in order:
    rows and stay in the sweep. `harvest_openalex_funders` fetches full
    funder payloads only for ids the table lacks. `harvest_openaire_funders`
    pulls the curated funder canon from the OpenAIRE graph.
+   OpenAlex funder ids are stored bare (`F4320321800`, never with the
+   `https://openalex.org/` prefix). `refresh_funder_links` writes bare
+   ids, and migration 0005 renamed the rows that kept the prefix. It
+   links each Jisc funder record to the OpenAlex funders that share its
+   ROR or its Funder Registry id. Jisc keeps one record per funding
+   programme for some funders, all with the same ROR (the European
+   Research Council has FP7, Horizon 2020 and Horizon Europe records), so
+   a record for one programme gets only the OpenAlex funder of that
+   programme, and the record for the funder as a whole keeps them all.
+   When OpenAlex has no funder for a programme (it has none for Horizon
+   Europe), the programme record keeps only the links of its own Funder
+   Registry id.
 5. The collaboration partners. `derive_work_partners` rebuilds
    `work_partners` from the stored OpenAlex and OpenAIRE work payloads
    (OpenAlex first, OpenAIRE for works OpenAlex links to no partner).

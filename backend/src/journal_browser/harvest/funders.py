@@ -194,7 +194,10 @@ async def harvest_openalex_funders(session: AsyncSession) -> dict[str, int]:
         }
     )
     stats["linked_ids"] = len(ids)
-    known = {r for (r,) in (await session.execute(select(OpenalexFunder.openalex_id))).all()}
+    known = {
+        openalex_id_to_pk(r)
+        for (r,) in (await session.execute(select(OpenalexFunder.openalex_id))).all()
+    }
     todo = [f"https://openalex.org/{i}" for i in ids if i not in known]
     stats["todo"] = len(todo)
     fetched: list[dict[str, Any]] = []
@@ -413,19 +416,23 @@ async def refresh_funder_links(session: AsyncSession) -> int:
 
     Called after each funder harvest so the table never goes stale; the
     API's canon links, search aliases and OpenAIRE identity blocks read it.
-    One twin matching via both ror AND fundref links once (ror wins —
-    insert order); ON CONFLICT DO NOTHING keeps the fundref pass from
-    violating funder_links_pkey on that (funder_id, source, source_id).
+    source_id is the bare OpenAlex id ("F4320320300") whatever form the
+    openalex_funders row stores, so one twin is one link. One twin
+    matching via both ror AND fundref links once (ror wins — insert
+    order); ON CONFLICT DO NOTHING keeps the fundref pass from violating
+    funder_links_pkey on that (funder_id, source, source_id).
     """
+    # SQL twin of identifiers.bare_openalex_id.
+    bare = "regexp_replace(o.openalex_id, '^https://openalex.org/', '')"
     await session.execute(text("delete from funder_links"))
     for source_sql in (
         "INSERT INTO funder_links (funder_id, source, source_id, via)"
-        " SELECT j.id, 'openalex', o.openalex_id, 'ror'"
+        f" SELECT j.id, 'openalex', {bare}, 'ror'"
         " FROM jisc_funders j JOIN openalex_funders o ON o.ror = j.ror"
         " WHERE j.ror IS NOT NULL"
         " ON CONFLICT DO NOTHING",
         "INSERT INTO funder_links (funder_id, source, source_id, via)"
-        " SELECT j.id, 'openalex', o.openalex_id, 'fundref'"
+        f" SELECT j.id, 'openalex', {bare}, 'fundref'"
         " FROM jisc_funders j JOIN openalex_funders o ON o.fundref = j.fundref"
         " WHERE j.fundref IS NOT NULL"
         " ON CONFLICT DO NOTHING",

@@ -5,6 +5,8 @@ filter, and the detail, map and CSV exports agree with the list."""
 from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy import Text, func, select
+from sqlalchemy.dialects.postgresql import array
 
 from conftest import requires_db
 from journal_browser.models import (
@@ -19,6 +21,7 @@ from journal_browser.models import (
     WorkPartner,
     WorkPureAuthor,
 )
+from journal_browser.services.collaborations import _valid_project_code
 
 P1, P2, P3 = "01a2b3c04", "02b3c4d05", "03c4d5e06"
 
@@ -501,9 +504,8 @@ async def test_trend_counts_each_work_once_per_partner_type(client, collab_api):
 @requires_db
 async def test_size_rollup_and_junk_project_filters(client, db, collab_api):
     # Add a mega-collab work (partner_count=25) and a rolled-up child partner,
-    # plus a junk 'unidentified' OpenAIRE project and duplicate grant.
-    from sqlalchemy import select
-
+    # plus a junk 'unidentified' OpenAIRE project, duplicate grants and award
+    # fields that hold no grant number.
     ut = (await db.execute(select(Work.institution_id).limit(1))).scalar_one()
     run_id = (await db.execute(select(Work.first_seen_run).limit(1))).scalar_one()
     db.add(
@@ -568,6 +570,33 @@ async def test_size_rollup_and_junk_project_filters(client, db, collab_api):
             ),
         ]
     )
+    # A funding period or a programme name in the award field is not a
+    # project; a grant number is.
+    db.add_all(
+        [
+            WorkFunder(
+                institution_id=ut,
+                pure_uuid="w_mega",
+                funder_openalex_id="F1",
+                funder_name="Alpha Foundation",
+                award="2007–2013",
+            ),
+            WorkFunder(
+                institution_id=ut,
+                pure_uuid="w_mega",
+                funder_openalex_id="F2",
+                funder_name="Beta Fund",
+                award="HORIZON2020",
+            ),
+            WorkFunder(
+                institution_id=ut,
+                pure_uuid="w_mega",
+                funder_openalex_id="F3",
+                funder_name="Gamma Trust",
+                award="GR 1133",
+            ),
+        ]
+    )
     await db.commit()
 
     # Standard size (default <=20) excludes w_mega; rollup folds 09child01 into P1.
@@ -591,3 +620,40 @@ async def test_size_rollup_and_junk_project_filters(client, db, collab_api):
     assert proj_keys["openalex:F2/B1"]["acronym"] == "BETAPROJ"
     assert proj_keys["openalex:F2/B1"]["works"] == 2
     assert sorted(proj_keys["openalex:F2/B1"]["sources"]) == ["openaire", "openalex"]
+    every_size = await search(client, size="all")
+    all_keys = {p["key"] for p in every_size["facets"]["project"]}
+    assert "openalex:F3/GR 1133" in all_keys
+    assert not all_keys & {"openalex:F1/2007–2013", "openalex:F2/HORIZON2020"}
+
+
+@requires_db
+async def test_project_code_is_a_shape_rule(db):
+    """Which award values are grant numbers is decided by shape, so a new
+    spelling of the same junk needs no code change."""
+    expected = {
+        # grant numbers, whitespace trimmed
+        "A1": "A1",
+        "  773590 ": "773590",
+        "Y 42": "Y 42",
+        "SFB 1066": "SFB 1066",
+        "FP7": "FP7",
+        # funding periods; the separators are an en dash and a U+2010 hyphen
+        "2007–2013": None,
+        "2014\u20102020": None,
+        "2021 2027": None,
+        "2004.": None,
+        # programme names
+        "HORIZON2020": None,
+        "Horizon 2020": None,
+        "France2030": None,
+        # no digit
+        "COMPETE": None,
+        "unidentified": None,
+        "0000": None,
+        "  ": None,
+        # a funder DOI
+        "AEI//10.13039/501100011033": None,
+    }
+    awards = func.unnest(array(list(expected), type_=Text)).column_valued("award")
+    rows = await db.execute(select(awards, _valid_project_code(awards)))
+    assert dict(rows.all()) == expected

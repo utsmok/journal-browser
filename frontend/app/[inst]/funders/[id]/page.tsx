@@ -33,6 +33,7 @@ import { countryName } from "@/lib/format";
 import { useFunderPrefs } from "@/lib/funder-prefs";
 
 const ROR_URL = "https://ror.org/";
+const OPENALEX_URL = "https://openalex.org/";
 const FUNDREF_URL = "https://doi.org/10.13039/";
 const OPF_URL = "https://openpolicyfinder.jisc.ac.uk/";
 const OPENAIRE_URL = "https://openaire.eu";
@@ -45,7 +46,7 @@ function CanonLinks({ funder }: { funder: FunderDetailResponse }) {
   if (funder.fundref)
     links.push({ label: t("detail.fundref"), href: FUNDREF_URL + funder.fundref });
   if (funder.openalex_funder_id)
-    links.push({ label: t("detail.openalex"), href: funder.openalex_funder_id });
+    links.push({ label: t("detail.openalex"), href: OPENALEX_URL + funder.openalex_funder_id });
   if (funder.url) links.push({ label: t("detail.website"), href: funder.url });
   return (
     <p className="flex flex-wrap gap-3 text-xs">
@@ -85,7 +86,7 @@ function reqSummary(t: (key: string) => string, req: string | null | undefined):
       return t("search.facets.reqEncourages");
     case "no_policy_for":
       return t("search.facets.reqNone");
-    case "does_no_mention":
+    case "does_not_mention":
       return t("search.facets.reqNotMentioned");
     default:
       return "—";
@@ -381,7 +382,7 @@ export default function FunderPage() {
               </Button>
               {data.openalex_funder_id && (
                 <Link
-                  href={`/${inst}/collaborations?funder=${encodeURIComponent(`openalex:${data.openalex_funder_id.replace(/^https?:\/\/openalex\.org\//, "")}`)}`}
+                  href={`/${inst}/collaborations?funder=${encodeURIComponent(`openalex:${data.openalex_funder_id}`)}`}
                   className="inline-flex h-8 items-center gap-1 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-3 text-xs font-medium hover:border-[var(--primary)] hover:text-[var(--primary-text)]"
                 >
                   {t("detail.explorePartners")}

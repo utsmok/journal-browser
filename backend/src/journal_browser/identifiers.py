@@ -1,4 +1,5 @@
-"""Identifier and title normalization shared by harvest and services.
+"""Identifier, title and source vocabulary normalization shared by harvest,
+routers and services.
 
 Pure value and SQL-expression helpers; this module imports neither the
 harvest nor the services package, so either side can use it without a
@@ -30,6 +31,39 @@ def normalize_ror(*values: Any) -> str | None:
         if v and (m := _ROR_RE.search(str(v))):
             return m.group(1).lower()
     return None
+
+
+#: Requirement levels of a Jisc OPF policy, strictest first. "none" is the
+#: readers' code for a policy that states no requirement.
+REQUIREMENT_ORDER = ("requires", "encourages", "no_policy_for", "does_not_mention", "none")
+
+#: Jisc OPF spells one level "does_no_mention" (its funder payloads of
+#: 2026-11); the stored and served spelling is "does_not_mention".
+_REQUIREMENT_SPELLINGS = {"does_no_mention": "does_not_mention"}
+
+
+def normalize_requirement(value: Any) -> str | None:
+    """Canonical Jisc OPF requirement level: stripped, lower-cased, the
+    Jisc misspelling mapped. None for a missing or blank value."""
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip().lower()
+    return _REQUIREMENT_SPELLINGS.get(cleaned, cleaned) or None
+
+
+def normalize_policy_requirements(block: Any) -> Any:
+    """Policy block with every `requirement` value in canonical spelling.
+    Returns a new dict or list and leaves the input as is."""
+    if isinstance(block, dict):
+        return {
+            key: normalize_requirement(value)
+            if key == "requirement" and isinstance(value, str)
+            else normalize_policy_requirements(value)
+            for key, value in block.items()
+        }
+    if isinstance(block, list):
+        return [normalize_policy_requirements(value) for value in block]
+    return block
 
 
 def bare_openalex_id(openalex_id: Any) -> Any:
