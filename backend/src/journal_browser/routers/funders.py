@@ -30,6 +30,16 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 DEFAULT_LIMIT = 25
 
 
+def _norm_req(block: Any) -> str | None:
+    if not isinstance(block, dict):
+        return None
+    val = block.get("requirement")
+    if not isinstance(val, str):
+        return None
+    cleaned = val.strip().lower()
+    return cleaned or None
+
+
 def _to_item(
     funder: JiscFunder,
     urls: list[str],
@@ -37,7 +47,11 @@ def _to_item(
     counts: dict[str, int],
     n_ut_works: int,
 ) -> FunderListItem:
-    structured = bool((funder.publications_policy or {}).get("archiving_policy"))
+    pub_policy = funder.publications_policy if isinstance(funder.publications_policy, dict) else {}
+    data_policy = (
+        funder.data_archiving_policy if isinstance(funder.data_archiving_policy, dict) else {}
+    )
+    structured = bool(pub_policy.get("archiving_policy"))
     # Display the twin the works actually cite (per-id counts); bare-id
     # keys everywhere. n_ut_works is the twin-set-deduped count from
     # ut_funder_work_counts: one work crediting two stream twins of the
@@ -52,6 +66,9 @@ def _to_item(
         fundref=funder.fundref,
         openalex_funder_id=openalex_url,
         policy_structured=structured,
+        oa_publishing_req=_norm_req(pub_policy.get("publishing_policy")),
+        green_archiving_req=_norm_req(pub_policy.get("archiving_policy")),
+        data_policy_req=_norm_req(data_policy),
         n_ut_works=n_ut_works,
     )
 
@@ -63,6 +80,10 @@ async def search_funders(
     q: Annotated[str | None, Query(max_length=200)] = None,
     country: Annotated[str | None, Query(max_length=200)] = None,
     policy_structured: bool | None = None,
+    has_works: bool | None = None,
+    oa_publishing: Annotated[str | None, Query(max_length=200)] = None,
+    green_archiving: Annotated[str | None, Query(max_length=200)] = None,
+    data_policy: Annotated[str | None, Query(max_length=200)] = None,
     sort: Annotated[str | None, Query(pattern="^(works|name)$")] = None,
     dir: Annotated[str | None, Query(pattern="^(asc|desc)$")] = None,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -113,35 +134,86 @@ async def search_funders(
         )
 
     countries = {c.strip().upper() for c in (split_multi(country) or []) if c.strip()}
+    oa_pub_reqs = {v.strip().lower() for v in (split_multi(oa_publishing) or []) if v.strip()}
+    green_reqs = {v.strip().lower() for v in (split_multi(green_archiving) or []) if v.strip()}
+    data_reqs = {v.strip().lower() for v in (split_multi(data_policy) or []) if v.strip()}
 
     def _matches(
-        item: FunderListItem, *, use_country: bool = True, use_policy: bool = True
+        item: FunderListItem,
+        *,
+        skip: str | None = None,
     ) -> bool:
-        if use_country and countries and (item.country or "").upper() not in countries:
+        if skip != "country" and countries and (item.country or "").upper() not in countries:
             return False
-        return not (
-            use_policy
+        if (
+            skip != "policy_structured"
             and policy_structured is not None
             and item.policy_structured != policy_structured
+        ):
+            return False
+        if skip != "has_works" and has_works is not None and (item.n_ut_works > 0) != has_works:
+            return False
+        if (
+            skip != "oa_publishing"
+            and oa_pub_reqs
+            and (item.oa_publishing_req or "none") not in oa_pub_reqs
+        ):
+            return False
+        if (
+            skip != "green_archiving"
+            and green_reqs
+            and (item.green_archiving_req or "none") not in green_reqs
+        ):
+            return False
+        return not (
+            skip != "data_policy"
+            and data_reqs
+            and (item.data_policy_req or "none") not in data_reqs
         )
 
     # Drop-own-dimension facets over the query-matched base.
     country_counts: dict[str, int] = {}
-    for item in base_items:
-        if not _matches(item, use_country=False, use_policy=True):
-            continue
-        code = (item.country or "").strip().upper()
-        if code:
-            country_counts[code] = country_counts.get(code, 0) + 1
     policy_counts = {"true": 0, "false": 0}
+    has_works_counts = {"true": 0, "false": 0}
+    oa_pub_counts: dict[str, int] = {}
+    green_counts: dict[str, int] = {}
+    data_counts: dict[str, int] = {}
+
     for item in base_items:
-        if not _matches(item, use_country=True, use_policy=False):
-            continue
-        key = "true" if item.policy_structured else "false"
-        policy_counts[key] += 1
+        if _matches(item, skip="country"):
+            code = (item.country or "").strip().upper()
+            if code:
+                country_counts[code] = country_counts.get(code, 0) + 1
+        if _matches(item, skip="policy_structured"):
+            policy_counts["true" if item.policy_structured else "false"] += 1
+        if _matches(item, skip="has_works"):
+            has_works_counts["true" if item.n_ut_works > 0 else "false"] += 1
+        if _matches(item, skip="oa_publishing"):
+            key = item.oa_publishing_req or "none"
+            oa_pub_counts[key] = oa_pub_counts.get(key, 0) + 1
+        if _matches(item, skip="green_archiving"):
+            key = item.green_archiving_req or "none"
+            green_counts[key] = green_counts.get(key, 0) + 1
+        if _matches(item, skip="data_policy"):
+            key = item.data_policy_req or "none"
+            data_counts[key] = data_counts.get(key, 0) + 1
+
+    req_order = ("requires", "encourages", "no_policy_for", "does_no_mention", "none")
+
+    def _ordered_req(counts_map: dict[str, int]) -> dict[str, int]:
+        ranked = {k: counts_map[k] for k in req_order if k in counts_map}
+        for k, v in sorted(counts_map.items()):
+            if k not in ranked:
+                ranked[k] = v
+        return ranked
+
     facets: dict[str, dict[str, int]] = {
         "country": dict(sorted(country_counts.items(), key=lambda kv: (-kv[1], kv[0]))),
         "policy_structured": policy_counts,
+        "has_works": has_works_counts,
+        "oa_publishing": _ordered_req(oa_pub_counts),
+        "green_archiving": _ordered_req(green_counts),
+        "data_policy": _ordered_req(data_counts),
     }
 
     items = [item for item in base_items if _matches(item)]

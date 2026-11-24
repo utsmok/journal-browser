@@ -198,6 +198,12 @@ class FunderListItem(BaseModel):
     # ROR-preferred link into openalex_funders; None when neither id links.
     openalex_funder_id: str | None = None
     policy_structured: bool = False
+    # Normalized JISC OPF requirement levels (requires / encourages /
+    # no_policy_for / does_no_mention) extracted from publications_policy and
+    # data_archiving_policy.
+    oa_publishing_req: str | None = None
+    green_archiving_req: str | None = None
+    data_policy_req: str | None = None
     # UT works crediting this funder (work_funders); 0 before migration 0049
     # lands or the harvest runs.
     n_ut_works: int = 0

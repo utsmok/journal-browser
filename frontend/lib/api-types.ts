@@ -3022,6 +3022,12 @@ export interface components {
              * @default false
              */
             policy_structured: boolean;
+            /** Oa Publishing Req */
+            oa_publishing_req?: string | null;
+            /** Green Archiving Req */
+            green_archiving_req?: string | null;
+            /** Data Policy Req */
+            data_policy_req?: string | null;
             /**
              * N Ut Works
              * @default 0
@@ -3083,6 +3089,12 @@ export interface components {
              * @default false
              */
             policy_structured: boolean;
+            /** Oa Publishing Req */
+            oa_publishing_req?: string | null;
+            /** Green Archiving Req */
+            green_archiving_req?: string | null;
+            /** Data Policy Req */
+            data_policy_req?: string | null;
             /**
              * N Ut Works
              * @default 0
@@ -6438,6 +6450,10 @@ export interface operations {
                 q?: string | null;
                 country?: string | null;
                 policy_structured?: boolean | null;
+                has_works?: boolean | null;
+                oa_publishing?: string | null;
+                green_archiving?: string | null;
+                data_policy?: string | null;
                 sort?: string | null;
                 dir?: string | null;
                 offset?: number;

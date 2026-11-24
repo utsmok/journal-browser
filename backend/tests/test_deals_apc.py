@@ -1129,8 +1129,26 @@ async def funders_fixture(db, institution_factory):
         db.add(journal_factory(issn))
     db.add_all(
         [
-            JiscFunder(id=1, name="Alpha Council", country="nl"),
-            JiscFunder(id=2, name="Beta Fund", country="nl"),
+            JiscFunder(
+                id=1,
+                name="Alpha Council",
+                country="nl",
+                publications_policy={
+                    "publishing_policy": {"requirement": "requires"},
+                    "archiving_policy": {"requirement": "requires"},
+                },
+                data_archiving_policy={"requirement": "encourages"},
+            ),
+            JiscFunder(
+                id=2,
+                name="Beta Fund",
+                country="nl",
+                publications_policy={
+                    "publishing_policy": {"requirement": "encourages"},
+                    "archiving_policy": {"requirement": "no_policy_for"},
+                },
+                data_archiving_policy=None,
+            ),
         ]
     )
     await db.flush()
@@ -1217,10 +1235,18 @@ async def test_funder_counts_gate_dedupe_and_sort(db, client, funders_fixture):
     assert body["works_by_year"][0]["year"] == 2023
     assert body["works_by_year"][0]["works_count"] == 1
 
-    # Facets, country/policy filtering, and sorting on /funders.
+    # Facets, country/policy/works filtering, and sorting on /funders.
     root = (await client.get("/api/v1/ut/funders")).json()
     assert root["facets"]["country"] == {"NL": 2}
-    assert root["facets"]["policy_structured"] == {"true": 0, "false": 2}
+    assert root["facets"]["policy_structured"] == {"true": 2, "false": 0}
+    assert root["facets"]["has_works"] == {"true": 2, "false": 0}
+    assert root["facets"]["oa_publishing"] == {"requires": 1, "encourages": 1}
+    assert root["facets"]["green_archiving"] == {"requires": 1, "no_policy_for": 1}
+    assert root["facets"]["data_policy"] == {"encourages": 1, "none": 1}
+    assert by_id[1]["oa_publishing_req"] == "requires"
+    assert by_id[1]["green_archiving_req"] == "requires"
+    assert by_id[1]["data_policy_req"] == "encourages"
+    assert by_id[2]["data_policy_req"] is None
 
     by_name_desc = (await client.get("/api/v1/ut/funders?sort=name&dir=desc")).json()["items"]
     assert [i["id"] for i in by_name_desc[:2]] == [2, 1]
@@ -1232,7 +1258,19 @@ async def test_funder_counts_gate_dedupe_and_sort(db, client, funders_fixture):
     only_gb = (await client.get("/api/v1/ut/funders?country=GB")).json()
     assert only_gb["total"] == 0
     only_struct = (await client.get("/api/v1/ut/funders?policy_structured=true")).json()
-    assert only_struct["total"] == 0
+    assert only_struct["total"] == 2
+    only_unstruct = (await client.get("/api/v1/ut/funders?policy_structured=false")).json()
+    assert only_unstruct["total"] == 0
+    only_works = (await client.get("/api/v1/ut/funders?has_works=true")).json()
+    assert only_works["total"] == 2
+    no_works = (await client.get("/api/v1/ut/funders?has_works=false")).json()
+    assert no_works["total"] == 0
+    only_oa_req = (await client.get("/api/v1/ut/funders?oa_publishing=requires")).json()
+    assert [i["id"] for i in only_oa_req["items"]] == [1]
+    only_green = (await client.get("/api/v1/ut/funders?green_archiving=no_policy_for")).json()
+    assert [i["id"] for i in only_green["items"]] == [2]
+    only_data = (await client.get("/api/v1/ut/funders?data_policy=encourages")).json()
+    assert [i["id"] for i in only_data["items"]] == [1]
 
 
 @requires_db

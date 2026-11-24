@@ -2636,6 +2636,73 @@
             }
           },
           {
+            "name": "has_works",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Has Works"
+            }
+          },
+          {
+            "name": "oa_publishing",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oa Publishing"
+            }
+          },
+          {
+            "name": "green_archiving",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Green Archiving"
+            }
+          },
+          {
+            "name": "data_policy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Data Policy"
+            }
+          },
+          {
             "name": "sort",
             "in": "query",
             "required": false,
@@ -12764,6 +12831,39 @@
             "title": "Policy Structured",
             "default": false
           },
+          "oa_publishing_req": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Publishing Req"
+          },
+          "green_archiving_req": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Green Archiving Req"
+          },
+          "data_policy_req": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Policy Req"
+          },
           "n_ut_works": {
             "type": "integer",
             "title": "N Ut Works",
@@ -12941,6 +13041,39 @@
             "type": "boolean",
             "title": "Policy Structured",
             "default": false
+          },
+          "oa_publishing_req": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oa Publishing Req"
+          },
+          "green_archiving_req": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Green Archiving Req"
+          },
+          "data_policy_req": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Policy Req"
           },
           "n_ut_works": {
             "type": "integer",
