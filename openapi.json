@@ -2459,6 +2459,123 @@
         }
       }
     },
+    "/api/v1/{institution_code}/journals/{issn_l}/cris-gaps": {
+      "get": {
+        "tags": [
+          "journals"
+        ],
+        "summary": "Journal Cris Gaps",
+        "description": "Lazy-loaded CRIS-gap + book-chapter rollup for one journal.",
+        "operationId": "journal_cris_gaps_api_v1__institution_code__journals__issn_l__cris_gaps_get",
+        "parameters": [
+          {
+            "name": "issn_l",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Issn L"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "parts",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "standalone",
+                      "chapter",
+                      "part"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 30,
+              "title": "Parts"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrisGapsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/{institution_code}/journals/{issn_l}": {
       "get": {
         "tags": [
@@ -2542,6 +2659,16 @@
               "title": "Year To"
             },
             "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "include_gaps",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Include Gaps"
+            }
           }
         ],
         "responses": {
@@ -3815,6 +3942,123 @@
         }
       }
     },
+    "/api/v1/{institution_code}/publishers/{name}/cris-gaps": {
+      "get": {
+        "tags": [
+          "publishers"
+        ],
+        "summary": "Publisher Cris Gaps",
+        "description": "Lazy-loaded CRIS-gap + book-chapter rollup for one publisher.",
+        "operationId": "publisher_cris_gaps_api_v1__institution_code__publishers__name__cris_gaps_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "parts",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "standalone",
+                      "chapter",
+                      "part"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 30,
+              "title": "Parts"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrisGapsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/{institution_code}/publishers/{name}": {
       "get": {
         "tags": [
@@ -3904,6 +4148,16 @@
               ],
               "maxLength": 30,
               "title": "Parts"
+            }
+          },
+          {
+            "name": "include_gaps",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Include Gaps"
             }
           }
         ],
@@ -4162,6 +4416,354 @@
         }
       }
     },
+    "/api/v1/{institution_code}/orgunits/faculty/{name}/cris-gaps": {
+      "get": {
+        "tags": [
+          "orgunits"
+        ],
+        "summary": "Faculty Cris Gaps",
+        "operationId": "faculty_cris_gaps_api_v1__institution_code__orgunits_faculty__name__cris_gaps_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "parts",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "standalone",
+                      "chapter",
+                      "part"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 30,
+              "title": "Parts"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrisGapsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/orgunits/group/{name}/cris-gaps": {
+      "get": {
+        "tags": [
+          "orgunits"
+        ],
+        "summary": "Group Cris Gaps",
+        "operationId": "group_cris_gaps_api_v1__institution_code__orgunits_group__name__cris_gaps_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "parts",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "standalone",
+                      "chapter",
+                      "part"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 30,
+              "title": "Parts"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrisGapsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/{institution_code}/orgunits/institute/{name}/cris-gaps": {
+      "get": {
+        "tags": [
+          "orgunits"
+        ],
+        "summary": "Institute Cris Gaps",
+        "operationId": "institute_cris_gaps_api_v1__institution_code__orgunits_institute__name__cris_gaps_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "parts",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "standalone",
+                      "chapter",
+                      "part"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 30,
+              "title": "Parts"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrisGapsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/{institution_code}/orgunits/faculty/{name}": {
       "get": {
         "tags": [
@@ -4243,6 +4845,16 @@
               "title": "Year To"
             },
             "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "include_gaps",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Include Gaps"
+            }
           }
         ],
         "responses": {
@@ -4350,6 +4962,16 @@
               "title": "Year To"
             },
             "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "include_gaps",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Include Gaps"
+            }
           }
         ],
         "responses": {
@@ -4457,6 +5079,16 @@
               "title": "Year To"
             },
             "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "include_gaps",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Include Gaps"
+            }
           }
         ],
         "responses": {
@@ -11291,6 +11923,27 @@
         ],
         "title": "CreateFeedbackIn"
       },
+      "CrisGapsResponse": {
+        "properties": {
+          "openalex_only": {
+            "$ref": "#/components/schemas/OpenalexOnly"
+          },
+          "chapter_rollup": {
+            "$ref": "#/components/schemas/PartsRollup",
+            "default": {
+              "chapters_total": 0,
+              "books_total": 0,
+              "books": []
+            }
+          }
+        },
+        "type": "object",
+        "required": [
+          "openalex_only"
+        ],
+        "title": "CrisGapsResponse",
+        "description": "Lazy-loaded CRIS gaps + book-chapter rollup for detail pages."
+      },
       "DealCreate": {
         "properties": {
           "publisher_id": {
@@ -14876,11 +15529,19 @@
             "type": "boolean",
             "title": "Available",
             "default": true
+          },
+          "parts_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Parts Counts",
+            "default": {}
           }
         },
         "type": "object",
         "title": "OpenalexOnly",
-        "description": "OpenAlex store works attributed to the venue or to the unit's\nmember authors whose DOI matches no Pure work \u2014 candidates missing\nfrom the CRIS. items holds the grouped entries (missing parts\ncollected under their main work), capped; total counts works and\nentries_total counts entries (before the cap), both exact.\navailable=False when the openalex_works projection never ran\n(frontend hides the card)."
+        "description": "OpenAlex store works attributed to the venue or to the unit's\nmember authors whose DOI matches no Pure work \u2014 candidates missing\nfrom the CRIS. items holds the grouped entries (missing parts\ncollected under their main work), capped; total counts works and\nentries_total counts entries (before the cap), both exact.\navailable=False when the openalex_works projection never ran\n(frontend hides the card). parts_counts carries unfiltered totals per\npart kind (all/chapter/part/standalone)."
       },
       "OpenalexOnlyAuthor": {
         "properties": {

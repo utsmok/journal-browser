@@ -636,6 +636,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/{institution_code}/journals/{issn_l}/cris-gaps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Journal Cris Gaps
+         * @description Lazy-loaded CRIS-gap + book-chapter rollup for one journal.
+         */
+        get: operations["journal_cris_gaps_api_v1__institution_code__journals__issn_l__cris_gaps_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/{institution_code}/journals/{issn_l}": {
         parameters: {
             query?: never;
@@ -800,6 +820,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/{institution_code}/publishers/{name}/cris-gaps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Publisher Cris Gaps
+         * @description Lazy-loaded CRIS-gap + book-chapter rollup for one publisher.
+         */
+        get: operations["publisher_cris_gaps_api_v1__institution_code__publishers__name__cris_gaps_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/{institution_code}/publishers/{name}": {
         parameters: {
             query?: never;
@@ -826,6 +866,57 @@ export interface paths {
         };
         /** Search Orgunits */
         get: operations["search_orgunits_api_v1__institution_code__orgunits_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/{institution_code}/orgunits/faculty/{name}/cris-gaps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Faculty Cris Gaps */
+        get: operations["faculty_cris_gaps_api_v1__institution_code__orgunits_faculty__name__cris_gaps_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/{institution_code}/orgunits/group/{name}/cris-gaps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Group Cris Gaps */
+        get: operations["group_cris_gaps_api_v1__institution_code__orgunits_group__name__cris_gaps_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/{institution_code}/orgunits/institute/{name}/cris-gaps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Institute Cris Gaps */
+        get: operations["institute_cris_gaps_api_v1__institution_code__orgunits_institute__name__cris_gaps_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2535,6 +2626,21 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /**
+         * CrisGapsResponse
+         * @description Lazy-loaded CRIS gaps + book-chapter rollup for detail pages.
+         */
+        CrisGapsResponse: {
+            openalex_only: components["schemas"]["OpenalexOnly"];
+            /**
+             * @default {
+             *       "chapters_total": 0,
+             *       "books_total": 0,
+             *       "books": []
+             *     }
+             */
+            chapter_rollup: components["schemas"]["PartsRollup"];
+        };
         /** DealCreate */
         DealCreate: {
             /** Publisher Id */
@@ -3768,7 +3874,8 @@ export interface components {
          *     collected under their main work), capped; total counts works and
          *     entries_total counts entries (before the cap), both exact.
          *     available=False when the openalex_works projection never ran
-         *     (frontend hides the card).
+         *     (frontend hides the card). parts_counts carries unfiltered totals per
+         *     part kind (all/chapter/part/standalone).
          */
         OpenalexOnly: {
             /**
@@ -3791,6 +3898,13 @@ export interface components {
              * @default true
              */
             available: boolean;
+            /**
+             * Parts Counts
+             * @default {}
+             */
+            parts_counts: {
+                [key: string]: number;
+            };
         };
         /**
          * OpenalexOnlyAuthor
@@ -6405,6 +6519,44 @@ export interface operations {
             };
         };
     };
+    journal_cris_gaps_api_v1__institution_code__journals__issn_l__cris_gaps_get: {
+        parameters: {
+            query?: {
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+                parts?: ("standalone" | "chapter" | "part")[] | null;
+            };
+            header?: never;
+            path: {
+                issn_l: string;
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrisGapsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     journal_detail_api_v1__institution_code__journals__issn_l__get: {
         parameters: {
             query?: {
@@ -6414,6 +6566,7 @@ export interface operations {
                 year_from?: number | null;
                 /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
                 year_to?: number | null;
+                include_gaps?: boolean;
             };
             header?: never;
             path: {
@@ -6769,6 +6922,44 @@ export interface operations {
             };
         };
     };
+    publisher_cris_gaps_api_v1__institution_code__publishers__name__cris_gaps_get: {
+        parameters: {
+            query?: {
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+                parts?: ("standalone" | "chapter" | "part")[] | null;
+            };
+            header?: never;
+            path: {
+                name: string;
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrisGapsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     publisher_detail_api_v1__institution_code__publishers__name__get: {
         parameters: {
             query?: {
@@ -6777,6 +6968,7 @@ export interface operations {
                 /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
                 year_to?: number | null;
                 parts?: ("standalone" | "chapter" | "part")[] | null;
+                include_gaps?: boolean;
             };
             header?: never;
             path: {
@@ -6853,6 +7045,120 @@ export interface operations {
             };
         };
     };
+    faculty_cris_gaps_api_v1__institution_code__orgunits_faculty__name__cris_gaps_get: {
+        parameters: {
+            query?: {
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+                parts?: ("standalone" | "chapter" | "part")[] | null;
+            };
+            header?: never;
+            path: {
+                name: string;
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrisGapsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    group_cris_gaps_api_v1__institution_code__orgunits_group__name__cris_gaps_get: {
+        parameters: {
+            query?: {
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+                parts?: ("standalone" | "chapter" | "part")[] | null;
+            };
+            header?: never;
+            path: {
+                name: string;
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrisGapsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    institute_cris_gaps_api_v1__institution_code__orgunits_institute__name__cris_gaps_get: {
+        parameters: {
+            query?: {
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+                parts?: ("standalone" | "chapter" | "part")[] | null;
+            };
+            header?: never;
+            path: {
+                name: string;
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrisGapsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     faculty_detail_api_v1__institution_code__orgunits_faculty__name__get: {
         parameters: {
             query?: {
@@ -6862,6 +7168,7 @@ export interface operations {
                 year_from?: number | null;
                 /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
                 year_to?: number | null;
+                include_gaps?: boolean;
             };
             header?: never;
             path: {
@@ -6901,6 +7208,7 @@ export interface operations {
                 year_from?: number | null;
                 /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
                 year_to?: number | null;
+                include_gaps?: boolean;
             };
             header?: never;
             path: {
@@ -6940,6 +7248,7 @@ export interface operations {
                 year_from?: number | null;
                 /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
                 year_to?: number | null;
+                include_gaps?: boolean;
             };
             header?: never;
             path: {

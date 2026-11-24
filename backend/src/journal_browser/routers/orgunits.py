@@ -7,9 +7,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
 from ..deps import InstitutionDep
-from ..schemas import OrgUnitDetailResponse, OrgUnitSearchResponse
+from ..schemas import (
+    CrisGapsResponse,
+    OpenalexOnly,
+    OrgUnitDetailResponse,
+    OrgUnitSearchResponse,
+    PartsRollup,
+)
 from ..services import orgunits as orgunits_service
 from ..services.works_query import clamped_year_range
+from .params import PartsFilter
 
 router = APIRouter(prefix="/orgunits", tags=["orgunits"])
 
@@ -93,6 +100,67 @@ async def search_orgunits(
     )
 
 
+async def _unit_cris_gaps(
+    level: Literal["faculty", "group", "institute"],
+    name: str,
+    session: SessionDep,
+    institution: InstitutionDep,
+    year_from: YearFrom = None,
+    year_to: YearTo = None,
+    parts: PartsFilter = None,
+) -> CrisGapsResponse:
+    gaps = await orgunits_service.orgunit_cris_gaps(
+        session,
+        institution,
+        level,
+        name,
+        year_range=clamped_year_range(institution, year_from, year_to),
+        parts=list(parts) if parts else None,
+    )
+    if gaps is None:
+        raise HTTPException(status_code=404, detail="orgunit not found")
+    return CrisGapsResponse(
+        openalex_only=OpenalexOnly(**gaps["openalex_only"]),
+        chapter_rollup=PartsRollup(**gaps["chapter_rollup"]),
+    )
+
+
+@router.get("/faculty/{name:path}/cris-gaps", response_model=CrisGapsResponse)
+async def faculty_cris_gaps(
+    name: str,
+    session: SessionDep,
+    institution: InstitutionDep,
+    year_from: YearFrom = None,
+    year_to: YearTo = None,
+    parts: PartsFilter = None,
+) -> CrisGapsResponse:
+    return await _unit_cris_gaps("faculty", name, session, institution, year_from, year_to, parts)
+
+
+@router.get("/group/{name:path}/cris-gaps", response_model=CrisGapsResponse)
+async def group_cris_gaps(
+    name: str,
+    session: SessionDep,
+    institution: InstitutionDep,
+    year_from: YearFrom = None,
+    year_to: YearTo = None,
+    parts: PartsFilter = None,
+) -> CrisGapsResponse:
+    return await _unit_cris_gaps("group", name, session, institution, year_from, year_to, parts)
+
+
+@router.get("/institute/{name:path}/cris-gaps", response_model=CrisGapsResponse)
+async def institute_cris_gaps(
+    name: str,
+    session: SessionDep,
+    institution: InstitutionDep,
+    year_from: YearFrom = None,
+    year_to: YearTo = None,
+    parts: PartsFilter = None,
+) -> CrisGapsResponse:
+    return await _unit_cris_gaps("institute", name, session, institution, year_from, year_to, parts)
+
+
 @router.get("/faculty/{name:path}", response_model=OrgUnitDetailResponse)
 async def faculty_detail(
     name: str,
@@ -101,6 +169,7 @@ async def faculty_detail(
     sort: AuthorSort = "share",
     year_from: YearFrom = None,
     year_to: YearTo = None,
+    include_gaps: bool = True,
 ) -> OrgUnitDetailResponse:
     detail = await orgunits_service.orgunit_detail(
         session,
@@ -109,6 +178,7 @@ async def faculty_detail(
         name,
         year_range=clamped_year_range(institution, year_from, year_to),
         sort=sort,
+        include_gaps=include_gaps,
     )
     if detail is None:
         raise HTTPException(status_code=404, detail="orgunit not found")
@@ -123,6 +193,7 @@ async def group_detail(
     sort: AuthorSort = "share",
     year_from: YearFrom = None,
     year_to: YearTo = None,
+    include_gaps: bool = True,
 ) -> OrgUnitDetailResponse:
     detail = await orgunits_service.orgunit_detail(
         session,
@@ -131,6 +202,7 @@ async def group_detail(
         name,
         year_range=clamped_year_range(institution, year_from, year_to),
         sort=sort,
+        include_gaps=include_gaps,
     )
     if detail is None:
         raise HTTPException(status_code=404, detail="orgunit not found")
@@ -145,6 +217,7 @@ async def institute_detail(
     sort: AuthorSort = "share",
     year_from: YearFrom = None,
     year_to: YearTo = None,
+    include_gaps: bool = True,
 ) -> OrgUnitDetailResponse:
     detail = await orgunits_service.orgunit_detail(
         session,
@@ -153,6 +226,7 @@ async def institute_detail(
         name,
         year_range=clamped_year_range(institution, year_from, year_to),
         sort=sort,
+        include_gaps=include_gaps,
     )
     if detail is None:
         raise HTTPException(status_code=404, detail="orgunit not found")

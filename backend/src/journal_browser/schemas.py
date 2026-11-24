@@ -582,12 +582,14 @@ class OpenalexOnly(BaseModel):
     collected under their main work), capped; total counts works and
     entries_total counts entries (before the cap), both exact.
     available=False when the openalex_works projection never ran
-    (frontend hides the card)."""
+    (frontend hides the card). parts_counts carries unfiltered totals per
+    part kind (all/chapter/part/standalone)."""
 
     total: int = 0
     entries_total: int = 0
     items: list[OpenalexOnlyEntry] = []
     available: bool = True
+    parts_counts: dict[str, int] = {}
 
 
 class ChapterBook(BaseModel):
@@ -610,6 +612,13 @@ class PartsRollup(BaseModel):
     chapters_total: int = 0
     books_total: int = 0
     books: list[ChapterBook] = []
+
+
+class CrisGapsResponse(BaseModel):
+    """Lazy-loaded CRIS gaps + book-chapter rollup for detail pages."""
+
+    openalex_only: OpenalexOnly
+    chapter_rollup: PartsRollup = PartsRollup()
 
 
 class WorkUtAuthor(BaseModel):

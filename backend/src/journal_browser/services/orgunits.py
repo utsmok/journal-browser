@@ -31,7 +31,12 @@ from ..models import (
     Work,
 )
 from ..queries import cache_epoch, work_type_not_excluded
-from .authorship import aids_gap_predicate, author_ids_openalex_only, chapter_rollup
+from .authorship import (
+    aids_gap_predicate,
+    author_ids_openalex_only,
+    chapter_rollup,
+    local_store_ready,
+)
 from .cache import (
     SNAPSHOT_CACHE,
     SNAPSHOT_TTL,
@@ -43,6 +48,7 @@ from .cache import (
     swr_schedule,
 )
 from .collaborations import top_partners_for_orgunit
+from .concurrency import together
 from .search import oa_type_case
 from .works_query import (
     WORKS_STRATA,
@@ -356,23 +362,29 @@ async def _scoped_units(
     """The snapshot roster with the works-derived columns recomputed inside
     the clamped range; attribute columns (faculty, group count, APC
     rollups) keep the snapshot values and units without in-range works
-    stay listed at zero (the authors-list convention)."""
-    scoped = {
-        r.name: r
-        for r in (
+    stay listed at zero (the authors-list convention). Cached in
+    SNAPSHOT_CACHE keyed by institution, harvest epoch, level, and range."""
+    cache_key = ("scoped_units", institution.id, await cache_epoch(session), level, year_range)
+    scoped = cache_get(SNAPSHOT_CACHE, cache_key, 3600)
+    if scoped is None:
+        rows = (
             await session.execute(select(_scoped_unit_rows(institution, level, year_range)))
         ).all()
-    }
+        scoped = {
+            r.name: (int(r.n_authors or 0), int(r.n_works or 0), int(r.deal_works or 0))
+            for r in rows
+        }
+        cache_put(SNAPSHOT_CACHE, cache_key, scoped)
     out: dict[str, _Unit] = {}
     for name, u in units.items():
-        r = scoped.get(name)
+        counts = scoped.get(name)
         out[name] = _Unit(
             name=name,
             faculty=u.faculty,
-            n_authors=int(r.n_authors) if r else 0,
-            n_works=int(r.n_works) if r else 0,
+            n_authors=counts[0] if counts else 0,
+            n_works=counts[1] if counts else 0,
             n_groups=u.n_groups,
-            deal_works=int(r.deal_works) if r else 0,
+            deal_works=counts[2] if counts else 0,
             apc_euro_total=u.apc_euro_total,
             apc_n=u.apc_n,
         )
@@ -517,28 +529,16 @@ async def orgunit_detail(
     name: str,
     year_range: tuple[int, int] | None = None,
     sort: str = "share",
+    include_gaps: bool = True,
 ) -> dict[str, Any] | None:
-    """Full unit bundle; None = unknown unit (404 upstream). An explicit
-    publication-year range narrows the works-derived sections — the unit
-    header (works/deal/authors counts via the _scoped_units merge), the
-    venue works counts, the member authors' in-range works counts, the
-    deal-usage work set and the CRIS-gap card (same scoping as the groups
-    list); per-year rows (works_by_year) keep the data window, the unit's
-    APC rollups stay snapshot, and the deal-usage euro follows the
-    narrowed work set (journal attributes stay unfiltered). Rebuilding
-    per-request costs several edge aggregates (~7 s live for a faculty
-    under harvest load). Served stale-while-revalidate: the bundle is
-    keyed on level + name + year range + sort, and a harvest epoch bump
-    serves the previous epoch's bundle while a background task rebuilds
-    with a fresh session — visitors never pay a rebuild they did not
-    cause. Unknown units are not cached.
+    """Full unit bundle; None = unknown unit (404 upstream).
 
-    `sort` orders the member authors card: 'share' ranks by the
-    diamond/gold OA share (default; authors below AUTHOR_SHARE_MIN_WORKS
-    counted works rank last, share None), 'works' by works count;
-    AUTHOR_CAP cuts after the chosen ordering."""
+    When include_gaps=False, skips the expensive author_ids_openalex_only
+    and chapter_rollup queries so initial detail views load quickly; the UI
+    loads gaps lazily from /cris-gaps when expanded.
+    """
     iid = institution.id
-    swr_key = ("unit_detail", iid, level, name, year_range, sort)
+    swr_key = ("unit_detail", iid, level, name, year_range, sort, include_gaps)
     epoch = await cache_epoch(session)
     fresh, bundle = swr_get(SWR_CACHE, swr_key, epoch)
     if fresh:
@@ -546,10 +546,20 @@ async def orgunit_detail(
     if bundle is not None:
         # Stale: serve it, rebuild in the background on a fresh session
         # (this request's session closes when the response is sent).
-        swr_schedule(SWR_CACHE, swr_key, _unit_bundle_factory(iid, level, name, year_range, sort))
+        swr_schedule(
+            SWR_CACHE,
+            swr_key,
+            _unit_bundle_factory(iid, level, name, year_range, sort, include_gaps),
+        )
         return bundle
     epoch, bundle = await _build_unit_bundle(
-        session, institution, level, name, year_range=year_range, sort=sort
+        session,
+        institution,
+        level,
+        name,
+        year_range=year_range,
+        sort=sort,
+        include_gaps=include_gaps,
     )
     if bundle is None:
         return None
@@ -557,7 +567,7 @@ async def orgunit_detail(
     return bundle
 
 
-def _unit_bundle_factory(iid, level, name, year_range, sort):
+def _unit_bundle_factory(iid, level, name, year_range, sort, include_gaps):
     async def _factory():
         from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -567,7 +577,13 @@ def _unit_bundle_factory(iid, level, name, year_range, sort):
             inst = (await session.scalars(select(Institution).where(Institution.id == iid))).one()
             # _build_unit_bundle already returns (epoch, bundle).
             return await _build_unit_bundle(
-                session, inst, level, name, year_range=year_range, sort=sort
+                session,
+                inst,
+                level,
+                name,
+                year_range=year_range,
+                sort=sort,
+                include_gaps=include_gaps,
             )
 
     return _factory
@@ -581,6 +597,7 @@ async def _build_unit_bundle(
     *,
     year_range: tuple[int, int] | None,
     sort: str,
+    include_gaps: bool = True,
 ) -> tuple[Any, dict[str, Any]]:
     """The uncached unit bundle; returns (epoch, bundle)."""
     iid = institution.id
@@ -844,25 +861,51 @@ async def _build_unit_bundle(
         .subquery()
     )
     label = func.coalesce(func.nullif(best.c.agreement, ""), best.c.publisher)
-    usage_rows = (
-        await session.execute(
-            select(
-                label.label("label"),
-                func.count().label("n_works"),
-                func.coalesce(func.sum(best.c.euro), 0).label("euro"),
-            )
-            .select_from(best)
-            .where(label.is_not(None))
-            .group_by(label)
-            .order_by(func.count().desc(), label)
-            .limit(DEAL_USAGE_CAP)
-        )
-    ).all()
 
-    # Member authors' resolved OpenAlex A-ids (uncapped, unlike
-    # author_rows) drive the CRIS-gap query.
-    aid_rows = (await session.execute(select(Author.openalex_ids).where(*membership))).all()
-    member_aids = [aid for (ids,) in aid_rows for aid in (ids or [])]
+    async def _q_deal_usage(own: AsyncSession):
+        return (
+            await own.execute(
+                select(
+                    label.label("label"),
+                    func.count().label("n_works"),
+                    func.coalesce(func.sum(best.c.euro), 0).label("euro"),
+                )
+                .select_from(best)
+                .where(label.is_not(None))
+                .group_by(label)
+                .order_by(func.count().desc(), label)
+                .limit(DEAL_USAGE_CAP)
+            )
+        ).all()
+
+    async def _q_partners(own: AsyncSession):
+        return await top_partners_for_orgunit(own, institution, level, name, year_range)
+
+    usage_rows, partners = await together(session, [_q_deal_usage, _q_partners])
+
+    if include_gaps:
+        aid_rows = (await session.execute(select(Author.openalex_ids).where(*membership))).all()
+        member_aids = [aid for (ids,) in aid_rows for aid in (ids or [])]
+
+        async def _q_gaps(own: AsyncSession):
+            return await author_ids_openalex_only(own, institution, member_aids, year_range)
+
+        async def _q_chapters(own: AsyncSession):
+            return await chapter_rollup(
+                own, institution, aids_gap_predicate(institution, member_aids, year_range)
+            )
+
+        openalex_only, chapters = await together(session, [_q_gaps, _q_chapters])
+    else:
+        ready = await local_store_ready(session, institution)
+        openalex_only = {
+            "total": 0,
+            "entries_total": 0,
+            "items": [],
+            "available": ready,
+            "parts_counts": {},
+        }
+        chapters = {"chapters_total": 0, "books_total": 0, "books": []}
 
     bundle = {
         "unit": _item(unit, level, topics),
@@ -890,19 +933,90 @@ async def _build_unit_bundle(
             for r in author_rows
         ],
         "works_by_year": works_by_year,
-        "openalex_only": await author_ids_openalex_only(
-            session, institution, member_aids, year_range
-        ),
-        # Chapter rollup over the gap card's exact population (member
-        # authors' store rows missing from Pure), before the item cap.
-        "chapter_rollup": await chapter_rollup(
-            session, institution, aids_gap_predicate(institution, member_aids, year_range)
-        ),
+        "openalex_only": openalex_only,
+        "chapter_rollup": chapters,
         "deal_usage": [
             {"label": r.label, "n_works": int(r.n_works), "euro": float(r.euro)} for r in usage_rows
         ],
-        "top_partners": await top_partners_for_orgunit(
-            session, institution, level, name, year_range
-        ),
+        "top_partners": partners,
     }
     return await cache_epoch(session), bundle
+
+
+async def orgunit_cris_gaps(
+    session: AsyncSession,
+    institution: Institution,
+    level: str,
+    name: str,
+    *,
+    year_range: tuple[int, int] | None = None,
+    parts: list[str] | None = None,
+) -> dict[str, Any] | None:
+    """Lazy CRIS-gap + unfiltered chapter-rollup payload for one org unit."""
+    iid = institution.id
+    swr_key = ("orgunit_cris_gaps", iid, level, name, year_range, tuple(parts or ()))
+    epoch = await cache_epoch(session)
+    fresh, bundle = swr_get(SWR_CACHE, swr_key, epoch)
+    if fresh:
+        return bundle
+    if bundle is not None:
+        swr_schedule(SWR_CACHE, swr_key, _unit_gaps_factory(iid, level, name, year_range, parts))
+        return bundle
+    epoch, bundle = await _build_unit_gaps(
+        session, institution, level, name, year_range=year_range, parts=parts
+    )
+    if bundle is None:
+        return None
+    swr_put(SWR_CACHE, swr_key, epoch, bundle)
+    return bundle
+
+
+def _unit_gaps_factory(iid, level, name, year_range, parts):
+    async def _factory():
+        from sqlalchemy.ext.asyncio import async_sessionmaker
+
+        from ..db import get_engine
+
+        async with async_sessionmaker(get_engine(), expire_on_commit=False)() as session:
+            inst = (await session.scalars(select(Institution).where(Institution.id == iid))).one()
+            return await _build_unit_gaps(
+                session, inst, level, name, year_range=year_range, parts=parts
+            )
+
+    return _factory
+
+
+async def _build_unit_gaps(
+    session: AsyncSession,
+    institution: Institution,
+    level: str,
+    name: str,
+    *,
+    year_range: tuple[int, int] | None,
+    parts: list[str] | None,
+) -> tuple[Any, dict[str, Any] | None]:
+    unit = (await _snapshot(session, institution)).get(level, {}).get(name)
+    if unit is None:
+        return await cache_epoch(session), None
+    membership = [
+        *_author_base(institution.id, institution.require_confirmed_affiliation),
+        unit_key(level) == name,
+    ]
+    aid_rows = (await session.execute(select(Author.openalex_ids).where(*membership))).all()
+    member_aids = [aid for (ids,) in aid_rows for aid in (ids or [])]
+
+    async def _q_gaps(own: AsyncSession):
+        return await author_ids_openalex_only(
+            own, institution, member_aids, year_range, parts=parts
+        )
+
+    async def _q_chapters(own: AsyncSession):
+        return await chapter_rollup(
+            own, institution, aids_gap_predicate(institution, member_aids, year_range), parts=None
+        )
+
+    openalex_only, chapters = await together(session, [_q_gaps, _q_chapters])
+    return await cache_epoch(session), {
+        "openalex_only": openalex_only,
+        "chapter_rollup": chapters,
+    }

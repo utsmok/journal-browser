@@ -135,43 +135,115 @@ SNAPSHOT_REFRESH_INTERVAL_S = 6 * 3600
 
 
 async def _warm_snapshots_task() -> None:
-    """Build the orgunits/publishers/authors snapshots and the default
-    journals browse facets for every institution with authors: the first
-    visitor to those pages otherwise pays multi-second cold builds after a
-    restart or a cache-TTL/harvest-bump invalidation. Errors are logged,
-    never propagated (a pass over an empty or unreachable DB must not
-    break boot)."""
+    """Build list snapshots, default browse facets, and fast detail bundles
+    for every institution with authors after boot and every six hours."""
     # Boot warmers skip wholesale in CI and offline dumps.
     if os.environ.get("JB_SKIP_EMBEDDING_WARMUP") == "1":
         return
     await asyncio.sleep(SNAPSHOT_WARM_DELAY_S)
     while True:
         try:
+            from datetime import UTC, datetime
+
             from .models import Author, Institution
-            from .services.authors import search_authors
-            from .services.orgunits import search_orgunits
-            from .services.publishers import search_publishers
+            from .routers import deals as deals_router
+            from .services import authors, collaborations, funders, orgunits, publishers
+            from .services.cache import SWR_CACHE, swr_put
             from .services.search import search_journals
+            from .services.works_query import clamped_year_range
 
             async with async_sessionmaker(get_engine(), expire_on_commit=False)() as session:
                 subq = select(Author.institution_id).distinct()
                 rows = await session.scalars(select(Institution).where(Institution.id.in_(subq)))
                 insts = rows.all()
+                cur_year = datetime.now(UTC).year
                 for inst in insts:
-                    # One faculty-level orgunits call builds the whole
-                    # snapshot (faculty+group+institute).
-                    await search_orgunits(session, institution=inst, level="faculty")
-                    await search_publishers(session, institution_id=inst.id)
-                    await search_authors(
+                    fac_res = await orgunits.search_orgunits(
+                        session, institution=inst, level="faculty"
+                    )
+                    pub_res = await publishers.search_publishers(session, institution_id=inst.id)
+                    await authors.search_authors(
                         session,
                         inst.id,
                         None,
                         limit=20,
                         require_confirmed=inst.require_confirmed_affiliation,
                     )
-                    # Defaults fill the default browse FACET_CACHE key;
-                    # facets ignore limit.
                     await search_journals(session, institution_id=inst.id, limit=1)
+
+                    # Warm deals, funders, collaborations, and Last-5-Years presets.
+                    try:
+                        epoch_d, built_d = await deals_router._build_deals_list(
+                            session, inst, "current"
+                        )
+                        swr_put(SWR_CACHE, ("deals_list", inst.id, "current"), epoch_d, built_d)
+                    except Exception:
+                        logger.exception("warm deals failed for %s", inst.code)
+
+                    try:
+                        canon = await funders.canon_links(session)
+                        await funders.ut_work_counts(session, inst)
+                        await funders.ut_funder_work_counts(session, inst, canon.bare_ids)
+                    except Exception:
+                        logger.exception("warm funders failed for %s", inst.code)
+
+                    try:
+                        await collaborations.search_collaborations(
+                            session,
+                            inst,
+                            collaborations.CollaborationFilters(),
+                            sort="works",
+                            direction="desc",
+                            offset=0,
+                            limit=25,
+                            include_facets=True,
+                        )
+                    except Exception:
+                        logger.exception("warm collaborations failed for %s", inst.code)
+
+                    last5_end = min(inst.data_window_end or cur_year, cur_year)
+                    last5_start = max(inst.data_window_start, last5_end - 4)
+                    last5 = clamped_year_range(inst, last5_start, last5_end)
+                    if last5 is not None:
+                        try:
+                            await publishers.search_publishers(
+                                session, institution_id=inst.id, years=last5, include_facets=False
+                            )
+                            await orgunits.search_orgunits(
+                                session, institution=inst, level="faculty", year_range=last5
+                            )
+                            await search_journals(
+                                session,
+                                institution_id=inst.id,
+                                limit=1,
+                                year_from=last5[0],
+                                year_to=last5[1],
+                            )
+                        except Exception:
+                            logger.exception("warm last5 failed for %s", inst.code)
+
+                    # Warm lightweight detail bundles (include_gaps=False) so first visits are
+                    # instant.
+                    for unit in fac_res.get("items", []):
+                        uname = unit.get("name")
+                        if uname:
+                            try:
+                                await orgunits.orgunit_detail(
+                                    session, inst, "faculty", uname, include_gaps=False
+                                )
+                            except Exception:
+                                logger.exception("warm faculty detail %s failed", uname)
+
+                    for pub in pub_res.get("items", [])[:10]:
+                        pname = pub.get("name")
+                        if pname:
+                            try:
+                                await publishers.publisher_detail(
+                                    session, inst, pname, include_gaps=False
+                                )
+                            except Exception:
+                                logger.exception("warm publisher detail %s failed", pname)
+
             logger.info("snapshot warm: %d institution(s)", len(insts))
         except Exception:
             logger.exception("snapshot warm failed")

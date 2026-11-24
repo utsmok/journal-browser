@@ -16,6 +16,7 @@ from ..models import (
     Deal,
     DealInstitution,
     DealJournal,
+    Institution,
     InstitutionWorksStats,
     JiscFunder,
     Journal,
@@ -24,10 +25,12 @@ from ..models import (
     Publisher,
     ScimagojrMetric,
 )
+from ..queries import cache_epoch
 from ..schemas import (
     ApcAggregateOut,
     ApcEvidenceOut,
     Attribution,
+    CrisGapsResponse,
     DealOut,
     FunderFitOut,
     GreenOaPolicy,
@@ -39,6 +42,7 @@ from ..schemas import (
     OpenaireInfo,
     OpenalexInfo,
     OpenalexOnly,
+    PartsRollup,
     RecommendRequest,
     RecommendResponse,
     ScimagojrOut,
@@ -50,11 +54,13 @@ from ..schemas import (
 )
 from ..services import authorship, detail_enrichment, exports, recommend, repo_links
 from ..services import search as search_service
+from ..services.cache import SWR_CACHE, swr_get, swr_put, swr_schedule
+from ..services.concurrency import together
 from ..services.deal_coverage import DEAL_FIELDS, deal_institution_join, dj_scope
 from ..services.funder_fit import JournalFacts, compute_funder_fit
 from ..services.works_query import YEAR_BUCKETS, clamped_year_range
 from ..vocab import GreenOa, OaType
-from .params import JournalSort, SearchIn
+from .params import JournalSort, PartsFilter, SearchIn
 
 router = APIRouter(prefix="/journals", tags=["journals"])
 
@@ -366,6 +372,96 @@ async def journal_openalex_only_csv(
     )
 
 
+@router.get("/{issn_l}/cris-gaps", response_model=CrisGapsResponse)
+async def journal_cris_gaps(
+    issn_l: str,
+    session: SessionDep,
+    institution: InstitutionDep,
+    year_from: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range start (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    year_to: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range end (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    parts: PartsFilter = None,
+) -> CrisGapsResponse:
+    """Lazy-loaded CRIS-gap + book-chapter rollup for one journal."""
+    issn_key = issn_l.upper()
+    if _is_ignored(issn_key):
+        raise HTTPException(status_code=404, detail="journal not found")
+    known = await session.scalar(select(Journal.issn_l).where(Journal.issn_l == issn_key))
+    if known is None:
+        raise HTTPException(status_code=404, detail="journal not found")
+    year_range = clamped_year_range(institution, year_from, year_to)
+    parts_list = list(parts) if parts else None
+    swr_key = ("journal_cris_gaps", institution.id, known, year_range, tuple(parts_list or ()))
+    epoch = await cache_epoch(session)
+    fresh, bundle = swr_get(SWR_CACHE, swr_key, epoch)
+    if fresh:
+        return bundle
+    if bundle is not None:
+        swr_schedule(
+            SWR_CACHE,
+            swr_key,
+            _journal_gaps_factory(institution.id, known, year_range, parts_list),
+        )
+        return bundle
+    epoch, built = await _build_journal_gaps(session, institution, known, year_range, parts_list)
+    swr_put(SWR_CACHE, swr_key, epoch, built)
+    return built
+
+
+def _journal_gaps_factory(
+    iid: int, issn_l: str, year_range: tuple[int, int] | None, parts: list[str] | None
+):
+    async def _factory():
+        from sqlalchemy.ext.asyncio import async_sessionmaker
+
+        from ..db import get_engine
+
+        async with async_sessionmaker(get_engine(), expire_on_commit=False)() as session:
+            inst = (await session.scalars(select(Institution).where(Institution.id == iid))).one()
+            return await _build_journal_gaps(session, inst, issn_l, year_range, parts)
+
+    return _factory
+
+
+async def _build_journal_gaps(
+    session: AsyncSession,
+    institution: Institution,
+    issn_l: str,
+    year_range: tuple[int, int] | None,
+    parts: list[str] | None,
+) -> tuple[Any, CrisGapsResponse]:
+    async def _q_gaps(own: AsyncSession):
+        return await authorship.venue_openalex_only(
+            own, institution, issn_l=issn_l, year_range=year_range, parts=parts
+        )
+
+    async def _q_chapters(own: AsyncSession):
+        return await authorship.chapter_rollup(
+            own, institution, authorship.venue_gap_predicate(institution, [issn_l], year_range)
+        )
+
+    openalex_only, chapters = await together(session, [_q_gaps, _q_chapters])
+    return await cache_epoch(session), CrisGapsResponse(
+        openalex_only=OpenalexOnly(**openalex_only),
+        chapter_rollup=PartsRollup(**chapters),
+    )
+
+
 @router.get("/{issn_l}", response_model=JournalDetailResponse)
 async def journal_detail(
     issn_l: str,
@@ -390,15 +486,86 @@ async def journal_detail(
             "institution's data window; default: the full window)",
         ),
     ] = None,
+    include_gaps: bool = True,
 ) -> JournalDetailResponse:
-    journal = await session.scalar(select(Journal).where(Journal.issn_l == issn_l.upper()))
-    if journal is None or _is_ignored(journal.issn_l):
+    issn_key = issn_l.upper()
+    if _is_ignored(issn_key):
         raise HTTPException(status_code=404, detail="journal not found")
-    # Works-derived detail sections (UT authorship, OpenAIRE matches, the
-    # canonical institution metrics, the CRIS gap) narrow to the range; the
-    # venue registry aggregates (OpenAlex venue metrics, SJR, deals, APC
-    # evidence) stay window/attribute-based.
     year_range = clamped_year_range(institution, year_from, year_to)
+    settings = get_settings()
+    swr_key = (
+        "journal_detail",
+        institution.id,
+        issn_key,
+        funder,
+        year_range,
+        include_gaps,
+        hash(tuple(sorted(settings.ignored_issns))),
+        settings.research_portal_url,
+    )
+    epoch = await cache_epoch(session)
+    fresh, bundle = swr_get(SWR_CACHE, swr_key, epoch)
+    if fresh:
+        return bundle
+    if bundle is not None:
+        swr_schedule(
+            SWR_CACHE,
+            swr_key,
+            _journal_detail_factory(institution.id, issn_key, funder, year_range, include_gaps),
+        )
+        return bundle
+    epoch, built = await _build_journal_detail(
+        session,
+        institution,
+        issn_key,
+        funder=funder,
+        year_range=year_range,
+        include_gaps=include_gaps,
+    )
+    if built is None:
+        raise HTTPException(status_code=404, detail="journal not found")
+    swr_put(SWR_CACHE, swr_key, epoch, built)
+    return built
+
+
+def _journal_detail_factory(
+    iid: int,
+    issn_key: str,
+    funder: int | None,
+    year_range: tuple[int, int] | None,
+    include_gaps: bool,
+):
+    async def _factory():
+        from sqlalchemy.ext.asyncio import async_sessionmaker
+
+        from ..db import get_engine
+
+        async with async_sessionmaker(get_engine(), expire_on_commit=False)() as session:
+            inst = (await session.scalars(select(Institution).where(Institution.id == iid))).one()
+            return await _build_journal_detail(
+                session,
+                inst,
+                issn_key,
+                funder=funder,
+                year_range=year_range,
+                include_gaps=include_gaps,
+            )
+
+    return _factory
+
+
+async def _build_journal_detail(
+    session: AsyncSession,
+    institution: Institution,
+    issn_key: str,
+    *,
+    funder: int | None,
+    year_range: tuple[int, int] | None,
+    include_gaps: bool,
+) -> tuple[Any, JournalDetailResponse | None]:
+    journal = await session.scalar(select(Journal).where(Journal.issn_l == issn_key))
+    if journal is None or _is_ignored(journal.issn_l):
+        return await cache_epoch(session), None
 
     # Publisher registry links (Open Access NL deals profile), keyed by the
     # same canonical grouping the publisher directory uses.
@@ -481,10 +648,6 @@ async def journal_detail(
     for year in sorted({s.year for s in stats_rows}):
         oa_row = by_source["openalex_institution_filter"].get(year)
         primary = by_source["pure_canon"].get(year)
-        # Works count: Pure-canonical when present. OA split: always the
-        # OpenAlex rows (pure_canon carries none by design). Plain dicts:
-        # writing the override onto a session-persistent instance would
-        # flush an UPDATE into the canon table on any later query.
         if oa_row is not None:
             row = {
                 "year": year,
@@ -541,9 +704,6 @@ async def journal_detail(
     )
 
     summary_stats = journal.summary_stats or {}
-    openalex_info = await detail_enrichment.openalex_info(session, journal.issn_l)
-    # Jisc Open Policy Finder green-OA bundle; null when never swept
-    # (jisc_policy NULL, DOAJ tri-state convention).
     policy = journal.jisc_policy
     routes = {
         version: GreenOaRoute(**route)
@@ -565,7 +725,6 @@ async def journal_detail(
         if policy is not None
         else None
     )
-    # The oa_type feeds both the list item and the optional funder fit.
     oa_type_val = search_service.oa_type_value(
         journal.is_in_doaj,
         journal.is_oa,
@@ -595,7 +754,42 @@ async def journal_detail(
             ),
         )
         funder_fit = FunderFitOut(status=fit.status, reasons=fit.reasons)
-    return JournalDetailResponse(
+
+    async def _q_oa_info(own: AsyncSession):
+        return await detail_enrichment.openalex_info(own, journal.issn_l)
+
+    async def _q_openaire(own: AsyncSession):
+        return await detail_enrichment.openaire_info(own, institution, journal.issn_l, year_range)
+
+    async def _q_inst_metrics(own: AsyncSession):
+        return await detail_enrichment.institution_metrics(
+            own, journal.issn_l, institution, year_range
+        )
+
+    async def _q_ut_authorship(own: AsyncSession):
+        return await authorship.venue_authorship(
+            own, institution, issn_l=journal.issn_l, year_range=year_range
+        )
+
+    async def _q_gaps(own: AsyncSession):
+        if include_gaps:
+            return await authorship.venue_openalex_only(
+                own, institution, issn_l=journal.issn_l, year_range=year_range
+            )
+        return {
+            "total": 0,
+            "entries_total": 0,
+            "items": [],
+            "available": await authorship.local_store_ready(own, institution),
+            "parts_counts": {},
+        }
+
+    openalex_info, openaire_dict, inst_metrics_dict, ut_auth_dict, gaps_dict = await together(
+        session,
+        [_q_oa_info, _q_openaire, _q_inst_metrics, _q_ut_authorship, _q_gaps],
+    )
+
+    return await cache_epoch(session), JournalDetailResponse(
         journal=JournalListItem(
             issn_l=journal.issn_l,
             title=journal.title,
@@ -619,7 +813,6 @@ async def journal_detail(
         apc_prices=journal.apc_prices or [],
         summary_stats=summary_stats or None,
         counts_by_year=journal.counts_by_year or [],
-        # DOAJ is the canon homepage source; OpenAlex fills the gap.
         homepage_url=journal.doaj_homepage_url or journal.homepage_url,
         doaj_homepage_url=journal.doaj_homepage_url,
         openaccess_nl_slug=oa_nl_slug,
@@ -657,28 +850,12 @@ async def journal_detail(
         ],
         apc_evidence=[ApcEvidenceOut.model_validate(e) for e in evidence],
         openalex=OpenalexInfo(**openalex_info) if openalex_info else None,
-        openaire=OpenaireInfo(
-            **await detail_enrichment.openaire_info(
-                session, institution, journal.issn_l, year_range
-            )
-        ),
+        openaire=OpenaireInfo(**openaire_dict),
         green_oa=green_oa,
         funder_fit=funder_fit,
-        institution_metrics=InstitutionMetrics(
-            **await detail_enrichment.institution_metrics(
-                session, journal.issn_l, institution, year_range
-            )
-        ),
-        ut_authorship=UTAuthorship(
-            **await authorship.venue_authorship(
-                session, institution, issn_l=journal.issn_l, year_range=year_range
-            )
-        ),
-        openalex_only=OpenalexOnly(
-            **await authorship.venue_openalex_only(
-                session, institution, issn_l=journal.issn_l, year_range=year_range
-            )
-        ),
+        institution_metrics=InstitutionMetrics(**inst_metrics_dict),
+        ut_authorship=UTAuthorship(**ut_auth_dict),
+        openalex_only=OpenalexOnly(**gaps_dict),
         attribution={
             **ATTRIBUTION,
             "stats": ATTRIBUTION["stats"].model_copy(

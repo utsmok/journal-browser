@@ -19,6 +19,7 @@ from ...models import (
     Publisher,
 )
 from ...schemas import AdminDealDetail, AdminDealOut, CapUsageEntry
+from ...services.cache import invalidate_prefix
 from ...vocab import DealStatus
 from .auth import AdminDep, SessionDep
 from .flags_refresh import schedule_flags_refresh
@@ -280,6 +281,9 @@ async def update_deal(
             )
         )
     await session.commit()
+    invalidate_prefix("deals_list")
+    invalidate_prefix("journal_detail")
+    invalidate_prefix("publisher_detail")
     schedule_flags_refresh()
     return await _deal_detail(session, deal_id)
 
@@ -363,6 +367,9 @@ async def update_deal_journals(
             .values(excluded=True)
         )
     await session.commit()
+    invalidate_prefix("deals_list")
+    invalidate_prefix("journal_detail")
+    invalidate_prefix("publisher_detail")
     schedule_flags_refresh()
     return await _deal_detail(session, deal_id)
 
@@ -412,5 +419,8 @@ async def update_deal_participations(
             )
         )
     await session.commit()
+    invalidate_prefix("deals_list")
+    invalidate_prefix("journal_detail")
+    invalidate_prefix("publisher_detail")
     schedule_flags_refresh()
     return await _deal_detail(session, deal_id)

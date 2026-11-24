@@ -117,7 +117,7 @@ async def local_store_ready(session: AsyncSession, institution: Institution) -> 
 
 
 def _unavailable() -> dict[str, Any]:
-    return {"total": 0, "entries_total": 0, "items": [], "available": False}
+    return {"total": 0, "entries_total": 0, "items": [], "available": False, "parts_counts": {}}
 
 
 def not_repository() -> Any:
@@ -511,27 +511,109 @@ async def journal_publisher_map(session: AsyncSession, issns: Iterable[str]) -> 
     return {r.issn_l: r.publisher for r in rows}
 
 
+def _gap_entry_stubs(rows: list[Any]) -> tuple[list[dict[str, Any]], int]:
+    """Pass-1 grouping using only lightweight columns (no authorships JSONB,
+    no DB lookups): preserves exact entry ordering and entries_total before
+    GAP_ITEM_CAP slicing."""
+    groups: dict[str, dict[str, Any]] = {}
+    entries: list[dict[str, Any]] = []
+    for r in rows:
+        primary = primary_parent(r.parent_works)
+        if primary is None:
+            entries.append(
+                {
+                    "kind": "single",
+                    "w_id": r.w_id,
+                    "_year": r.year,
+                    "_name": (r.title or "").lower(),
+                }
+            )
+            continue
+        key = str(primary.get("id") or f"name:{(primary.get('name') or '').lower()}")
+        group = groups.setdefault(key, {"primary": primary, "w_ids": [], "year": None})
+        group["w_ids"].append(r.w_id)
+        year = r.year
+        if year is not None and (group["year"] is None or year > group["year"]):
+            group["year"] = year
+    for group in groups.values():
+        primary = group["primary"]
+        entries.append(
+            {
+                "kind": "group",
+                "w_ids": group["w_ids"],
+                "_year": group["year"],
+                "_name": str(primary.get("name") or "").lower(),
+            }
+        )
+    entries.sort(key=lambda e: (e["_year"] is None, -(e["_year"] or 0), e["_name"]))
+    return entries[:GAP_ITEM_CAP], len(entries)
+
+
 async def _store_gap_payload(
     session: AsyncSession,
     institution: Institution,
     predicate: list[Any],
     parts: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Shared shape: exact work total + capped grouped entries over one
-    store predicate (gates + attribution + anti-join). Rows fetch
-    uncapped (grouping needs every row: a group's recency is its newest
-    part's year), most recent first. Work rows carry the work identity
-    (openalex id/url), the compact authorships, roster attribution for
-    the institution's own authors, venue context (journal + publisher)
-    and the work-parts fields (compact parent_works, is_part). The parts
-    filter (pipe-joined standalone|chapter|part) ORs its kinds over the
-    same population, then the survivors group."""
+    """Shared shape: exact work total + per-part counts + capped grouped
+    entries over one store predicate (gates + attribution + anti-join).
+
+    Two-pass execution avoids pulling thousands of authorships JSONB blobs
+    or running Pure-match/roster enrichment beyond GAP_ITEM_CAP:
+    1. Count all / standalone / chapter / part totals in one SQL pass, and
+       fetch lightweight columns (w_id, title, year, parent_works, is_part)
+       only to determine exact grouping order and `entries_total`.
+    2. Hydrate full row details, UT author roster, publisher map, Pure-match
+       tags, and parent registry ONLY for the `w_id`s inside top `entries[:GAP_ITEM_CAP]`."""
     if not await local_store_ready(session, institution):
         return _unavailable()
-    where = [OpenalexWork.institution_id == institution.id, *predicate]
-    if (parts_sql := parts_predicate(parts)) is not None:
-        where.append(parts_sql)
-    total = await session.scalar(select(func.count()).select_from(OpenalexWork).where(*where))
+    base_where = [OpenalexWork.institution_id == institution.id, *predicate]
+    parts_sql = parts_predicate(parts)
+    count_cols = [
+        func.count().label("all"),
+        func.count().filter(PART_KIND_PREDICATES["standalone"]).label("standalone"),
+        func.count().filter(PART_KIND_PREDICATES["chapter"]).label("chapter"),
+        func.count().filter(PART_KIND_PREDICATES["part"]).label("part"),
+        *([func.count().filter(parts_sql).label("filtered")] if parts_sql is not None else []),
+    ]
+    counts_row = (await session.execute(select(*count_cols).where(*base_where))).one()
+    parts_counts = {
+        "all": int(counts_row.all or 0),
+        "standalone": int(counts_row.standalone or 0),
+        "chapter": int(counts_row.chapter or 0),
+        "part": int(counts_row.part or 0),
+    }
+    total = int(counts_row.filtered or 0) if parts_sql is not None else parts_counts["all"]
+    if total == 0:
+        return {
+            "total": 0,
+            "entries_total": 0,
+            "items": [],
+            "available": True,
+            "parts_counts": parts_counts,
+        }
+
+    where = [*base_where, *([parts_sql] if parts_sql is not None else [])]
+    stub_rows = (
+        await session.execute(
+            select(
+                OpenalexWork.w_id,
+                OpenalexWork.title,
+                OpenalexWork.year,
+                OpenalexWork.parent_works,
+            )
+            .where(*where)
+            .order_by(OpenalexWork.year.desc().nulls_last(), func.lower(OpenalexWork.title))
+        )
+    ).all()
+    top_stubs, entries_total = _gap_entry_stubs(stub_rows)
+    served_wids = sorted(
+        {
+            wid
+            for stub in top_stubs
+            for wid in ([stub["w_id"]] if stub["kind"] == "single" else stub["w_ids"])
+        }
+    )
     rows = (
         await session.execute(
             select(
@@ -547,7 +629,9 @@ async def _store_gap_payload(
                 OpenalexWork.parent_works,
                 OpenalexWork.is_part,
             )
-            .where(*where)
+            .where(
+                OpenalexWork.institution_id == institution.id, OpenalexWork.w_id.in_(served_wids)
+            )
             .order_by(OpenalexWork.year.desc().nulls_last(), func.lower(OpenalexWork.title))
         )
     ).all()
@@ -582,10 +666,6 @@ async def _store_gap_payload(
         }
         for r in rows
     ]
-    # Explain rows the DOI anti-join kept: a parent book or a same-title
-    # Pure record may hold the publication. The exact-DOI tag cannot fire
-    # here — the anti-join already removed those. Pure-link uuids per item
-    # come straight from the roster map built above.
     await tag_pure_matches(
         session,
         institution,
@@ -600,14 +680,13 @@ async def _store_gap_payload(
         ],
         check_own_doi=False,
     )
-    # Missing parts group under their main work; the rendered cap applies
-    # to entries, not works (total/entries_total stay exact).
-    entries, entries_total = await group_gap_entries(session, institution, items)
+    entries, _ = await group_gap_entries(session, institution, items)
     return {
-        "total": int(total or 0),
+        "total": total,
         "entries_total": entries_total,
         "items": entries[:GAP_ITEM_CAP],
         "available": True,
+        "parts_counts": parts_counts,
     }
 
 
@@ -749,7 +828,7 @@ async def venue_openalex_only(
     venue's global output as a CRIS gap."""
     venue_issns = [issn_l] if issn_l is not None else sorted(set(issns or []))
     if not venue_issns:
-        return {"total": 0, "entries_total": 0, "items": [], "available": True}
+        return {"total": 0, "entries_total": 0, "items": [], "available": True, "parts_counts": {}}
     return await _store_gap_payload(
         session,
         institution,
@@ -780,6 +859,7 @@ async def author_ids_openalex_only(
             "entries_total": 0,
             "items": [],
             "available": await local_store_ready(session, institution),
+            "parts_counts": {},
         }
     return await _store_gap_payload(
         session,

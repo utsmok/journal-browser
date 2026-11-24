@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import EXCLUDED_WORK_TYPES, get_settings
 from ..models import FunderLink, Institution, OpenaireFunder, OpenaireFunderStream, OpenalexFunder
+from ..queries import cache_epoch
+from .cache import SNAPSHOT_CACHE, SNAPSHOT_TTL, cache_get, cache_put
 from .works_query import YEAR_BUCKETS, empty_year_buckets
 
 
@@ -44,6 +46,10 @@ async def canon_links(session: AsyncSession) -> FunderCanon:
     extra_aliases: dict[int, list[str]] = {
         459: ["Dutch Research Council", "NWO"],
     }
+    cache_key = ("funder_canon_links", await cache_epoch(session))
+    hit = cache_get(SNAPSHOT_CACHE, cache_key, SNAPSHOT_TTL)
+    if hit is not None:
+        return hit
     exists = bool(
         await session.scalar(text("select to_regclass('public.funder_links') is not null"))
     )
@@ -128,6 +134,7 @@ async def canon_links(session: AsyncSession) -> FunderCanon:
         for name in names:
             if name not in canon.aliases.setdefault(fid, []):
                 canon.aliases[fid].append(name)
+    cache_put(SNAPSHOT_CACHE, cache_key, canon)
     return canon
 
 
@@ -187,6 +194,10 @@ async def ut_work_counts(
     across a funder's twin-id set."""
     if not await _work_funders_ready(session):
         return {}
+    cache_key = ("funder_work_counts", institution.id, await cache_epoch(session), year_range)
+    hit = cache_get(SNAPSHOT_CACHE, cache_key, 3600)
+    if hit is not None:
+        return hit
     rows = await session.execute(
         text(
             "select wf.funder_openalex_id, count(distinct wf.pure_uuid) as n"
@@ -194,7 +205,9 @@ async def ut_work_counts(
         ),
         _gate_params(institution.id, *_window_bounds(institution, year_range)),
     )
-    return {str(fid).rsplit("/", 1)[-1]: int(n) for fid, n in rows}
+    out = {str(fid).rsplit("/", 1)[-1]: int(n) for fid, n in rows}
+    cache_put(SNAPSHOT_CACHE, cache_key, out)
+    return out
 
 
 async def ut_funder_work_counts(
@@ -213,6 +226,16 @@ async def ut_funder_work_counts(
     pairs = [(fid, bare) for fid, ids in bare_ids_by_funder.items() for bare in sorted(ids)]
     if not pairs:
         return {}
+    cache_key = (
+        "funder_union_counts",
+        institution.id,
+        await cache_epoch(session),
+        year_range,
+        hash(tuple(pairs)),
+    )
+    hit = cache_get(SNAPSHOT_CACHE, cache_key, 3600)
+    if hit is not None:
+        return hit
     params = _gate_params(institution.id, *_window_bounds(institution, year_range))
     params["fids"] = [fid for fid, _ in pairs]
     params["bares"] = [bare for _, bare in pairs]
@@ -226,7 +249,9 @@ async def ut_funder_work_counts(
         ),
         params,
     )
-    return {int(fid): int(n) for fid, n in rows}
+    out = {int(fid): int(n) for fid, n in rows}
+    cache_put(SNAPSHOT_CACHE, cache_key, out)
+    return out
 
 
 async def top_journals(

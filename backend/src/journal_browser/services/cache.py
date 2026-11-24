@@ -10,6 +10,11 @@ from typing import Any
 #: Snapshot lifetime in seconds; a harvest bump invalidates sooner.
 SNAPSHOT_TTL = 86400
 
+#: Bounded LRU-style caps so long-running processes stay flat in RAM.
+SWR_MAX_ENTRIES = 512
+FACET_MAX_ENTRIES = 512
+SNAPSHOT_MAX_ENTRIES = 256
+
 # Stores live here so the TTL/get/put pattern has exactly one home.
 FACET_CACHE: dict[tuple, tuple[float, Any]] = {}
 SNAPSHOT_CACHE: dict[tuple, tuple[float, Any]] = {}
@@ -27,6 +32,14 @@ _rebuilding: set[tuple] = set()
 _rebuild_tasks: set[asyncio.Task] = set()
 
 
+def _touch_and_evict(store: dict, key: tuple, value: Any, max_entries: int) -> None:
+    if key in store:
+        del store[key]
+    elif len(store) >= max_entries:
+        store.pop(next(iter(store)), None)
+    store[key] = value
+
+
 def swr_get(store: dict, key: tuple, epoch: Any) -> tuple[bool, Any]:
     """(fresh, bundle): fresh=True when the cached bundle matches the
     current epoch. Otherwise the stale bundle (serve it now and rebuild
@@ -35,12 +48,17 @@ def swr_get(store: dict, key: tuple, epoch: Any) -> tuple[bool, Any]:
     hit = store.get(key)
     if hit is None:
         return False, None
+    # Refresh insertion order on hit so LRU eviction keeps hot pages.
+    del store[key]
+    store[key] = hit
     old_epoch, bundle = hit
     return old_epoch == epoch, bundle
 
 
-def swr_put(store: dict, key: tuple, epoch: Any, bundle: Any) -> None:
-    store[key] = (epoch, bundle)
+def swr_put(
+    store: dict, key: tuple, epoch: Any, bundle: Any, max_entries: int = SWR_MAX_ENTRIES
+) -> None:
+    _touch_and_evict(store, key, (epoch, bundle), max_entries)
 
 
 def swr_schedule(store: dict, key: tuple, factory: Any) -> bool:
@@ -70,9 +88,18 @@ def cache_get(store: dict, key: tuple, ttl_seconds: float) -> Any | None:
     """store[key] when present and fresh, else None."""
     hit = store.get(key)
     if hit and time.monotonic() - hit[0] < ttl_seconds:
+        del store[key]
+        store[key] = hit
         return hit[1]
     return None
 
 
-def cache_put(store: dict, key: tuple, value: Any) -> None:
-    store[key] = (time.monotonic(), value)
+def cache_put(store: dict, key: tuple, value: Any, max_entries: int = FACET_MAX_ENTRIES) -> None:
+    _touch_and_evict(store, key, (time.monotonic(), value), max_entries)
+
+
+def invalidate_prefix(prefix: str) -> None:
+    """Drop cached entries whose tuple key starts with `prefix`."""
+    for store in (SWR_CACHE, SNAPSHOT_CACHE, FACET_CACHE):
+        for key in [k for k in store if k and k[0] == prefix]:
+            store.pop(key, None)

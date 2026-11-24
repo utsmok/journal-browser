@@ -55,6 +55,8 @@ def clamped_year_range(
         raise ValueError(
             f"year range {year_from}-{year_to} lies outside the data window ({start}-{end})"
         )
+    if lo == start and hi == end:
+        return None
     return (lo, hi)
 
 

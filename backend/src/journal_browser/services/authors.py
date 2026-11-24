@@ -26,7 +26,7 @@ from ..models import (
     Work,
     WorkPureAuthor,
 )
-from ..queries import work_type_normalized
+from ..queries import cache_epoch, work_type_normalized
 from ..topics import topic_mass
 from .authorship import (
     OPENALEX_URL,
@@ -36,6 +36,7 @@ from .authorship import (
     ut_authors_for_authorships,
     ut_roster_by_aids,
 )
+from .cache import SWR_CACHE, swr_get, swr_put, swr_schedule
 from .facets import author_facets
 from .search import base_query, escape_like, oa_type_case
 from .work_sources import authorships_by_wid, openalex_only_works_for_author
@@ -659,17 +660,58 @@ async def author_profile(
     pure_uuid: str,
     year_range: tuple[int, int] | None = None,
 ) -> dict[str, Any] | None:
-    """Full profile bundle; None = unknown author (404 upstream). All
-    per-author work views are bounded to the institution's data window,
-    or to the explicit publication-year range when one is active (the
-    journals list, suggestions and topics keep the window: journal
-    attributes stay unfiltered by the year range)."""
+    """Full profile bundle; None = unknown author (404 upstream). Cached via SWR."""
+    iid = institution.id
+    swr_key = (
+        "author_profile",
+        iid,
+        pure_uuid,
+        year_range,
+        institution.research_portal_url,
+    )
+    epoch = await cache_epoch(session)
+    fresh, bundle = swr_get(SWR_CACHE, swr_key, epoch)
+    if fresh:
+        return bundle
+    if bundle is not None:
+        swr_schedule(SWR_CACHE, swr_key, _author_profile_factory(iid, pure_uuid, year_range))
+        return bundle
+    epoch, built = await _build_author_profile(
+        session, institution, pure_uuid, year_range=year_range
+    )
+    if built is None:
+        return None
+    swr_put(SWR_CACHE, swr_key, epoch, built)
+    return built
+
+
+def _author_profile_factory(iid: int, pure_uuid: str, year_range: tuple[int, int] | None):
+    async def _factory():
+        from sqlalchemy.ext.asyncio import async_sessionmaker
+
+        from ..db import get_engine
+
+        async with async_sessionmaker(get_engine(), expire_on_commit=False)() as session:
+            inst = (await session.scalars(select(Institution).where(Institution.id == iid))).one()
+            return await _build_author_profile(session, inst, pure_uuid, year_range=year_range)
+
+    return _factory
+
+
+async def _build_author_profile(
+    session: AsyncSession,
+    institution: Institution,
+    pure_uuid: str,
+    *,
+    year_range: tuple[int, int] | None = None,
+) -> tuple[Any, dict[str, Any] | None]:
+    """Uncached profile build; returns (epoch, bundle | None)."""
     iid = institution.id
     author = await session.scalar(
         select(Author).where(Author.institution_id == iid, Author.pure_uuid == pure_uuid)
     )
     if author is None:
-        return None
+        return await cache_epoch(session), None
 
     # people.utwente.nl profile: served when uuid-verified, or when the
     # admin confirmed the (name-only) candidate identity row.
@@ -859,7 +901,7 @@ async def author_profile(
 
     top_partners = await top_partners_for_author(session, institution, author.pure_uuid, year_range)
 
-    return {
+    return await cache_epoch(session), {
         "author": {
             "pure_uuid": author.pure_uuid,
             "name": author.name,

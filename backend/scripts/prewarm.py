@@ -64,6 +64,7 @@ def warm_institution(code: str) -> None:
     for journal in journals[:TOP_N]:
         issn = journal.get("issn_l")
         if issn:
+            get(f"{root}/journals/{issn}?include_gaps=false")
             get(f"{root}/journals/{issn}")
             get(f"{root}/journals/{issn}/similar")
     get(f"{root}/deals")
@@ -73,10 +74,12 @@ def warm_institution(code: str) -> None:
     for publisher in items(get(f"{root}/publishers?limit=50"))[:TOP_N]:
         name = publisher.get("name")
         if name:
+            get(f"{root}/publishers/{q(name)}?include_gaps=false")
             get(f"{root}/publishers/{q(name)}")
     orgunits = get(f"{root}/orgunits")
     for unit in items(orgunits):
         if unit.get("level") == "faculty" and unit.get("name"):
+            get(f"{root}/orgunits/faculty/{q(unit['name'])}?include_gaps=false")
             get(f"{root}/orgunits/faculty/{q(unit['name'])}")
     get(f"{root}/authors?limit=50")
 

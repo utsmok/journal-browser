@@ -12,7 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
 from ..deps import InstitutionDep
-from ..models import JiscFunder
+from ..models import Institution, JiscFunder
+from ..queries import cache_epoch
 from ..schemas import (
     FunderDetailResponse,
     FunderListItem,
@@ -20,6 +21,7 @@ from ..schemas import (
     FunderTopJournal,
 )
 from ..services import funders as funders_service
+from ..services.cache import SWR_CACHE, swr_get, swr_put, swr_schedule
 from ..services.works_query import clamped_year_range
 from .params import split_multi
 
@@ -253,10 +255,46 @@ async def funder_detail(
         ),
     ] = None,
 ) -> FunderDetailResponse:
+    year_range = clamped_year_range(institution, year_from, year_to)
+    swr_key = ("funder_detail", institution.id, funder_id, year_range)
+    epoch = await cache_epoch(session)
+    fresh, bundle = swr_get(SWR_CACHE, swr_key, epoch)
+    if fresh:
+        return bundle
+    if bundle is not None:
+        swr_schedule(
+            SWR_CACHE, swr_key, _funder_detail_factory(institution.id, funder_id, year_range)
+        )
+        return bundle
+    epoch, built = await _build_funder_detail(session, institution, funder_id, year_range)
+    if built is None:
+        raise HTTPException(status_code=404, detail=f"funder {funder_id} not found")
+    swr_put(SWR_CACHE, swr_key, epoch, built)
+    return built
+
+
+def _funder_detail_factory(iid: int, funder_id: int, year_range: tuple[int, int] | None):
+    async def _factory():
+        from sqlalchemy.ext.asyncio import async_sessionmaker
+
+        from ..db import get_engine
+
+        async with async_sessionmaker(get_engine(), expire_on_commit=False)() as session:
+            inst = (await session.scalars(select(Institution).where(Institution.id == iid))).one()
+            return await _build_funder_detail(session, inst, funder_id, year_range)
+
+    return _factory
+
+
+async def _build_funder_detail(
+    session: AsyncSession,
+    institution: Institution,
+    funder_id: int,
+    year_range: tuple[int, int] | None,
+) -> tuple[Any, FunderDetailResponse | None]:
     funder = await session.get(JiscFunder, funder_id)
     if funder is None:
-        raise HTTPException(status_code=404, detail=f"funder {funder_id} not found")
-    year_range = clamped_year_range(institution, year_from, year_to)
+        return await cache_epoch(session), None
     counts = await funders_service.ut_work_counts(session, institution, year_range)
     canon = await funders_service.canon_links(session)
     union_counts = await funders_service.ut_funder_work_counts(
@@ -268,7 +306,9 @@ async def funder_detail(
     top: list[dict[str, Any]] = []
     for bare in sorted(ids, key=lambda b: -counts.get(b, 0)):
         top.extend(
-            await funders_service.top_journals(session, institution, bare, year_range=year_range)
+            await funders_service.top_journals(
+                session, institution, bare, limit=25, year_range=year_range
+            )
         )
     seen: set[str] = set()
     deduped = []
@@ -277,11 +317,11 @@ async def funder_detail(
             seen.add(j["issn_l"])
             deduped.append(j)
     yearly = await funders_service.works_by_year(session, institution, ids, year_range)
-    return FunderDetailResponse(
+    return await cache_epoch(session), FunderDetailResponse(
         **item.model_dump(),
         publications_policy=funder.publications_policy,
         data_archiving_policy=funder.data_archiving_policy,
         openaire=canon.openaire.get(funder_id),
-        top_journals=[FunderTopJournal(**j) for j in deduped[:5]],
+        top_journals=[FunderTopJournal(**j) for j in deduped[:25]],
         works_by_year=yearly,
     )

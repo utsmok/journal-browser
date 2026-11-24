@@ -12,13 +12,11 @@ enabled (default), child/inactive RORs fold into their canonical partner and
 links are deduplicated per (work, canonical partner) before any count runs.
 """
 
-import asyncio
 import re
 from collections import defaultdict
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
-from weakref import WeakKeyDictionary
 
 from fastapi.responses import StreamingResponse
 from sqlalchemy import (
@@ -36,7 +34,7 @@ from sqlalchemy import (
 )
 from sqlalchemy import cast as sql_cast
 from sqlalchemy.dialects.postgresql import JSONB, aggregate_order_by
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from ..identifiers import bare_openalex_id, normalize_ror
@@ -75,7 +73,16 @@ from ..schemas import (
     CollaborationWorksResponse,
     FacetCount,
 )
-from .cache import FACET_CACHE, SNAPSHOT_TTL, cache_get, cache_put
+from .cache import (
+    FACET_CACHE,
+    SNAPSHOT_TTL,
+    SWR_CACHE,
+    cache_get,
+    cache_put,
+    swr_get,
+    swr_put,
+    swr_schedule,
+)
 from .collaborations_detail import (
     OA_OPEN_STATUSES,
     STANDARD_MAX_PARTNERS,
@@ -84,6 +91,7 @@ from .collaborations_detail import (
     top_partners_for_author,
     top_partners_for_orgunit,
 )
+from .concurrency import together
 from .csv_export import csv_response, csv_safe, safe_filename
 from .works_query import (
     YEAR_BUCKETS,
@@ -1018,32 +1026,6 @@ def _jisc_id(funder_key: str, jisc_map: dict[str, int]) -> int | None:
     return jisc_map.get(funder_key.removeprefix("openalex:"))
 
 
-_query_slots: WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore] = WeakKeyDictionary()
-
-
-def _slots() -> asyncio.Semaphore:
-    loop = asyncio.get_running_loop()
-    slots = _query_slots.get(loop)
-    if slots is None:
-        slots = _query_slots.setdefault(loop, asyncio.Semaphore(QUERY_CONCURRENCY))
-    return slots
-
-
-async def _together(session: AsyncSession, queries: Sequence[Any]) -> list[Any]:
-    if not isinstance(session.bind, AsyncEngine):
-        return [await query(session) for query in queries]
-    slots = _slots()
-
-    async def one(query: Any) -> Any:
-        async with (
-            slots,
-            async_sessionmaker(session.bind, expire_on_commit=False)() as own,
-        ):
-            return await query(own)
-
-    return list(await asyncio.gather(*(one(query) for query in queries)))
-
-
 async def _overview_trend(
     session: AsyncSession,
     institution: Institution,
@@ -1246,7 +1228,7 @@ async def _summary(
 
             return run
 
-        facets_dict = dict(await _together(session, [wrap(n, fn) for n, fn in facet_jobs]))
+        facets_dict = dict(await together(session, [wrap(n, fn) for n, fn in facet_jobs]))
 
     summary: dict[str, Any] = {
         "total_works": int(total_works),
@@ -1313,7 +1295,7 @@ async def _credit_lists(
 
     for dimension, found in zip(
         ("funder", "project"),
-        await _together(session, [dimension_rows("funder"), dimension_rows("project")]),
+        await together(session, [dimension_rows("funder"), dimension_rows("project")]),
         strict=True,
     ):
         for row in found:
@@ -1604,6 +1586,27 @@ async def collaboration_map(
     return CollaborationMapResponse(items=items, unmapped=len(rows) - len(items))
 
 
+def _collab_filters_key(filters: CollaborationFilters) -> tuple[Any, ...]:
+    return (
+        filters.q,
+        tuple(filters.org_types or ()),
+        tuple(filters.countries or ()),
+        filters.level,
+        tuple(filters.faculty or ()),
+        tuple(filters.funders or ()),
+        tuple(filters.projects or ()),
+        tuple(filters.sources or ()),
+        tuple(filters.oa_statuses or ()),
+        tuple(filters.topics or ()),
+        filters.size,
+        filters.rollup,
+        filters.lead,
+        filters.min_works,
+        filters.shares_deals,
+        filters.year_range,
+    )
+
+
 async def collaboration_detail(
     session: AsyncSession,
     institution: Institution,
@@ -1612,8 +1615,52 @@ async def collaboration_detail(
     *,
     include_works: bool = True,
 ) -> CollaborationDetailResponse | None:
-    if not await _linked(session, institution, ror):
+    swr_key = ("collab_detail", institution.id, ror, _collab_filters_key(filters), include_works)
+    epoch = await cache_epoch(session)
+    fresh, bundle = swr_get(SWR_CACHE, swr_key, epoch)
+    if fresh:
+        return bundle
+    if bundle is not None:
+        swr_schedule(
+            SWR_CACHE,
+            swr_key,
+            _collab_detail_factory(institution.id, ror, filters, include_works),
+        )
+        return bundle
+    epoch, built = await _build_collaboration_detail(
+        session, institution, ror, filters, include_works=include_works
+    )
+    if built is None:
         return None
+    swr_put(SWR_CACHE, swr_key, epoch, built)
+    return built
+
+
+def _collab_detail_factory(iid: int, ror: str, filters: CollaborationFilters, include_works: bool):
+    async def _factory():
+        from sqlalchemy.ext.asyncio import async_sessionmaker
+
+        from ..db import get_engine
+
+        async with async_sessionmaker(get_engine(), expire_on_commit=False)() as session:
+            inst = (await session.scalars(select(Institution).where(Institution.id == iid))).one()
+            return await _build_collaboration_detail(
+                session, inst, ror, filters, include_works=include_works
+            )
+
+    return _factory
+
+
+async def _build_collaboration_detail(
+    session: AsyncSession,
+    institution: Institution,
+    ror: str,
+    filters: CollaborationFilters,
+    *,
+    include_works: bool = True,
+) -> tuple[Any, CollaborationDetailResponse | None]:
+    if not await _linked(session, institution, ror):
+        return await cache_epoch(session), None
     deal_rors = await _shared_deal_rors(session, institution)
     merged_counts = await _merged_counts(session) if filters.rollup else {}
     jisc_map = await _jisc_funder_map(session)
@@ -1679,7 +1726,7 @@ async def collaboration_detail(
         rollup=filters.rollup,
         work_conds=_work_conditions(institution, filters),
         link_conds=_link_conditions(filters),
-        together=_together,
+        together=together,
     )
 
     recent_items: list[CollaborationWork] = []
@@ -1694,7 +1741,7 @@ async def collaboration_detail(
 
     record = await session.get(PartnerInstitution, ror)
     details = await _ror_details(session, institution, record)
-    return CollaborationDetailResponse(
+    return await cache_epoch(session), CollaborationDetailResponse(
         **base.model_dump(),
         **details,
         **breakdowns,

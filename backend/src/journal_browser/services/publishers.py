@@ -41,7 +41,13 @@ from ..models import (
     Publisher,
 )
 from ..queries import cache_epoch
-from .authorship import chapter_rollup, venue_authorship, venue_gap_predicate, venue_openalex_only
+from .authorship import (
+    chapter_rollup,
+    local_store_ready,
+    venue_authorship,
+    venue_gap_predicate,
+    venue_openalex_only,
+)
 from .cache import (
     SNAPSHOT_CACHE,
     SNAPSHOT_TTL,
@@ -52,6 +58,7 @@ from .cache import (
     swr_put,
     swr_schedule,
 )
+from .concurrency import together
 from .deal_coverage import deal_institution_join, dj_scope
 from .facets import (
     PublisherRow,
@@ -480,33 +487,34 @@ async def publisher_detail(
     name: str,
     years: tuple[int, int] | None = None,
     parts: list[str] | None = None,
+    include_gaps: bool = True,
 ) -> dict[str, Any] | None:
     """Full publisher bundle; None = no browsable journal under this
     canonical key (404 upstream). Deals reuse the journal-detail
     participation join. parts (pipe-joined standalone|chapter|part)
-    filters the CRIS-gap card's rows and total; the chapter rollup runs
-    over the same filtered population.
-
-    An active publication-year range serves the year-scoped snapshot
-    (search convention): the header's works sum and the journal table's
-    works column become the year-scoped pure_canon stats sums, while the
-    roster membership and every journal attribute stay unfiltered.
-
-    Like the unit bundle, the page is served stale-while-revalidate: a
-    harvest epoch bump serves the previous epoch's bundle while a
-    background task rebuilds with a fresh session, instead of every
-    visitor paying the multi-second cold build right after each wave."""
+    filters the CRIS-gap card's rows and total; when include_gaps=False,
+    the heavy CRIS-gap/chapter-rollup queries are skipped (the UI loads
+    them lazily via /cris-gaps when expanded)."""
     iid = institution.id
-    swr_key = ("publisher_detail", iid, name, years, tuple(parts or ()))
+    swr_key = (
+        "publisher_detail",
+        iid,
+        name,
+        years,
+        tuple(parts or ()) if include_gaps else (),
+        include_gaps,
+    )
     epoch = await cache_epoch(session)
     fresh, bundle = swr_get(SWR_CACHE, swr_key, epoch)
     if fresh:
         return bundle
     if bundle is not None:
-        swr_schedule(SWR_CACHE, swr_key, _publisher_bundle_factory(iid, name, years, parts))
+        swr_schedule(
+            SWR_CACHE, swr_key, _publisher_bundle_factory(iid, name, years, parts, include_gaps)
+        )
         return bundle
     epoch, bundle = await _build_publisher_bundle(
-        session, institution, name, years=years, parts=parts
+        session, institution, name, years=years, parts=parts, include_gaps=include_gaps
     )
     if bundle is None:
         return None
@@ -514,7 +522,7 @@ async def publisher_detail(
     return bundle
 
 
-def _publisher_bundle_factory(iid, name, years, parts):
+def _publisher_bundle_factory(iid, name, years, parts, include_gaps):
     async def _factory():
         from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -522,8 +530,9 @@ def _publisher_bundle_factory(iid, name, years, parts):
 
         async with async_sessionmaker(get_engine(), expire_on_commit=False)() as session:
             inst = (await session.scalars(select(Institution).where(Institution.id == iid))).one()
-            # _build_publisher_bundle already returns (epoch, bundle | None).
-            return await _build_publisher_bundle(session, inst, name, years=years, parts=parts)
+            return await _build_publisher_bundle(
+                session, inst, name, years=years, parts=parts, include_gaps=include_gaps
+            )
 
     return _factory
 
@@ -535,6 +544,7 @@ async def _build_publisher_bundle(
     *,
     years: tuple[int, int] | None,
     parts: list[str] | None,
+    include_gaps: bool = True,
 ) -> tuple[Any, dict[str, Any] | None]:
     """The uncached publisher bundle; returns (epoch, bundle | None)."""
     iid = institution.id
@@ -752,6 +762,30 @@ async def _build_publisher_bundle(
             }
         )
 
+    if include_gaps:
+
+        async def _q_gaps(own: AsyncSession):
+            return await venue_openalex_only(
+                own, institution, issns=issns, year_range=years, parts=parts
+            )
+
+        async def _q_chapters(own: AsyncSession):
+            return await chapter_rollup(
+                own, institution, venue_gap_predicate(institution, issns, years), parts=None
+            )
+
+        openalex_only, chapters = await together(session, [_q_gaps, _q_chapters])
+    else:
+        ready = await local_store_ready(session, institution)
+        openalex_only = {
+            "total": 0,
+            "entries_total": 0,
+            "items": [],
+            "available": ready,
+            "parts_counts": {},
+        }
+        chapters = {"chapters_total": 0, "books_total": 0, "books": []}
+
     return await cache_epoch(session), {
         "publisher": _item(
             pub,
@@ -773,10 +807,75 @@ async def _build_publisher_bundle(
         "ut_authorship": await venue_authorship(
             session, institution, issns=issns, year_range=years
         ),
-        "openalex_only": await venue_openalex_only(
-            session, institution, issns=issns, year_range=years, parts=parts
-        ),
-        "chapter_rollup": await chapter_rollup(
-            session, institution, venue_gap_predicate(institution, issns, years), parts=parts
-        ),
+        "openalex_only": openalex_only,
+        "chapter_rollup": chapters,
+    }
+
+
+async def publisher_cris_gaps(
+    session: AsyncSession,
+    institution: Institution,
+    name: str,
+    *,
+    years: tuple[int, int] | None = None,
+    parts: list[str] | None = None,
+) -> dict[str, Any] | None:
+    """Lazy CRIS-gap + unfiltered chapter-rollup payload for one publisher."""
+    iid = institution.id
+    swr_key = ("publisher_cris_gaps", iid, name, years, tuple(parts or ()))
+    epoch = await cache_epoch(session)
+    fresh, bundle = swr_get(SWR_CACHE, swr_key, epoch)
+    if fresh:
+        return bundle
+    if bundle is not None:
+        swr_schedule(SWR_CACHE, swr_key, _publisher_gaps_factory(iid, name, years, parts))
+        return bundle
+    epoch, bundle = await _build_publisher_gaps(
+        session, institution, name, years=years, parts=parts
+    )
+    if bundle is None:
+        return None
+    swr_put(SWR_CACHE, swr_key, epoch, bundle)
+    return bundle
+
+
+def _publisher_gaps_factory(iid, name, years, parts):
+    async def _factory():
+        from sqlalchemy.ext.asyncio import async_sessionmaker
+
+        from ..db import get_engine
+
+        async with async_sessionmaker(get_engine(), expire_on_commit=False)() as session:
+            inst = (await session.scalars(select(Institution).where(Institution.id == iid))).one()
+            return await _build_publisher_gaps(session, inst, name, years=years, parts=parts)
+
+    return _factory
+
+
+async def _build_publisher_gaps(
+    session: AsyncSession,
+    institution: Institution,
+    name: str,
+    *,
+    years: tuple[int, int] | None,
+    parts: list[str] | None,
+) -> tuple[Any, dict[str, Any] | None]:
+    issns = await group_issns(session, institution.id, name)
+    if issns is None:
+        return await cache_epoch(session), None
+
+    async def _q_gaps(own: AsyncSession):
+        return await venue_openalex_only(
+            own, institution, issns=issns, year_range=years, parts=parts
+        )
+
+    async def _q_chapters(own: AsyncSession):
+        return await chapter_rollup(
+            own, institution, venue_gap_predicate(institution, issns, years), parts=None
+        )
+
+    openalex_only, chapters = await together(session, [_q_gaps, _q_chapters])
+    return await cache_epoch(session), {
+        "openalex_only": openalex_only,
+        "chapter_rollup": chapters,
     }

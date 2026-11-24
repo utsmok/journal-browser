@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_session
 from ..deps import InstitutionDep
 from ..schemas import (
+    CrisGapsResponse,
     DealDiscrepancyRow,
     DealOut,
     JournalListItem,
@@ -163,6 +164,47 @@ async def publisher_openalex_only_csv(
     )
 
 
+@router.get("/{name:path}/cris-gaps", response_model=CrisGapsResponse)
+async def publisher_cris_gaps(
+    name: str,
+    session: SessionDep,
+    institution: InstitutionDep,
+    year_from: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range start (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    year_to: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range end (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    parts: PartsFilter = None,
+) -> CrisGapsResponse:
+    """Lazy-loaded CRIS-gap + book-chapter rollup for one publisher."""
+    gaps = await publishers_service.publisher_cris_gaps(
+        session,
+        institution,
+        name,
+        years=clamped_year_range(institution, year_from, year_to),
+        parts=list(parts) if parts else None,
+    )
+    if gaps is None:
+        raise HTTPException(status_code=404, detail="publisher not found")
+    return CrisGapsResponse(
+        openalex_only=OpenalexOnly(**gaps["openalex_only"]),
+        chapter_rollup=PartsRollup(**gaps["chapter_rollup"]),
+    )
+
+
 @router.get("/{name:path}", response_model=PublisherDetailResponse)
 async def publisher_detail(
     name: str,
@@ -187,6 +229,7 @@ async def publisher_detail(
         ),
     ] = None,
     parts: PartsFilter = None,
+    include_gaps: bool = True,
 ) -> PublisherDetailResponse:
     detail = await publishers_service.publisher_detail(
         session,
@@ -194,6 +237,7 @@ async def publisher_detail(
         name,
         years=clamped_year_range(institution, year_from, year_to),
         parts=list(parts) if parts else None,
+        include_gaps=include_gaps,
     )
     if detail is None:
         raise HTTPException(status_code=404, detail="publisher not found")
