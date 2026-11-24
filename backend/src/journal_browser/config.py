@@ -84,6 +84,11 @@ class Settings(BaseSettings):
     # Default sits above the measured cold publisher-snapshot build
     # (~59 s under harvest load); lower via env for stricter cuts.
     statement_timeout_ms: int = 60_000
+    # JSON bytes each in-process cache (facet, snapshot and SWR store)
+    # may hold, estimated from the serialised value. Above it the least
+    # recently used entries go first. The entry caps alone let a few
+    # hundred multi-megabyte snapshots add up to gigabytes.
+    cache_max_mb: int = 256
 
     # ut-metadata Postgres (canonical Twente publications). Empty = the
     # feature is off: every endpoint keeps its works_stats-only behavior.

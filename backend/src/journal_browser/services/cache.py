@@ -1,11 +1,21 @@
 """Monotonic-TTL caches shared by search facets and the publisher/unit
 snapshots. A harvest bump (cache_epoch in the key) invalidates sooner
-than the TTL."""
+than the TTL.
+
+Every store is a dict in least-recently-used order, one entry per key:
+(stamp or epoch, value, size). size is the JSON length of the value and
+the unit of the byte cap (JB_CACHE_MAX_MB)."""
 
 import asyncio
+import json
 import logging
+import sys
 import time
 from typing import Any
+
+from pydantic import BaseModel
+
+from ..config import get_settings
 
 #: Snapshot lifetime in seconds; a harvest bump invalidates sooner.
 SNAPSHOT_TTL = 86400
@@ -16,28 +26,50 @@ FACET_MAX_ENTRIES = 512
 SNAPSHOT_MAX_ENTRIES = 256
 
 # Stores live here so the TTL/get/put pattern has exactly one home.
-FACET_CACHE: dict[tuple, tuple[float, Any]] = {}
-SNAPSHOT_CACHE: dict[tuple, tuple[float, Any]] = {}
+FACET_CACHE: dict[tuple, tuple] = {}
+SNAPSHOT_CACHE: dict[tuple, tuple] = {}
 
 logger = logging.getLogger(__name__)
 
-# Stale-while-revalidate detail bundles: key -> (epoch, bundle). A
+# Stale-while-revalidate detail bundles: key -> (epoch, bundle, size). A
 # harvest bump changes cache_epoch, which invalidates every epoch-keyed
 # cache at once; without SWR each detail page pays its full cold build
 # right after every harvest wave (60+ s under load). SWR serves the
 # previous epoch's bundle immediately and rebuilds in the background, so
 # visitors never wait on a rebuild they did not cause.
-SWR_CACHE: dict[tuple, tuple[Any, Any]] = {}
+SWR_CACHE: dict[tuple, tuple] = {}
 _rebuilding: set[tuple] = set()
 _rebuild_tasks: set[asyncio.Task] = set()
 
 
-def _touch_and_evict(store: dict, key: tuple, value: Any, max_entries: int) -> None:
-    if key in store:
-        del store[key]
-    elif len(store) >= max_entries:
-        store.pop(next(iter(store)), None)
-    store[key] = value
+def _json_default(value: Any) -> Any:
+    return value.model_dump() if isinstance(value, BaseModel) else str(value)
+
+
+def _nbytes(value: Any) -> int:
+    """Memory estimate of a cached value: the length of its JSON form.
+    The Python objects need a few times that, so a store filled to the cap
+    holds more RAM than the cap says."""
+    if isinstance(value, (bytes, str)):
+        return len(value)
+    try:
+        return len(json.dumps(value, default=_json_default))
+    except (TypeError, ValueError):
+        # Keys json rejects (tuples) still cache; only the size is rough.
+        return sys.getsizeof(value)
+
+
+def _touch_and_evict(store: dict, key: tuple, entry: tuple, max_entries: int) -> None:
+    """Insert or refresh `key` as the most recent entry, then drop the
+    least recently used entries until the store fits both caps. The entry
+    just written always stays, even when it alone exceeds the byte cap."""
+    store.pop(key, None)
+    store[key] = (*entry, _nbytes(entry[1]))
+    max_bytes = get_settings().cache_max_mb * 1024 * 1024
+    while len(store) > 1 and (
+        len(store) > max_entries or sum(e[2] for e in store.values()) > max_bytes
+    ):
+        store.pop(next(iter(store)))
 
 
 def swr_get(store: dict, key: tuple, epoch: Any) -> tuple[bool, Any]:
@@ -51,13 +83,19 @@ def swr_get(store: dict, key: tuple, epoch: Any) -> tuple[bool, Any]:
     # Refresh insertion order on hit so LRU eviction keeps hot pages.
     del store[key]
     store[key] = hit
-    old_epoch, bundle = hit
+    old_epoch, bundle = hit[:2]
     return old_epoch == epoch, bundle
 
 
 def swr_put(
     store: dict, key: tuple, epoch: Any, bundle: Any, max_entries: int = SWR_MAX_ENTRIES
 ) -> None:
+    if bundle is None:
+        # A rebuild found the entity gone (a harvest deleted it). None is
+        # never a bundle to serve, and the stale one must not outlive it:
+        # the next request builds inline and answers 404.
+        store.pop(key, None)
+        return
     _touch_and_evict(store, key, (epoch, bundle), max_entries)
 
 
