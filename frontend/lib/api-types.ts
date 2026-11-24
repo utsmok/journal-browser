@@ -1849,6 +1849,12 @@ export interface components {
              * @default works_desc
              */
             sort: string;
+            /**
+             * Q Match
+             * @default name
+             * @enum {string}
+             */
+            q_match: "name" | "topic" | "group";
             /** Items */
             items: components["schemas"]["AuthorItem"][];
             /**

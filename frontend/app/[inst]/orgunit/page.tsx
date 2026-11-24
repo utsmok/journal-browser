@@ -479,7 +479,20 @@ function OrgUnitsView() {
               ) : rows.length === 0 ? (
                 <div className="py-10 text-center text-[var(--muted-foreground)]">
                   {q && !anyFilter ? (
-                    <>{t(`list.emptyQuery.${level}`, { query: q })}</>
+                    // Faculties/groups/institutes are separate rosters; a
+                    // query that misses here (philosophy is a group, not a
+                    // faculty) may still match the other levels.
+                    <>
+                      <>{t(`list.emptyQuery.${level}`, { query: q })}</>
+                      <div className="mx-auto mt-4 max-w-md space-y-3 text-start">
+                        <p>{t("list.crossLevelHint")}</p>
+                        {(["faculty", "group", "institute"] as const)
+                          .filter((l) => l !== level)
+                          .map((l) => (
+                            <CrossLevelMatches key={l} inst={inst} q={q} level={l} />
+                          ))}
+                      </div>
+                    </>
                   ) : !anyFilter ? (
                     // Unfiltered empty: for an institution whose orgunit
                     // corpus was never harvested (e.g. rug) this is a data
@@ -678,6 +691,34 @@ function OrgUnitsView() {
           </Card>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Other-level matches for an empty q search: one query per level,
+// rendered only when that level has hits (philosophy is a research
+// group, not a faculty). */
+function CrossLevelMatches({ inst, q, level }: { inst: string; q: string; level: OrgUnitLevel }) {
+  const t = useTranslations("orgunits");
+  const { data } = useOrgUnits({ level, q, include_facets: false, limit: 3 });
+  if (!data || data.total === 0) return null;
+  return (
+    <div>
+      <p className="text-sm">
+        {t("list.levelToggle." + level)} ({data.total})
+      </p>
+      <ul className="mt-1 space-y-1 text-sm">
+        {data.items.map((unit) => (
+          <li key={unit.name}>
+            <Link
+              className="underline decoration-[var(--border)] underline-offset-2 hover:decoration-[var(--muted-foreground)]"
+              href={`/${inst}/orgunit/${level}/${encodeNamePath(unit.name)}`}
+            >
+              {unit.name}
+            </Link>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

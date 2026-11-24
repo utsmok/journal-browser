@@ -90,6 +90,7 @@
     },
     "clearFilters": "Clear filters",
     "emptyNoData": "No organisational data is available for {institution} yet.",
+    "crossLevelHint": "Matches in the other views:",
     "institutionFallback": "this institution",
     "resultsListLabel": "Organisational unit results",
     "tableCaption": "Organisational unit search results",
