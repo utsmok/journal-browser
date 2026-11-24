@@ -28,6 +28,7 @@ from sqlalchemy import (
     distinct,
     func,
     literal,
+    not_,
     or_,
     select,
     union_all,
@@ -126,27 +127,18 @@ _Payload = Literal["openalex", "openaire"]
 _SizeMode = Literal["standard", "small", "all"]
 _LeadMode = Literal["all", "home", "partner"]
 
-#: Sentinel/programme grant strings that are not meaningful projects.
-_JUNK_PROJECT_CODES = frozenset(
-    {
-        "unidentified",
-        "unknown",
-        "none",
-        "n/a",
-        "na",
-        "null",
-        "0",
-        "not available",
-        "not applicable",
-        "horizon2020",
-        "horizon 2020",
-        "h2020",
-        "fp7",
-        "horizon europe",
-        "erc",
-        "eu",
-    }
+#: Grant values that are not grant numbers, matched by shape. Each pattern
+#: is one kind of value publishers put in the award field instead.
+_YEAR = r"(?:19|20)[0-9]{2}"
+#: A year or a span of years, the funding period: "2007–2013", "2021 2027",
+#: "2004.".
+_YEAR_OR_SPAN = (
+    r"^\(?" + _YEAR + r"\)?"
+    r"(?:\s*[^0-9a-z]{1,6}\s*\(?" + _YEAR + r"\)?){0,2}[,.;]?$"
 )
+#: A programme label, one or more words followed by a year: "HORIZON2020",
+#: "Horizon 2020", "France2030".
+_PROGRAMME_LABEL = r"^(?:[a-z]+\s?)+" + _YEAR + r"$"
 
 _PARTNER_CSV = (
     "ror",
@@ -246,21 +238,28 @@ def _primary_topic() -> Any:
 
 
 def _valid_project_code(col: Any) -> Any:
-    """SQL expression returning a cleaned grant code, or NULL for junk/sentinel
-    values (e.g. OpenAIRE 'unidentified' or generic 'HORIZON2020')."""
+    """SQL expression returning a cleaned grant code, or NULL when the
+    value is not one. Four shapes are dropped, each a value publishers put
+    in the award field instead of a grant number: a word or placeholder
+    with no digit other than zero (OpenAIRE "unidentified", "COMPETE",
+    "0000"); a year or a span of years ("2007–2013", "2021 2027"); a
+    programme label ("HORIZON2020", "France2030"); a funding
+    acknowledgement carrying a Funder Registry DOI
+    ("MCIN/AEI/10.13039/501100011033").
+
+    The label pattern also takes grant numbers whose digits happen to be
+    a year (DFG "GRK 2073", JST "JPMJCR2014"): about 50 of 43,500 stored
+    awards on 2026-11-24, against about 1,250 programme labels. A short
+    ordinal such as "FP7" cannot be told from grant numbers like FWF
+    "Y 42" and passes."""
     trimmed = func.nullif(func.btrim(col), "")
-    lowered = func.lower(trimmed)
-    return case(
-        (
-            and_(
-                trimmed.is_not(None),
-                ~lowered.in_(sorted(_JUNK_PROJECT_CODES)),
-                ~lowered.contains("10.13039/"),
-            ),
-            trimmed,
-        ),
-        else_=None,
+    is_code = and_(
+        trimmed.op("~")("[1-9]"),
+        not_(trimmed.op("~*")(_YEAR_OR_SPAN)),
+        not_(trimmed.op("~*")(_PROGRAMME_LABEL)),
+        not_(func.lower(trimmed).contains("10.13039/")),
     )
+    return case((is_code, trimmed), else_=None)
 
 
 async def _shared_deal_rors(session: AsyncSession, institution: Institution) -> frozenset[str]:
@@ -393,8 +392,8 @@ def _projects(institution: Institution) -> Any:
     code = _valid_project_code(raw_code)
     acronym = value("acronym")
     resolved = FunderAlias.funder_openalex_id
-    # Drop OpenAIRE entries whose code is explicitly junk (e.g. "unidentified")
-    # and which carry no acronym.
+    # Drop OpenAIRE entries whose code is not a grant number (OpenAIRE
+    # "unidentified") and that carry no acronym.
     is_junk_only = and_(raw_code.is_not(None), code.is_(None), acronym.is_(None))
     project_key = case(
         (is_junk_only, None),
