@@ -8,6 +8,20 @@ updates:
     directory: /frontend
     schedule:
       interval: weekly
+  # Base images and OS packages of the three Dockerfiles; one entry per
+  # directory.
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /frontend
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /db
+    schedule:
+      interval: weekly
   - package-ecosystem: github-actions
     directory: /
     schedule:
