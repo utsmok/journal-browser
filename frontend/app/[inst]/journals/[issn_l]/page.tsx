@@ -51,6 +51,7 @@ import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { useYearRange } from "@/hooks/use-year-filter";
 import { encodeNamePath, errorMessage, type OpenalexTopic } from "@/lib/api";
+import { displayPublisherName } from "@/lib/deal-links";
 import { useFunderPrefs } from "@/lib/funder-prefs";
 
 const SIMILAR_PREVIEW = 5;
@@ -201,7 +202,10 @@ function JournalPageInner() {
   const sections: { id: string; label: string; hint?: string }[] = [
     { id: "overview", label: t("nav.overview") },
     ...(deals.length > 0
-      ? deals.map((deal) => ({ id: `deal-${deal.id}`, label: t("deal.title") }))
+      ? deals.map((deal) => ({
+          id: `deal-${deal.id}`,
+          label: displayPublisherName(deal.publisher_name) || t("deal.title"),
+        }))
       : [{ id: "deal", label: t("deal.title") }]),
     ...(greenOa ? [{ id: "green-oa", label: t("greenOa.title") }] : []),
     ...(hasApc ? [{ id: "apc", label: t("apc.title"), hint: t("apc.hint") }] : []),

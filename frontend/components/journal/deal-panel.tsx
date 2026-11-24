@@ -10,7 +10,7 @@ import { External } from "@/components/journal/shared";
 import { SourceNote } from "@/components/source-note";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { capReached, latestYearUsage } from "@/lib/deal-caps";
-import { dealLinkLabel, orderedDealLinks } from "@/lib/deal-links";
+import { dealLinkLabel, displayPublisherName, orderedDealLinks } from "@/lib/deal-links";
 import { cleanProse } from "@/lib/utils";
 import type { Attribution, DealLink, DealOut } from "@/lib/api";
 
@@ -31,13 +31,20 @@ export function DealPanel({
   );
   const capUsage = latestYearUsage(deal.cap_usage);
   const capUsageReached = capUsage.some(capReached);
+  // The publisher names the deal: a journal can sit in several deals, and
+  // the generic label tells none of them apart. It stands in only when the
+  // deal has no publisher.
+  const publisher = displayPublisherName(deal.publisher_name);
+  const subtitle = [publisher ? t("deal.title") : null, deal.duration_text ?? deal.esac_id]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <CollapsibleCard
       id={id}
       compact
       title={
         <>
-          {t("deal.title")}
+          {publisher || t("deal.title")}
           <DealBadge covered capped={capUsageReached} />
           {deal.corresponding_authors_only && (
             <Badge variant="muted" title={t("deal.correspondingOnlyHint", { name: site.name })}>
@@ -55,11 +62,7 @@ export function DealPanel({
           )}
         </>
       }
-      description={
-        <p className="text-xs text-[var(--muted-foreground)]">
-          {deal.publisher_name} · {deal.duration_text ?? deal.esac_id}
-        </p>
-      }
+      description={<p className="text-xs text-[var(--muted-foreground)]">{subtitle}</p>}
       contentClassName="space-y-4 text-sm"
     >
       {deal.summary && <p className="max-w-prose text-pretty">{cleanProse(deal.summary)}</p>}
