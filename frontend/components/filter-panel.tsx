@@ -1,10 +1,11 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import * as React from "react";
 import { useTranslations } from "next-intl";
 
 import { ACCESS_TEXT, DealGlyph, LockIcon, QuartileGlyph } from "@/components/badges";
+import { Card } from "@/components/ui/card";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { PUB_TYPE_LABELS } from "@/lib/search-config";
 
@@ -393,22 +394,22 @@ function FacetGroup({
     >
       <summary
         title={summaryTitle}
-        className={`${focus} flex cursor-pointer select-none list-none items-center justify-between gap-2 rounded py-1.5 text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] [&::-webkit-details-marker]:hidden`}
+        className={`${focus} flex cursor-pointer select-none list-none items-center justify-between gap-2 rounded py-1 text-xs font-semibold text-[var(--foreground)] hover:text-[var(--primary-text)] [&::-webkit-details-marker]:hidden`}
       >
         <span>{label}</span>
         <span className="flex items-center gap-1.5">
           {activeValues.length > 0 && (
-            <span className="tabular-nums">
-              {activeValues.length}/{values.length}
+            <span className="rounded-full bg-[var(--brand-tint-bg)] px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--primary-text)]">
+              {activeValues.length}
             </span>
           )}
           <ChevronDown
             aria-hidden
-            className="size-3.5 shrink-0 transition-transform group-open:rotate-180"
+            className="size-3.5 shrink-0 text-[var(--muted-foreground)] transition-transform group-open:rotate-180"
           />
         </span>
       </summary>
-      <div className="mt-1.5 space-y-1.5">
+      <div className="mt-2 space-y-1.5">
         {searchable && values.length > initialLimit && (
           <input
             type="search"
@@ -444,6 +445,17 @@ function FacetGroup({
               >
                 {look.icon}
               </svg>
+            ) : !chips ? (
+              <span
+                aria-hidden
+                className={`inline-flex size-3.5 shrink-0 items-center justify-center rounded-[3px] border ${
+                  active
+                    ? "border-current bg-current/15"
+                    : "border-[var(--border)] bg-[var(--background)]"
+                }`}
+              >
+                {active && <Check className="size-2.5 stroke-[2.5]" />}
+              </span>
             ) : null;
             const labelText = f.label ?? f.value;
             // An unknown count is never a zero: render the em dash so a slow
@@ -524,7 +536,14 @@ export function FacetGroupList({
   loading?: boolean;
 }) {
   return (
-    <div className="space-y-2.5" aria-busy={loading || undefined}>
+    <div
+      className={
+        variant === "rows"
+          ? "divide-y divide-[var(--border)] [&>*:not(:first-child)]:pt-3 [&>*:not(:last-child)]:pb-3"
+          : "space-y-3"
+      }
+      aria-busy={loading || undefined}
+    >
       {groups.map((group) => (
         <FacetGroup
           key={group.key}
@@ -535,6 +554,52 @@ export function FacetGroupList({
         />
       ))}
     </div>
+  );
+}
+
+/** Shared sticky filter sidebar container with unified header + Reset affordance. */
+export function FilterSidebarCard({
+  activeCount = 0,
+  onReset,
+  resetTitle,
+  headerSlot,
+  children,
+}: {
+  activeCount?: number;
+  onReset?: () => void;
+  resetTitle?: string;
+  /** Optional extra control placed between the header and facet groups (e.g. FunderPicker). */
+  headerSlot?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const t = useTranslations("common");
+  return (
+    <Card className="p-4">
+      <div className="mb-3 flex items-center justify-between gap-2 border-b border-[var(--border)] pb-2.5">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+            {t("facets.sidebarHeading")}
+          </span>
+          {activeCount > 0 && (
+            <span className="rounded-full bg-[var(--brand-tint-bg)] px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--primary-text)]">
+              {activeCount}
+            </span>
+          )}
+        </div>
+        {onReset && activeCount > 0 && (
+          <button
+            type="button"
+            onClick={onReset}
+            title={resetTitle}
+            className="text-xs font-medium text-[var(--primary-text)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+          >
+            {t("facets.sidebarReset")}
+          </button>
+        )}
+      </div>
+      {headerSlot && <div className="mb-3 border-b border-[var(--border)] pb-3">{headerSlot}</div>}
+      {children}
+    </Card>
   );
 }
 

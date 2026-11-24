@@ -9,7 +9,12 @@ import * as React from "react";
 import { ActiveFiltersBar, type ActiveFilterChip } from "@/components/active-filters-bar";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { DirectoryPager } from "@/components/directory-pager";
-import { FacetGroupList, type FacetGroupDef, type FacetValue } from "@/components/filter-panel";
+import {
+  FacetGroupList,
+  FilterSidebarCard,
+  type FacetGroupDef,
+  type FacetValue,
+} from "@/components/filter-panel";
 import { rememberDirectoryUrl } from "@/components/journal/section-nav";
 import { OrcidLink } from "@/components/orcid-link";
 import { SortHead } from "@/components/search/sort-head";
@@ -420,8 +425,14 @@ function AuthorsView() {
       <div className="flex flex-col gap-6 min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
         {/* Wide-screen sidebar: sticky, scrolls on its own when long. */}
         {!disabled && data != null ? (
-          <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:block">
-            <FacetGroupList groups={groups} onToggle={toggleFacet} variant="rows" />
+          <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto min-[960px]:block">
+            <FilterSidebarCard
+              activeCount={filterChips.length}
+              onReset={clearFilters}
+              resetTitle={t("list.resetTitle")}
+            >
+              <FacetGroupList groups={groups} onToggle={toggleFacet} variant="rows" />
+            </FilterSidebarCard>
           </aside>
         ) : (
           <div className="hidden min-[960px]:block" />
@@ -438,42 +449,6 @@ function AuthorsView() {
             />
           )}
 
-          {/* Sort and reset belong with the results they act on. */}
-          {!disabled && (
-            <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
-              <label htmlFor="author-sort" className="whitespace-nowrap">
-                {t("list.sortBy")}
-              </label>
-              <select
-                id="author-sort"
-                title={t("list.sortTitle")}
-                value={sort}
-                onChange={(event) =>
-                  setParams({
-                    sort: event.target.value === "works_desc" ? undefined : event.target.value,
-                  })
-                }
-                className={SELECT_CLASS}
-              >
-                {sorts.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-              {(anyFilter || q) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-[var(--muted-foreground)]"
-                  title={t("list.resetTitle")}
-                  onClick={clearFilters}
-                >
-                  {t("list.resetFilters")}
-                </Button>
-              )}
-            </div>
-          )}
           {disabled ? (
             <CollapsibleCard
               id="authors-disabled"
@@ -484,8 +459,8 @@ function AuthorsView() {
             </CollapsibleCard>
           ) : (
             <Card>
-              <CardContent className="pt-6">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <CardContent className="pt-5">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
                   <p className="text-sm text-[var(--muted-foreground)]">
                     {/* Announce only settled counts: while a fetch runs the live
                       region keeps its previous text, so typing never chatters. */}
@@ -498,6 +473,32 @@ function AuthorsView() {
                     </span>
                     {isFetching && data ? ` · ${t("results.updating")}` : ""}
                   </p>
+                  <div className="flex items-center gap-2 text-sm">
+                    <label
+                      htmlFor="author-sort"
+                      className="whitespace-nowrap text-xs text-[var(--muted-foreground)]"
+                    >
+                      {t("list.sortBy")}
+                    </label>
+                    <select
+                      id="author-sort"
+                      title={t("list.sortTitle")}
+                      value={sort}
+                      onChange={(event) =>
+                        setParams({
+                          sort:
+                            event.target.value === "works_desc" ? undefined : event.target.value,
+                        })
+                      }
+                      className={SELECT_CLASS}
+                    >
+                      {sorts.map((s) => (
+                        <option key={s.value} value={s.value}>
+                          {s.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 {isError ? (

@@ -5,7 +5,7 @@ import { getMessages, getTranslations } from "next-intl/server";
 import "./globals.css";
 
 import { SiteFooter } from "@/components/site-footer";
-import { BrandLink, SiteNav } from "@/components/site-nav";
+import { AboutUtilityLink, BrandLink, SiteNav } from "@/components/site-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { YearFilterControl } from "@/components/year-filter";
 import { FeedbackWidget } from "@/components/feedback/feedback-widget";
@@ -61,11 +61,12 @@ const THEME_SCRIPT = `(function(){try{var m=localStorage.getItem("jb-theme");if(
 function SiteHeader() {
   return (
     <header className="bg-[var(--secondary)] text-[var(--secondary-foreground)]">
-      <div className="mx-auto flex min-h-16 max-w-screen-2xl flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2 sm:flex-nowrap sm:py-0">
+      <div className="mx-auto flex min-h-16 max-w-screen-2xl flex-wrap items-center justify-between gap-x-4 gap-y-1.5 px-4 py-2 lg:flex-nowrap lg:py-0">
         <BrandLink />
         <SiteNav />
-        <div className="flex items-center gap-1 sm:gap-2">
+        <div className="flex items-center gap-2 sm:gap-3">
           <YearFilterControl />
+          <AboutUtilityLink />
           <ThemeToggle />
         </div>
       </div>

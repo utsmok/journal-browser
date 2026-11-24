@@ -360,6 +360,10 @@ export function useFunderDirectory(params: FunderSearchParams) {
         country: params.country?.join("|"),
         policy_structured:
           params.policy_structured === undefined ? undefined : String(params.policy_structured),
+        has_works: params.has_works === undefined ? undefined : String(params.has_works),
+        oa_publishing: params.oa_publishing?.join("|"),
+        green_archiving: params.green_archiving?.join("|"),
+        data_policy: params.data_policy?.join("|"),
         sort: params.sort,
         dir: params.dir,
         offset: params.offset ?? 0,

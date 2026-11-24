@@ -52,8 +52,10 @@ function DataExplorerMenu({ prefix }: { prefix: string }) {
         aria-haspopup="menu"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "inline-flex items-center gap-1 rounded-sm py-1.5 underline-offset-4 hover:text-white/80 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
-          active ? "font-semibold text-white underline" : "text-white/85",
+          "relative inline-flex items-center gap-1 rounded-sm py-2 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
+          active
+            ? "font-semibold text-white after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:bg-[var(--primary)]"
+            : "text-white/80",
         )}
       >
         {t("nav.dataExplorer")}
@@ -118,23 +120,32 @@ export function SiteNav() {
       aria-label={t("nav.mainLabel")}
       className="order-last w-full whitespace-nowrap text-sm sm:order-none sm:w-auto"
     >
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 sm:gap-x-6">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 lg:gap-x-5">
         <NavLink
           href={`${prefix}/`}
           label={t("nav.search")}
           exact
           alsoMatchPrefixes={[`${prefix}/guide`, `${prefix}/journals`]}
         />
-        <NavLink href={`${prefix}/deals`} label={t("nav.deals")} />
-        <NavLink href={`${prefix}/funders`} label={t("nav.funders")} />
         <NavLink href={`${prefix}/publisher`} label={t("nav.publishers")} />
-        <NavLink href={`${prefix}/author`} label={t("nav.authors")} />
         <NavLink href={`${prefix}/orgunit`} label={t("nav.faculties")} />
+        <NavLink href={`${prefix}/author`} label={t("nav.authors")} />
+        <NavLink href={`${prefix}/funders`} label={t("nav.funders")} />
+        <NavLink href={`${prefix}/deals`} label={t("nav.deals")} />
         <DataExplorerMenu prefix={prefix} />
-        <NavLink href={`${prefix}/about`} label={t("nav.about")} />
       </div>
     </nav>
   );
+}
+
+/** Right-side utility link to About for the active institution. */
+export function AboutUtilityLink() {
+  const t = useTranslations("common");
+  const pathname = usePathname() ?? "/";
+  const seg = pathname.split("/")[1] ?? "";
+  const inst = instFromSegment(seg);
+  if (!inst) return null;
+  return <NavLink href={`/${inst}/about`} label={t("nav.about")} className="text-xs sm:text-sm" />;
 }
 
 /** Compact university switcher pill next to the logo; replaces the top-nav
@@ -236,9 +247,14 @@ export function BrandLink() {
         aria-label={t("appTitle")}
         className="flex items-center whitespace-nowrap"
       >
-        <OjbWordmark className="h-11 w-auto" />
+        <OjbWordmark className="h-10 w-auto" />
       </Link>
-      {inst && <InstitutionSwitcher inst={inst} />}
+      {inst && (
+        <>
+          <span aria-hidden className="hidden h-5 w-px bg-white/20 sm:inline-block" />
+          <InstitutionSwitcher inst={inst} />
+        </>
+      )}
     </div>
   );
 }

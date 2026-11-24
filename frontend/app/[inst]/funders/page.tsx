@@ -7,7 +7,12 @@ import * as React from "react";
 
 import { ActiveFiltersBar, type ActiveFilterChip } from "@/components/active-filters-bar";
 import { DirectoryPager } from "@/components/directory-pager";
-import { FacetGroupList, type FacetGroupDef } from "@/components/filter-panel";
+import {
+  FacetGroupList,
+  FilterSidebarCard,
+  type FacetGroupDef,
+  type FacetValue,
+} from "@/components/filter-panel";
 import { rememberDirectoryUrl } from "@/components/journal/section-nav";
 import { SortHead } from "@/components/search/sort-head";
 import { SourceNote } from "@/components/source-note";
@@ -28,7 +33,7 @@ import { useInstitution } from "@/hooks/use-institution";
 import { useSearchShortcut } from "@/hooks/use-search-shortcut";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { useYearRange } from "@/hooks/use-year-filter";
-import { errorMessage, type FunderSearchSort } from "@/lib/api";
+import { errorMessage, type FunderListItem, type FunderSearchSort } from "@/lib/api";
 import { countryName } from "@/lib/format";
 import { FUNDER_COLUMN_SORTS } from "@/lib/search-config";
 
@@ -36,8 +41,18 @@ const OPF_URL = "https://openpolicyfinder.jisc.ac.uk/";
 const SEARCH_INPUT_ID = "funder-search";
 const PAGE_SIZES = [25, 50, 100];
 
+const SELECT_CLASS =
+  "h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2";
+
+const REQ_ORDER = ["requires", "encourages", "no_policy_for", "does_no_mention", "none"] as const;
+
 function paramValues(sp: { get(key: string): string | null }, key: string): string[] {
   return (sp.get(key) ?? "").split("|").filter(Boolean);
+}
+
+function toggleMultiParam(list: string[], value: string): string | undefined {
+  const next = list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+  return next.join("|") || undefined;
 }
 
 function FundersPageInner() {
@@ -55,6 +70,11 @@ function FundersPageInner() {
   const q = sp.get("q") ?? "";
   const [input, setInput] = React.useState(q);
   const countries = paramValues(sp, "country");
+  const hasWorksParam = sp.get("has_works");
+  const hasWorks = hasWorksParam === "true" ? true : hasWorksParam === "false" ? false : undefined;
+  const oaPub = paramValues(sp, "oa_publishing");
+  const greenArch = paramValues(sp, "green_archiving");
+  const dataPolicy = paramValues(sp, "data_policy");
   const policyParam = sp.get("policy_structured");
   const policyStructured =
     policyParam === "true" ? true : policyParam === "false" ? false : undefined;
@@ -108,6 +128,10 @@ function FundersPageInner() {
     q: q || undefined,
     country: countries.length > 0 ? countries : undefined,
     policy_structured: policyStructured,
+    has_works: hasWorks,
+    oa_publishing: oaPub.length > 0 ? oaPub : undefined,
+    green_archiving: greenArch.length > 0 ? greenArch : undefined,
+    data_policy: dataPolicy.length > 0 ? dataPolicy : undefined,
     sort,
     dir: dir ?? undefined,
     offset,
@@ -119,20 +143,50 @@ function FundersPageInner() {
   const rows = data?.items ?? [];
   const total = data?.total ?? 0;
   const facets = data?.facets;
-  const anyFilter = countries.length > 0 || policyStructured !== undefined;
+  const anyFilter =
+    countries.length > 0 ||
+    hasWorks !== undefined ||
+    oaPub.length > 0 ||
+    greenArch.length > 0 ||
+    dataPolicy.length > 0 ||
+    policyStructured !== undefined;
+
+  const reqLabel = React.useCallback(
+    (code: string | null | undefined): string => {
+      const normalized = (code || "none").toLowerCase();
+      if (normalized === "requires") return t("search.facets.reqRequires");
+      if (normalized === "encourages") return t("search.facets.reqEncourages");
+      if (normalized === "no_policy_for") return t("search.facets.reqNone");
+      if (normalized === "does_no_mention") return t("search.facets.reqNotMentioned");
+      if (normalized === "none") return t("search.facets.reqMissing");
+      return normalized.replaceAll("_", " ");
+    },
+    [t],
+  );
 
   const toggleFacet = (key: string, value: string) => {
+    if (key === "has_works") {
+      setParams({ has_works: hasWorksParam === value ? undefined : value });
+      return;
+    }
+    if (key === "oa_publishing") {
+      setParams({ oa_publishing: toggleMultiParam(oaPub, value) });
+      return;
+    }
+    if (key === "green_archiving") {
+      setParams({ green_archiving: toggleMultiParam(greenArch, value) });
+      return;
+    }
+    if (key === "data_policy") {
+      setParams({ data_policy: toggleMultiParam(dataPolicy, value) });
+      return;
+    }
     if (key === "country") {
-      const next = countries.includes(value)
-        ? countries.filter((c) => c !== value)
-        : [...countries, value];
-      setParams({ country: next.join("|") || undefined });
+      setParams({ country: toggleMultiParam(countries, value) });
       return;
     }
     if (key === "policy_structured") {
-      setParams({
-        policy_structured: policyParam === value ? undefined : value,
-      });
+      setParams({ policy_structured: policyParam === value ? undefined : value });
     }
   };
 
@@ -141,6 +195,10 @@ function FundersPageInner() {
     setParams({
       q: undefined,
       country: undefined,
+      has_works: undefined,
+      oa_publishing: undefined,
+      green_archiving: undefined,
+      data_policy: undefined,
       policy_structured: undefined,
     });
   };
@@ -166,11 +224,39 @@ function FundersPageInner() {
     return (dir ?? spec.natural) === "asc" ? "ascending" : "descending";
   };
 
-  const countryBuckets = Object.entries(facets?.country ?? {}).map(([value, count]) => ({
-    value,
-    count,
-    label: countryName(value),
-  }));
+  const reqValues = (
+    counts: Record<string, number> | undefined,
+    active: string[],
+  ): FacetValue[] => {
+    const seen = new Set<string>();
+    const list: FacetValue[] = [];
+    for (const key of REQ_ORDER) {
+      const count = counts?.[key];
+      if (count !== undefined && (count > 0 || active.includes(key))) {
+        seen.add(key);
+        list.push({ value: key, count, label: reqLabel(key) });
+      }
+    }
+    for (const [value, count] of Object.entries(counts ?? {})) {
+      if (!seen.has(value) && (count > 0 || active.includes(value))) {
+        list.push({ value, count, label: reqLabel(value) });
+      }
+    }
+    for (const value of active) {
+      if (!list.some((v) => v.value === value)) {
+        list.unshift({ value, count: 0, label: reqLabel(value) });
+      }
+    }
+    return list;
+  };
+
+  const countryBuckets: FacetValue[] = Object.entries(facets?.country ?? {}).map(
+    ([value, count]) => ({
+      value,
+      count,
+      label: countryName(value),
+    }),
+  );
   for (const code of countries) {
     if (!countryBuckets.some((b) => b.value === code)) {
       countryBuckets.unshift({ value: code, count: 0, label: countryName(code) });
@@ -178,6 +264,45 @@ function FundersPageInner() {
   }
 
   const groups: FacetGroupDef[] = [
+    {
+      key: "has_works",
+      label: t("search.facets.instWorks", { inst: site.short }),
+      defaultOpen: true,
+      values: [
+        {
+          value: "true",
+          count: facets?.has_works?.true,
+          label: t("search.facets.hasWorksYes", { inst: site.short }),
+        },
+        {
+          value: "false",
+          count: facets?.has_works?.false,
+          label: t("search.facets.hasWorksNo", { inst: site.short }),
+        },
+      ],
+      activeValues: hasWorksParam ? [hasWorksParam] : [],
+    },
+    {
+      key: "oa_publishing",
+      label: t("search.facets.oaPublishing"),
+      defaultOpen: true,
+      values: reqValues(facets?.oa_publishing, oaPub),
+      activeValues: oaPub,
+    },
+    {
+      key: "green_archiving",
+      label: t("search.facets.greenArchiving"),
+      defaultOpen: true,
+      values: reqValues(facets?.green_archiving, greenArch),
+      activeValues: greenArch,
+    },
+    {
+      key: "data_policy",
+      label: t("search.facets.dataPolicy"),
+      defaultOpen: true,
+      values: reqValues(facets?.data_policy, dataPolicy),
+      activeValues: dataPolicy,
+    },
     ...(countryBuckets.length > 0
       ? [
           {
@@ -191,24 +316,6 @@ function FundersPageInner() {
           },
         ]
       : []),
-    {
-      key: "policy_structured",
-      label: t("search.facets.policy"),
-      defaultOpen: true,
-      values: [
-        {
-          value: "true",
-          count: facets?.policy_structured?.true,
-          label: t("search.facets.policyStructured"),
-        },
-        {
-          value: "false",
-          count: facets?.policy_structured?.false,
-          label: t("search.facets.policyTextOnly"),
-        },
-      ],
-      activeValues: policyParam ? [policyParam] : [],
-    },
   ];
 
   const chips: ActiveFilterChip[] = [
@@ -224,6 +331,34 @@ function FundersPageInner() {
           },
         ]
       : []),
+    ...(hasWorks !== undefined
+      ? [
+          {
+            id: "has_works",
+            label: `${t("search.facets.instWorks", { inst: site.short })}: ${
+              hasWorks
+                ? t("search.facets.hasWorksYes", { inst: site.short })
+                : t("search.facets.hasWorksNo", { inst: site.short })
+            }`,
+            onRemove: () => setParams({ has_works: undefined }),
+          },
+        ]
+      : []),
+    ...oaPub.map((v) => ({
+      id: `oa_publishing:${v}`,
+      label: `${t("search.facets.oaPublishing")}: ${reqLabel(v)}`,
+      onRemove: () => toggleFacet("oa_publishing", v),
+    })),
+    ...greenArch.map((v) => ({
+      id: `green_archiving:${v}`,
+      label: `${t("search.facets.greenArchiving")}: ${reqLabel(v)}`,
+      onRemove: () => toggleFacet("green_archiving", v),
+    })),
+    ...dataPolicy.map((v) => ({
+      id: `data_policy:${v}`,
+      label: `${t("search.facets.dataPolicy")}: ${reqLabel(v)}`,
+      onRemove: () => toggleFacet("data_policy", v),
+    })),
     ...countries.map((code) => ({
       id: `country:${code}`,
       label: `${t("search.facets.country")}: ${countryName(code)}`,
@@ -243,6 +378,39 @@ function FundersPageInner() {
         ]
       : []),
   ];
+
+  const policySummary = (f: FunderListItem) => {
+    const parts: { label: string; req: string | null | undefined }[] = [
+      { label: t("search.facets.oaPublishing"), req: f.oa_publishing_req },
+      { label: t("search.facets.greenArchiving"), req: f.green_archiving_req },
+      { label: t("search.facets.dataPolicy"), req: f.data_policy_req },
+    ];
+    return (
+      <div className="flex flex-wrap gap-1.5">
+        {parts.map((part) => {
+          const val = (part.req || "none").toLowerCase();
+          const tone =
+            val === "requires"
+              ? "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-400/35 dark:bg-emerald-400/15 dark:text-emerald-200"
+              : val === "encourages"
+                ? "border-blue-300 bg-blue-50 text-blue-900 dark:border-blue-400/35 dark:bg-blue-400/15 dark:text-blue-200"
+                : "border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)]";
+          return (
+            <span
+              key={part.label}
+              className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] leading-tight ${tone}`}
+            >
+              <span className="opacity-80">{part.label}:</span>
+              <span className="font-medium">{reqLabel(val)}</span>
+            </span>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const from = rows.length > 0 ? offset + 1 : 0;
+  const to = offset + rows.length;
 
   return (
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
@@ -290,8 +458,10 @@ function FundersPageInner() {
       <div className="flex flex-col gap-6 min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
         {/* Sticky sidebar (>=960px) */}
         {data != null && groups.length > 0 ? (
-          <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:block">
-            <FacetGroupList groups={groups} onToggle={toggleFacet} variant="rows" />
+          <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto min-[960px]:block">
+            <FilterSidebarCard activeCount={chips.length} onReset={clearAll}>
+              <FacetGroupList groups={groups} onToggle={toggleFacet} variant="rows" />
+            </FilterSidebarCard>
           </aside>
         ) : (
           <div className="hidden min-[960px]:block" />
@@ -307,7 +477,39 @@ function FundersPageInner() {
           />
 
           <Card>
-            <CardContent className="pt-6">
+            <CardContent className="pt-5">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
+                <p className="text-sm text-[var(--muted-foreground)]">
+                  <span aria-live="polite">
+                    {data ? (total > 0 ? t("search.range", { from, to, total }) : "0") : ""}
+                  </span>
+                </p>
+                <div className="flex items-center gap-2 text-sm">
+                  <label
+                    htmlFor="funder-sort"
+                    className="whitespace-nowrap text-xs text-[var(--muted-foreground)]"
+                  >
+                    {t("search.sortBy")}
+                  </label>
+                  <select
+                    id="funder-sort"
+                    title={t("search.sortHint")}
+                    value={sort ?? "works"}
+                    onChange={(event) => {
+                      const nextSort = event.target.value as FunderSearchSort;
+                      setParams({
+                        sort: nextSort === "works" ? undefined : nextSort,
+                        dir: undefined,
+                      });
+                    }}
+                    className={SELECT_CLASS}
+                  >
+                    <option value="works">{t("search.sortWorks", { inst: site.short })}</option>
+                    <option value="name">{t("search.sortName")}</option>
+                  </select>
+                </div>
+              </div>
+
               {isError ? (
                 <div className="py-10 text-center">
                   <p className="text-[var(--destructive)]">{errorMessage(tc, error)}</p>
@@ -337,24 +539,22 @@ function FundersPageInner() {
                         key={f.id}
                         className="border-b border-[var(--border)] py-3 first:pt-0 last:border-0 last:pb-0"
                       >
-                        <Link
-                          href={`/${inst}/funders/${f.id}`}
-                          className="font-medium text-[var(--foreground)] underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-                        >
-                          {f.name ?? t("unnamedFunder", { id: f.id })}
-                        </Link>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs tabular-nums text-[var(--muted-foreground)]">
-                          <span>{countryName(f.country)}</span>
-                          <span>
+                        <div className="flex items-start justify-between gap-3">
+                          <Link
+                            href={`/${inst}/funders/${f.id}`}
+                            className="font-medium text-[var(--foreground)] underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                          >
+                            {f.name ?? t("unnamedFunder", { id: f.id })}
+                          </Link>
+                          <span className="shrink-0 text-xs tabular-nums text-[var(--muted-foreground)]">
                             {f.n_ut_works.toLocaleString("en")}{" "}
                             {t("instWorks", { inst: site.short })}
                           </span>
-                          <span>
-                            {f.policy_structured
-                              ? t("search.facets.policyStructured")
-                              : t("search.facets.policyTextOnly")}
-                          </span>
                         </div>
+                        <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                          {countryName(f.country)}
+                        </p>
+                        <div className="mt-2">{policySummary(f)}</div>
                       </li>
                     ))}
                   </ul>
@@ -372,7 +572,7 @@ function FundersPageInner() {
                             />
                           </TableHead>
                           <TableHead>{t("search.country")}</TableHead>
-                          <TableHead>{t("search.facets.policy")}</TableHead>
+                          <TableHead>{t("search.facets.policies")}</TableHead>
                           <TableHead className="text-right" aria-sort={ariaSortFor("works")}>
                             <SortHead
                               columnId="works"
@@ -396,11 +596,7 @@ function FundersPageInner() {
                             <TableCell className="text-[var(--muted-foreground)]">
                               {countryName(f.country)}
                             </TableCell>
-                            <TableCell className="text-xs text-[var(--muted-foreground)]">
-                              {f.policy_structured
-                                ? t("search.facets.policyStructured")
-                                : t("search.facets.policyTextOnly")}
-                            </TableCell>
+                            <TableCell>{policySummary(f)}</TableCell>
                             <TableCell className="text-right tabular-nums">
                               {f.n_ut_works.toLocaleString("en")}
                             </TableCell>

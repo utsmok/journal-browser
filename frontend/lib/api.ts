@@ -425,6 +425,10 @@ export type FunderSearchParams = {
   q?: string;
   country?: string[];
   policy_structured?: boolean;
+  has_works?: boolean;
+  oa_publishing?: string[];
+  green_archiving?: string[];
+  data_policy?: string[];
   sort?: FunderSearchSort;
   dir?: "asc" | "desc";
   offset?: number;

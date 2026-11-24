@@ -1,10 +1,12 @@
 "use client";
 
+import { Calendar } from "lucide-react";
 import { usePathname } from "next/navigation";
-import * as React from "react";
 import { useTranslations } from "next-intl";
+import * as React from "react";
 
 import { effectiveYearRange, useYearBounds, useYearRange } from "@/hooks/use-year-filter";
+import { cn } from "@/lib/utils";
 
 const LAST5_SPAN = 5;
 
@@ -44,7 +46,7 @@ export function YearFilterControl() {
   for (let y = toYear; y >= fromYear; y--) years.push(y);
 
   const selectClass =
-    "rounded-[var(--radius)] border border-white/25 bg-white/10 px-1.5 py-1 text-xs text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 [&>option]:bg-[var(--card)] [&>option]:text-[var(--foreground)]";
+    "rounded bg-transparent px-1 py-0.5 text-xs font-medium text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 [&>option]:bg-[var(--card)] [&>option]:text-[var(--foreground)]";
 
   const setCustom = (from: number, to: number) => {
     if (from > to) [from, to] = [to, from];
@@ -53,11 +55,19 @@ export function YearFilterControl() {
 
   return (
     <div
-      className={`flex items-center gap-1 ${yearScoped ? "" : "opacity-65"}`}
+      className={cn(
+        "flex items-center gap-1 rounded-[var(--radius)] border px-2 py-1 transition-colors",
+        active && yearScoped
+          ? "border-[var(--primary)]/80 bg-white/15"
+          : "border-white/25 bg-white/10",
+        !yearScoped && "opacity-55",
+      )}
       aria-label={t("yearFilter.groupLabel")}
       role="group"
-      title={yearScoped ? undefined : t("yearFilter.inactivePageHint")}
+      title={yearScoped ? t("yearFilter.presetHint") : t("yearFilter.inactivePageHint")}
     >
+      <Calendar aria-hidden className="size-3.5 shrink-0 text-white/80" />
+      <span className="hidden text-xs text-white/75 xl:inline">{t("yearFilter.shortLabel")}</span>
       <select
         aria-label={t("yearFilter.presetLabel")}
         title={t("yearFilter.presetHint")}

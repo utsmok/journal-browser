@@ -7,11 +7,13 @@ import * as React from "react";
 
 import { useInstitution } from "@/hooks/use-institution";
 import { useFunders } from "@/hooks/use-api";
+import { countryName } from "@/lib/format";
 import { useFunderPrefs } from "@/lib/funder-prefs";
+import { cn } from "@/lib/utils";
 
 /** Debounced funder picker: search the Jisc OPF canon, click a row to
  * select it (persisted in localStorage), or open its detail page. */
-export function FunderPicker() {
+export function FunderPicker({ fullWidth = false }: { fullWidth?: boolean } = {}) {
   const inst = useInstitution();
   const t = useTranslations("common");
   const [funder, setFunder] = useFunderPrefs();
@@ -39,9 +41,14 @@ export function FunderPicker() {
 
   if (funder) {
     return (
-      <span className="inline-flex h-10 items-center gap-1.5 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-2.5 text-sm">
+      <div
+        className={cn(
+          "inline-flex h-9 items-center justify-between gap-1.5 rounded-[var(--radius)] border border-[var(--brand-tint-border)] bg-[var(--brand-tint-bg)] px-2.5 text-xs font-medium text-[var(--primary-text)]",
+          fullWidth && "flex w-full",
+        )}
+      >
         <span
-          className="max-w-[220px] truncate"
+          className={cn("truncate", fullWidth ? "min-w-0 flex-1" : "max-w-[220px]")}
           title={t("funder.selectedTitle", { name: funder.name })}
         >
           {t("funder.selectedLabel", { name: funder.name })}
@@ -49,17 +56,17 @@ export function FunderPicker() {
         <button
           type="button"
           aria-label={t("funder.clearLabel", { name: funder.name })}
-          className="rounded p-0.5 hover:bg-[var(--muted)]"
+          className="shrink-0 rounded p-0.5 hover:bg-black/5 dark:hover:bg-white/10"
           onClick={() => setFunder(null)}
         >
-          <X aria-hidden className="size-4" />
+          <X aria-hidden className="size-3.5" />
         </button>
-      </span>
+      </div>
     );
   }
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className={cn("relative", fullWidth && "w-full")}>
       <div className="relative">
         <input
           type="search"
@@ -71,18 +78,24 @@ export function FunderPicker() {
           onFocus={() => setOpen(true)}
           placeholder={t("funder.placeholder")}
           aria-label={t("funder.inputLabel")}
-          className="h-10 w-40 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] pl-7 pr-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 min-[560px]:w-56"
+          className={cn(
+            "h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] pl-7 pr-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2",
+            fullWidth ? "w-full" : "w-40 min-[560px]:w-56",
+          )}
         />
         <Search
           aria-hidden
-          className="pointer-events-none absolute left-2 top-2.5 size-4 opacity-50"
+          className="pointer-events-none absolute left-2 top-2.5 size-3.5 opacity-50"
         />
       </div>
       {open && debounced.trim().length >= 2 && (
         <ul
           role="listbox"
           aria-label={t("funder.resultsLabel")}
-          className="absolute z-30 mt-1 max-h-72 w-72 overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-1 text-sm shadow-lg"
+          className={cn(
+            "absolute z-30 mt-1 max-h-72 overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-1 text-sm shadow-lg",
+            fullWidth ? "left-0 right-0 min-w-64" : "w-72",
+          )}
         >
           {funders.isPending && <li className="px-2 py-1.5 opacity-60">{t("funder.searching")}</li>}
           {funders.data?.items.length === 0 && (
@@ -103,19 +116,19 @@ export function FunderPicker() {
               >
                 <span className="block truncate font-medium">{f.name}</span>
                 <span className="text-xs opacity-70">
-                  {(f.country ?? "").toUpperCase()}
+                  {countryName(f.country) || (f.country ?? "").toUpperCase()}
                   {f.policy_structured ? "" : t("funder.textOnlyPolicy")}
                 </span>
               </button>
               <span
-                className="shrink-0 rounded-full bg-[var(--muted)] px-1.5 py-0.5 text-xs"
+                className="shrink-0 rounded-full bg-[var(--muted)] px-1.5 py-0.5 text-xs tabular-nums"
                 title={t("funder.worksTitle", { count: f.n_ut_works })}
               >
                 {f.n_ut_works}
               </span>
               <Link
                 href={`/${inst}/funders/${f.id}`}
-                className="shrink-0 px-1.5 py-1 text-xs underline decoration-dotted"
+                className="shrink-0 px-1.5 py-1 text-xs font-medium text-[var(--primary-text)] underline-offset-2 hover:underline"
                 title={t("funder.openPageTitle", {
                   name: f.name ?? t("funder.fallbackName", { id: f.id }),
                 })}

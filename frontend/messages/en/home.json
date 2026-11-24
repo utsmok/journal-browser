@@ -11,14 +11,36 @@
     "valueLine": "Open data, open code: every number links to the open source it came from.",
     "coverageToPresent": "Coverage: {start} to present",
     "coverageSingleYear": "Coverage: {year}",
-    "coverageRange": "Coverage: {start} to {end}"
+    "coverageRange": "Coverage: {start} to {end}",
+    "feature1Title": "Open access deals",
+    "feature1Body": "See which transformative agreements waive or discount APCs for your authors.",
+    "feature2Title": "Institutional output",
+    "feature2Body": "Inspect where your university publishes, across journals, publishers, faculties, and funders.",
+    "feature3Title": "Open data sources",
+    "feature3Body": "Built from OpenAlex, OpenAIRE, ROR, DOAJ, OpenAPC, and Jisc Open Policy Finder."
   },
   "hero": {
     "title": "Find the best home for your next article",
     "intro": "Search journals to see whether they are covered by an open access deal, what publishing there costs, and how the {institution} publishes in them.",
+    "modeSwitchLabel": "Journal discovery mode",
+    "quickStartButton": "Quick start",
     "modeBrowse": "Browse & filter",
     "modeGuide": "Guided finder",
     "modeGuideIntro": "Paste your title and abstract to get ranked open access journal recommendations tailored to your funder, deal coverage, and budget."
+  },
+  "onboarding": {
+    "ariaLabel": "Quick start guide",
+    "title": "New to the {short} journal browser? Three ways to start:",
+    "dismiss": "Dismiss quick start guide",
+    "dismissShort": "Got it",
+    "step1Title": "Browse & filter journals",
+    "step1Body": "Search by title, ISSN, or topic and filter by deal coverage, OA model, or APC.",
+    "step2Title": "Try the guided finder",
+    "step2Body": "Paste your paper's title and abstract for tailored journal recommendations.",
+    "step3Title": "Explore deals & policies",
+    "step3Body": "Check institutional agreements in",
+    "step3Deals": "Deals",
+    "step3Funders": "Funders"
   },
   "search": {
     "placeholder": "Search journals, ISSNs, publishers, or topics",

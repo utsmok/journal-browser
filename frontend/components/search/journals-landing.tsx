@@ -1,7 +1,7 @@
 "use client";
 
 import { flexRender, getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
-import { Compass, Search, SlidersHorizontal } from "lucide-react";
+import { Compass, HelpCircle, Search, SlidersHorizontal } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { notFound, usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -9,9 +9,11 @@ import * as React from "react";
 
 import { ActiveFiltersBar, type ActiveFilterChip } from "@/components/active-filters-bar";
 import { DealBadge, FunderFitBadge, OaTypeBadge, QuartileBadge } from "@/components/badges";
-import { FilterPanel } from "@/components/filter-panel";
+import { FilterPanel, FilterSidebarCard } from "@/components/filter-panel";
 import { GuideWizard } from "@/components/guide/guide-wizard";
 import { rememberDirectoryUrl } from "@/components/journal/section-nav";
+import { OnboardingBanner, useOnboardingState } from "@/components/onboarding-banner";
+import { PageTabs } from "@/components/page-tabs";
 import { FunderPicker } from "@/components/search/funder-picker";
 import { Pagination } from "@/components/search/pagination";
 import { SortHead } from "@/components/search/sort-head";
@@ -94,7 +96,8 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
   const language = sp.get("language") ?? "";
   const semanticMode = sp.get("mode") === "semantic";
   const semantic = view === "browse" && semanticMode && spQ.trim().length >= 2;
-  const [funder] = useFunderPrefs();
+  const [funder, setFunder] = useFunderPrefs();
+  const onboarding = useOnboardingState();
   const funderFit = sp.get("funder_fit") ?? "";
   const { year_from, year_to } = useYearRange();
 
@@ -492,15 +495,17 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
       hasApc !== null ||
       hasWorks !== null ||
       greenOa !== null ||
+      funder ||
       funderFit ||
       oaTypes.length > 0 ||
-      Boolean(pubType) ||
-      Boolean(language),
+      pubType ||
+      language,
   );
   const hasFilters = Boolean(spQ) || hasNonQueryFilters;
 
   const clearFilters = () => {
     setInput("");
+    if (funder) setFunder(null);
     update({
       q: undefined,
       search_in: undefined,
@@ -665,6 +670,18 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
           },
         ]
       : []),
+    ...(funder
+      ? [
+          {
+            id: "funder",
+            label: tc("funder.selectedLabel", { name: funder.name }),
+            onRemove: () => {
+              setFunder(null);
+              update({ funder_fit: undefined });
+            },
+          },
+        ]
+      : []),
     ...(funderFit
       ? [
           {
@@ -709,7 +726,7 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
   return (
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
       <header className="mb-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <h1 className="mb-2 text-3xl font-bold text-balance">
               {view === "guide" ? tg("header.heading") : t("hero.title")}
@@ -720,113 +737,121 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
                 : t("hero.intro", { institution: site.name })}
             </p>
           </div>
-          <div
-            role="tablist"
-            aria-label={t("hero.title")}
-            className="flex shrink-0 overflow-hidden rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)]"
-          >
+          {view === "browse" && !hasFilters && !semanticMode && onboarding.dismissed && (
             <button
               type="button"
-              role="tab"
-              aria-selected={view === "browse"}
-              onClick={() => switchView("browse")}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${
-                view === "browse"
-                  ? "bg-[var(--secondary)] text-[var(--secondary-foreground)]"
-                  : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-              }`}
+              onClick={onboarding.reopen}
+              className="inline-flex items-center gap-1.5 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:border-[var(--primary)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
             >
-              <SlidersHorizontal aria-hidden className="size-3.5" />
-              {t("hero.modeBrowse")}
+              <HelpCircle aria-hidden className="size-3.5" />
+              {t("hero.quickStartButton")}
             </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={view === "guide"}
-              onClick={() => switchView("guide")}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${
-                view === "guide"
-                  ? "bg-[var(--secondary)] text-[var(--secondary-foreground)]"
-                  : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              <Compass aria-hidden className="size-3.5" />
-              {t("hero.modeGuide")}
-            </button>
-          </div>
+          )}
         </div>
 
+        <PageTabs
+          ariaLabel={t("hero.modeSwitchLabel")}
+          value={view}
+          onChange={switchView}
+          items={[
+            {
+              value: "browse",
+              label: t("hero.modeBrowse"),
+              icon: <SlidersHorizontal aria-hidden className="size-3.5" />,
+            },
+            {
+              value: "guide",
+              label: t("hero.modeGuide"),
+              icon: <Compass aria-hidden className="size-3.5" />,
+            },
+          ]}
+          className="mb-5"
+        />
+
         {view === "browse" && (
-          <div className="mt-5 space-y-2">
-            <form
-              className="flex max-w-3xl flex-wrap gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                update({ q: input || undefined });
-              }}
-            >
-              <div className="relative w-full min-[560px]:w-auto min-[560px]:flex-1 min-[960px]:min-w-[24rem]">
-                <Input
-                  id={SEARCH_INPUT_ID}
-                  value={input}
-                  onChange={(event) => setInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") event.currentTarget.blur();
-                  }}
-                  placeholder={
-                    semanticMode ? t("search.placeholderSemantic") : t("search.placeholder")
-                  }
-                  aria-label={t("search.inputLabel")}
-                  className="pr-8"
-                />
-                {input === "" && (
-                  <kbd
-                    aria-hidden
-                    className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-[var(--border)] bg-[var(--muted)] px-1.5 py-0.5 text-[11px] text-[var(--muted-foreground)] [@media(hover:hover)_and_(pointer:fine)]:block"
-                  >
-                    /
-                  </kbd>
-                )}
-              </div>
-              {!semanticMode && (
-                <select
-                  aria-label={t("search.scopeLabel")}
-                  title={t("search.scopeTitle")}
-                  value={searchIn}
-                  onChange={(event) => update({ search_in: event.target.value })}
-                  className="h-10 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
+          <form
+            className="flex max-w-3xl flex-wrap gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              update({ q: input || undefined });
+            }}
+          >
+            <div className="relative w-full min-[560px]:w-auto min-[560px]:flex-1 min-[960px]:min-w-[24rem]">
+              <Input
+                id={SEARCH_INPUT_ID}
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") event.currentTarget.blur();
+                }}
+                placeholder={
+                  semanticMode ? t("search.placeholderSemantic") : t("search.placeholder")
+                }
+                aria-label={t("search.inputLabel")}
+                className="pr-8"
+              />
+              {input === "" && (
+                <kbd
+                  aria-hidden
+                  className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-[var(--border)] bg-[var(--muted)] px-1.5 py-0.5 text-[11px] text-[var(--muted-foreground)] [@media(hover:hover)_and_(pointer:fine)]:block"
                 >
-                  {SEARCH_IN_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {ts(o.labelKey)}
-                    </option>
-                  ))}
-                </select>
+                  /
+                </kbd>
               )}
-              <label
-                className="flex h-10 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2.5 text-sm select-none"
-                title={t("search.semanticTitle")}
-              >
-                <input
-                  type="checkbox"
-                  className="size-4 accent-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
-                  checked={sp.get("mode") === "semantic"}
-                  onChange={(event) =>
-                    update({ mode: event.target.checked ? "semantic" : undefined })
-                  }
-                />
-                {t("search.semanticLabel")}
-              </label>
-              <Button type="submit" className="flex-1 min-[560px]:flex-none">
-                <Search aria-hidden className="size-4" /> {t("search.submit")}
-              </Button>
-            </form>
-            <div className="max-w-3xl">
-              <FunderPicker />
             </div>
-          </div>
+            {!semanticMode && (
+              <select
+                aria-label={t("search.scopeLabel")}
+                title={t("search.scopeTitle")}
+                value={searchIn}
+                onChange={(event) => update({ search_in: event.target.value })}
+                className="h-10 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
+              >
+                {SEARCH_IN_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {ts(o.labelKey)}
+                  </option>
+                ))}
+              </select>
+            )}
+            <label
+              className="flex h-10 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2.5 text-sm select-none"
+              title={t("search.semanticTitle")}
+            >
+              <input
+                type="checkbox"
+                className="size-4 accent-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
+                checked={sp.get("mode") === "semantic"}
+                onChange={(event) =>
+                  update({ mode: event.target.checked ? "semantic" : undefined })
+                }
+              />
+              {t("search.semanticLabel")}
+            </label>
+            <Button type="submit" className="flex-1 min-[560px]:flex-none">
+              <Search aria-hidden className="size-4" /> {t("search.submit")}
+            </Button>
+          </form>
         )}
       </header>
+
+      {view === "browse" && !hasFilters && !semanticMode && onboarding.visible && (
+        <div className="mb-6">
+          <OnboardingBanner
+            inst={inst}
+            instShort={instShort}
+            onTryBrowse={() => {
+              onboarding.dismiss();
+              document.getElementById(SEARCH_INPUT_ID)?.focus();
+            }}
+            onTryGuided={() => {
+              onboarding.dismiss();
+              switchView("guide");
+            }}
+            onDismiss={onboarding.dismiss}
+          />
+        </div>
+      )}
 
       {view === "guide" ? (
         <GuideWizard embedded />
@@ -835,6 +860,12 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
           {/* Stacked filter card: the only filter UI below 960px. */}
           {!semanticMode && (
             <section className="mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
+              <div className="mb-3 border-b border-[var(--border)] pb-3">
+                <p className="mb-1.5 text-xs font-semibold text-[var(--foreground)]">
+                  {tc("facets.groupYourFunder")}
+                </p>
+                <FunderPicker fullWidth />
+              </div>
               <FilterPanel
                 facets={facets}
                 selection={filterSelection}
@@ -849,15 +880,29 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
           <div className="flex flex-col gap-6 min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
             {/* Wide-screen sidebar: sticky, scrolls on its own when long. */}
             {!semanticMode && (
-              <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:block">
-                <FilterPanel
-                  facets={facets}
-                  selection={filterSelection}
-                  onToggle={handleFacetToggle}
-                  variant="rows"
-                  error={facetsError}
-                  onRetry={() => facetsQuery.refetch()}
-                />
+              <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto min-[960px]:block">
+                <FilterSidebarCard
+                  activeCount={filterChips.length}
+                  onReset={hasFilters ? clearFilters : undefined}
+                  resetTitle={t("toolbar.resetTitle")}
+                  headerSlot={
+                    <div>
+                      <p className="mb-1.5 text-xs font-semibold text-[var(--foreground)]">
+                        {tc("facets.groupYourFunder")}
+                      </p>
+                      <FunderPicker fullWidth />
+                    </div>
+                  }
+                >
+                  <FilterPanel
+                    facets={facets}
+                    selection={filterSelection}
+                    onToggle={handleFacetToggle}
+                    variant="rows"
+                    error={facetsError}
+                    onRetry={() => facetsQuery.refetch()}
+                  />
+                </FilterSidebarCard>
               </aside>
             )}
 
@@ -870,53 +915,49 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
                 removeAriaPrefix={tc("activeFilters.remove")}
               />
 
-              {/* Sort and reset belong with the results they act on. */}
-              <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
-                {!semanticMode && (
-                  <>
-                    <label htmlFor="sort" className="whitespace-nowrap">
-                      {t("toolbar.sortBy")}
-                    </label>
-                    <select
-                      id="sort"
-                      title={t("toolbar.sortTitle")}
-                      value={sort}
-                      onChange={(event) => update({ sort: event.target.value, dir: undefined })}
-                      className="h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
-                    >
-                      {SORTS.map((s) => (
-                        <option key={s.value} value={s.value}>
-                          {s.value === "institution_works"
-                            ? t("toolbar.sortInstitutionWorks", { inst: instShort })
-                            : ts(s.labelKey)}
-                        </option>
-                      ))}
-                    </select>
-                    {hasFilters && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-[var(--muted-foreground)]"
-                        title={t("toolbar.resetTitle")}
-                        onClick={clearFilters}
-                      >
-                        {hasNonQueryFilters ? t("toolbar.resetFilters") : t("toolbar.resetSearch")}
-                      </Button>
-                    )}
-                  </>
-                )}
-                {semanticMode && (
-                  <p className="text-[var(--muted-foreground)]">
-                    {semantic
-                      ? t("toolbar.semanticStatusActive")
-                      : t("toolbar.semanticStatusPending")}
-                  </p>
-                )}
-              </div>
-
               <Card>
-                <CardContent className="pt-6">
-                  <Pagination data={data} isFetching={isFetching} stack={stack} moveTo={moveTo} />
+                <CardContent className="pt-5">
+                  <Pagination
+                    data={data}
+                    isFetching={isFetching}
+                    stack={stack}
+                    moveTo={moveTo}
+                    toolbarSlot={
+                      semanticMode ? (
+                        <p className="text-xs text-[var(--muted-foreground)]">
+                          {semantic
+                            ? t("toolbar.semanticStatusActive")
+                            : t("toolbar.semanticStatusPending")}
+                        </p>
+                      ) : (
+                        <div className="flex items-center gap-2 text-sm">
+                          <label
+                            htmlFor="sort"
+                            className="whitespace-nowrap text-xs text-[var(--muted-foreground)]"
+                          >
+                            {t("toolbar.sortBy")}
+                          </label>
+                          <select
+                            id="sort"
+                            title={t("toolbar.sortTitle")}
+                            value={sort}
+                            onChange={(event) =>
+                              update({ sort: event.target.value, dir: undefined })
+                            }
+                            className="h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
+                          >
+                            {SORTS.map((s) => (
+                              <option key={s.value} value={s.value}>
+                                {s.value === "institution_works"
+                                  ? t("toolbar.sortInstitutionWorks", { inst: instShort })
+                                  : ts(s.labelKey)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )
+                    }
+                  />
 
                   {isError ? (
                     <div className="py-10 text-center">

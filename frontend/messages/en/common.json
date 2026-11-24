@@ -52,6 +52,7 @@
   },
 
   "yearFilter": {
+    "shortLabel": "Years",
     "groupLabel": "Publication year range",
     "presetLabel": "Publication years",
     "presetHint": "Limit publication counts, lists, and charts to these years. The choice is saved per university.",
@@ -95,6 +96,9 @@
   },
 
   "facets": {
+    "sidebarHeading": "Filters",
+    "sidebarReset": "Reset",
+    "groupYourFunder": "Your funder",
     "filterBy": "Filter by {label}",
 
     "groupVenueType": "Venue type",

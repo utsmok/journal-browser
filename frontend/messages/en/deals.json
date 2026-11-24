@@ -4,7 +4,20 @@
   },
   "page": {
     "heading": "Open access deals",
-    "intro": "Transformative and read-and-publish agreements that cover {institution} authors. Each entry shows the caps, the conditions, and the workflow."
+    "intro": "Transformative and read-and-publish agreements that cover {institution} authors. Each entry shows the caps, the conditions, and the workflow.",
+    "summaryInline": "{current} active agreements · {covered, number} covered journal entries · {capped} with article caps."
+  },
+  "tabs": {
+    "ariaLabel": "Deal status",
+    "current": "Current deals",
+    "archive": "Archived deals"
+  },
+  "sort": {
+    "label": "Sort by",
+    "title": "Order of the results",
+    "journalsDesc": "Covered journals (high→low)",
+    "titleAsc": "Title (A→Z)",
+    "oaDesc": "OA articles (high→low)"
   },
   "kpi": {
     "currentDeals": "Current deals",
@@ -15,10 +28,20 @@
   "filter": {
     "searchPlaceholder": "Search deals, publishers, or conditions…",
     "searchAria": "Search deals",
+    "groupEligibility": "Eligibility",
+    "groupCaps": "Article caps",
+    "groupCost": "Cost evidence",
+    "groupStatus": "Curation",
     "all": "All",
     "capped": "Capped",
+    "uncapped": "No article cap",
     "capReached": "At cap",
     "correspondingOnly": "Corresponding only",
+    "openToAll": "Open to all authors",
+    "hasCost": "Has APC spend data",
+    "noCost": "No cost data",
+    "curated": "Curated",
+    "curationPending": "Curation pending",
     "clear": "Clear filter",
     "empty": "No deals match the current filter."
   },

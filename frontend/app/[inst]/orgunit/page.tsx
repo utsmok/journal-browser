@@ -7,8 +7,14 @@ import * as React from "react";
 
 import { ActiveFiltersBar, type ActiveFilterChip } from "@/components/active-filters-bar";
 import { DirectoryPager } from "@/components/directory-pager";
-import { FacetGroupList, type FacetGroupDef, type FacetValue } from "@/components/filter-panel";
+import {
+  FacetGroupList,
+  FilterSidebarCard,
+  type FacetGroupDef,
+  type FacetValue,
+} from "@/components/filter-panel";
 import { rememberDirectoryUrl } from "@/components/journal/section-nav";
+import { PageTabs } from "@/components/page-tabs";
 import { SortHead } from "@/components/search/sort-head";
 import { ListSkeletonRows } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -330,72 +336,48 @@ function OrgUnitsView() {
         <p className="mb-4 max-w-2xl text-sm text-[var(--muted-foreground)]">
           {t("list.intro", { institution: site.name })}
         </p>
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Level toggle: switching also drops the faculty facet, which
-            only applies to research groups. */}
-          <div
-            role="group"
-            aria-label={t("list.levelLabel")}
-            className="flex overflow-hidden rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)]"
-          >
-            <Button
-              variant={level === "faculty" ? "secondary" : "ghost"}
-              size="sm"
-              className="rounded-none"
-              aria-pressed={level === "faculty"}
-              onClick={() => setParams({ level: undefined, faculty: undefined })}
-            >
-              {t("list.levelToggle.faculty")}
-            </Button>
-            <Button
-              variant={level === "group" ? "secondary" : "ghost"}
-              size="sm"
-              className="rounded-none"
-              aria-pressed={level === "group"}
-              onClick={() => setParams({ level: "group", faculty: undefined })}
-            >
-              {t("list.levelToggle.group")}
-            </Button>
-            <Button
-              variant={level === "institute" ? "secondary" : "ghost"}
-              size="sm"
-              className="rounded-none"
-              aria-pressed={level === "institute"}
-              onClick={() => setParams({ level: "institute", faculty: undefined })}
-            >
-              {t("list.levelToggle.institute")}
-            </Button>
+        <PageTabs
+          ariaLabel={t("list.levelLabel")}
+          value={level}
+          onChange={(next) =>
+            setParams({ level: next === "faculty" ? undefined : next, faculty: undefined })
+          }
+          items={[
+            { value: "faculty", label: t("list.levelToggle.faculty") },
+            { value: "group", label: t("list.levelToggle.group") },
+            { value: "institute", label: t("list.levelToggle.institute") },
+          ]}
+          className="mb-5"
+        />
+        <form
+          className="flex max-w-2xl gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            update(input);
+          }}
+        >
+          <div className="relative flex-1">
+            <Input
+              id={SEARCH_INPUT_ID}
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") event.currentTarget.blur();
+              }}
+              placeholder={t(`list.search.${level}`)}
+              aria-label={t(`list.search.${level}`)}
+            />
+            {input === "" && (
+              <kbd
+                aria-hidden
+                className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-[var(--border)] bg-[var(--muted)] px-1.5 py-0.5 text-[11px] text-[var(--muted-foreground)] [@media(hover:hover)_and_(pointer:fine)]:block"
+              >
+                /
+              </kbd>
+            )}
           </div>
-          <form
-            className="flex min-w-64 max-w-2xl flex-1 gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              update(input);
-            }}
-          >
-            <div className="relative flex-1">
-              <Input
-                id={SEARCH_INPUT_ID}
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") event.currentTarget.blur();
-                }}
-                placeholder={t(`list.search.${level}`)}
-                aria-label={t(`list.search.${level}`)}
-              />
-              {input === "" && (
-                <kbd
-                  aria-hidden
-                  className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-[var(--border)] bg-[var(--muted)] px-1.5 py-0.5 text-[11px] text-[var(--muted-foreground)] [@media(hover:hover)_and_(pointer:fine)]:block"
-                >
-                  /
-                </kbd>
-              )}
-            </div>
-            <Button type="submit">{t("list.search.action")}</Button>
-          </form>
-        </div>
+          <Button type="submit">{t("list.search.action")}</Button>
+        </form>
       </header>
 
       {/* Stacked filter card: the only filter UI below 960px. */}
@@ -408,8 +390,14 @@ function OrgUnitsView() {
       <div className="flex flex-col gap-6 min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
         {/* Wide-screen sidebar: sticky, scrolls on its own when long. */}
         {data != null ? (
-          <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:block">
-            <FacetGroupList groups={groups} onToggle={toggleFacet} variant="rows" />
+          <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto min-[960px]:block">
+            <FilterSidebarCard
+              activeCount={filterChips.length}
+              onReset={clearFilters}
+              resetTitle={t("list.resetFiltersTitle")}
+            >
+              <FacetGroupList groups={groups} onToggle={toggleFacet} variant="rows" />
+            </FilterSidebarCard>
           </aside>
         ) : (
           <div className="hidden min-[960px]:block" />
@@ -424,55 +412,9 @@ function OrgUnitsView() {
             removeAriaPrefix={tc("activeFilters.remove")}
           />
 
-          <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
-            <label htmlFor="orgunit-sort" className="whitespace-nowrap">
-              {t("list.sortBy")}
-            </label>
-            <select
-              id="orgunit-sort"
-              title={t("list.sortOrderTitle")}
-              value={sort ?? "default"}
-              onChange={(event) =>
-                setParams({
-                  sort: event.target.value === "default" ? undefined : event.target.value,
-                  // A sort change invalidates the old direction: keeping
-                  // `dir` would flip the freshly chosen label.
-                  dir: undefined,
-                })
-              }
-              className={SELECT_CLASS}
-            >
-              {/* The backend default is relevance with a query, works count
-                without; say so instead of guessing one label. */}
-              <option value="default">{q ? t("list.sort.relevance") : t("list.sort.works")}</option>
-              {(
-                [
-                  ["name", t("list.sort.name")],
-                  ["authors", t("list.sort.authors")],
-                  ["works", t("list.sort.works")],
-                  ["deal_works", t("list.sort.dealWorks")],
-                ] as [OrgUnitSearchSort, string][]
-              ).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-            {(anyFilter || q) && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-[var(--muted-foreground)]"
-                title={t("list.resetFiltersTitle")}
-                onClick={clearFilters}
-              >
-                {t("list.resetFilters")}
-              </Button>
-            )}
-          </div>
           <Card>
-            <CardContent className="pt-6">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <CardContent className="pt-5">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
                 <p className="text-sm text-[var(--muted-foreground)]">
                   {/* Announce only settled counts: while a fetch runs the live
                     region keeps its previous text, so typing never chatters. */}
@@ -483,6 +425,46 @@ function OrgUnitsView() {
                   </span>
                   {isFetching && data ? ` ${t("list.updating")}` : ""}
                 </p>
+                <div className="flex items-center gap-2 text-sm">
+                  <label
+                    htmlFor="orgunit-sort"
+                    className="whitespace-nowrap text-xs text-[var(--muted-foreground)]"
+                  >
+                    {t("list.sortBy")}
+                  </label>
+                  <select
+                    id="orgunit-sort"
+                    title={t("list.sortOrderTitle")}
+                    value={sort ?? "default"}
+                    onChange={(event) =>
+                      setParams({
+                        sort: event.target.value === "default" ? undefined : event.target.value,
+                        // A sort change invalidates the old direction: keeping
+                        // `dir` would flip the freshly chosen label.
+                        dir: undefined,
+                      })
+                    }
+                    className={SELECT_CLASS}
+                  >
+                    {/* The backend default is relevance with a query, works count
+                      without; say so instead of guessing one label. */}
+                    <option value="default">
+                      {q ? t("list.sort.relevance") : t("list.sort.works")}
+                    </option>
+                    {(
+                      [
+                        ["name", t("list.sort.name")],
+                        ["authors", t("list.sort.authors")],
+                        ["works", t("list.sort.works")],
+                        ["deal_works", t("list.sort.dealWorks")],
+                      ] as [OrgUnitSearchSort, string][]
+                    ).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {isError ? (

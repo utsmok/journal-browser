@@ -93,7 +93,33 @@ export default function LandingPage() {
         <OjbWordmark className="mx-auto block h-36 w-auto" />
       </h1>
       <p className="mt-3 text-center text-[var(--muted-foreground)]">{t("landing.intro")}</p>
-      <ul className="mt-8 space-y-3">
+      <div className="mt-6 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-3.5">
+          <p className="text-xs font-semibold text-[var(--foreground)]">
+            {t("landing.feature1Title")}
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-[var(--muted-foreground)]">
+            {t("landing.feature1Body")}
+          </p>
+        </div>
+        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-3.5">
+          <p className="text-xs font-semibold text-[var(--foreground)]">
+            {t("landing.feature2Title")}
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-[var(--muted-foreground)]">
+            {t("landing.feature2Body")}
+          </p>
+        </div>
+        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-3.5">
+          <p className="text-xs font-semibold text-[var(--foreground)]">
+            {t("landing.feature3Title")}
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-[var(--muted-foreground)]">
+            {t("landing.feature3Body")}
+          </p>
+        </div>
+      </div>
+      <ul className="mt-6 space-y-3">
         {institutions.map((inst) => (
           <li key={inst.code}>
             <Link
