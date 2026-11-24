@@ -61,7 +61,10 @@ export function apcStatsText(stats: JournalListItem["apc_stats"]): string {
         low != null && low !== s.euro_max
           ? `${formatApc(low)}–${formatApc(s.euro_max ?? 0)}`
           : formatApc(s.euro_max ?? 0);
-      return `${s.period}: €${range} · ${s.article_count} article${s.article_count === 1 ? "" : "s"} · mean €${formatApc(s.euro_mean ?? 0)}`;
+      // Figures stored before the paid/€0 split still count €0 articles.
+      const paid = s.paid_count != null ? `${s.paid_count} paid` : "paid count not stored";
+      const mean = `${s.paid_count != null ? "" : "approx. "}mean €${formatApc(s.euro_mean ?? 0)}`;
+      return `${s.period}: €${range} · ${paid} · ${mean}`;
     })
     .join("\n");
 }
@@ -100,7 +103,10 @@ export type ApcSummary = {
   amount: string | null;
   /** The list price as published, when it was converted to euros. */
   original: string | null;
-  paid: { amount: string; period: number; count: number } | null;
+  /** The mean of the newest period with an article paid above €0. `count`
+   * is the paid articles of that period, or null when the stored figures
+   * predate the paid/€0 split. */
+  paid: { amount: string; period: number; count: number | null } | null;
 };
 
 export function apcSummary(apc: ApcFields): ApcSummary {
@@ -113,7 +119,7 @@ export function apcSummary(apc: ApcFields): ApcSummary {
   const period = (fromOpenapc ? apc.apc_year : null) ?? newest?.period ?? null;
   const paid =
     mean != null && period != null
-      ? { amount: `€${formatApc(mean)}`, period, count: newest?.article_count ?? 0 }
+      ? { amount: `€${formatApc(mean)}`, period, count: newest?.paid_count ?? null }
       : null;
   const { apc_source: source, apc_price: price } = apc;
   if (source != null && source !== "openapc" && price != null) {

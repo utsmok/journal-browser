@@ -187,7 +187,11 @@ function JournalPageInner() {
             )}
           </>
         ) : apc.kind === "paid" && apcPaid ? (
-          t("header.kpiPaidSub", { period: apcPaid.period, count: apcPaid.count })
+          apcPaid.count != null ? (
+            t("header.kpiPaidSub", { period: apcPaid.period, count: apcPaid.count })
+          ) : (
+            t("header.kpiPaidPeriod", { period: apcPaid.period })
+          )
         ) : undefined,
       hint:
         apc.kind === "list"
@@ -199,11 +203,16 @@ function JournalPageInner() {
                   ? t("header.kpiListNoRateHint", { currency: apc.currency ?? "" })
                   : null,
               apcPaid
-                ? t("header.kpiPaidHint", {
-                    amount: apcPaid.amount,
-                    count: apcPaid.count,
-                    period: apcPaid.period,
-                  })
+                ? apcPaid.count != null
+                  ? t("header.kpiPaidHint", {
+                      amount: apcPaid.amount,
+                      count: apcPaid.count,
+                      period: apcPaid.period,
+                    })
+                  : t("header.kpiPaidHintNoCount", {
+                      amount: apcPaid.amount,
+                      period: apcPaid.period,
+                    })
                 : null,
             ]
               .filter(Boolean)

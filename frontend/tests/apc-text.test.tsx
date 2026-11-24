@@ -63,6 +63,36 @@ describe("ApcText", () => {
     );
   });
 
+  it("counts the paid articles behind the mean, not the ones an agreement paid for", () => {
+    renderApc({
+      apc_source: "openapc",
+      apc_currency: "EUR",
+      apc_price: 2193,
+      apc_year: 2024,
+      apc_low: 1800,
+      apc_high: 2500,
+      apc_stats: [
+        {
+          period: 2024,
+          article_count: 17,
+          paid_count: 12,
+          zero_count: 5,
+          euro_min: 1800,
+          euro_max: 2500,
+          euro_mean: 2193,
+        },
+      ],
+    });
+    expect(screen.getByText("paid")).toHaveAttribute(
+      "title",
+      "No list price is known. Institutions reported paying €1,800 to 2,500 per article for this journal (OpenAPC). In 2024 the mean was €2,190 over 12 paid articles.",
+    );
+    expect(screen.getByLabelText("OpenAPC APC detail")).toHaveAttribute(
+      "title",
+      "Reported to OpenAPC per year:\n2024: €1,800–2,500 · 12 paid · mean €2,190",
+    );
+  });
+
   it("shows a dash for a journal without any price", () => {
     renderApc({ apc_source: null, apc_price: null, ...noPaid });
     expect(screen.getByText("—")).toBeInTheDocument();

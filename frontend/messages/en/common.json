@@ -100,6 +100,7 @@
     "listNoRateTitle": "List price: {amount} from {source} ({year}). There is no euro exchange rate for {currency}, so it is shown in that currency.",
     "paidLabel": "paid",
     "paidTitle": "No list price is known. Institutions reported paying {range} per article for this journal (OpenAPC). In {year} the mean was {mean} over {count, plural, one {# paid article} other {# paid articles}}.",
+    "paidTitleNoCount": "No list price is known. Institutions reported paying {range} per article for this journal (OpenAPC). In {year} the mean was {mean}.",
     "paidDetail": "Reported to OpenAPC per year:\n{detail}",
     "paidAria": "OpenAPC APC detail"
   },

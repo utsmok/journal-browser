@@ -36,12 +36,11 @@ export function ApcText({ apc, className }: { apc: ApcFields; className?: string
   }
   if (s.kind === "paid" && s.amount != null && s.paid != null) {
     const detail = apc.apc_stats.length > 0 ? apcStatsText(apc.apc_stats) : "";
-    const paidTitle = t("apc.paidTitle", {
-      range: s.amount,
-      year: s.paid.period,
-      mean: s.paid.amount,
-      count: s.paid.count,
-    });
+    const { period, count } = s.paid;
+    const paidTitle =
+      count != null
+        ? t("apc.paidTitle", { range: s.amount, year: period, mean: s.paid.amount, count })
+        : t("apc.paidTitleNoCount", { range: s.amount, year: period, mean: s.paid.amount });
     return (
       <span className={`inline-flex items-center gap-1 whitespace-nowrap ${className ?? ""}`}>
         <span className="tabular-nums" title={detail || paidTitle}>

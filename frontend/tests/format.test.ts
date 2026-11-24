@@ -117,6 +117,30 @@ describe("apcSummary", () => {
     expect(summary.paid).toEqual({ amount: "€2,190", period: 2024, count: 22 });
   });
 
+  it("counts only the paid articles behind the mean", () => {
+    const stats = {
+      period: 2024,
+      article_count: 17,
+      paid_count: 12,
+      zero_count: 5,
+      euro_min: 1800,
+      euro_max: 2500,
+      euro_mean: 2193,
+    };
+    const apc = {
+      apc_source: "openapc",
+      apc_currency: "EUR",
+      apc_price: 2193,
+      apc_year: 2024,
+      apc_low: 1800,
+      apc_high: 2500,
+    };
+    expect(apcSummary({ ...apc, apc_stats: [stats] } as never).paid?.count).toBe(12);
+    expect(
+      apcSummary({ ...apc, apc_stats: [{ ...stats, paid_count: null }] } as never).paid?.count,
+    ).toBeNull();
+  });
+
   it("has nothing to show for a journal without any price", () => {
     expect(apcSummary({ apc_source: null, apc_price: null, ...noPaid } as never).kind).toBe("none");
   });
@@ -166,20 +190,22 @@ describe("apcRowGap", () => {
 });
 
 describe("apcStatsText", () => {
-  it("renders one line per period with count and mean", () => {
+  it("renders one line per period with the paid count and the mean", () => {
     const text = apcStatsText([
-      { period: 2024, article_count: 8, euro_min: null, euro_max: 2500, euro_mean: 2200 },
       {
-        period: 2023,
-        article_count: 1,
-        euro_min: 1800,
-        euro_max: 2000,
+        period: 2024,
+        article_count: 3,
+        paid_count: 1,
+        zero_count: 2,
+        euro_min: 1900,
+        euro_max: 1900,
         euro_mean: 1900,
       },
+      { period: 2023, article_count: 1, euro_min: 1800, euro_max: 2000, euro_mean: 1900 },
     ] as never);
     expect(text.split("\n")).toEqual([
-      "2024: €2,500 · 8 articles · mean €2,200",
-      "2023: €1,800–2,000 · 1 article · mean €1,900",
+      "2024: €1,900 · 1 paid · mean €1,900",
+      "2023: €1,800–2,000 · paid count not stored · approx. mean €1,900",
     ]);
   });
 });
