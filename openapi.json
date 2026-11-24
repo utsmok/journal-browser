@@ -9187,6 +9187,28 @@
             "type": "integer",
             "title": "Article Count"
           },
+          "paid_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid Count"
+          },
+          "zero_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zero Count"
+          },
           "euro_min": {
             "anyOf": [
               {
@@ -9224,12 +9246,10 @@
         "type": "object",
         "required": [
           "period",
-          "article_count",
-          "euro_min",
-          "euro_max",
-          "euro_mean"
+          "article_count"
         ],
-        "title": "ApcAggregateOut"
+        "title": "ApcAggregateOut",
+        "description": "One OpenAPC period of a journal. The euro_* figures cover the paid\narticles only (amount above zero). paid_count and zero_count (\u20ac0: an\nagreement paid for the article) split article_count; the rest reported\nno amount. A NULL count or lowest amount belongs to a row migration\n0005 could not split, until the OpenAPC job rebuilds it."
       },
       "ApcEvidenceOut": {
         "properties": {
@@ -9310,6 +9330,16 @@
           "issn_l"
         ],
         "title": "ApcEvidenceOut"
+      },
+      "ApcSource": {
+        "type": "string",
+        "enum": [
+          "openalex",
+          "doaj",
+          "openapc"
+        ],
+        "title": "ApcSource",
+        "description": "Which dataset a shown APC comes from. openalex and doaj are publisher\nlist prices (journals.list_price_source); openapc is the mean amount\nactually paid, shown only for journals without a list price."
       },
       "Attribution": {
         "properties": {
@@ -15398,13 +15428,12 @@
           "apc_source": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/ApcSource"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Apc Source"
+            ]
           },
           "apc_currency": {
             "anyOf": [
@@ -15427,6 +15456,39 @@
               }
             ],
             "title": "Apc Price"
+          },
+          "apc_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apc Year"
+          },
+          "apc_original_currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apc Original Currency"
+          },
+          "apc_original_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apc Original Price"
           },
           "apc_low": {
             "anyOf": [
@@ -17446,13 +17508,12 @@
           "source": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/ApcSource"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Source"
+            ]
           },
           "currency": {
             "anyOf": [
@@ -17475,6 +17536,17 @@
               }
             ],
             "title": "Price"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
           },
           "low": {
             "anyOf": [
@@ -17512,7 +17584,7 @@
         },
         "type": "object",
         "title": "RecommendApcDisplay",
-        "description": "Structured APC evidence attached to a recommended journal."
+        "description": "The shown price (source, currency, price, year; JournalListItem\nexplains them) and the OpenAPC paid block (low, high, and the mean of\nthe newest paid period) for a recommended journal."
       },
       "RecommendDealSummary": {
         "properties": {

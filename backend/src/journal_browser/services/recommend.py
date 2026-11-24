@@ -41,7 +41,7 @@ from ..schemas import (
     RecommendRequest,
     RecommendResponse,
 )
-from ..vocab import OaType
+from ..vocab import ApcSource, OaType
 from . import embeddings
 from .deal_coverage import deal_institution_join, dj_scope
 from .funder_fit import FunderFit, JournalFacts, compute_funder_fit, policy_structured
@@ -202,10 +202,18 @@ def _extract_apc_and_cost(
     deal_summary: RecommendDealSummary | None,
     inst_label: str,
 ) -> tuple[RecommendApcDisplay | None, float | None, str]:
-    """Derive structured APC display, numeric EUR estimate, and plain cost label."""
+    """Derive structured APC display, numeric EUR estimate, and plain cost label.
+
+    The estimate is the shown price in EUR (before deal waivers): the
+    publisher's list price, or without one the mean amount paid to OpenAPC.
+    The label names which of the two it is. A list price in a currency
+    without an exchange rate has no EUR estimate and is labelled in its own
+    currency.
+    """
     apc_source = item.get("apc_source")
     apc_currency = item.get("apc_currency")
     apc_price = item.get("apc_price")
+    apc_year = item.get("apc_year")
     apc_low = item.get("apc_low")
     apc_high = item.get("apc_high")
     apc_stats = item.get("apc_stats") or []
@@ -222,22 +230,25 @@ def _extract_apc_and_cost(
             source=apc_source,
             currency=apc_currency,
             price=float(apc_price) if apc_price is not None else None,
+            year=apc_year,
             low=float(apc_low) if apc_low is not None else None,
             high=float(apc_high) if apc_high is not None else None,
             mean=latest_mean,
         )
 
-    # Numeric list/observed APC in EUR (before deal waivers).
+    is_list_price = apc_source in (ApcSource.OPENALEX, ApcSource.DOAJ)
+    # Shown price in EUR (before deal waivers). None: no price known, or a
+    # list price in a currency without an exchange rate.
     raw_eur: float | None = None
-    if apc_source == "openalex" and apc_currency == "EUR" and apc_price is not None:
+    if apc_price is not None and (
+        apc_source == ApcSource.OPENAPC or (is_list_price and apc_currency == "EUR")
+    ):
         raw_eur = float(apc_price)
-    elif apc_source == "openapc":
-        if latest_mean is not None:
-            raw_eur = latest_mean
-        elif apc_high is not None:
-            raw_eur = float(apc_high)
-        elif apc_low is not None:
-            raw_eur = float(apc_low)
+    # A list price is exact; a mean of paid amounts is an estimate (~).
+    prefix = "~" if apc_source == ApcSource.OPENAPC else ""
+    what = "list price"
+    if apc_source == ApcSource.OPENAPC:
+        what = f"mean amount paid, OpenAPC {apc_year}"
 
     if oa_type == OaType.DIAMOND:
         return apc_display, 0.0, "€0 (Diamond OA)"
@@ -251,19 +262,23 @@ def _extract_apc_and_cost(
             return apc_display, 0.0, f"€0 (Covered by {inst_label} deal)"
         if cap_reached:
             if raw_eur is not None:
-                return apc_display, raw_eur, f"~{_fmt_eur(raw_eur)} APC (deal cap reached)"
+                return (
+                    apc_display,
+                    raw_eur,
+                    f"{prefix}{_fmt_eur(raw_eur)} APC ({what}; deal cap reached)",
+                )
             return apc_display, None, f"Deal cap reached ({inst_label} deal)"
         # Discount-only deal.
         if raw_eur is not None:
-            return apc_display, raw_eur, f"Discounted APC (list ~{_fmt_eur(raw_eur)})"
+            return apc_display, raw_eur, f"Discounted APC ({what} {prefix}{_fmt_eur(raw_eur)})"
         return apc_display, None, f"Discounted APC ({inst_label} deal)"
 
     if raw_eur is not None:
-        prefix = "~" if apc_source == "openapc" else ""
-        return apc_display, raw_eur, f"{prefix}{_fmt_eur(raw_eur)} APC"
+        return apc_display, raw_eur, f"{prefix}{_fmt_eur(raw_eur)} APC ({what})"
 
-    if apc_source == "openalex" and apc_price is not None and apc_currency:
-        return apc_display, None, f"{apc_currency} {round(float(apc_price)):,} APC"
+    if is_list_price and apc_price is not None and apc_currency:
+        original = f"{apc_currency} {round(float(apc_price)):,}"
+        return apc_display, None, f"{original} APC (list price, no euro exchange rate)"
 
     if oa_type == OaType.SUBSCRIPTION:
         green = item.get("green_oa")

@@ -96,6 +96,16 @@ class WorksSource(StrEnum):
     OPENALEX_INSTITUTION_FILTER = "openalex_institution_filter"
 
 
+class ApcSource(StrEnum):
+    """Which dataset a shown APC comes from. openalex and doaj are publisher
+    list prices (journals.list_price_source); openapc is the mean amount
+    actually paid, shown only for journals without a list price."""
+
+    OPENALEX = "openalex"
+    DOAJ = "doaj"
+    OPENAPC = "openapc"
+
+
 class HarvestStatus(StrEnum):
     """harvest_runs.status (ck_harvest_runs_status)."""
 

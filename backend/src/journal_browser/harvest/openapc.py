@@ -116,18 +116,23 @@ async def build_aggregates(
         except Exception:  # per-record isolation: one bad row never kills the run
             counters["skipped"] += 1
             logger.warning("openapc aggregate row skipped: %r", row.get("doi"))
+    # Articles an agreement paid for arrive as €0 and rows without an amount
+    # as None. Only amounts above zero describe what a publication cost, so
+    # they alone feed the euro_* figures; the counts keep the rest visible.
     aggregates = []
     for (issn_l, period), euros in sorted(groups.items()):
-        vals = [e for e in euros if e is not None]
+        paid = [e for e in euros if e is not None and e > 0]
         aggregates.append(
             {
                 "issn_l": issn_l,
                 "period": period,
                 "source": SOURCE,
                 "article_count": len(euros),
-                "euro_min": min(vals) if vals else None,
-                "euro_max": max(vals) if vals else None,
-                "euro_mean": round(fmean(vals), 2) if vals else None,
+                "paid_count": len(paid),
+                "zero_count": sum(1 for e in euros if e == 0),
+                "euro_min": min(paid) if paid else None,
+                "euro_max": max(paid) if paid else None,
+                "euro_mean": round(fmean(paid), 2) if paid else None,
             }
         )
     return aggregates, counters

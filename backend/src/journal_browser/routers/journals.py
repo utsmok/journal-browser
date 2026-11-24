@@ -811,6 +811,20 @@ async def _build_journal_detail(
         [_q_oa_info, _q_openaire, _q_inst_metrics, _q_ut_authorship, _q_gaps],
     )
 
+    # Same APC fields as a search row: the shown price from the journal's
+    # denormalized columns, the paid block from the aggregates above.
+    apc = search_service.shown_price(
+        {
+            "list_price_source": journal.list_price_source,
+            "list_price_currency": journal.list_price_currency,
+            "list_price_amount": journal.list_price_amount,
+            "list_price_year": journal.list_price_year,
+            "list_price_euro": journal.list_price_euro,
+            "latest_apc_euro": journal.latest_apc_euro,
+            "latest_apc_period": journal.latest_apc_period,
+        }
+    )
+    apc.update(search_service.paid_block([a for a in aggregates if a.euro_max and a.euro_max > 0]))
     return await cache_epoch(session), JournalDetailResponse(
         journal=JournalListItem(
             issn_l=journal.issn_l,
@@ -827,6 +841,7 @@ async def _build_journal_detail(
             quartile=sjr_rows[-1].best_quartile if sjr_rows else None,
             twoyr_mean_citedness=summary_stats.get("two_yr_mean_citedness"),
             oa_type=oa_type_val,
+            **apc,
         ),
         stats_totals=stats_totals,
         issns=journal.issns or [],
@@ -864,6 +879,8 @@ async def _build_journal_detail(
             ApcAggregateOut(
                 period=a.period,
                 article_count=a.article_count,
+                paid_count=a.paid_count,
+                zero_count=a.zero_count,
                 euro_min=a.euro_min,
                 euro_max=a.euro_max,
                 euro_mean=a.euro_mean,

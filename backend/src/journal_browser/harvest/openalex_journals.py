@@ -27,6 +27,7 @@ from .common import (
     require_openalex_key,
     upsert_issn_map,
 )
+from .denorm import refresh_apcs
 
 logger = logging.getLogger(__name__)
 
@@ -532,6 +533,8 @@ async def harvest_journals(
                 main_stats = await sweep_all_sources(client, session, limit)
             else:
                 main_stats = await harvest_journals_delta(client, session, limit)
+    # apc_prices feed the list price columns.
+    await refresh_apcs(session)
     return {"seed": seed_stats, "delta": main_stats}
 
 

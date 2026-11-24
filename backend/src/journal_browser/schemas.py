@@ -6,6 +6,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .vocab import (
+    ApcSource,
     DealJournalSource,
     DealStatus,
     FeedbackCategory,
@@ -63,13 +64,23 @@ class JournalListItem(BaseModel):
     # OpenAlex primary topic (first entry of the topics list); None when the
     # journal has no topics.
     primary_topic: str | None = None
-    # Display APC for results rows: OpenAlex list price when known
-    # (apc_price + apc_currency, EUR preferred), else the OpenAPC observed
-    # range over the journal's newest two evidence periods (apc_low/high)
-    # with per-period stats for the tooltip. All None without either source.
-    apc_source: str | None = None
+    # The journal's APC as two concepts. The shown price is the publisher's
+    # list price when one is known: apc_source says openalex or doaj,
+    # apc_price is in apc_currency (EUR when an exchange rate exists, else
+    # the original currency), apc_original_* keep the source amount, and
+    # apc_year is the year that source was last harvested. Without a list
+    # price the shown price is the mean amount paid: apc_source openapc,
+    # apc_price in EUR over apc_year, the newest OpenAPC period with a
+    # paid article. Sorting, the APC filter and the finder budget use the
+    # shown price. The paid block (apc_low/apc_high over the newest two
+    # paid periods, apc_stats per period) is filled whenever the journal
+    # has paid articles. All None without any price.
+    apc_source: ApcSource | None = None
     apc_currency: str | None = None
     apc_price: float | None = None
+    apc_year: int | None = None
+    apc_original_currency: str | None = None
+    apc_original_price: float | None = None
     apc_low: float | None = None
     apc_high: float | None = None
     apc_stats: list["ApcAggregateOut"] = []
@@ -129,11 +140,14 @@ class RecommendDealSummary(BaseModel):
 
 
 class RecommendApcDisplay(BaseModel):
-    """Structured APC evidence attached to a recommended journal."""
+    """The shown price (source, currency, price, year; JournalListItem
+    explains them) and the OpenAPC paid block (low, high, and the mean of
+    the newest paid period) for a recommended journal."""
 
-    source: str | None = None
+    source: ApcSource | None = None
     currency: str | None = None
     price: float | None = None
+    year: int | None = None
     low: float | None = None
     high: float | None = None
     mean: float | None = None
@@ -287,11 +301,19 @@ class SimilarJournalsBundle(BaseModel):
 
 
 class ApcAggregateOut(BaseModel):
+    """One OpenAPC period of a journal. The euro_* figures cover the paid
+    articles only (amount above zero). paid_count and zero_count (€0: an
+    agreement paid for the article) split article_count; the rest reported
+    no amount. A NULL count or lowest amount belongs to a row migration
+    0005 could not split, until the OpenAPC job rebuilds it."""
+
     period: int
     article_count: int
-    euro_min: float | None
-    euro_max: float | None
-    euro_mean: float | None
+    paid_count: int | None = None
+    zero_count: int | None = None
+    euro_min: float | None = None
+    euro_max: float | None = None
+    euro_mean: float | None = None
 
 
 class ApcEvidenceOut(BaseModel):

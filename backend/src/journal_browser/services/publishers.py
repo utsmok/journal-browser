@@ -67,7 +67,15 @@ from .facets import (
     publisher_predicates,
     publisher_topic_facet,
 )
-from .search import APC_SHOWN, OA_TYPES, attach_apc_display, base_query, oa_type_case, sort_order
+from .search import (
+    APC_PRICE_EURO,
+    APC_SHOWN,
+    OA_TYPES,
+    attach_apc_display,
+    base_query,
+    oa_type_case,
+    sort_order,
+)
 
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 100
@@ -134,7 +142,7 @@ def _snapshot_query(institution_id: int, years: tuple[int, int] | None = None) -
         oa_type_case(F.deal_covered, F.openaire_diamond).label("oa_type"),
         J.latest_quartile.label("quartile"),
         APC_SHOWN.label("apc_any"),
-        J.latest_apc_euro.label("apc_euro"),
+        APC_PRICE_EURO.label("apc_euro"),
         J.topics,
     ).join(F, (F.institution_id == institution_id) & (F.issn_l == J.issn_l))
     if yearly is not None:
