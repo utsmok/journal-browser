@@ -470,6 +470,35 @@ async def test_partner_works_and_the_csv_exports(client, collab_api):
 
 
 @requires_db
+async def test_trend_counts_each_work_once_per_partner_type(client, collab_api):
+    # w1 (2020) reaches an education and a nonprofit partner, so it counts
+    # under both types; w5 (2024) has no partner.
+    body = (await client.get("/api/v1/ut/collaborations")).json()
+    by_year = {y["year"]: y["by_org_type"] for y in body["trend"]}
+    assert by_year[2020] == {"education": 1, "nonprofit": 1}
+    assert by_year[2021] == {"education": 1}
+    assert by_year[2024] == {}
+
+    response = await client.get("/api/v1/ut/collaborations/trend.csv")
+    assert response.status_code == 200, response.text
+    rows = [line.split(",") for line in response.text.strip().splitlines()]
+    header = rows[0]
+    assert header[:4] == ["year", "all_works", "collaborative_works", "collaborative_share"]
+    table = {row[0]: dict(zip(header, row, strict=True)) for row in rows[1:]}
+    assert table["2020"]["education_works"] == "1"
+    assert table["2020"]["nonprofit_works"] == "1"
+    assert table["2020"]["nonprofit_share"] == "1.0"
+    assert table["2020"]["company_works"] == "0"
+    assert table["2024"]["collaborative_works"] == "0"
+    assert table["2024"]["education_share"] == ""
+
+    narrowed = await client.get("/api/v1/ut/collaborations/trend.csv", params={"type": "nonprofit"})
+    table = {line.split(",")[0]: line.split(",") for line in narrowed.text.strip().splitlines()}
+    assert table["2021"][header.index("collaborative_works")] == "0"
+    assert table["2020"][header.index("education_works")] == "0"
+
+
+@requires_db
 async def test_size_rollup_and_junk_project_filters(client, db, collab_api):
     # Add a mega-collab work (partner_count=25) and a rolled-up child partner,
     # plus a junk 'unidentified' OpenAIRE project and duplicate grant.

@@ -1030,6 +1030,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/{institution_code}/collaborations/trend.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Collaborations Trend Csv
+         * @description Collaborative works per publication year, split by partner organisation
+         *     type, location and open access status, as CSV.
+         */
+        get: operations["collaborations_trend_csv_api_v1__institution_code__collaborations_trend_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/{institution_code}/collaborations/{ror}": {
         parameters: {
             query?: never;
@@ -2496,6 +2517,13 @@ export interface components {
              * @default 0
              */
             oa_closed: number;
+            /**
+             * By Org Type
+             * @default {}
+             */
+            by_org_type: {
+                [key: string]: number;
+            };
         };
         /**
          * CollaborationUnitCount
@@ -7416,6 +7444,70 @@ export interface operations {
         };
     };
     collaborations_csv_api_v1__institution_code__collaborations_partners_csv_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                /** @description ROR organisation types (multi-select) */
+                type?: string[] | null;
+                /** @description ISO 3166-1 alpha-2 country codes (multi-select) */
+                country?: string[] | null;
+                level?: "faculty" | "group" | "institute";
+                /** @description Org unit names at `level` (pipe-joined multi-select) */
+                faculty?: string[] | null;
+                /** @description Funder keys from the funder facet (pipe-joined) */
+                funder?: string[] | null;
+                /** @description Project keys from the project facet (pipe-joined) */
+                project?: string[] | null;
+                /** @description Payloads that supplied partner links (pipe-joined) */
+                source?: ("openalex" | "openaire")[] | null;
+                /** @description Open access statuses (multi-select) */
+                oa_status?: string[] | null;
+                /** @description OpenAlex primary topics (pipe-joined) */
+                topic?: string[] | null;
+                /** @description Collaboration size: standard (<=20 partners, default), small (<=5 partners), or all (including mega-consortia) */
+                size?: "standard" | "small" | "all";
+                /** @description Roll up inactive successors and same-city sub-units into their canonical organisation (default: true) */
+                rollup?: boolean;
+                /** @description Corresponding-author lead filter: all, home, or partner */
+                lead?: "all" | "home" | "partner";
+                /** @description Minimum shared works per partner */
+                min_works?: number | null;
+                /** @description Filter to partners sharing OA deals with the home institution */
+                shares_deals?: boolean | null;
+                /** @description Publication-year range start (clamped to the institution's data window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window) */
+                year_to?: number | null;
+            };
+            header?: never;
+            path: {
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    collaborations_trend_csv_api_v1__institution_code__collaborations_trend_csv_get: {
         parameters: {
             query?: {
                 q?: string | null;

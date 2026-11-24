@@ -199,6 +199,17 @@ async def collaborations_csv(
     return await collaborations_service.collaborations_csv(session, institution, filters)
 
 
+@router.get("/trend.csv")
+async def collaborations_trend_csv(
+    session: SessionDep,
+    institution: InstitutionDep,
+    filters: FiltersDep,
+) -> StreamingResponse:
+    """Collaborative works per publication year, split by partner organisation
+    type, location and open access status, as CSV."""
+    return await collaborations_service.collaborations_trend_csv(session, institution, filters)
+
+
 @router.get("/{ror}", response_model=CollaborationDetailResponse)
 async def collaboration_detail(
     session: SessionDep,

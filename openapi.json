@@ -6332,6 +6332,383 @@
         }
       }
     },
+    "/api/v1/{institution_code}/collaborations/trend.csv": {
+      "get": {
+        "tags": [
+          "collaborations"
+        ],
+        "summary": "Collaborations Trend Csv",
+        "description": "Collaborative works per publication year, split by partner organisation\ntype, location and open access status, as CSV.",
+        "operationId": "collaborations_trend_csv_api_v1__institution_code__collaborations_trend_csv_get",
+        "parameters": [
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 60,
+              "description": "ROR organisation types (multi-select)",
+              "title": "Type"
+            },
+            "description": "ROR organisation types (multi-select)"
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 20,
+              "description": "ISO 3166-1 alpha-2 country codes (multi-select)",
+              "title": "Country"
+            },
+            "description": "ISO 3166-1 alpha-2 country codes (multi-select)"
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "faculty",
+                "group",
+                "institute"
+              ],
+              "type": "string",
+              "default": "faculty",
+              "title": "Level"
+            }
+          },
+          {
+            "name": "faculty",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 400,
+              "description": "Org unit names at `level` (pipe-joined multi-select)",
+              "title": "Faculty"
+            },
+            "description": "Org unit names at `level` (pipe-joined multi-select)"
+          },
+          {
+            "name": "funder",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 400,
+              "description": "Funder keys from the funder facet (pipe-joined)",
+              "title": "Funder"
+            },
+            "description": "Funder keys from the funder facet (pipe-joined)"
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 400,
+              "description": "Project keys from the project facet (pipe-joined)",
+              "title": "Project"
+            },
+            "description": "Project keys from the project facet (pipe-joined)"
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "openalex",
+                      "openaire"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 40,
+              "description": "Payloads that supplied partner links (pipe-joined)",
+              "title": "Source"
+            },
+            "description": "Payloads that supplied partner links (pipe-joined)"
+          },
+          {
+            "name": "oa_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 60,
+              "description": "Open access statuses (multi-select)",
+              "title": "Oa Status"
+            },
+            "description": "Open access statuses (multi-select)"
+          },
+          {
+            "name": "topic",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maxLength": 400,
+              "description": "OpenAlex primary topics (pipe-joined)",
+              "title": "Topic"
+            },
+            "description": "OpenAlex primary topics (pipe-joined)"
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "standard",
+                "small",
+                "all"
+              ],
+              "type": "string",
+              "description": "Collaboration size: standard (<=20 partners, default), small (<=5 partners), or all (including mega-consortia)",
+              "default": "standard",
+              "title": "Size"
+            },
+            "description": "Collaboration size: standard (<=20 partners, default), small (<=5 partners), or all (including mega-consortia)"
+          },
+          {
+            "name": "rollup",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Roll up inactive successors and same-city sub-units into their canonical organisation (default: true)",
+              "default": true,
+              "title": "Rollup"
+            },
+            "description": "Roll up inactive successors and same-city sub-units into their canonical organisation (default: true)"
+          },
+          {
+            "name": "lead",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "home",
+                "partner"
+              ],
+              "type": "string",
+              "description": "Corresponding-author lead filter: all, home, or partner",
+              "default": "all",
+              "title": "Lead"
+            },
+            "description": "Corresponding-author lead filter: all, home, or partner"
+          },
+          {
+            "name": "min_works",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 10000,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Minimum shared works per partner",
+              "title": "Min Works"
+            },
+            "description": "Minimum shared works per partner"
+          },
+          {
+            "name": "shares_deals",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter to partners sharing OA deals with the home institution",
+              "title": "Shares Deals"
+            },
+            "description": "Filter to partners sharing OA deals with the home institution"
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/{institution_code}/collaborations/{ror}": {
       "get": {
         "tags": [
@@ -11619,6 +11996,14 @@
             "type": "integer",
             "title": "Oa Closed",
             "default": 0
+          },
+          "by_org_type": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "By Org Type",
+            "default": {}
           }
         },
         "type": "object",

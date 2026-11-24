@@ -44,8 +44,19 @@
     "oaRate": "Open access share",
     "oaSub": "{oa} open · {closed} closed",
     "trendTitle": "Collaboration trend over time",
-    "trendModeGeo": "Domestic vs. international",
-    "trendModeOa": "Open access mix",
+    "trendMode": {
+      "geo": "Domestic vs. international",
+      "type": "By organisation type",
+      "oa": "Open access mix"
+    },
+    "trendCsv": "Download trend (CSV)",
+    "trendCsvNote": "One row per year, with the domestic, international, open access and organisation-type counts for the current filters.",
+    "typeScaleShare": "Share of collaborative works",
+    "typeScaleWorks": "Number of works",
+    "typeChartLabel": "Collaborative works per year by partner organisation type",
+    "typeTooltipHead": "{year}: {works} collaborative works",
+    "typeNote": "Each line counts the collaborative works with at least one partner of that type. A work with partners of two types counts on both lines, so the shares can add up to more than 100%.",
+    "typeEmpty": "No collaborative works match the current filters.",
     "domestic": "Domestic",
     "internationalLabel": "International",
     "totalWorks": "All {inst} works"

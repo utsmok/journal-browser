@@ -3,7 +3,9 @@
 import { useTranslations } from "next-intl";
 import * as React from "react";
 
+import { OrgTypeTrend } from "@/components/collaborations/org-type-trend";
 import { CollapsibleCard } from "@/components/collapsible-card";
+import { GapCsvButton } from "@/components/gap-csv-button";
 import { OaTrend } from "@/components/oa-trend";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -79,11 +81,20 @@ function GeoTrendChart({
   );
 }
 
+const TREND_MODES = ["geo", "type", "oa"] as const;
+type TrendMode = (typeof TREND_MODES)[number];
+
 /** Headline KPI strip + collapsible trend chart for policy & strategy overview. */
-export function CollaborationOverview({ data }: { data: CollaborationSearchResponse }) {
+export function CollaborationOverview({
+  data,
+  trendCsvHref,
+}: {
+  data: CollaborationSearchResponse;
+  trendCsvHref: string;
+}) {
   const t = useTranslations("collaborations");
   const site = useSiteMeta();
-  const [trendMode, setTrendMode] = React.useState<"geo" | "oa">("geo");
+  const [trendMode, setTrendMode] = React.useState<TrendMode>("geo");
 
   const collabPct = pct(data.works_with_partner, data.total_works);
   const intlPct = pct(data.international_works, data.works_with_partner);
@@ -177,32 +188,28 @@ export function CollaborationOverview({ data }: { data: CollaborationSearchRespo
           defaultOpen={false}
           description={
             <div className="mt-2 flex overflow-hidden rounded-[var(--radius)] border border-[var(--input)] w-fit">
-              <Button
-                variant={trendMode === "geo" ? "secondary" : "ghost"}
-                size="sm"
-                className="h-7 rounded-none px-2.5 text-xs"
-                aria-pressed={trendMode === "geo"}
-                onClick={() => setTrendMode("geo")}
-              >
-                {t("overview.trendModeGeo")}
-              </Button>
-              <Button
-                variant={trendMode === "oa" ? "secondary" : "ghost"}
-                size="sm"
-                className="h-7 rounded-none px-2.5 text-xs"
-                aria-pressed={trendMode === "oa"}
-                onClick={() => setTrendMode("oa")}
-              >
-                {t("overview.trendModeOa")}
-              </Button>
+              {TREND_MODES.map((mode) => (
+                <Button
+                  key={mode}
+                  variant={trendMode === mode ? "secondary" : "ghost"}
+                  size="sm"
+                  className="h-7 rounded-none px-2.5 text-xs"
+                  aria-pressed={trendMode === mode}
+                  onClick={() => setTrendMode(mode)}
+                >
+                  {t(`overview.trendMode.${mode}`)}
+                </Button>
+              ))}
             </div>
           }
         >
-          {trendMode === "geo" ? (
-            <GeoTrendChart trend={data.trend} instShort={site.short} />
-          ) : (
-            <OaTrend stats={oaStats} />
-          )}
+          {trendMode === "geo" && <GeoTrendChart trend={data.trend} instShort={site.short} />}
+          {trendMode === "type" && <OrgTypeTrend trend={data.trend} />}
+          {trendMode === "oa" && <OaTrend stats={oaStats} />}
+          <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <GapCsvButton href={trendCsvHref} label={t("overview.trendCsv")} />
+            <p className="text-xs text-[var(--muted-foreground)]">{t("overview.trendCsvNote")}</p>
+          </div>
         </CollapsibleCard>
       )}
     </div>

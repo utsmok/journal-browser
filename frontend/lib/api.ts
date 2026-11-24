@@ -152,6 +152,15 @@ export function fetchCollaborationWorks(
   );
 }
 
+function collabCsvHref(inst: string, p: CollaborationSearchParams, tail: string): string {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(collabParams(p))) {
+    if (value) qs.set(key, value);
+  }
+  const query = qs.toString();
+  return `/api/v1/${inst}/collaborations${tail}${query ? `?${query}` : ""}`;
+}
+
 /** CSV export of the filtered partner list, or of one partner's works with
  * `ror`. The anchor goes through the same /api proxy as apiGet. */
 export function collaborationCsvHref(
@@ -159,13 +168,13 @@ export function collaborationCsvHref(
   p: CollaborationSearchParams,
   ror?: string,
 ): string {
-  const qs = new URLSearchParams();
-  for (const [key, value] of Object.entries(collabParams(p))) {
-    if (value) qs.set(key, value);
-  }
-  const query = qs.toString();
-  const tail = ror ? `/${encodeURIComponent(ror)}/works.csv` : "/partners.csv";
-  return `/api/v1/${inst}/collaborations${tail}${query ? `?${query}` : ""}`;
+  return collabCsvHref(inst, p, ror ? `/${encodeURIComponent(ror)}/works.csv` : "/partners.csv");
+}
+
+/** CSV export of the per-year trend: collaborative works by partner
+ * organisation type, location and open access status. */
+export function collaborationTrendCsvHref(inst: string, p: CollaborationSearchParams): string {
+  return collabCsvHref(inst, p, "/trend.csv");
 }
 
 export type BudgetMode = NonNullable<Schemas["RecommendRequest"]["budget_mode"]>;
@@ -271,6 +280,10 @@ export type JournalSearchParams = {
   year_from?: number;
   /** Publication-year range end (global year lens; server clamps to the data window). */
   year_to?: number;
+  /** Only journals with works in the current or previous year; on by default. */
+  active?: boolean;
+  /** Only journals on a curated list (Scimago, DOAJ, deal, national lists); on by default. */
+  vouched?: boolean;
   sort?: SortKey;
   /** Sort direction; omitted = each key's natural direction. */
   dir?: "asc" | "desc";

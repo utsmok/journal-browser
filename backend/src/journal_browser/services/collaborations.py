@@ -105,6 +105,7 @@ __all__ = [
     "collaboration_detail",
     "collaboration_map",
     "collaborations_csv",
+    "collaborations_trend_csv",
     "partner_works",
     "partner_works_csv",
     "search_collaborations",
@@ -165,6 +166,31 @@ _PARTNER_CSV = (
     "sources",
     "funders",
     "projects",
+)
+# ROR organisation types in the column order of the trend CSV; "unknown"
+# covers partners whose ROR record has no type.
+_ORG_TYPES = (
+    "education",
+    "healthcare",
+    "facility",
+    "government",
+    "company",
+    "nonprofit",
+    "funder",
+    "archive",
+    "other",
+    "unknown",
+)
+_TREND_CSV = (
+    "year",
+    "all_works",
+    "collaborative_works",
+    "collaborative_share",
+    "domestic_works",
+    "international_works",
+    "oa_works",
+    "closed_works",
+    *(f"{kind}_{col}" for kind in _ORG_TYPES for col in ("works", "share")),
 )
 _WORK_CSV = (
     "pure_uuid",
@@ -1033,8 +1059,9 @@ async def _overview_trend(
     selected: Any,
     home_cc: str | None,
 ) -> tuple[list[CollaborationTrendYear], int, int, int, int]:
-    """Per-year totals + domestic/international + OA split over the filtered
-    collaborative works, plus overall domestic/international/OA/closed totals."""
+    """Per-year totals + domestic/international + OA + organisation-type split
+    over the filtered collaborative works, plus overall domestic/international/
+    OA/closed totals."""
     total_by_year = dict(
         (
             await session.execute(
@@ -1090,6 +1117,16 @@ async def _overview_trend(
         )
     ).all()
     by_year = {int(r.year): r for r in rows}
+    org_type = func.coalesce(func.lower(PartnerInstitution.org_type), "unknown")
+    type_counts: dict[int, dict[str, int]] = defaultdict(dict)
+    for yr, kind, count in await session.execute(
+        select(Work.year, org_type, func.count(func.distinct(selected.c.work)))
+        .select_from(selected)
+        .join(PartnerInstitution, PartnerInstitution.ror == selected.c.ror)
+        .join(Work, and_(Work.institution_id == institution.id, Work.pure_uuid == selected.c.work))
+        .group_by(Work.year, org_type)
+    ):
+        type_counts[int(yr)][kind] = int(count)
     all_years = sorted({int(y) for y in total_by_year if y is not None} | set(by_year))
     trend: list[CollaborationTrendYear] = []
     domestic_total = 0
@@ -1114,6 +1151,7 @@ async def _overview_trend(
                     domestic=dom,
                     international=intl,
                     **oa_vals,
+                    by_org_type=type_counts.get(yr, {}),
                 )
             )
         else:
@@ -1140,7 +1178,7 @@ async def _summary(
 ) -> dict[str, Any]:
     """Totals, overview trend and (when requested) facets, cached per epoch."""
     key = (
-        "collab_summary_v2",
+        "collab_summary_v3",
         institution.id,
         filters.q,
         *(
@@ -1824,6 +1862,49 @@ async def collaborations_csv(
         f"{_file_stem(institution, 'collaborations-partners')}.csv",
         _csv_lines(table),
         _PARTNER_CSV,
+    )
+
+
+async def collaborations_trend_csv(
+    session: AsyncSession,
+    institution: Institution,
+    filters: CollaborationFilters,
+) -> StreamingResponse:
+    """One row per publication year: all works, collaborative works and their
+    domestic, open access and organisation-type split. Each `<type>_share` is
+    the share of that year's collaborative works with a partner of that type."""
+    summary = await _summary(
+        session,
+        institution,
+        filters,
+        include_facets=False,
+        deal_rors=await _shared_deal_rors(session, institution),
+        jisc_map={},
+    )
+
+    def share(part: int, whole: int) -> float | None:
+        return round(part / whole, 4) if whole else None
+
+    table: list[list[Any]] = []
+    for y in summary["trend"]:
+        row: list[Any] = [
+            y.year,
+            y.total_works,
+            y.with_partner,
+            share(y.with_partner, y.total_works),
+            y.domestic,
+            y.international,
+            sum(getattr(y, f"oa_{st}") for st in OA_OPEN_STATUSES),
+            y.oa_closed,
+        ]
+        for kind in _ORG_TYPES:
+            count = y.by_org_type.get(kind, 0)
+            row += [count, share(count, y.with_partner)]
+        table.append(row)
+    return csv_response(
+        f"{_file_stem(institution, 'collaborations-trend')}.csv",
+        _csv_lines(table),
+        _TREND_CSV,
     )
 
 

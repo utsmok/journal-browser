@@ -29,6 +29,7 @@ import { useYearRange } from "@/hooks/use-year-filter";
 import {
   COLLAB_PAGE_SIZE,
   collaborationCsvHref,
+  collaborationTrendCsvHref,
   errorMessage,
   type CollaborationLead,
   type CollaborationSize,
@@ -278,7 +279,12 @@ function PartnersPageInner() {
             }}
           />
 
-          {list.data && <CollaborationOverview data={list.data} />}
+          {list.data && (
+            <CollaborationOverview
+              data={list.data}
+              trendCsvHref={collaborationTrendCsvHref(inst, params)}
+            />
+          )}
 
           <section aria-labelledby="partners-map-title">
             <h2 id="partners-map-title" className="text-base font-semibold">

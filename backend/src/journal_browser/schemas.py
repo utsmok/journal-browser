@@ -1727,6 +1727,11 @@ class CollaborationTrendYear(BaseModel):
     oa_green: int = 0
     oa_bronze: int = 0
     oa_closed: int = 0
+    # Collaborative works with at least one partner of each ROR organisation
+    # type ("unknown" when ROR has no type). A work with partners of two
+    # types counts under both, so the values can sum to more than
+    # with_partner.
+    by_org_type: dict[str, int] = {}
 
 
 class CollaborationSearchResponse(BaseModel):
