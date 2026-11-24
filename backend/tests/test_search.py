@@ -16,7 +16,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from conftest import journal_factory, requires_db
 from journal_browser.config import reset_settings_cache
-from journal_browser.harvest.denorm import BROWSE_EXCLUDED_SQL, MATERIALIZE_SQL
+from journal_browser.currency import year_rate
+from journal_browser.harvest.denorm import BROWSE_EXCLUDED_SQL, MATERIALIZE_SQL, refresh_apcs
 from journal_browser.models import (
     Institution,
     IssnMap,
@@ -31,6 +32,13 @@ DIM = 384
 def _vec(i: int) -> list[float]:
     """Unit basis vector: distance 0 to itself, 1 (orthogonal) to the others."""
     return [1.0 if j == i else 0.0 for j in range(DIM)]
+
+
+def _usd_in_eur(amount: float) -> float:
+    """An amount in USD at the bundled rate, as refresh_apcs stores it."""
+    rate = year_rate("USD")
+    assert rate is not None
+    return round(amount * rate, 2)
 
 
 @pytest.fixture
@@ -99,7 +107,7 @@ async def api(client, db_engine):
                     "2323-2323",
                     title="Water Journal",
                     is_oa=True,
-                    latest_apc_euro=2500,
+                    apc_prices=[{"currency": "EUR", "price": 2500}],
                     search_text=None,
                 ),
                 journal_factory(
@@ -208,6 +216,7 @@ async def api(client, db_engine):
                         {"currency": "USD", "price": 3000},
                         {"currency": "EUR", "price": 2700},
                     ],
+                    harvested_at=datetime(2026, 10, 4, tzinfo=UTC),
                     search_text="Fee Listed Journal",
                 ),
                 # USD-only list price: the display path must convert to EUR
@@ -217,6 +226,13 @@ async def api(client, db_engine):
                     title="Dollar Listed Journal",
                     apc_prices=[{"currency": "USD", "price": 1000}],
                     search_text="Dollar Listed Journal",
+                ),
+                # List price in a currency without an exchange rate.
+                journal_factory(
+                    "2525-2525",
+                    title="Hryvnia Listed Journal",
+                    apc_prices=[{"currency": "UAH", "price": 120000}],
+                    search_text="Hryvnia Listed Journal",
                 ),
                 # Corpus-cutoff boundary: exactly 4 window works stays in,
                 # 3 drops out; a non-journal venue drops regardless.
@@ -355,6 +371,8 @@ async def api(client, db_engine):
         # The browse-excluded flag is denormalized (migration 0011 backfills
         # prod); recompute here so the proceedings fixtures get real values.
         await session.execute(BROWSE_EXCLUDED_SQL, {"iid": home.id})
+        # The price columns are denormalized, as after a harvest.
+        await refresh_apcs(session)
         await session.commit()
     return client
 
@@ -544,8 +562,8 @@ async def test_fuzzy_fallback_sets_flag(api):
 async def test_facets_and_drop_own_filter(api):
     browse = (await api.get("/api/v1/ut/journals")).json()
     facets = browse["facets"]
-    # 3333 + 1515 have OpenAPC evidence, 1616 + 2121 an OpenAlex list price.
-    assert facets["apc"] == {"true": 4, "false": browse["total"] - 4}
+    # 3333 + 1515 have paid articles; 1616, 2121, 2323 and 2525 a list price.
+    assert facets["apc"] == {"true": 6, "false": browse["total"] - 6}
     for group in ("deal_coverage", "oa", "doaj", "apc"):
         assert sum(facets[group].values()) == browse["total"]
     assert facets["publisher"]["Massachusetts Institute of Technology Press"] == 1
@@ -553,9 +571,16 @@ async def test_facets_and_drop_own_filter(api):
     # Active filter: the apc facet excludes its own filter; the publisher
     # facet respects it.
     body = (await api.get("/api/v1/ut/journals", params={"has_apc": "true"})).json()
-    assert body["total"] == 4
+    assert body["total"] == 6
     assert body["facets"]["apc"] == facets["apc"]
-    assert _issns(body) == {"3333-3333", "1515-1515", "1616-1616", "2121-2121"}
+    assert _issns(body) == {
+        "3333-3333",
+        "1515-1515",
+        "1616-1616",
+        "2121-2121",
+        "2323-2323",
+        "2525-2525",
+    }
 
     # Chip facets must drop exactly their own filter. The variants used to
     # re-include it, so e.g. deal=covered rendered the "No deal" chip with
@@ -587,20 +612,28 @@ async def test_facets_and_drop_own_filter(api):
 
 
 @requires_db
-async def test_apc_fields_on_list_items(api, monkeypatch):
+async def test_apc_fields_on_list_items(api):
     r = await api.get("/api/v1/ut/journals", params={"q": "priced"})
     assert r.status_code == 200
     (item,) = r.json()["items"]
-    # No OpenAlex list price on this fixture: OpenAPC fallback, observed
-    # range across the newest two evidence periods (2023-2024).
-    assert item["apc_source"] == "openapc"
-    assert item["apc_low"] == 2000.0
-    assert item["apc_high"] == 2500.0
-    assert item["apc_currency"] is None and item["apc_price"] is None
+    # No list price on this fixture: the shown price is the mean amount
+    # paid in the newest OpenAPC period, and the paid block spans the
+    # newest two. The periods carry no paid/zero split (NULL), and a
+    # lowest amount of NULL falls back to the period's highest.
+    assert (item["apc_source"], item["apc_currency"], item["apc_price"], item["apc_year"]) == (
+        "openapc",
+        "EUR",
+        2200.0,
+        2024,
+    )
+    assert item["apc_original_currency"] is None and item["apc_original_price"] is None
+    assert (item["apc_low"], item["apc_high"]) == (2000.0, 2500.0)
     assert item["apc_stats"] == [
         {
             "period": 2024,
             "article_count": 8,
+            "paid_count": None,
+            "zero_count": None,
             "euro_min": None,
             "euro_max": 2500.0,
             "euro_mean": 2200.0,
@@ -608,36 +641,49 @@ async def test_apc_fields_on_list_items(api, monkeypatch):
         {
             "period": 2023,
             "article_count": 5,
+            "paid_count": None,
+            "zero_count": None,
             "euro_min": None,
             "euro_max": 2000.0,
             "euro_mean": 1800.0,
         },
     ]
-    # OpenAlex list price wins when known; EUR preferred over USD.
+
+    # The OpenAlex list price wins when known: EUR over USD, dated by the
+    # harvest, and no paid block.
     r = await api.get("/api/v1/ut/journals", params={"q": "fee listed"})
     (item,) = r.json()["items"]
-    assert item["apc_source"] == "openalex"
-    assert item["apc_currency"] == "EUR"
-    assert item["apc_price"] == 2700.0
-    assert item["apc_low"] is None and item["apc_high"] is None
-    assert item["apc_stats"] == []
+    assert (item["apc_source"], item["apc_currency"], item["apc_price"], item["apc_year"]) == (
+        "openalex",
+        "EUR",
+        2700.0,
+        2026,
+    )
+    assert (item["apc_original_currency"], item["apc_original_price"]) == ("EUR", 2700.0)
+    assert item["apc_low"] is None and item["apc_high"] is None and item["apc_stats"] == []
 
-    # USD-only list prices display in EUR at the Jan 1 rate; when no rate
-    # is available the source currency is kept.
+    # A USD list price shows in EUR at the rate of the refresh; the dollar
+    # amount is kept for display.
     r = await api.get("/api/v1/ut/journals", params={"q": "dollar listed"})
     (item,) = r.json()["items"]
-    assert item["apc_source"] == "openalex"
+    assert (
+        item["apc_source"],
+        item["apc_currency"],
+        item["apc_original_currency"],
+        item["apc_original_price"],
+    ) == ("openalex", "EUR", "USD", 1000.0)
+    assert item["apc_price"] == _usd_in_eur(1000)
 
-    from journal_browser.services import search
-
-    monkeypatch.setattr(search, "year_rate", lambda currency: 0.9)
-    r = await api.get("/api/v1/ut/journals", params={"q": "dollar listed"})
+    # No exchange rate for the currency: the list price stays in it.
+    r = await api.get("/api/v1/ut/journals", params={"q": "hryvnia listed"})
     (item,) = r.json()["items"]
-    assert (item["apc_currency"], item["apc_price"]) == ("EUR", 900.0)
-    monkeypatch.setattr(search, "year_rate", lambda currency: None)
-    r = await api.get("/api/v1/ut/journals", params={"q": "dollar listed"})
-    (item,) = r.json()["items"]
-    assert (item["apc_currency"], item["apc_price"]) == ("USD", 1000.0)
+    assert (
+        item["apc_source"],
+        item["apc_currency"],
+        item["apc_price"],
+        item["apc_original_currency"],
+        item["apc_original_price"],
+    ) == ("openalex", "UAH", 120000.0, "UAH", 120000.0)
 
     # No price evidence at all: nulls across the board.
     r = await api.get("/api/v1/ut/journals", params={"q": "quantum studies"})

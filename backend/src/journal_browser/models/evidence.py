@@ -40,7 +40,15 @@ class ApcEvidence(Base):
 
 
 class JournalApcAggregate(Base):
-    """Journal-level cost evidence: ISSN-L x period aggregates of OpenAPC rows."""
+    """Journal-level cost evidence: ISSN-L x period aggregates of OpenAPC rows.
+
+    Three kinds of article make up article_count: paid (amount above zero),
+    zero (€0: an agreement paid for it) and without an amount. The euro_*
+    figures cover the paid articles only. paid_count and zero_count count
+    the other two; the rest reported no amount. A NULL count belongs to a
+    row migration 0005 could not split exactly, until the OpenAPC job
+    rebuilds the table.
+    """
 
     __tablename__ = "journal_apc_aggregates"
 
@@ -48,6 +56,8 @@ class JournalApcAggregate(Base):
     period: Mapped[int] = mapped_column(Integer, primary_key=True)
     source: Mapped[str] = mapped_column(Text, nullable=False, server_default="openapc")
     article_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    paid_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    zero_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     euro_min: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     euro_max: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     euro_mean: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)

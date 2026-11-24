@@ -29,6 +29,7 @@ from .common import (
     require_headers,
     run_harvest,
 )
+from .denorm import refresh_apcs
 
 logger = logging.getLogger(__name__)
 
@@ -168,4 +169,7 @@ async def harvest_doaj(session: AsyncSession) -> dict[str, Any]:
             "stamped_not_listed": stamped,
         }
 
-    return await run_harvest(SOURCE, ENTITY_TYPE, "all", {"csv": CSV_URL}, body, session)
+    stats = await run_harvest(SOURCE, ENTITY_TYPE, "all", {"csv": CSV_URL}, body, session)
+    # doaj_apc_max feeds the list price columns.
+    await refresh_apcs(session)
+    return stats

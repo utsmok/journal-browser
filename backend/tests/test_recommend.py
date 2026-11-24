@@ -7,12 +7,14 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from conftest import journal_factory, requires_db
+from journal_browser.harvest.denorm import refresh_apcs
 from journal_browser.models import (
     Deal,
     DealInstitution,
     DealJournal,
     Institution,
     JiscFunder,
+    JournalApcAggregate,
     JournalFlags,
     Publisher,
     ScimagojrMetric,
@@ -244,6 +246,25 @@ async def recommend_fixture(client, db_engine, monkeypatch):
                 listed_in=None,
                 embedding=_unit_vec(3.0),
             ),
+            # 13. Gold OA with a €4,460 list price. OpenAPC saw its 2025
+            # articles paid under a deal (€0) after paid ones in 2024: the
+            # budget goes by the list price.
+            journal_factory(
+                "1000-0013",
+                title="Deal-Paid Gold Membranes",
+                publisher_name="Elsevier",
+                is_oa=True,
+                apc_prices=[{"currency": "EUR", "price": 4460}],
+                embedding=_unit_vec(13.0),
+            ),
+            # 14. Gold OA without a list price; OpenAPC paid articles only.
+            journal_factory(
+                "1000-0014",
+                title="Paid-Only Gold Membranes",
+                publisher_name="Paid Press",
+                is_oa=True,
+                embedding=_unit_vec(14.0),
+            ),
         ]
         session.add_all(journals)
         await session.flush()
@@ -257,6 +278,33 @@ async def recommend_fixture(client, db_engine, monkeypatch):
                     deal_id=deal_capped.id, issn="1000-0003", issn_l="1000-0003", source="jct"
                 ),
                 ScimagojrMetric(issn_l="1000-0002", year=2025, best_quartile="Q1", h_index=88),
+            ]
+        )
+        session.add_all(
+            [
+                JournalApcAggregate(
+                    issn_l="1000-0013", period=2025, article_count=2, paid_count=0, zero_count=2
+                ),
+                JournalApcAggregate(
+                    issn_l="1000-0013",
+                    period=2024,
+                    article_count=3,
+                    paid_count=1,
+                    zero_count=2,
+                    euro_min=1500,
+                    euro_max=1500,
+                    euro_mean=1500,
+                ),
+                JournalApcAggregate(
+                    issn_l="1000-0014",
+                    period=2024,
+                    article_count=4,
+                    paid_count=4,
+                    zero_count=0,
+                    euro_min=1000,
+                    euro_max=2000,
+                    euro_mean=1500,
+                ),
             ]
         )
 
@@ -327,10 +375,12 @@ async def recommend_fixture(client, db_engine, monkeypatch):
             ),
             *(
                 JournalFlags(institution_id=inst.id, issn_l=issn, works_window_plus=500)
-                for issn in ("1000-0010", "1000-0011", "1000-0012")
+                for issn in ("1000-0010", "1000-0011", "1000-0012", "1000-0013", "1000-0014")
             ),
         ]
         session.add_all(flags)
+        # The price columns are denormalized, as after a harvest.
+        await refresh_apcs(session)
         await session.commit()
 
     return client
@@ -440,6 +490,39 @@ async def test_recommend_budget_capped_and_funder_fit(recommend_fixture):
     assert "1000-0007" not in issns  # Prohibited is funder "no"
     for rec in body["recommendations"]:
         assert rec["funder_fit"]["status"] == "compliant"
+
+
+@requires_db
+async def test_recommend_budget_uses_the_list_price_over_paid_amounts(recommend_fixture):
+    client = recommend_fixture
+    request = {
+        "title": "High-throughput membrane filtration for wastewater reuse",
+        "budget_mode": "capped",
+        "prefer_institution_history": True,
+        "limit": 20,
+    }
+    res = await client.post("/api/v1/ut/journals/recommend", json={**request, "max_apc_eur": 2000})
+    assert res.status_code == 200
+    by_issn = {r["issn_l"]: r for r in res.json()["recommendations"]}
+
+    # A €4,460 list price stays over a €2,000 cap, although the journal's
+    # newest OpenAPC articles were paid under a deal and older ones at
+    # €1,500.
+    assert "1000-0013" not in by_issn
+    # Without a list price the mean amount paid decides, and the label
+    # says so. A known list price is labelled as one.
+    paid = by_issn["1000-0014"]
+    assert paid["estimated_cost_eur"] == 1500.0
+    assert paid["estimated_cost_label"] == "~€1,500 APC (mean amount paid, OpenAPC 2024)"
+    assert (paid["apc_display"]["source"], paid["apc_display"]["year"]) == ("openapc", 2024)
+    listed = by_issn["1000-0004"]
+    assert listed["estimated_cost_label"] == "€1,500 APC (list price)"
+    assert listed["apc_display"]["source"] == "openalex"
+
+    # Over its list price, the deal-paid journal passes too.
+    res = await client.post("/api/v1/ut/journals/recommend", json={**request, "max_apc_eur": 5000})
+    by_issn = {r["issn_l"]: r for r in res.json()["recommendations"]}
+    assert by_issn["1000-0013"]["estimated_cost_label"] == "€4,460 APC (list price)"
 
 
 @requires_db

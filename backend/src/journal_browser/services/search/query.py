@@ -1,3 +1,4 @@
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from sqlalchemy import (
@@ -6,7 +7,6 @@ from sqlalchemy import (
     and_,
     case,
     cast,
-    exists,
     func,
     or_,
     select,
@@ -24,11 +24,10 @@ from ...models import (
     JournalApcAggregate,
     JournalFlags,
 )
-from ...vocab import GreenOa
+from ...vocab import ApcSource, GreenOa
 from ..deal_coverage import dj_scope
 from ..funder_fit import fit_case
 from .classify import oa_type_case
-from .currency import to_eur
 from .recommendable import active_clause, vouched_clause
 
 # Sort keys: relevance | title | publisher | institution_works | quartile |
@@ -49,22 +48,31 @@ WORKS_CUTOFF = Journal.works_2020_plus > 3
 #: Trigram similarity threshold for the fuzzy fallback; pg_trgm's built-in
 #: default, which the % operator uses via pg_trgm.similarity_threshold.
 FUZZY_THRESHOLD = 0.3
-#: Any displayable APC info: an OpenAlex list price in any currency, or
-#: OpenAPC rows with an observed cost. The has_apc filter matches this; the
-#: oa_type gold/diamond split keys on DOAJ's own charge declaration plus
-#: observed prices (owner decision 2026-10-28, supersedes the OpenAPC-only
-#: split of 2026-10-23).
-APC_COST_EXISTS = exists(
-    select(1).where(
-        JournalApcAggregate.issn_l == Journal.issn_l,
-        JournalApcAggregate.euro_max.is_not(None),
-    )
-)
-APC_SHOWN = or_(
-    func.coalesce(func.jsonb_array_length(Journal.apc_prices), 0) > 0,
-    APC_COST_EXISTS,
-)
 
+#: A price to show: a publisher list price (OpenAlex or DOAJ) or an observed
+#: OpenAPC paid amount, both denormalized by harvest.denorm.refresh_apcs.
+#: The has_apc filter and its facet count this. The oa_type gold/diamond
+#: split keeps its own evidence rule in classify.py (owner decision
+#: 2026-10-28).
+APC_SHOWN = or_(Journal.list_price_source.is_not(None), Journal.latest_apc_euro.is_not(None))
+#: Sort and filter price in EUR, the same choice shown_price labels: the
+#: list price, else the mean amount actually paid. NULL when the list
+#: price is in a currency without an exchange rate; such journals sort
+#: after every EUR price.
+APC_PRICE_EURO = case(
+    (Journal.list_price_source.is_not(None), Journal.list_price_euro),
+    else_=Journal.latest_apc_euro,
+)
+#: Denormalized columns behind the shown price (harvest.denorm), selected
+#: on every results row and read by shown_price.
+APC_SHOWN_FIELDS = (
+    "apc_source",
+    "apc_currency",
+    "apc_price",
+    "apc_year",
+    "apc_original_currency",
+    "apc_original_price",
+)
 #: Green-OA route buckets over the Jisc OPF columns. The facet counts the
 #: best allowed route (submitted > accepted > published; "none" = swept but
 #: no route, or OA prohibited); the search filter matches the literal
@@ -106,15 +114,6 @@ GREEN_OA_CONDS: dict[GreenOa, Any] = {
         ),
     ),
 }
-
-
-def _list_price(currency: str) -> Any:
-    """OpenAlex list-price APC in one currency; None without an entry."""
-    path = text(f"'$[*] ? (@.currency == \"{currency}\")'::jsonpath")
-    return cast(
-        func.jsonb_path_query_first(Journal.apc_prices, path).op("->>")("price"),
-        Numeric,
-    )
 
 
 def escape_like(term: str) -> str:
@@ -268,12 +267,16 @@ def base_query(
             J.type.label("pub_type"),
             # Modal work language (ISO 639-1); NULL = never observed.
             J.language.label("language"),
-            # Display/sort price: OpenAlex list price (EUR, then USD), else
-            # the OpenAPC latest cost. apc_prices order is unspecified, so
-            # the currency match goes through jsonb_path_query_first.
-            func.coalesce(_list_price("EUR"), _list_price("USD"), J.latest_apc_euro).label(
-                "apc_price"
-            ),
+            # Denormalized price columns for the shown price and the sort
+            # key: the list price in EUR, else the mean amount paid.
+            J.list_price_source,
+            J.list_price_currency,
+            J.list_price_amount,
+            J.list_price_year,
+            J.list_price_euro,
+            J.latest_apc_euro,
+            J.latest_apc_period,
+            APC_PRICE_EURO.label("apc_price"),
             # Any-source APC presence; the facet pass filters on this.
             APC_SHOWN.label("apc_any"),
             # Best green-OA route bucket (facet pass; NULL = never swept).
@@ -433,32 +436,82 @@ def sort_order(sort: SortKey, subq: Any) -> tuple[Any, str]:
     return func.coalesce(subq.c.rank, 0), "desc"  # relevance
 
 
-async def attach_apc_display(session: AsyncSession, items: list[dict[str, Any]]) -> None:
-    """Stamp display APC fields onto each item dict in place (page-sized).
+def shown_price(row: Mapping[str, Any]) -> dict[str, Any]:
+    """The price shown for one journal, read from its denormalized columns.
 
-    OpenAlex list price wins (EUR, then USD, else first entry), standardized
-    to EUR at the Jan 1 rate of the current year (non-EUR sources keep their
-    currency only when no rate is available); without one, the OpenAPC
-    observed range over the newest two evidence periods, plus per-period
-    stats for the tooltip. One keyed query per source table.
+    apc_source names the dataset the price comes from: openalex or doaj for
+    a publisher list price, openapc for the mean amount actually paid
+    (shown only for journals without a list price), None without either.
+    apc_price and apc_currency are what to display: a list price in EUR,
+    or in its own currency when no exchange rate exists. For a list price
+    apc_original_currency and apc_original_price keep the source amount,
+    and apc_year is the year that source was last harvested, since neither
+    dates its prices. For openapc apc_price is the mean of the newest
+    period with a paid article and apc_year that period.
     """
-    issns = [i["issn_l"] for i in items]
-    list_price: dict[str, tuple[str, float]] = {}
-    for issn_l, prices in (
-        await session.execute(
-            select(Journal.issn_l, Journal.apc_prices).where(Journal.issn_l.in_(issns))
-        )
-    ).all():
-        entries = [p for p in (prices or []) if isinstance(p, dict) and p.get("price") is not None]
-        by_currency = {p.get("currency"): p["price"] for p in entries}
-        matched = next((c for c in ("EUR", "USD") if c in by_currency), None)
-        if matched:
-            list_price[issn_l] = to_eur(float(by_currency[matched]), matched)
-        elif entries:
-            list_price[issn_l] = to_eur(
-                float(entries[0]["price"]), str(entries[0].get("currency") or "")
-            )
+    if row.get("list_price_source"):
+        euro = row.get("list_price_euro")
+        return {
+            "apc_source": row["list_price_source"],
+            "apc_currency": "EUR" if euro is not None else row["list_price_currency"],
+            "apc_price": float(euro if euro is not None else row["list_price_amount"]),
+            "apc_year": row["list_price_year"],
+            "apc_original_currency": row["list_price_currency"],
+            "apc_original_price": float(row["list_price_amount"]),
+        }
+    if row.get("latest_apc_euro") is not None:
+        return {
+            "apc_source": ApcSource.OPENAPC,
+            "apc_currency": "EUR",
+            "apc_price": float(row["latest_apc_euro"]),
+            "apc_year": row["latest_apc_period"],
+            "apc_original_currency": None,
+            "apc_original_price": None,
+        }
+    return dict.fromkeys(APC_SHOWN_FIELDS)
 
+
+def paid_block(rows: Sequence[Any]) -> dict[str, Any]:
+    """The OpenAPC paid-amount fields for one journal.
+
+    `rows` are the journal's journal_apc_aggregates rows with a paid
+    article, newest period first. apc_low/apc_high span the newest two
+    periods and apc_stats list each one. A lowest amount of NULL (a
+    period migration 0005 could not split) falls back to the period's
+    highest amount.
+    """
+    window = [r for r in rows if r.period >= rows[0].period - 1] if rows else []
+    return {
+        "apc_low": min(
+            (float(r.euro_min if r.euro_min is not None else r.euro_max) for r in window),
+            default=None,
+        ),
+        "apc_high": max((float(r.euro_max) for r in window), default=None),
+        "apc_stats": [
+            {
+                "period": r.period,
+                "article_count": r.article_count,
+                "paid_count": r.paid_count,
+                "zero_count": r.zero_count,
+                "euro_min": None if r.euro_min is None else float(r.euro_min),
+                "euro_max": float(r.euro_max),
+                "euro_mean": float(r.euro_mean),
+            }
+            for r in rows
+        ],
+    }
+
+
+async def attach_apc_display(session: AsyncSession, items: list[dict[str, Any]]) -> None:
+    """Stamp the APC fields onto each item dict in place (page-sized).
+
+    The shown price comes from the row's denormalized columns (shown_price).
+    One keyed query adds the OpenAPC paid block (paid_block), filled
+    whenever the journal has paid articles, whatever the shown price is.
+    """
+    for item in items:
+        item.update(shown_price(item))
+    issns = [i["issn_l"] for i in items]
     aggs: dict[str, list[Any]] = {}
     for row in (
         await session.execute(
@@ -466,56 +519,17 @@ async def attach_apc_display(session: AsyncSession, items: list[dict[str, Any]])
                 JournalApcAggregate.issn_l,
                 JournalApcAggregate.period,
                 JournalApcAggregate.article_count,
+                JournalApcAggregate.paid_count,
+                JournalApcAggregate.zero_count,
                 JournalApcAggregate.euro_min,
                 JournalApcAggregate.euro_max,
                 JournalApcAggregate.euro_mean,
             )
-            .where(JournalApcAggregate.issn_l.in_(issns))
-            .where(JournalApcAggregate.euro_max.is_not(None))
+            .where(JournalApcAggregate.issn_l.in_(issns), JournalApcAggregate.euro_max > 0)
             .order_by(JournalApcAggregate.issn_l, JournalApcAggregate.period.desc())
         )
     ).all():
         aggs.setdefault(row.issn_l, []).append(row)
 
     for item in items:
-        hit = list_price.get(item["issn_l"])
-        if hit is not None:
-            item.update(
-                apc_source="openalex",
-                apc_currency=hit[0],
-                apc_price=hit[1],
-                apc_low=None,
-                apc_high=None,
-                apc_stats=[],
-            )
-            continue
-        rows = aggs.get(item["issn_l"]) or []
-        if not rows:
-            item.update(
-                apc_source=None,
-                apc_currency=None,
-                apc_price=None,
-                apc_low=None,
-                apc_high=None,
-                apc_stats=[],
-            )
-            continue
-        window = [r for r in rows if r.period >= rows[0].period - 1]
-        lows = [float(r.euro_min if r.euro_min is not None else r.euro_max) for r in window]
-        item.update(
-            apc_source="openapc",
-            apc_currency=None,
-            apc_price=None,
-            apc_low=min(lows),
-            apc_high=max(float(r.euro_max) for r in window),
-            apc_stats=[
-                {
-                    "period": r.period,
-                    "article_count": r.article_count,
-                    "euro_min": None if r.euro_min is None else float(r.euro_min),
-                    "euro_max": float(r.euro_max),
-                    "euro_mean": None if r.euro_mean is None else float(r.euro_mean),
-                }
-                for r in rows
-            ],
-        )
+        item.update(paid_block(aggs.get(item["issn_l"]) or []))

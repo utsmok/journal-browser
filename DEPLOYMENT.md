@@ -189,6 +189,31 @@ run it with `--refresh` when those inputs look stale. Browse and semantic
 search apply the same two filters by default; users can switch each off
 (`active=false`, `vouched=false`).
 
+### APC prices
+
+Two sets of columns keep a publisher's list price apart from what authors
+paid. Both are recomputed by `harvest.denorm.refresh_apcs`, which runs after
+`ingest_openapc`, `harvest_journals` and `harvest_doaj`.
+
+- `journals.list_price_source`, `_currency`, `_amount`, `_year` and `_euro`
+  hold the publisher's list price. The OpenAlex `apc_prices` entry wins: EUR
+  first, then USD, then an entry with an exchange rate, then the first
+  entry. Without one, the DOAJ maximum APC is used. `_year` is the year that
+  source was last harvested, because neither source dates its price. `_euro`
+  is the amount in euros at the 1 January ECB rate of the year of the
+  refresh, or NULL when the currency has no rate.
+- `journals.latest_apc_euro` and `latest_apc_period` hold the mean amount
+  paid in the newest OpenAPC period with an article paid above €0. OpenAPC
+  records an article that an agreement paid for as €0, and some rows carry
+  no amount (`NA`). Both kinds count in `article_count` only, and the €0
+  ones also in `journal_apc_aggregates.zero_count`; `paid_count` counts the
+  rest. `euro_min`, `euro_max` and `euro_mean` cover the paid articles.
+
+Browse, the APC filter and sort, and the finder budget use the list price.
+They fall back to the paid mean for a journal without a list price. After
+migration 0005, periods that mixed paid and €0 articles keep approximate
+figures until `uv run python jobs/ingest_openapc.py` rebuilds the table.
+
 ### Manual and repair jobs
 
 Not in bootstrap or the daily wave. All run from `backend/` as

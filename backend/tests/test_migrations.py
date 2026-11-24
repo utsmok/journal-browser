@@ -1,13 +1,16 @@
 """Alembic migration outcomes on a scratch database: head schema carries
-the ON CONFLICT constraint names the harvest layer targets, and base↔head
-is reversible. create_all (the fixtures' schema source) is not
-authoritative for migrated deployments. Replaces test_usage_migration.py
-and folds in test_schema_contract.py's constraint assertion; the 0053
-browse-marker test retired with the squash of the migration history."""
+the ON CONFLICT constraint names the harvest layer targets, base↔head
+is reversible, and 0005 moves APC figures both ways. create_all (the
+fixtures' schema source) is not authoritative for migrated deployments.
+Replaces test_usage_migration.py and folds in test_schema_contract.py's
+constraint assertion; the 0053 browse-marker test retired with the squash
+of the migration history."""
 
 import asyncio
+import json
 import secrets
 from collections.abc import Callable
+from decimal import Decimal
 from pathlib import Path
 
 import asyncpg
@@ -75,3 +78,129 @@ async def test_upgrade_head_down_base_up_head(mig_db):
     await conn.close()
 
     await _alembic(command.upgrade, "head")  # and the tree reinstalls cleanly
+
+
+@requires_db
+async def test_apc_list_price_vs_paid_migration_round_trip(mig_db):
+    """0005 splits each OpenAPC period by its stored figures, backfills the
+    list price and the paid amount, and restores the old figures on the
+    way down."""
+    _name, url = mig_db
+    await _alembic(command.upgrade, "0004_journal_listed_in")
+    conn = await asyncpg.connect(url.replace("+asyncpg", ""))
+
+    async def periods() -> dict[tuple[str, int], tuple]:
+        """(issn_l, period) -> article count and euro figures."""
+        rows = await conn.fetch(
+            "select issn_l, period, article_count, euro_min, euro_max, euro_mean"
+            " from journal_apc_aggregates order by 1, 2"
+        )
+        return {
+            (r["issn_l"], r["period"]): (
+                r["article_count"],
+                *(
+                    None if r[c] is None else float(r[c])
+                    for c in ("euro_min", "euro_max", "euro_mean")
+                ),
+            )
+            for r in rows
+        }
+
+    # Figures as the old build_aggregates wrote them: €0 articles count in
+    # the lowest amount and the mean, rows without an amount in neither.
+    # 0376-7388 2025 (Journal of Membrane Science): articles at €0 under a
+    # deal or without an amount; 2024: 2000, 0, 3000.
+    # 0034-4257 2024 (Remote Sensing of Environment): 22 paid, 1000..3000.
+    old = {
+        ("0376-7388", 2024): (3, 0.0, 3000.0, 1666.67),
+        ("0376-7388", 2025): (4, 0.0, 0.0, 0.0),
+        ("0034-4257", 2024): (22, 1000.0, 3000.0, 2000.0),
+        ("0034-4257", 2025): (17, None, None, None),
+    }
+    for (issn_l, period), (count, lo, hi, mean) in old.items():
+        await conn.execute(
+            "insert into journal_apc_aggregates"
+            " (issn_l, period, article_count, euro_min, euro_max, euro_mean)"
+            " values ($1, $2, $3, $4, $5, $6)",
+            issn_l,
+            period,
+            count,
+            lo,
+            hi,
+            mean,
+        )
+    # The old rule put the newest period's highest amount on the journal,
+    # so the deal-paid journal read €0.
+    await conn.execute(
+        "insert into journals (issn_l, apc_prices, latest_apc_euro) values ($1, $2, 0)",
+        "0376-7388",
+        json.dumps([{"price": 4890, "currency": "USD"}, {"price": 4460, "currency": "EUR"}]),
+    )
+    await conn.execute("insert into journals (issn_l, latest_apc_euro) values ('0034-4257', 3000)")
+    assert await periods() == old
+
+    await _alembic(command.upgrade, "head")
+
+    assert await periods() == {
+        # €0 next to paid articles: the mean and highest amount stay, the
+        # lowest amount (€0) becomes unknown.
+        ("0376-7388", 2024): (3, None, 3000.0, 1666.67),
+        # Nothing paid: no euro figure at all.
+        ("0376-7388", 2025): (4, None, None, None),
+        ("0034-4257", 2024): (22, 1000.0, 3000.0, 2000.0),
+        ("0034-4257", 2025): (17, None, None, None),
+    }
+    counts = {
+        (r["issn_l"], r["period"]): (r["paid_count"], r["zero_count"])
+        for r in await conn.fetch(
+            "select issn_l, period, paid_count, zero_count from journal_apc_aggregates"
+        )
+    }
+    # How many articles were €0 next to paid ones is not stored.
+    assert counts == {
+        ("0376-7388", 2024): (None, None),
+        ("0376-7388", 2025): (0, None),
+        ("0034-4257", 2024): (22, 0),
+        ("0034-4257", 2025): (0, 0),
+    }
+    journals = {
+        r["issn_l"]: r
+        for r in await conn.fetch(
+            "select issn_l, latest_apc_euro, latest_apc_period, list_price_source,"
+            " list_price_currency, list_price_amount, list_price_euro from journals"
+        )
+    }
+    membrane, remote = journals["0376-7388"], journals["0034-4257"]
+    # The paid amount skips the €0 period; the list price comes from OpenAlex.
+    assert (float(membrane["latest_apc_euro"]), membrane["latest_apc_period"]) == (1666.67, 2024)
+    assert (
+        membrane["list_price_source"],
+        membrane["list_price_currency"],
+        float(membrane["list_price_amount"]),
+        float(membrane["list_price_euro"]),
+    ) == ("openalex", "EUR", 4460.0, 4460.0)
+    assert (float(remote["latest_apc_euro"]), remote["latest_apc_period"]) == (2000.0, 2024)
+    assert remote["list_price_source"] is None
+
+    # What the next OpenAPC ingest writes for the mixed period.
+    await conn.execute(
+        "update journal_apc_aggregates set paid_count = 2, zero_count = 1,"
+        " euro_min = 2000, euro_mean = 2500 where issn_l = '0376-7388' and period = 2024"
+    )
+    await _alembic(command.downgrade, "-1")
+    assert await periods() == old
+    journals = {
+        r["issn_l"]: r["latest_apc_euro"]
+        for r in await conn.fetch("select issn_l, latest_apc_euro from journals")
+    }
+    assert journals == {"0376-7388": Decimal(0), "0034-4257": Decimal(3000)}
+    columns = {
+        r["column_name"]
+        for r in await conn.fetch(
+            "select column_name from information_schema.columns"
+            " where table_schema = 'public' and table_name = 'journals'"
+        )
+    }
+    assert not columns & {"latest_apc_period", "list_price_source", "list_price_euro"}
+    await conn.close()
+    await _alembic(command.upgrade, "head")

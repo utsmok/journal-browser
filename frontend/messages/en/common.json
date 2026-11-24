@@ -94,6 +94,16 @@
     "funderFitNo": "Not compliant",
     "funderFitTooltip": "Funder fit: {label}"
   },
+  "apc": {
+    "listTitle": "List price: {amount} from {source} ({year}).",
+    "listConvertedTitle": "List price: {amount} from {source} ({year}), converted from {original} at the 1 January exchange rate of the European Central Bank.",
+    "listNoRateTitle": "List price: {amount} from {source} ({year}). There is no euro exchange rate for {currency}, so it is shown in that currency.",
+    "paidLabel": "paid",
+    "paidTitle": "No list price is known. Institutions reported paying {range} per article for this journal (OpenAPC). In {year} the mean was {mean} over {count, plural, one {# paid article} other {# paid articles}}.",
+    "paidTitleNoCount": "No list price is known. Institutions reported paying {range} per article for this journal (OpenAPC). In {year} the mean was {mean}.",
+    "paidDetail": "Reported to OpenAPC per year:\n{detail}",
+    "paidAria": "OpenAPC APC detail"
+  },
 
   "facets": {
     "sidebarHeading": "Filters",
@@ -153,7 +163,7 @@
     "hintOaType": "How the journal makes content open access. You can combine several types; click a selected type to remove it.",
     "hintDoaj": "Is the journal listed in DOAJ, the quality-controlled open access directory? One choice; click it again to clear.",
     "hintQuartile": "SCImago impact quartile of the journal in its subject category. One choice; click it again to clear.",
-    "hintApc": "Is any APC known for this journal: a list price from OpenAlex, or costs reported to OpenAPC? One choice; click it again to clear.",
+    "hintApc": "Is any APC known for this journal: a list price from OpenAlex or DOAJ, or amounts reported paid to OpenAPC? One choice; click it again to clear.",
     "hintGreenOa": "Which versions of an article the publisher lets authors self-archive, according to the Jisc Open Policy Finder. One choice; click it again to clear.",
     "hintTopic": "OpenAlex topic of the journal's works. One choice; click it again to clear.",
     "hintPublisher": "The journal's publisher. One choice; click it again to clear.",
@@ -179,8 +189,8 @@
     "titleQuartileQ2": "Second quarter, 25 to 50%, of its SCImago subject category.",
     "titleQuartileQ3": "Third quarter, 50 to 75%, of its SCImago subject category.",
     "titleQuartileQ4": "Last quarter, past 75%, of its SCImago subject category by citation metrics.",
-    "titleApcKnown": "APCs are known for this journal: a list price from OpenAlex, or costs reported to OpenAPC.",
-    "titleApcUnknown": "No APC is known for this journal from either source.",
+    "titleApcKnown": "APCs are known for this journal: a list price from OpenAlex or DOAJ, or amounts reported paid to OpenAPC.",
+    "titleApcUnknown": "No APC is known for this journal from any of these sources.",
     "titleGreenOaSubmitted": "You may self-archive the submitted version (preprint), for example on a preprint server or your own website.",
     "titleGreenOaAccepted": "You may self-archive the peer-reviewed accepted version (postprint), for example in an institutional repository.",
     "titleGreenOaPublished": "You may self-archive the publisher's final published version.",
@@ -227,7 +237,7 @@
       "journals": "Journals come from OpenAlex. Search includes active journals and any book series or conference where your institution publishes. Open access type is calculated at query time using DOAJ for gold versus diamond, OpenAPC payments when they contradict a no-APC claim, and active institutional deals for hybrid.",
       "works": "Publication counts and lists come from your university's Pure repository for the selected years, with retired records removed. Preprints, books, datasets, software, errata, and peer reviews are excluded, while book chapters stay in because conference proceedings often appear there. OpenAlex adds citations and open access status, and OpenAlex takes precedence when it disagrees with OpenAIRE.",
       "deals": "Deal terms, caps, and dates come from openaccess.nl. Journal ISSN lists come from JCT/ESAC and signed contracts, such as the rebuilt 311-title Emerald list. Manual edits and excluded titles survive automated refreshes.",
-      "apc": "Prices show the publisher's OpenAlex list price converted to euros at the January 1 ECB exchange rate. When no list price is available, the display falls back to the observed euro range reported to OpenAPC across the two newest reporting periods.",
+      "apc": "Prices come from OpenAlex, which publishes each journal's list price in one or more currencies, and otherwise from DOAJ, which publishes the highest APC. They are converted to euros at the 1 January exchange rate of the European Central Bank, or shown in their own currency when no rate exists. Without a list price, the price shown is the mean amount that institutions reported paying to OpenAPC. Articles that an agreement paid for (€0) are not part of that mean.",
       "greenOa": "Self-archiving policies come verbatim from the Jisc Open Policy Finder. Routes that require an open access fee are excluded from free green open access, and prohibited journals always show as having no route. Funder compliance marks gold, diamond, and active deal journals as compliant.",
       "similar": "Similar journals are ranked locally with the bge-small-en-v1.5 embedding model. Each journal vector is built from its cleaned title, its top five OpenAlex topics, and the titles of its three most cited works.",
       "authorWorks": "Lists active publications registered for this author in your university's Pure repository. Preprints, books, datasets, software, errata, and peer reviews are excluded, while book chapters stay in. Each work is enriched by DOI with OpenAlex and OpenAIRE data, and OpenAlex takes precedence when the two disagree on open access status.",

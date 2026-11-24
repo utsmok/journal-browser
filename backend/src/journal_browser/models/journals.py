@@ -57,12 +57,25 @@ class Journal(Base):
     # Global denormalized search columns (institution-neutral), refreshed by
     # harvest.denorm; the per-institution state lives in journal_flags.
     latest_quartile: Mapped[str | None] = mapped_column(String(4), nullable=True)
-    # Denormalized most recent known OpenAPC cost: the highest single
-    # reported APC in the journal's newest period with cost evidence (not a
-    # period mean), so the results table can sort on APC without a
-    # correlated subquery per row (same pattern as latest_quartile);
-    # refreshed by harvest.denorm.refresh_apcs.
+    # Two prices, kept apart (harvest.denorm.refresh_apcs writes both; search
+    # sorts and filters on the list price first, the paid amount second).
+    # latest_apc_* is the observed paid amount: the mean of the newest
+    # OpenAPC period with at least one article whose amount is above zero,
+    # and that period. Articles an agreement paid for reach OpenAPC as €0
+    # or without an amount, so they never set it.
     latest_apc_euro: Mapped[float | None] = mapped_column(Numeric, nullable=True)
+    latest_apc_period: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # list_price_* is the publisher's list price: the OpenAlex apc_prices
+    # entry (EUR, else USD, else one that converts to EUR, else the first),
+    # else the DOAJ maximum APC. amount and currency are the original;
+    # euro converts at the Jan 1 ECB rate of the last refresh (NULL when the
+    # currency has no rate). Neither source dates its price: year is the
+    # year that source was last harvested for the journal.
+    list_price_source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    list_price_currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    list_price_amount: Mapped[float | None] = mapped_column(Numeric, nullable=True)
+    list_price_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    list_price_euro: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     # Modal non-green Work oa_status across the journal's most recent works
     # (harvest/journal_oa.py), sampled because OpenAlex marks the venue
     # is_oa without saying which OA color. bronze/closed/green mean "no OA

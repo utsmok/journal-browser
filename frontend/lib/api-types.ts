@@ -1442,18 +1442,29 @@ export interface components {
             work_identity_missing: number;
             last_run: components["schemas"]["AdminLastRunOut"] | null;
         };
-        /** ApcAggregateOut */
+        /**
+         * ApcAggregateOut
+         * @description One OpenAPC period of a journal. The euro_* figures cover the paid
+         *     articles only (amount above zero). paid_count and zero_count (€0: an
+         *     agreement paid for the article) split article_count; the rest reported
+         *     no amount. A NULL count or lowest amount belongs to a row migration
+         *     0005 could not split, until the OpenAPC job rebuilds it.
+         */
         ApcAggregateOut: {
             /** Period */
             period: number;
             /** Article Count */
             article_count: number;
+            /** Paid Count */
+            paid_count?: number | null;
+            /** Zero Count */
+            zero_count?: number | null;
             /** Euro Min */
-            euro_min: number | null;
+            euro_min?: number | null;
             /** Euro Max */
-            euro_max: number | null;
+            euro_max?: number | null;
             /** Euro Mean */
-            euro_mean: number | null;
+            euro_mean?: number | null;
         };
         /** ApcEvidenceOut */
         ApcEvidenceOut: {
@@ -1470,6 +1481,14 @@ export interface components {
             /** Issn L */
             issn_l: string | null;
         };
+        /**
+         * ApcSource
+         * @description Which dataset a shown APC comes from. openalex and doaj are publisher
+         *     list prices (journals.list_price_source); openapc is the mean amount
+         *     actually paid, shown only for journals without a list price.
+         * @enum {string}
+         */
+        ApcSource: "openalex" | "doaj" | "openapc";
         /** Attribution */
         Attribution: {
             /** Source */
@@ -3690,12 +3709,17 @@ export interface components {
             language?: string | null;
             /** Primary Topic */
             primary_topic?: string | null;
-            /** Apc Source */
-            apc_source?: string | null;
+            apc_source?: components["schemas"]["ApcSource"] | null;
             /** Apc Currency */
             apc_currency?: string | null;
             /** Apc Price */
             apc_price?: number | null;
+            /** Apc Year */
+            apc_year?: number | null;
+            /** Apc Original Currency */
+            apc_original_currency?: string | null;
+            /** Apc Original Price */
+            apc_original_price?: number | null;
             /** Apc Low */
             apc_low?: number | null;
             /** Apc High */
@@ -4450,15 +4474,18 @@ export interface components {
         };
         /**
          * RecommendApcDisplay
-         * @description Structured APC evidence attached to a recommended journal.
+         * @description The shown price (source, currency, price, year; JournalListItem
+         *     explains them) and the OpenAPC paid block (low, high, and the mean of
+         *     the newest paid period) for a recommended journal.
          */
         RecommendApcDisplay: {
-            /** Source */
-            source?: string | null;
+            source?: components["schemas"]["ApcSource"] | null;
             /** Currency */
             currency?: string | null;
             /** Price */
             price?: number | null;
+            /** Year */
+            year?: number | null;
             /** Low */
             low?: number | null;
             /** High */

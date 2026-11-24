@@ -1,6 +1,5 @@
 """Refresh denormalized search state.
-
-Global columns on journals (latest_quartile, latest_apc_euro) and the
+Global columns on journals (latest_quartile, the APC columns) and the
 per-institution journal_flags rows (works_count, deal_covered,
 works_window_plus, browse_excluded). One idempotent statement per column.
 Call the matching refresh at the end of any job that changes the underlying
@@ -10,16 +9,25 @@ rows:
                               admin window edits)
 - refresh_quartiles           after scimago ingest (jobs/ingest_scimagojr.py)
 - refresh_deal_flags          after deal-register changes (curation)
-- refresh_apcs                after OpenAPC ingest
+- refresh_apcs                after OpenAPC ingest, and after the OpenAlex
+                              journals or DOAJ harvest (they set list prices)
 
 The SQL lives here so the alembic backfill and the jobs share one source.
 """
 
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+from dataclasses import dataclass
+from decimal import ROUND_HALF_EVEN, Decimal
+from typing import Any
 
+from sqlalchemy import Integer, bindparam, cast, func, or_, select, text
+from sqlalchemy.engine import Connection
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
+
+from .. import currency
 from ..ingest import bump_cache_epoch
-from ..models import Institution
+from ..models import Institution, Journal
+from ..vocab import ApcSource
 
 # Decision 16 (docs/decisions.md): proceedings-like titles with no deal and
 # no institution works are hidden from browse. Recomputed wholesale so deal
@@ -114,23 +122,179 @@ QUARTILES_SQL = text(
     """
 )
 
-# Mirrors the OpenAPC fallback in attach_apc_display: the newest period with
-# a known cost wins, and the value is that period's highest single reported
-# APC (a real observed price — period means average multi-article years).
-APC_SQL = text(
+# Observed paid amount: the mean paid amount of the journal's newest OpenAPC
+# period with at least one paid article. Articles paid under a deal reach
+# OpenAPC as €0 and rows without an amount as NULL, so only periods whose
+# highest amount is above zero qualify. A journal whose newest rows are all
+# €0 keeps its last period with real payments instead of reading as free.
+PAID_APC_SQL = text(
     """
-    UPDATE journals j SET latest_apc_euro = a.euro_max
+    UPDATE journals j
+    SET latest_apc_euro = a.euro_mean, latest_apc_period = a.period
     FROM (
-        SELECT DISTINCT ON (issn_l) issn_l, euro_max
+        SELECT DISTINCT ON (issn_l) issn_l, period, euro_mean
         FROM journal_apc_aggregates
-        WHERE euro_max IS NOT NULL
+        WHERE euro_max > 0
         ORDER BY issn_l, period DESC
     ) a
     RIGHT JOIN journals jj ON jj.issn_l = a.issn_l
     WHERE j.issn_l = jj.issn_l
-      AND j.latest_apc_euro IS DISTINCT FROM a.euro_max
+      AND (j.latest_apc_euro IS DISTINCT FROM a.euro_mean
+           OR j.latest_apc_period IS DISTINCT FROM a.period)
     """
 )
+
+# The publisher's list price, separate from the paid amount above: journal
+# column -> bound parameter of the bulk update (a parameter may not carry
+# the name of a column the statement updates).
+LIST_PRICE_BINDS = {
+    "list_price_source": "b_source",
+    "list_price_currency": "b_currency",
+    "list_price_amount": "b_amount",
+    "list_price_year": "b_year",
+    "list_price_euro": "b_euro",
+}
+
+
+@dataclass(frozen=True)
+class ListPrice:
+    """One publisher list price.
+
+    `euro` is None when the original currency has no exchange rate; the
+    price is then shown in its own currency and sorts after every EUR price.
+    """
+
+    source: ApcSource
+    currency: str
+    amount: float
+    year: int | None
+    euro: float | None
+
+
+def _price_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _openalex_entry(entries: list[dict[str, Any]]) -> tuple[str, float]:
+    """(currency, price) of the entry to show from an OpenAlex apc_prices
+    list. One source lists the same price in several currencies, so the
+    EUR entry needs no conversion and USD is next. Beyond those, an entry
+    that converts to EUR beats one in a currency without an exchange rate;
+    the first entry breaks the remaining ties."""
+    order = sorted(
+        range(len(entries)),
+        key=lambda i: (
+            {"EUR": 0, "USD": 1}.get(entries[i]["currency"], 2),
+            currency.year_rate(entries[i]["currency"]) is None,
+            i,
+        ),
+    )
+    chosen = entries[order[0]]
+    return chosen["currency"], chosen["price"]
+
+
+def select_list_price(
+    *,
+    apc_prices: Any = None,
+    doaj_apc_max: float | None = None,
+    doaj_apc_currency: str | None = None,
+    openalex_year: int | None = None,
+    doaj_year: int | None = None,
+) -> ListPrice | None:
+    """Pick the publisher list price from the stored source payloads.
+
+    OpenAlex apc_prices wins, else the DOAJ maximum APC. Neither source
+    dates its price, so the year is the year that source was last
+    harvested for the journal.
+    """
+    entries = [
+        {"currency": str(p.get("currency") or ""), "price": float(p["price"])}
+        for p in (apc_prices if isinstance(apc_prices, list) else [])
+        if isinstance(p, dict) and _price_number(p.get("price"))
+    ]
+    if entries:
+        code, amount = _openalex_entry(entries)
+        source, year = ApcSource.OPENALEX, openalex_year
+    elif doaj_apc_max is not None:
+        code, amount = str(doaj_apc_currency or ""), float(doaj_apc_max)
+        source, year = ApcSource.DOAJ, doaj_year
+    else:
+        return None
+    shown_in, euro = currency.to_eur(amount, code)
+    return ListPrice(source, code, amount, year, euro if shown_in == "EUR" else None)
+
+
+def refresh_list_prices(conn: Connection | Session) -> int:
+    """Recompute the list-price columns on journals; returns rows updated.
+
+    Synchronous on purpose: the jobs call it through
+    AsyncSession.run_sync (a Session) and the alembic backfill through
+    op.get_bind() (a Connection). Only journals with a price in either
+    source, or a stored list price that may have lost its source, are read.
+    """
+    stored = (
+        select(
+            Journal.issn_l,
+            Journal.apc_prices,
+            Journal.doaj_apc_max,
+            Journal.doaj_apc_currency,
+            cast(func.extract("year", Journal.harvested_at), Integer).label("openalex_year"),
+            cast(func.extract("year", Journal.doaj_harvested_at), Integer).label("doaj_year"),
+            *(getattr(Journal, name) for name in LIST_PRICE_BINDS),
+        )
+        .where(
+            or_(
+                func.coalesce(func.jsonb_array_length(Journal.apc_prices), 0) > 0,
+                Journal.doaj_apc_max.is_not(None),
+                Journal.list_price_source.is_not(None),
+            )
+        )
+        .order_by(Journal.issn_l)
+    )
+    changed: list[dict[str, Any]] = []
+    for row in conn.execute(stored).mappings():
+        price = select_list_price(
+            apc_prices=row.apc_prices,
+            doaj_apc_max=row.doaj_apc_max,
+            doaj_apc_currency=row.doaj_apc_currency,
+            openalex_year=row.openalex_year,
+            doaj_year=row.doaj_year,
+        )
+        values = _list_price_values(price)
+        if any(row[name] != value for name, value in values.items()):
+            changed.append(
+                {
+                    "b_issn_l": row.issn_l,
+                    **{bind: values[name] for name, bind in LIST_PRICE_BINDS.items()},
+                }
+            )
+    if changed:
+        journals = Journal.__table__
+        conn.execute(
+            journals.update()
+            .where(journals.c.issn_l == bindparam("b_issn_l"))
+            .values(**{name: bindparam(bind) for name, bind in LIST_PRICE_BINDS.items()}),
+            changed,
+        )
+    return len(changed)
+
+
+def _list_price_values(price: ListPrice | None) -> dict[str, Any]:
+    """Column values for one journal's list price (all NULL without one)."""
+    return {
+        "list_price_source": price.source.value if price else None,
+        "list_price_currency": price.currency if price else None,
+        "list_price_amount": _money(price.amount) if price else None,
+        "list_price_year": price.year if price else None,
+        "list_price_euro": _money(price.euro) if price and price.euro is not None else None,
+    }
+
+
+def _money(value: float) -> Decimal:
+    """Two decimals, the storage scale. The comparison against the stored
+    Numeric needs a Decimal: a float like 852.12 never equals it."""
+    return Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_EVEN)
+
 
 # Effective per-institution coverage: a current deal the institution
 # participates in, via the shared sheet rows — or, when the relation marks
@@ -289,7 +453,9 @@ async def refresh_quartiles(session: AsyncSession) -> None:
 
 
 async def refresh_apcs(session: AsyncSession) -> None:
-    await session.execute(APC_SQL)
+    """Recompute the paid amount and the list price on every journal."""
+    await session.execute(PAID_APC_SQL)
+    await session.run_sync(refresh_list_prices)
     await bump_cache_epoch(session)
 
 

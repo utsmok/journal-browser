@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
+import { ApcText } from "@/components/apc-text";
 import { DealBadge, OaTypeBadge, QuartileBadge } from "@/components/badges";
 import { CardPager } from "@/components/card-pager";
 import { CollapsibleCard } from "@/components/collapsible-card";
@@ -37,7 +38,7 @@ import {
   type PublisherListItem,
 } from "@/lib/api";
 import { capReached, latestYearUsage } from "@/lib/deal-caps";
-import { formatEur, journalApcText } from "@/lib/format";
+import { formatEur } from "@/lib/format";
 import { dealLinkLabel, displayPublisherName, orderedDealLinks } from "@/lib/deal-links";
 
 const PAGE_SIZE = 10;
@@ -529,33 +530,30 @@ export default function PublisherPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {journalRows.map((j) => {
-                    const apc = journalApcText(j);
-                    return (
-                      <TableRow key={j.issn_l}>
-                        <TableCell className="font-medium">
-                          <Link
-                            href={`/${inst}/journals/${j.issn_l}`}
-                            className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-                          >
-                            {j.title || j.issn_l}
-                          </Link>
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {j.works.toLocaleString("en")}
-                        </TableCell>
-                        <TableCell>
-                          <OaTypeBadge oaType={j.oa_type} isOa={j.is_oa} />
-                        </TableCell>
-                        <TableCell>
-                          <QuartileBadge quartile={j.quartile ?? null} />
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap tabular-nums">
-                          {apc ?? <span className="text-[var(--muted-foreground)]">—</span>}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {journalRows.map((j) => (
+                    <TableRow key={j.issn_l}>
+                      <TableCell className="font-medium">
+                        <Link
+                          href={`/${inst}/journals/${j.issn_l}`}
+                          className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                        >
+                          {j.title || j.issn_l}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {j.works.toLocaleString("en")}
+                      </TableCell>
+                      <TableCell>
+                        <OaTypeBadge oaType={j.oa_type} isOa={j.is_oa} />
+                      </TableCell>
+                      <TableCell>
+                        <QuartileBadge quartile={j.quartile ?? null} />
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <ApcText apc={j} />
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
               {publisher.n_journals > journals.length && (

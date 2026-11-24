@@ -43,7 +43,8 @@ import {
   type SortKey,
 } from "@/lib/api";
 import { displayPublisherName } from "@/lib/deal-links";
-import { apcAmount, apcStatsText, formatApc, formatInt } from "@/lib/format";
+import { formatInt } from "@/lib/format";
+import { ApcText } from "@/components/apc-text";
 import { useFunderPrefs } from "@/lib/funder-prefs";
 import { COLUMN_SORTS, PUB_TYPE_LABELS, SEARCH_IN_OPTIONS, SORTS } from "@/lib/search-config";
 
@@ -409,40 +410,7 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
             state={sortRef.current}
           />
         ),
-        cell: (info) => {
-          const row = info.row.original;
-          if (row.apc_source === "openalex" && row.apc_price != null) {
-            return (
-              <span className="tabular-nums" title={t("table.listPriceTitle")}>
-                {apcAmount(row.apc_currency, row.apc_price)}
-              </span>
-            );
-          }
-          if (row.apc_source === "openapc" && row.apc_low != null) {
-            const range =
-              row.apc_low !== row.apc_high
-                ? `${formatApc(row.apc_low)} to ${formatApc(row.apc_high ?? row.apc_low)}`
-                : formatApc(row.apc_low);
-            const detail = row.apc_stats ? apcStatsText(row.apc_stats) : "";
-            return (
-              <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                <span className="tabular-nums" title={detail || undefined}>
-                  €{range}
-                </span>
-                {detail && (
-                  <span
-                    className="cursor-help rounded-full border border-[var(--muted-foreground)]/50 px-[5px] text-[10px] leading-[14px] text-[var(--muted-foreground)]"
-                    title={t("table.openapcDetail", { detail })}
-                    aria-label={t("table.openapcAria")}
-                  >
-                    ?
-                  </span>
-                )}
-              </span>
-            );
-          }
-          return <span className="text-[var(--muted-foreground)]">—</span>;
-        },
+        cell: (info) => <ApcText apc={info.row.original} />,
       },
       {
         accessorKey: "primary_topic",
@@ -1123,25 +1091,10 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
                                   count: row.works.toLocaleString("en"),
                                   inst: site.short,
                                 })}
-                                {row.apc_source === "openalex" && row.apc_price != null && (
+                                {row.apc_source != null && row.apc_price != null && (
                                   <>
                                     {" · "}
-                                    {t("table.listApcOpenalex", {
-                                      amount: apcAmount(row.apc_currency, row.apc_price),
-                                    })}
-                                  </>
-                                )}
-                                {row.apc_source === "openapc" && row.apc_low != null && (
-                                  <>
-                                    {" · "}
-                                    {t("table.listApcOpenapc", {
-                                      range:
-                                        row.apc_low !== row.apc_high
-                                          ? `${formatApc(row.apc_low)} to ${formatApc(
-                                              row.apc_high ?? row.apc_low,
-                                            )}`
-                                          : formatApc(row.apc_low),
-                                    })}
+                                    {t("table.apc")}: <ApcText apc={row} />
                                   </>
                                 )}
                               </div>

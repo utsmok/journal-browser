@@ -85,17 +85,12 @@
     "citednessTooltip": "2-year mean citedness from OpenAlex. This is the average number of citations that the journal's works from the last two years have received.",
     "citednessCellTitle": "2-year mean citedness (OpenAlex)",
     "quartileTooltip": "SCImago quartile.",
-    "apcTooltip": "Article processing charge (APC). This is the journal's list price from OpenAlex where the price is known. When it is not, this is the range of APCs that institutions reported to OpenAPC in the two newest reporting periods.",
+    "apcTooltip": "Article processing charge (APC). Where a list price is known, from OpenAlex or else DOAJ, the column shows it in euros. Otherwise it shows the range of amounts that institutions reported paying to OpenAPC, marked as paid.",
     "topicTooltip": "Primary OpenAlex topic of the journal's works.",
-    "listPriceTitle": "List price (OpenAlex)",
-    "openapcDetail": "Reported to OpenAPC per year:\n{detail}",
-    "openapcAria": "OpenAPC APC detail",
     "topicFilterTitle": "Filter the search by topic “{topic}”",
     "fuzzy": "No exact matches for “{query}”. Showing close name matches.",
     "unknownPublisher": "Unknown publisher",
-    "listWorks": "{count} {inst} works",
-    "listApcOpenalex": "APC {amount}",
-    "listApcOpenapc": "APC €{range}"
+    "listWorks": "{count} {inst} works"
   },
   "empty": {
     "query": "No journals match “{query}”.",
