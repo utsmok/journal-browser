@@ -85,7 +85,7 @@ function reqSummary(t: (key: string) => string, req: string | null | undefined):
       return t("search.facets.reqEncourages");
     case "no_policy_for":
       return t("search.facets.reqNone");
-    case "does_no_mention":
+    case "does_not_mention":
       return t("search.facets.reqNotMentioned");
     default:
       return "—";

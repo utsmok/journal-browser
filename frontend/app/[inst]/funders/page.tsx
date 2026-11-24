@@ -44,7 +44,7 @@ const PAGE_SIZES = [25, 50, 100];
 const SELECT_CLASS =
   "h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2";
 
-const REQ_ORDER = ["requires", "encourages", "no_policy_for", "does_no_mention", "none"] as const;
+const REQ_ORDER = ["requires", "encourages", "no_policy_for", "does_not_mention", "none"] as const;
 
 function paramValues(sp: { get(key: string): string | null }, key: string): string[] {
   return (sp.get(key) ?? "").split("|").filter(Boolean);
@@ -157,7 +157,7 @@ function FundersPageInner() {
       if (normalized === "requires") return t("search.facets.reqRequires");
       if (normalized === "encourages") return t("search.facets.reqEncourages");
       if (normalized === "no_policy_for") return t("search.facets.reqNone");
-      if (normalized === "does_no_mention") return t("search.facets.reqNotMentioned");
+      if (normalized === "does_not_mention") return t("search.facets.reqNotMentioned");
       if (normalized === "none") return t("search.facets.reqMissing");
       return normalized.replaceAll("_", " ");
     },
