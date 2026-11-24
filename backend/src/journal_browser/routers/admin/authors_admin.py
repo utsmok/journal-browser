@@ -29,7 +29,7 @@ from ...models import (
 from ...schemas import AdminExternalAuthorOut, AuthorIdentityAdminOut, AuthorIdentityPageOut
 from ...services.authorship import attributed_to_any
 from .auth import AdminDep, SessionDep
-from .settings_admin import _get_institution_or_404
+from .settings_admin import get_institution_or_404
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -219,7 +219,7 @@ async def stored_external_author(
     # store lower-cased bare ids).
     conditions = [attributed_to_any([external_id])]
     if institution is not None:
-        inst = await _get_institution_or_404(session, institution)
+        inst = await get_institution_or_404(session, institution)
         conditions.append(OpenalexWork.institution_id == inst.id)
     works = (
         (

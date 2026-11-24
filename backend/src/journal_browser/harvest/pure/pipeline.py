@@ -24,8 +24,8 @@ from .transport import (
     oai_tag,
 )
 from .xmlrecords import (
-    _cerif_publication_fields,
-    _header_fields,
+    cerif_publication_fields,
+    header_fields,
     pure_uuid_for,
     record_payload,
     year_for_set,
@@ -44,7 +44,7 @@ async def _ingest_oai_record(
     entity_type: str,
 ) -> str:
     """Store one <record> verbatim + upsert the canonical row; returns kind."""
-    oai_identifier, datestamp, _set_specs, status = _header_fields(record)
+    oai_identifier, datestamp, _set_specs, status = header_fields(record)
     if status == "deleted":
         # deletedRecord=no on this endpoint, so a deleted header is an anomaly.
         ingest.parse_failures += 1
@@ -58,7 +58,7 @@ async def _ingest_oai_record(
     _, payload = record_payload(record)
     if entity_type == "work_cerif":
         metadata = record.find(oai_tag("metadata"))
-        cerif = _cerif_publication_fields(metadata)
+        cerif = cerif_publication_fields(metadata)
         if cerif:
             payload["cerif"] = cerif
     kind, _ = await ingest.ingest_record(oai_identifier, payload)

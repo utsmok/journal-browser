@@ -21,7 +21,6 @@ year-scoped pure_canon stats sums (search.base_query convention).
 """
 
 import warnings
-from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import Numeric, and_, case, func, or_, select, text
@@ -30,7 +29,6 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
-from ..harvest.common import cache_epoch
 from ..models import (
     Deal,
     DealInstitution,
@@ -42,6 +40,7 @@ from ..models import (
     JournalFlags,
     Publisher,
 )
+from ..queries import cache_epoch
 from .authorship import chapter_rollup, venue_authorship, venue_gap_predicate, venue_openalex_only
 from .cache import (
     SNAPSHOT_CACHE,
@@ -54,8 +53,14 @@ from .cache import (
     swr_schedule,
 )
 from .deal_coverage import deal_institution_join, dj_scope
-from .facets import passes, publisher_facets, publisher_predicates, publisher_topic_facet
-from .search import APC_SHOWN, OA_TYPES, _oa_type, _order, attach_apc_display, base_query
+from .facets import (
+    PublisherRow,
+    passes,
+    publisher_facets,
+    publisher_predicates,
+    publisher_topic_facet,
+)
+from .search import APC_SHOWN, OA_TYPES, attach_apc_display, base_query, oa_type_case, sort_order
 
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 100
@@ -74,29 +79,6 @@ SORT_KEYS = ("relevance", "name", "journals", "works", "deals", "apc")
 def grouping_key() -> Any:
     """Publisher grouping key: canonical when set, else publisher_name."""
     return func.coalesce(func.nullif(Journal.publisher_canonical, ""), Journal.publisher_name)
-
-
-@dataclass(slots=True)
-class _Pub:
-    """One publisher row of the cached snapshot."""
-
-    name: str
-    n_journals: int
-    n_works: int
-    deal_journals: int
-    oa_counts: dict[str, int]
-    quartile_counts: dict[str, int]  # q1..q4
-    apc_journals: int
-    eur_min: float | None
-    eur_max: float | None
-    # Works-weighted topic mass, top 5: [{"name": label, "n": mass}].
-    topics: list[dict[str, Any]]
-    # Topic display_names present in the group's journals (facet/filter
-    # vocabulary), plus a lower-cased copy for case-insensitive matching.
-    labels: frozenset[str]
-    labels_lower: frozenset[str]
-    # Sub-brand publisher_names in the group, lower-cased for q matching.
-    members_lower: frozenset[str]
 
 
 def _snapshot_query(institution_id: int, years: tuple[int, int] | None = None) -> Any:
@@ -142,7 +124,7 @@ def _snapshot_query(institution_id: int, years: tuple[int, int] | None = None) -
         J.publisher_name.label("member"),
         works,
         F.deal_covered.label("deal_covered"),
-        _oa_type(F.deal_covered, F.openaire_diamond).label("oa_type"),
+        oa_type_case(F.deal_covered, F.openaire_diamond).label("oa_type"),
         J.latest_quartile.label("quartile"),
         APC_SHOWN.label("apc_any"),
         J.latest_apc_euro.label("apc_euro"),
@@ -303,7 +285,7 @@ def _snapshot_query(institution_id: int, years: tuple[int, int] | None = None) -
 
 async def _snapshot(
     session: AsyncSession, institution_id: int, years: tuple[int, int] | None = None
-) -> dict[str, _Pub]:
+) -> dict[str, PublisherRow]:
     """Publisher aggregation for one institution, cached until the next
     harvest bump or 24h. An active publication-year range joins the key
     (search.facets convention): the year-scoped swap runs at query time,
@@ -317,7 +299,7 @@ async def _snapshot(
     hit = cache_get(SNAPSHOT_CACHE, cache_key, SNAPSHOT_TTL)
     if hit is not None:
         return hit
-    snap: dict[str, _Pub] = {}
+    snap: dict[str, PublisherRow] = {}
     # The entries CTE's set-returning join is implicitly lateral in
     # Postgres; SQLAlchemy mistakes it for a cartesian product.
     with warnings.catch_warnings():
@@ -335,7 +317,7 @@ async def _snapshot(
             key=lambda t: (-t["n"], t["name"]),
         )
         labels = frozenset(r.labels or ())
-        snap[r.name] = _Pub(
+        snap[r.name] = PublisherRow(
             name=r.name,
             n_journals=r.n_journals,
             n_works=int(r.n_works or 0),
@@ -354,11 +336,13 @@ async def _snapshot(
     return snap
 
 
-def _order_pubs(pubs: list[_Pub], sort: str, q: str | None, dir: str | None) -> list[_Pub]:
+def _order_pubs(
+    pubs: list[PublisherRow], sort: str, q: str | None, dir: str | None
+) -> list[PublisherRow]:
     """Sort with the SQL convention: head direction, ties broken by
     (lower(name), name) ascending; two stable passes keep that intact."""
 
-    def head(p: _Pub) -> Any:
+    def head(p: PublisherRow) -> Any:
         if sort == "name":
             return p.name.lower()
         if sort == "journals":
@@ -383,7 +367,7 @@ def _order_pubs(pubs: list[_Pub], sort: str, q: str | None, dir: str | None) -> 
 
 
 def _item(
-    p: _Pub,
+    p: PublisherRow,
     topics: list[dict[str, Any]],
     external_ids: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -440,7 +424,7 @@ async def search_publishers(
     q = q.strip() if q and q.strip() else None
     q_lower = q.lower() if q else None
 
-    def q_hit(p: _Pub) -> bool:
+    def q_hit(p: PublisherRow) -> bool:
         return q_lower in p.name.lower() or any(q_lower in m for m in p.members_lower)
 
     # The q filter rides along in facet counts; the dimension filters don't
@@ -601,7 +585,7 @@ async def _build_publisher_bundle(
         .subquery()
     )
     issns = [r.issn_l for r in (await session.execute(select(subq.c.issn_l))).all()]
-    order_col, direction = _order("institution_works", subq)
+    order_col, direction = sort_order("institution_works", subq)
     head = order_col.desc() if direction == "desc" else order_col.asc()
     journal_rows = (
         await session.execute(select(subq).order_by(head, subq.c.issn_l.desc()).limit(JOURNAL_CAP))

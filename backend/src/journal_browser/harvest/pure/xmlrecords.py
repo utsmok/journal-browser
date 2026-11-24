@@ -1,5 +1,4 @@
 import logging
-import re
 import xml.etree.ElementTree as ET
 from typing import Any
 
@@ -10,7 +9,7 @@ from .transport import DC_NS, DCT_NS, PureOaiError, oai_tag
 logger = logging.getLogger(__name__)
 
 
-def _header_fields(record: ET.Element) -> tuple[str, str, list[str], str | None]:
+def header_fields(record: ET.Element) -> tuple[str, str, list[str], str | None]:
     """(oai_identifier, datestamp, set_specs, status) from a <record> header."""
     header = record.find(oai_tag("header"))
     if header is None:
@@ -56,7 +55,7 @@ def pure_uuid_for(oai_identifier: str) -> str:
     return tail.rsplit("/", 1)[-1]
 
 
-def _cerif_publication_fields(metadata_el: ET.Element | None) -> dict[str, Any]:
+def cerif_publication_fields(metadata_el: ET.Element | None) -> dict[str, Any]:
     """Targeted CERIF Publication extraction: the fields works needs plus
     the author list (the standalone author path's pure-side edges).
 
@@ -99,7 +98,7 @@ def _cerif_publication_fields(metadata_el: ET.Element | None) -> dict[str, Any]:
 
 def record_payload(record: ET.Element) -> tuple[str, dict[str, Any]]:
     """(source_pk, payload) for a non-deleted record; source_pk = oai_identifier."""
-    oai_identifier, datestamp, set_specs, _ = _header_fields(record)
+    oai_identifier, datestamp, set_specs, _ = header_fields(record)
     payload: dict[str, Any] = {
         "oai_identifier": oai_identifier,
         "datestamp": datestamp,
@@ -120,12 +119,6 @@ def record_payload(record: ET.Element) -> tuple[str, dict[str, Any]]:
             payload["doi_normalized"] = doi
             break
     return oai_identifier, payload
-
-
-def _norm_title(title: str) -> str:
-    """Case/punctuation-folded title for fuzzy matching."""
-    folded = title.casefold()
-    return re.sub(r"[^0-9a-z]+", " ", folded).strip()
 
 
 def _normalize_access(raw: str | None) -> str | None:

@@ -6,8 +6,8 @@ from sqlalchemy import exc as sa_exc
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...harvest.common import cache_epoch
 from ...models import Journal
+from ...queries import cache_epoch
 from ...vocab import GreenOa
 from .. import funder_fit as funder_fit_mod
 from ..cache import FACET_CACHE, cache_get, cache_put

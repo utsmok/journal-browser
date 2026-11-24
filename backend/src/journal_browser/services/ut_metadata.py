@@ -31,7 +31,7 @@ OA_BUCKETS = ("gold", "hybrid", "green", "bronze", "diamond", "closed", "unknown
 _engines: dict[str, AsyncEngine] = {}
 
 
-def _get_engine(dsn: str) -> AsyncEngine:
+def get_engine(dsn: str) -> AsyncEngine:
     """Build (once per DSN) the read-only ut-metadata engine.
 
     default_transaction_read_only makes the server reject writes even on
@@ -92,7 +92,7 @@ async def ut_openalex_only_works_for_author(
     if not dsn or not author_a_ids:
         return None
     try:
-        async with _get_engine(dsn).connect() as conn:
+        async with get_engine(dsn).connect() as conn:
             rows = (
                 (
                     await conn.execute(

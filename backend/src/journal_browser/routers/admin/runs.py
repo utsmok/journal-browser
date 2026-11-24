@@ -16,7 +16,7 @@ from ...models import (
 )
 from ...schemas import AdminRunOut, AdminSummaryOut, FlaggedDealOut
 from .auth import AdminDep, SessionDep
-from .settings_admin import _get_institution_or_404
+from .settings_admin import get_institution_or_404
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -35,7 +35,7 @@ async def list_runs(
         .limit(limit)
     )
     if institution is not None:
-        inst = await _get_institution_or_404(session, institution)
+        inst = await get_institution_or_404(session, institution)
         query = query.where(HarvestRun.institution_id == inst.id)
     rows = (await session.execute(query)).all()
     return [
@@ -101,7 +101,7 @@ async def admin_summary(
     since = datetime.now(UTC) - timedelta(hours=24)
     run_filter = True
     if institution is not None:
-        inst = await _get_institution_or_404(session, institution)
+        inst = await get_institution_or_404(session, institution)
         run_filter = HarvestRun.institution_id == inst.id
     failed_24h = await session.scalar(
         select(func.count())

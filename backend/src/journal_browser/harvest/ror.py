@@ -34,9 +34,9 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
+from ..identifiers import normalize_ror
 from ..models import PartnerInstitution
 from .common import paced_single_gets
-from .funders import normalize_ror
 from .partner_rollup import build_search_fields, refresh_partner_rollups
 
 logger = logging.getLogger(__name__)

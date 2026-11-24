@@ -19,9 +19,9 @@ from ...models import (
     Publisher,
 )
 from ...schemas import AdminDealDetail, AdminDealOut, CapUsageEntry
-from ...services.flags_refresh import _schedule_flags_refresh
 from ...vocab import DealStatus
 from .auth import AdminDep, SessionDep
+from .flags_refresh import schedule_flags_refresh
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -232,7 +232,7 @@ async def create_deal(body: DealCreate, session: SessionDep, _: AdminDep) -> dic
     )
     session.add(deal)
     await session.commit()
-    _schedule_flags_refresh()
+    schedule_flags_refresh()
     return await _deal_detail(session, deal.id)
 
 
@@ -280,7 +280,7 @@ async def update_deal(
             )
         )
     await session.commit()
-    _schedule_flags_refresh()
+    schedule_flags_refresh()
     return await _deal_detail(session, deal_id)
 
 
@@ -363,7 +363,7 @@ async def update_deal_journals(
             .values(excluded=True)
         )
     await session.commit()
-    _schedule_flags_refresh()
+    schedule_flags_refresh()
     return await _deal_detail(session, deal_id)
 
 
@@ -412,5 +412,5 @@ async def update_deal_participations(
             )
         )
     await session.commit()
-    _schedule_flags_refresh()
+    schedule_flags_refresh()
     return await _deal_detail(session, deal_id)

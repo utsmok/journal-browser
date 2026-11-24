@@ -13,6 +13,7 @@ from ..models import (
     Work,
     WorkIdentity,
 )
+from .reconcile import home_institution_id, publisher_names
 
 logger = logging.getLogger(__name__)
 
@@ -29,11 +30,7 @@ async def render_curation_report(
     session: AsyncSession, data_guard_actions: list[dict[str, str]] | None = None
 ) -> Path:
     """Read-only HTML report for library staff."""
-    # Deferred: reconcile re-exports this function (test import path), so a
-    # module-level import of its helpers would cycle at import time.
-    from .reconcile import _home_institution_id, _publisher_names
-
-    publisher_names = await _publisher_names(session)
+    pub_names = await publisher_names(session)
     deals = list((await session.execute(select(Deal))).scalars())
     oanl = [d for d in deals if d.openaccess_nl_url]
     flagged = [d for d in deals if d.needs_curation]
@@ -47,7 +44,7 @@ async def render_curation_report(
 
     def deal_row(d: Deal) -> str:
         return (
-            f"<li>#{d.id} <strong>{_esc(publisher_names.get(d.publisher_id, '?'))}</strong> "
+            f"<li>#{d.id} <strong>{_esc(pub_names.get(d.publisher_id, '?'))}</strong> "
             f"[{_esc(d.status)}] {_esc(d.duration_text)} — "
             f"{_esc(d.needs_curation_reason or '')} "
             f"<a href='{_esc(d.openaccess_nl_url)}'>openaccess.nl</a> "
@@ -68,7 +65,7 @@ async def render_curation_report(
             + "</ul>"
         )
     jct_only = [d for d in deals if d.esac_id and not d.openaccess_nl_url]
-    home_id = await _home_institution_id(session)
+    home_id = await home_institution_id(session)
     if home_id is not None:
         twente_deal_ids = set(
             (
@@ -86,7 +83,7 @@ async def render_curation_report(
             f"<h2>{_esc(get_settings().institution_name)}-relevant JCT agreements "
             "with no openaccess.nl deal (publisher/duration unmatched)</h2><ul>"
             + "".join(
-                f"<li>#{d.id} {_esc(publisher_names.get(d.publisher_id, '?'))} "
+                f"<li>#{d.id} {_esc(pub_names.get(d.publisher_id, '?'))} "
                 f"{_esc(d.esac_id)} [{_esc(d.status)}] {_esc(d.duration_text)}</li>"
                 for d in relevant
             )

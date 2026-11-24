@@ -38,7 +38,6 @@ from sqlalchemy.ext.asyncio import (
 
 from journal_browser.config import get_settings
 from journal_browser.harvest.common import (
-    normalize_doi,
     openalex_budget_ok,
     paced_single_gets,
     resolve_institution,
@@ -48,6 +47,7 @@ from journal_browser.harvest.enrich import (
     GET_MIN_INTERVAL_S,
     fetch_works_by_doi,
 )
+from journal_browser.identifiers import normalize_doi
 from journal_browser.models import OpenalexWork, OpenalexWorkParent
 
 logger = logging.getLogger(__name__)

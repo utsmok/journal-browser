@@ -15,9 +15,10 @@ import time
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
-from journal_browser.harvest.common import get_active_institutions, resolve_institution
+from journal_browser.harvest.common import resolve_institution
 from journal_browser.harvest.openalex_works import rebuild_openalex_works
 from journal_browser.logging_setup import configure_logging
+from journal_browser.queries import get_active_institutions
 
 logger = logging.getLogger("journal_browser.jobs.build_openalex_works")
 

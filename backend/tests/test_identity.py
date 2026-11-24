@@ -26,8 +26,8 @@ from journal_browser.harvest.people_utwente import (
     tile_clean_name,
     tile_common_name,
 )
-from journal_browser.harvest.pure.xmlrecords import _norm_title
 from journal_browser.harvest.pure_portal_persons import apply_person_bindings, parse_listing
+from journal_browser.identifiers import norm_title
 from journal_browser.ingest import IngestSession
 from journal_browser.models import (
     Author,
@@ -924,7 +924,7 @@ async def test_gap_tags_and_authorship_counts_as_served(client, db, institution_
             institution_id=ut.id,
             pure_uuid=uuid,
             title=title,
-            norm_title=_norm_title(title),
+            norm_title=norm_title(title),
             year=year,
             doi_normalized=doi,
             oa_status=oa,

@@ -49,7 +49,7 @@ async def run(session, institution, source_override: str | None = None) -> bool:
         source = "ut-metadata"
         dsn = resolve_dsn(institution)
         assert dsn, "select_source already rejected utmd without a DSN"
-        data = await fetch_source(ut_metadata_service._get_engine(dsn))
+        data = await fetch_source(ut_metadata_service.get_engine(dsn))
     else:
         source = "local"
         data = await fetch_local_source(session, institution)

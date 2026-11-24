@@ -23,12 +23,10 @@ from .doi import _doi_clean, extract_doi
 from .entities import harvest_pure_entities
 from .pipeline import _consume_oai_pages, harvest_pure_cerif, harvest_pure_years
 from .store import retire_absent
-from .xmlrecords import _norm_title
 
 __all__ = [
     "_consume_oai_pages",
     "_doi_clean",
-    "_norm_title",
     "extract_doi",
     "harvest_pure_cerif",
     "harvest_pure_entities",

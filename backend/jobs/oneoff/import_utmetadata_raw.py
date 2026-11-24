@@ -31,19 +31,20 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
-from journal_browser.harvest.common import normalize_doi, resolve_institution
+from journal_browser.harvest.common import resolve_institution
 from journal_browser.harvest.denorm import refresh_institution_stats
 from journal_browser.harvest.institution_stats import (
-    _oa_status,
-    _source_issn_map,
-    _write_journal_stats,
+    oa_status,
+    source_issn_map,
+    write_journal_stats,
     write_pure_canon_stats,
 )
-from journal_browser.harvest.openaire import _confirm
+from journal_browser.harvest.openaire import confirm
 from journal_browser.harvest.pure import extract_doi
+from journal_browser.identifiers import normalize_doi
 from journal_browser.ingest import IngestSession
 from journal_browser.models import Institution
-from journal_browser.services.ut_metadata import _get_engine
+from journal_browser.services.ut_metadata import get_engine
 
 PAGE = 400
 
@@ -174,7 +175,7 @@ async def rebuild_openalex_stats(session, institution) -> dict:
         GROUP BY 1, 2, 3
         """
     )
-    issn_by_source = await _source_issn_map(session)
+    issn_by_source = await source_issn_map(session)
     per_journal_year: Counter[tuple[str, int, str]] = Counter()
     unlinked = out_of_window = no_year = 0
     for src_id, yr, oa, n in (await session.execute(sql, {"iid": institution.id})).all():
@@ -190,8 +191,8 @@ async def rebuild_openalex_stats(session, institution) -> dict:
         if not issn_l:
             unlinked += n
             continue
-        per_journal_year[(issn_l, year, _oa_status({"open_access": {"oa_status": oa}}))] += n
-    await _write_journal_stats(session, institution.id, per_journal_year)
+        per_journal_year[(issn_l, year, oa_status({"open_access": {"oa_status": oa}}))] += n
+    await write_journal_stats(session, institution.id, per_journal_year)
     return {
         "openalex_stats_rows": len({(i, y) for (i, y, _s) in per_journal_year}),
         "openalex_unlinked_to_journal": unlinked,
@@ -209,7 +210,7 @@ async def main(code: str) -> None:
         dsn = resolve_dsn(institution)
         if not dsn:
             raise SystemExit(f"no ut-metadata DSN for {institution.code}; set it first")
-        ext_engine = _get_engine(dsn)
+        ext_engine = get_engine(dsn)
         async with ext_engine.connect() as ext:
             totals: dict = {}
             for source, entity_type in STREAMS:
@@ -248,7 +249,7 @@ async def main(code: str) -> None:
                     last = pk
                     doi = _extract_openaire_doi(payload)
                     if doi and (uuid := doi_to_work.get(doi)):
-                        await _confirm(
+                        await confirm(
                             session,
                             institution_id=institution.id,
                             source_pk=pk,

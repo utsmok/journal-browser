@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import get_settings, work_type_excluded
 from ..ingest import IngestSession
 from ..models import Institution, InstitutionTrend, InstitutionWorksStats, Journal, Work
-from ..services.works_query import work_type_not_excluded
+from ..queries import work_type_not_excluded
 from .common import OA_STATUSES, openalex_budget_ok, require_openalex_key
 from .openalex_journals import resolve_institution_openalex_id
 
@@ -36,12 +36,12 @@ def openalex_id_to_pk(openalex_id: str | None) -> str:
     return (openalex_id or "").rsplit("/", 1)[-1]
 
 
-def _oa_status(work: dict[str, Any]) -> str:
+def oa_status(work: dict[str, Any]) -> str:
     status = ((work.get("open_access") or {}).get("oa_status")) or "closed"
     return status if status in OA_STATUSES else "closed"
 
 
-async def _source_issn_map(session: AsyncSession) -> dict[str, str]:
+async def source_issn_map(session: AsyncSession) -> dict[str, str]:
     rows = await session.execute(select(Journal.openalex_id, Journal.issn_l))
     return {openalex_id_to_pk(s): issn_l for s, issn_l in rows.all() if s and issn_l}
 
@@ -81,7 +81,7 @@ async def harvest_institution_stats(
         async def commit_page(_page: int, _cursor: str | None) -> None:
             await ingest.commit()
 
-        issn_by_source = await _source_issn_map(session)
+        issn_by_source = await source_issn_map(session)
         per_journal_year: Counter[tuple[str, int, str]] = Counter()
         per_year: Counter[tuple[int, str]] = Counter()
         unlinked = 0
@@ -127,7 +127,7 @@ async def harvest_institution_stats(
                 if institution.data_window_end is not None
                 else current_year
             ):
-                status = _oa_status(payload)
+                status = oa_status(payload)
                 per_year[(year, status)] += 1
                 source_pk = openalex_id_to_pk(
                     ((payload.get("primary_location") or {}).get("source") or {}).get("id")
@@ -155,7 +155,7 @@ async def harvest_institution_stats(
             finish["openalex_reserve_stop"] = 1
         stats = await ingest.finish_run("completed", finish)
 
-        await _write_journal_stats(session, institution.id, per_journal_year)
+        await write_journal_stats(session, institution.id, per_journal_year)
         corresponding = await _corresponding_counts(client, inst_id, institution)
         await _write_trends(session, institution.id, per_year, corresponding)
         await session.commit()
@@ -168,7 +168,7 @@ def _zero_row(institution_id: int, keys: dict[str, Any]) -> dict[str, Any]:
     return row
 
 
-async def _write_journal_stats(
+async def write_journal_stats(
     session: AsyncSession,
     institution_id: int,
     per_journal_year: Counter[tuple[str, int, str]],

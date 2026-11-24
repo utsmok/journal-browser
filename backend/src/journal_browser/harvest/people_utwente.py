@@ -38,6 +38,7 @@ import httpx
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..config import PEOPLE_BASE_URL
 from ..ingest import IngestSession
 from ..models import (
     Author,
@@ -52,7 +53,6 @@ from .pure_portal_persons import match_org_name, org_bare_key, person_name_key, 
 
 logger = logging.getLogger(__name__)
 
-PEOPLE_BASE_URL = "https://people.utwente.nl/"
 RPC_URL = PEOPLE_BASE_URL + "wh_services/utwente_ppp/rpc/"
 RESEARCH_PORTAL_URL = "https://research.utwente.nl"
 

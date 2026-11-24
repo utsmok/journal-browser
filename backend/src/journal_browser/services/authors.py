@@ -4,17 +4,15 @@ All journal-level views reuse search.base_query, so the global corpus
 cutoff (works_window_plus > 3: the journal's own OpenAlex works in the
 window, materialized from counts_by_year — not the institution's works),
 proceedings exclusion and ignore-list apply to every suggestion; the
-oa_type case is shared via search._oa_type."""
+oa_type case is shared via search.oa_type_case."""
 
 from typing import Any
 
 from sqlalchemy import case, false, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..config import get_settings, work_type_excluded
-from ..harvest.authors import topic_mass
-from ..harvest.common import normalize_doi
-from ..harvest.people_utwente import PEOPLE_BASE_URL
+from ..config import PEOPLE_BASE_URL, get_settings, work_type_excluded
+from ..identifiers import normalize_doi
 from ..models import (
     Author,
     AuthorIdentity,
@@ -28,6 +26,8 @@ from ..models import (
     Work,
     WorkPureAuthor,
 )
+from ..queries import work_type_normalized
+from ..topics import topic_mass
 from .authorship import (
     OPENALEX_URL,
     group_gap_entries,
@@ -37,7 +37,7 @@ from .authorship import (
     ut_roster_by_aids,
 )
 from .facets import author_facets
-from .search import _like, _oa_type, base_query
+from .search import base_query, escape_like, oa_type_case
 from .work_sources import authorships_by_wid, openalex_only_works_for_author
 from .works_query import (
     YEAR_BUCKETS,
@@ -45,7 +45,6 @@ from .works_query import (
     empty_year_buckets,
     strata_cond,
     unit_work_join,
-    work_type_normalized,
     work_window,
     work_year_window,
 )
@@ -177,7 +176,7 @@ async def search_authors(
         # Diacritics fold so "Follmer" finds "Föllmer"; translate() keeps
         # this extension-free, and the roster is small enough to scan.
         q_cond = func.translate(func.lower(Author.name), _FOLD_SRC, _FOLD_DST).like(
-            func.translate(func.lower(f"%{_like(qstr)}%"), _FOLD_SRC, _FOLD_DST),
+            func.translate(func.lower(f"%{escape_like(qstr)}%"), _FOLD_SRC, _FOLD_DST),
             escape="\\",
         )
     # Year-scoped per-author aggregates over the stored work edges (the
@@ -250,7 +249,7 @@ async def search_authors(
         )
     elif q_cond is not None:
         order = (
-            case((Author.name.ilike(f"{_like(qstr)}%", escape="\\"), 1), else_=0).desc(),
+            case((Author.name.ilike(f"{escape_like(qstr)}%", escape="\\"), 1), else_=0).desc(),
             n_col.desc(),
             func.lower(Author.name),
             Author.pure_uuid,
@@ -322,7 +321,7 @@ async def _author_journals(
                 Work.journal_issn_l.label("issn_l"),
                 Journal.title.label("title"),
                 func.count().label("n_works"),
-                _oa_type(flags.c.deal_covered, flags.c.openaire_diamond),
+                oa_type_case(flags.c.deal_covered, flags.c.openaire_diamond),
             )
             .select_from(Work)
             .join(
@@ -832,7 +831,7 @@ async def author_profile(
         ).all()
         topics_by_issn = {row.issn_l: row.topics or [] for row in topic_rows}
         # Same proportional spread as the ingest-time primary_topic (see
-        # harvest.authors.topic_mass).
+        # topics.topic_mass).
         mass = topic_mass({r.issn_l: r.n_works for r in journal_rows}, topics_by_issn)
     else:
         mass = {}

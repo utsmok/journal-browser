@@ -28,9 +28,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
-from journal_browser.harvest.common import get_active_institutions
 from journal_browser.ingest import IngestSession
 from journal_browser.models import HarvestState, Journal
+from journal_browser.queries import get_active_institutions
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 

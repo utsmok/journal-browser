@@ -9,8 +9,9 @@ from typing import Any
 from sqlalchemy import and_, func, or_, select
 
 from ..models import ApcEvidence, Deal, DealInstitution, DealJournal, Work
+from ..queries import work_type_not_excluded
 from ..schemas import DealOut
-from ..services.works_query import work_type_not_excluded, work_window
+from .works_query import work_window
 
 #: DealOut fields that map 1:1 onto Deal columns (the detail path getattrs
 #: them); excludes the computed register extras. Set-equal to the column

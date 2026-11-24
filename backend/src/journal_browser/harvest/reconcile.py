@@ -29,8 +29,8 @@ from ..models import (
     ManualOverride,
     Publisher,
 )
-from .common import get_active_institutions, get_home_institution
-from .curation_report import render_curation_report as render_curation_report
+from ..queries import get_active_institutions
+from .common import get_home_institution
 
 logger = logging.getLogger(__name__)
 
@@ -132,13 +132,13 @@ async def _jct_deals(session: AsyncSession) -> list[Deal]:
     return list(rows.scalars().all())
 
 
-async def _home_institution_id(session: AsyncSession) -> int | None:
+async def home_institution_id(session: AsyncSession) -> int | None:
     """Home-institution row id (the env-seeded bootstrap institution)."""
     inst = await get_home_institution(session)
     return inst.id if inst else None
 
 
-async def _publisher_names(session: AsyncSession) -> dict[int, str]:
+async def publisher_names(session: AsyncSession) -> dict[int, str]:
     rows = await session.execute(select(Publisher.id, Publisher.name))
     return dict(rows.all())
 
@@ -228,7 +228,7 @@ async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
         ).scalars()
     )
     stats["nl_deals"] = len(deals)
-    publisher_names = await _publisher_names(session)
+    pub_names = await publisher_names(session)
     protected = await _override_protected(session, [d.id for d in deals])
     for deal in deals:
         participants = [
@@ -254,7 +254,7 @@ async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
                 .on_conflict_do_nothing(index_elements=["deal_id", "institution_id"])
             )
             stats["linked"] += len(participants)
-        pname = (publisher_names.get(deal.publisher_id) or "").strip()
+        pname = (pub_names.get(deal.publisher_id) or "").strip()
         # openaccess.nl names carry parenthetical sigla ("... (ACS)") that
         # OpenAlex publisher names lack; match on the bare name.
         base = re.sub(r"\s*\([^)]*\)\s*$", "", pname).strip()
@@ -461,8 +461,8 @@ async def dedupe_oanl_deals(session: AsyncSession, publisher_names: dict[int, st
 
 async def reconcile_deals(session: AsyncSession) -> dict[str, int]:
     """Match + merge; returns report counters."""
-    publisher_names = await _publisher_names(session)
-    merged_oanl = await dedupe_oanl_deals(session, publisher_names)
+    pub_names = await publisher_names(session)
+    merged_oanl = await dedupe_oanl_deals(session, pub_names)
     jct_deals = await _jct_deals(session)
     matched = unmatched_jct = 0
 
@@ -475,7 +475,7 @@ async def reconcile_deals(session: AsyncSession) -> dict[str, int]:
     # Prefer agreements that carry the home institution; when UKB (Dutch
     # university libraries) or SURF joint deals don't enumerate members,
     # the Dutch-consortium suffix still outranks foreign consortia.
-    home_id = await _home_institution_id(session)
+    home_id = await home_institution_id(session)
     twente_deal_ids: set[int] = set()
     if home_id is not None:
         twente_deal_ids = set(
@@ -506,14 +506,14 @@ async def reconcile_deals(session: AsyncSession) -> dict[str, int]:
             await session.delete(jct)
             matched += 1
             continue
-        name = _canonical_name(_code_of(jct.esac_id), publisher_names.get(jct.publisher_id))
+        name = _canonical_name(_code_of(jct.esac_id), pub_names.get(jct.publisher_id))
         target = None
         for deal in oanl_deals:
             if target or deal.id in consumed or deal.esac_id:
                 # esac set means this canonical already absorbed another
                 # agreement; a second match would collide on journal rows.
                 continue
-            deal_name = publisher_names.get(deal.publisher_id, "")
+            deal_name = pub_names.get(deal.publisher_id, "")
             if not deal_name or not name:
                 continue
             if deal_name.casefold().strip() == name.casefold().strip() and durations_overlap(
@@ -766,8 +766,8 @@ async def _resolve_pair(
     if not dominant:
         return a, None
     names = {
-        a.id: (await _publisher_names(session)).get(a.publisher_id) or "",
-        b.id: (await _publisher_names(session)).get(b.publisher_id) or "",
+        a.id: (await publisher_names(session)).get(a.publisher_id) or "",
+        b.id: (await publisher_names(session)).get(b.publisher_id) or "",
     }
 
     def _matches(d: Deal) -> bool:

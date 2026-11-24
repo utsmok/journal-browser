@@ -36,6 +36,14 @@ EXCLUDED_WORK_TYPES = frozenset(
     }
 )
 
+# openalex_works rows rebuilt by the author sweep carry this value in
+# works.source; serving queries filter it out.
+AUTHOR_SWEEP_PREFIX = "author-sweep"
+
+# Root of people.utwente.nl: person pages, photos, and the JSON-RPC
+# endpoint all hang off it (harvest/people_utwente.py, services/authors.py).
+PEOPLE_BASE_URL = "https://people.utwente.nl/"
+
 
 def normalize_work_type(value: str | None) -> str:
     """Bare, lower-cased work type so source spellings collapse onto one

@@ -193,7 +193,7 @@ def _institution_payload(
     }
 
 
-async def _get_institution_or_404(session: AsyncSession, code: str) -> Institution:
+async def get_institution_or_404(session: AsyncSession, code: str) -> Institution:
     inst = (
         await session.execute(select(Institution).where(Institution.code == code))
     ).scalar_one_or_none()
@@ -204,14 +204,14 @@ async def _get_institution_or_404(session: AsyncSession, code: str) -> Instituti
 
 @router.get("/institutions/{code}", response_model=AdminInstitutionOut)
 async def get_institution(code: str, session: SessionDep, _: AdminDep) -> dict[str, Any]:
-    return _institution_payload(await _get_institution_or_404(session, code))
+    return _institution_payload(await get_institution_or_404(session, code))
 
 
 @router.put("/institutions/{code}", response_model=AdminInstitutionOut)
 async def update_institution(
     code: str, body: InstitutionUpdate, session: SessionDep, _: AdminDep
 ) -> dict[str, Any]:
-    inst = await _get_institution_or_404(session, code)
+    inst = await get_institution_or_404(session, code)
     window_changed = bool(body.model_fields_set & {"data_window_start", "data_window_end"})
     was_active = inst.active
     # Merged window check: a one-sided body must also be validated against

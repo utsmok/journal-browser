@@ -7,7 +7,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from ..harvest.funders import normalize_ror
+from ..identifiers import normalize_ror
 from ..models import (
     Author,
     AuthorWork,
@@ -18,6 +18,7 @@ from ..models import (
     Work,
     WorkPartner,
 )
+from ..queries import work_type_normalized, work_type_not_excluded
 from ..schemas import (
     CollaborationAuthorCount,
     CollaborationJournalCount,
@@ -27,15 +28,13 @@ from ..schemas import (
     FacetCount,
     PartnerSummary,
 )
-from .search import _oa_type
+from .search import oa_type_case
 from .works_query import (
     YEAR_BUCKETS,
     author_works_join,
     unit_author_join,
     unit_key,
     unit_work_join,
-    work_type_normalized,
-    work_type_not_excluded,
     work_year_window,
 )
 
@@ -158,7 +157,7 @@ async def detail_breakdowns(
         ).all()
 
     async def q_journals(own: AsyncSession):
-        oa_expr = _oa_type(
+        oa_expr = oa_type_case(
             func.coalesce(JournalFlags.deal_covered, False),
             func.coalesce(JournalFlags.openaire_diamond, False),
         )

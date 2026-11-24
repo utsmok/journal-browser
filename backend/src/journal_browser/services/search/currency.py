@@ -11,7 +11,7 @@ _converter: CurrencyConverter | None = None
 _converter_year: int | None = None
 
 
-def _year_rate(currency: str) -> float | None:
+def year_rate(currency: str) -> float | None:
     """EUR units per 1 `currency` at Jan 1 of the current year.
 
     The ECB publishes no fixing on Jan 1 (holiday), so missing-rate linear
@@ -40,18 +40,18 @@ def _year_rate(currency: str) -> float | None:
         return None
 
 
-def _to_eur(price: float, currency: str) -> tuple[str, float]:
+def to_eur(price: float, currency: str) -> tuple[str, float]:
     """Standardize a list price to EUR; keep the source currency on failure.
 
     Returns (currency, price), matching the list_price tuple convention.
     """
     if currency == "EUR":
         return currency, price
-    # Deferred: _year_rate resolves through the package namespace, keeping
-    # the search-module monkeypatch seam (tests/test_search_scopes.py) live.
+    # Deferred: year_rate resolves through the package namespace, keeping
+    # the search-module monkeypatch seam (tests/test_search.py) live.
     from journal_browser.services import search
 
-    rate = search._year_rate(currency)
+    rate = search.year_rate(currency)
     if rate is None or rate <= 0:
         return currency, price
     return "EUR", round(price * rate, 2)

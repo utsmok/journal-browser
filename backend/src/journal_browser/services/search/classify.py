@@ -49,7 +49,7 @@ _OBSERVED = case(
 #: An OA venue with no model evidence at all is "generic" instead of an
 #: overeager diamond. Per-work oa_status outside the sample is
 #: deliberately unused.
-def _oa_type(deal_covered: Any, openaire_diamond: Any) -> Any:
+def oa_type_case(deal_covered: Any, openaire_diamond: Any) -> Any:
     return case(
         (and_(_OA_EVIDENCE, _CHARGED), OaType.GOLD),
         (or_(_DOAJ_DIAMOND, openaire_diamond.is_(True)), OaType.DIAMOND),

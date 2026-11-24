@@ -15,7 +15,6 @@ from sqlalchemy import Integer, bindparam, case, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import normalize_work_type
-from ..harvest.common import oa_openness_desc
 from ..models import (
     Author,
     Institution,
@@ -25,8 +24,9 @@ from ..models import (
     Work,
     WorkPureAuthor,
 )
+from ..queries import oa_openness_desc, work_type_not_excluded
 from . import ut_metadata
-from .works_query import work_type_not_excluded, work_year_window
+from .works_query import work_year_window
 
 OPENALEX_URL = "https://openalex.org"
 

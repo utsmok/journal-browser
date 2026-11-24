@@ -21,7 +21,8 @@ from sqlalchemy import case, delete, func, select, text, update
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..config import work_type_excluded
+from ..config import AUTHOR_SWEEP_PREFIX, work_type_excluded
+from ..identifiers import normalize_doi
 from ..models import (
     HarvestRun,
     HarvestState,
@@ -32,14 +33,13 @@ from ..models import (
     SourceRecord,
     Work,
 )
-from .common import canonical_oa_status, normalize_doi, oa_openness_desc, oa_openness_rank
+from ..queries import oa_openness_desc, oa_openness_rank
+from .common import canonical_oa_status
 
 logger = logging.getLogger(__name__)
 
 SOURCE = "openalex"
 ENTITY_TYPE = "works_stats"
-#: harvest_runs.filter_set prefix of the per-author enrichment sweep
-AUTHOR_SWEEP_PREFIX = "author-sweep"
 
 INSERT_CHUNK = 2000
 STREAM_PARTITION = 200

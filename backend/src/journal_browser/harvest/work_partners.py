@@ -29,6 +29,7 @@ from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..identifiers import normalize_ror
 from ..models import (
     Institution,
     PartnerInstitution,
@@ -37,8 +38,7 @@ from ..models import (
     WorkIdentity,
     WorkPartner,
 )
-from .common import get_active_institutions
-from .funders import normalize_ror
+from ..queries import get_active_institutions
 from .partner_rollup import build_search_fields, refresh_partner_rollups
 
 logger = logging.getLogger(__name__)

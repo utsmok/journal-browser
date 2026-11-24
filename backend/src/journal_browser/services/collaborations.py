@@ -39,9 +39,7 @@ from sqlalchemy.dialects.postgresql import JSONB, aggregate_order_by
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import aliased
 
-from ..harvest.common import cache_epoch
-from ..harvest.funder_aliases import bare_openalex_id
-from ..harvest.funders import normalize_ror
+from ..identifiers import bare_openalex_id, normalize_ror
 from ..models import (
     Author,
     AuthorWork,
@@ -59,6 +57,7 @@ from ..models import (
     WorkPartner,
     WorkPureAuthor,
 )
+from ..queries import cache_epoch, work_type_normalized, work_type_not_excluded
 from ..schemas import (
     CollaborationDetailResponse,
     CollaborationFacets,
@@ -85,13 +84,11 @@ from .collaborations_detail import (
     top_partners_for_author,
     top_partners_for_orgunit,
 )
-from .exports import _csv_response, _csv_safe, _safe_filename
+from .csv_export import csv_response, csv_safe, safe_filename
 from .works_query import (
     YEAR_BUCKETS,
     unit_key,
     unit_work_conditions,
-    work_type_normalized,
-    work_type_not_excluded,
     work_window,
 )
 
@@ -1460,12 +1457,12 @@ async def _ror_details(
 
 
 def _file_stem(institution: Institution, *parts: str) -> str:
-    return _safe_filename("-".join(p for p in (institution.code, *parts) if p))
+    return safe_filename("-".join(p for p in (institution.code, *parts) if p))
 
 
 async def _csv_lines(rows: Sequence[Sequence[Any]]) -> AsyncIterator[list[str]]:
     for row in rows:
-        yield ["" if v is None else _csv_safe(str(v)) for v in row]
+        yield ["" if v is None else csv_safe(str(v)) for v in row]
 
 
 async def _linked(session: AsyncSession, institution: Institution, ror: str) -> bool:
@@ -1776,7 +1773,7 @@ async def collaborations_csv(
                 ),
             ]
         )
-    return _csv_response(
+    return csv_response(
         f"{_file_stem(institution, 'collaborations-partners')}.csv",
         _csv_lines(table),
         _PARTNER_CSV,
@@ -1811,7 +1808,7 @@ async def partner_works_csv(
         ]
         for r in rows
     ]
-    return _csv_response(
+    return csv_response(
         f"{_file_stem(institution, 'collaborations', ror, 'works')}.csv",
         _csv_lines(table),
         _WORK_CSV,

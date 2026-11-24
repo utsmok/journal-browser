@@ -19,7 +19,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
 from journal_browser.harvest.author_ids import resolve_author_ids
-from journal_browser.harvest.common import get_active_institutions, resolve_institution
+from journal_browser.harvest.common import resolve_institution
+from journal_browser.queries import get_active_institutions
 
 
 async def main(

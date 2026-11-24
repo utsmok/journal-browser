@@ -24,13 +24,13 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from journal_browser.config import get_settings
-from journal_browser.harvest.common import normalize_doi, resolve_institution
+from journal_browser.harvest.common import resolve_institution
 from journal_browser.harvest.denorm import refresh_institution_stats
 from journal_browser.harvest.institution_stats import write_pure_canon_stats
-from journal_browser.harvest.pure import _norm_title
+from journal_browser.identifiers import norm_title, normalize_doi
 from journal_browser.ingest import IngestSession
 from journal_browser.models import Institution, Journal, Work
-from journal_browser.services.ut_metadata import _get_engine
+from journal_browser.services.ut_metadata import get_engine
 
 BATCH = 1000
 
@@ -106,7 +106,7 @@ async def import_works(
     session: AsyncSession, institution: Institution, dsn: str, run_id: int
 ) -> dict:
     iid = institution.id
-    async with _get_engine(dsn).connect() as ext:
+    async with get_engine(dsn).connect() as ext:
         canon = (await ext.exec_driver_sql(CANON_WORKS_SQL)).mappings().all()
         # work_id -> first (alphabetically) venue issn_l per canonical work.
         venues: dict[int, str] = {}
@@ -166,7 +166,7 @@ async def import_works(
                 "pure_uuid": rec["pure_uuid"],
                 "doi_normalized": doi,
                 "title": title,
-                "norm_title": _norm_title(title),
+                "norm_title": norm_title(title),
                 "year": year,
                 "work_type": rec["work_type"],
                 "publisher": rec["publisher"],

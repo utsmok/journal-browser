@@ -580,11 +580,11 @@ async def test_apc_fields_on_list_items(api, monkeypatch):
 
     from journal_browser.services import search
 
-    monkeypatch.setattr(search, "_year_rate", lambda currency: 0.9)
+    monkeypatch.setattr(search, "year_rate", lambda currency: 0.9)
     r = await api.get("/api/v1/ut/journals", params={"q": "dollar listed"})
     (item,) = r.json()["items"]
     assert (item["apc_currency"], item["apc_price"]) == ("EUR", 900.0)
-    monkeypatch.setattr(search, "_year_rate", lambda currency: None)
+    monkeypatch.setattr(search, "year_rate", lambda currency: None)
     r = await api.get("/api/v1/ut/journals", params={"q": "dollar listed"})
     (item,) = r.json()["items"]
     assert (item["apc_currency"], item["apc_price"]) == ("USD", 1000.0)

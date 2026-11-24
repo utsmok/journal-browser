@@ -7,10 +7,10 @@ import asyncio
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from ..config import get_settings
-from ..harvest.common import get_active_institutions
-from ..harvest.denorm import refresh_deal_flags
-from .source_health import record_degraded
+from ...config import get_settings
+from ...harvest.denorm import refresh_deal_flags
+from ...queries import get_active_institutions
+from ...services.source_health import record_degraded
 
 
 async def _refresh_deal_flags_soon() -> None:
@@ -31,7 +31,7 @@ _flags_task: asyncio.Task | None = None
 _flags_rerun = False
 
 
-def _schedule_flags_refresh() -> None:
+def schedule_flags_refresh() -> None:
     """Deal writes change per-institution coverage, but the full recompute
     takes tens of seconds on live data — run it in the background so admin
     edits return instantly. Coverage lags the write by about that long."""

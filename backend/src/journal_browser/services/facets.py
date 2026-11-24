@@ -2,15 +2,36 @@
 implementations (author SQL, publisher in-memory; orgunit facets moved
 into the unit snapshot)."""
 
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
+from typing import Any
 
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Author
 
-if TYPE_CHECKING:
-    from .publishers import _Pub
+
+@dataclass(slots=True)
+class PublisherRow:
+    """One publisher row of the cached snapshot."""
+
+    name: str
+    n_journals: int
+    n_works: int
+    deal_journals: int
+    oa_counts: dict[str, int]
+    quartile_counts: dict[str, int]  # q1..q4
+    apc_journals: int
+    eur_min: float | None
+    eur_max: float | None
+    # Works-weighted topic mass, top 5: [{"name": label, "n": mass}].
+    topics: list[dict[str, Any]]
+    # Topic display_names present in the group's journals (facet/filter
+    # vocabulary), plus a lower-cased copy for case-insensitive matching.
+    labels: frozenset[str]
+    labels_lower: frozenset[str]
+    # Sub-brand publisher_names in the group, lower-cased for q matching.
+    members_lower: frozenset[str]
 
 
 def others(conds: dict, own: str) -> list:
@@ -123,12 +144,12 @@ def publisher_predicates(
     return preds
 
 
-def passes(p: "_Pub", preds: dict[str, Any], skip: str | None = None) -> bool:
+def passes(p: PublisherRow, preds: dict[str, Any], skip: str | None = None) -> bool:
     return all(fn(p) for key, fn in preds.items() if key != skip)
 
 
 def publisher_facets(
-    pubs: list["_Pub"], preds: dict[str, Any], *, quartiles: tuple[str, ...], oa_types: tuple
+    pubs: list[PublisherRow], preds: dict[str, Any], *, quartiles: tuple[str, ...], oa_types: tuple
 ) -> dict[str, dict[str, int]]:
     """Drop-own-dimension publisher counts per facet (topic separate)."""
 
@@ -162,7 +183,9 @@ def publisher_facets(
     return out
 
 
-def publisher_topic_facet(pubs: list["_Pub"], preds: dict[str, Any], limit: int) -> dict[str, int]:
+def publisher_topic_facet(
+    pubs: list[PublisherRow], preds: dict[str, Any], limit: int
+) -> dict[str, int]:
     """Publishers (under every filter except topic) with >=1 journal per
     topic label; top `limit` by publisher count."""
     counts: dict[str, int] = {}

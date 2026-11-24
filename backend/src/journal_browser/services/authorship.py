@@ -42,9 +42,8 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.types import Text
 
-from ..harvest.common import normalize_doi
-from ..harvest.openalex_works import AUTHOR_SWEEP_PREFIX
-from ..harvest.pure.xmlrecords import _norm_title
+from ..config import AUTHOR_SWEEP_PREFIX
+from ..identifiers import norm_title, normalize_doi
 from ..models import (
     Author,
     Institution,
@@ -54,7 +53,8 @@ from ..models import (
     Work,
     WorkPureAuthor,
 )
-from .works_query import work_type_not_excluded, work_year_window, year_end
+from ..queries import work_type_not_excluded
+from .works_query import work_year_window, year_end
 
 TOP_AUTHORS = 10
 #: Entries served per OpenalexOnly payload (after grouping); total and
@@ -199,7 +199,7 @@ async def tag_pure_matches(
     Precedence is doi > parent > title; untagged rows are the likely
     misses. One batched DOI/parent-DOI lookup and one batched title
     lookup per page — never per-row queries. Titles fold with the same
-    function Pure ingestion uses (harvest _norm_title), so both sides
+    function Pure ingestion uses (identifiers.norm_title), so both sides
     normalize identically.
 
     ``check_own_doi`` enables the doi_in_pure tag; venue/group cards
@@ -224,7 +224,7 @@ async def tag_pure_matches(
         doi_uuid = {r.doi_normalized: r.pure_uuid for r in rows}
     # norm title -> the Pure records carrying it and their roster authors
     title_rows: dict[str, set[tuple[str, str]]] = {}
-    titles = sorted({t for it in items if (t := _norm_title(it.get("title") or ""))})
+    titles = sorted({t for it in items if (t := norm_title(it.get("title") or ""))})
     persons = sorted({u for ids in author_uuids for u in ids})
     if titles and persons:
         rows = (
@@ -253,7 +253,7 @@ async def tag_pure_matches(
             match, match_uuid = "doi_in_pure", doi_uuid[doi]
         if match is None and doi and (parent := parent_doi(doi)) in doi_uuid:
             match, match_uuid = "parent_book_in_pure", doi_uuid[parent]
-        shared = title_rows.get(_norm_title(it.get("title") or "")) if match is None else None
+        shared = title_rows.get(norm_title(it.get("title") or "")) if match is None else None
         hits = sorted(uuid for uuid, person in shared or () if person in ids)
         if hits:
             match, match_uuid = "same_title_in_pure", hits[0]

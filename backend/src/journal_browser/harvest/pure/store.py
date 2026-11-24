@@ -6,13 +6,13 @@ from sqlalchemy import case, delete, literal_column, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...identifiers import norm_title
 from ...models import OpenalexWork, Work
 from .cerif import ref_uuid
 from .doi import extract_doi
 from .transport import PureOaiError
 from .xmlrecords import (
     _dc_first,
-    _norm_title,
     canonical_access,
     pure_uuid_for,
 )
@@ -62,7 +62,7 @@ async def upsert_work(
         pure_uuid=uuid,
         doi_normalized=doi,
         title=title,
-        norm_title=_norm_title(title),
+        norm_title=norm_title(title),
         year=year,
         work_type=_dc_first(dc.get("type")),
         publisher=_dc_first(dc.get("publisher")),
@@ -95,7 +95,7 @@ async def upsert_work(
         set_={
             "doi_normalized": doi,
             "title": title,
-            "norm_title": _norm_title(title),
+            "norm_title": norm_title(title),
             "year": year,
             "work_type": _dc_first(dc.get("type")),
             "publisher": _dc_first(dc.get("publisher")),

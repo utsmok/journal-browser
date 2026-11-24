@@ -23,7 +23,7 @@ from ..config import get_settings
 from ..ingest import bump_cache_epoch
 from ..models import OpenalexPublisher, SourceRecord
 from .common import openalex_budget_ok
-from .openalex_journals import _payload_dict
+from .openalex_journals import payload_dict
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +130,7 @@ async def _fetch(client: AlethecaClient, ids: list[str]) -> dict[str, dict[str, 
         found = await client.publishers.batch_get(batch, field="openalex_id")
         for pid in batch:
             entity = found.get(pid)
-            out[pid] = _payload_dict(entity) if entity is not None else None
+            out[pid] = payload_dict(entity) if entity is not None else None
     return out
 
 

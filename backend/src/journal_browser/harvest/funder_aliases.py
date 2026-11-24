@@ -25,26 +25,18 @@ one transaction, so a rerun gives the same rows.
 import logging
 from typing import Any
 
-from sqlalchemy import and_, delete, func, insert, literal_column, select
+from sqlalchemy import and_, delete, func, insert, select
 from sqlalchemy import cast as sql_cast
 from sqlalchemy.dialects.postgresql import JSONB, distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..identifiers import bare_openalex_id
 from ..models import FunderAlias, OpenaireWorkFacts, OpenalexFunder, WorkFunder
 
 logger = logging.getLogger(__name__)
 
 #: shared works a grant match needs before it is trusted
 MIN_WORKS = 3
-
-
-def bare_openalex_id(openalex_id: Any) -> Any:
-    """An OpenAlex id without its https://openalex.org/ prefix; stored ids
-    come in both forms."""
-    # Inline literals, not bind parameters: the same expression then groups.
-    return func.regexp_replace(
-        openalex_id, literal_column("'^https://openalex.org/'"), literal_column("''")
-    )
 
 
 def project_credits() -> Any:

@@ -16,6 +16,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from journal_browser.config import get_settings
+from journal_browser.identifiers import normalize_ror
 from journal_browser.models import (
     FunderLink,
     JiscFunder,
@@ -38,17 +39,8 @@ logger = logging.getLogger(__name__)
 OPENAIRE_PAGE_SIZE = 100  # OpenAIRE graph v3 pageSize maximum
 UPSERT_CHUNK = 2_000  # asyncpg caps statements at 32,767 binds
 
-_ROR_RE = re.compile(r"ror\.org/(0[0-9a-z]{8})", re.IGNORECASE)
 _FUNDREF_RE = re.compile(r"10\.13039/(\d{6,})", re.IGNORECASE)
 _BARE_FUNDREF_RE = re.compile(r"^\d{6,}$")
-
-
-def normalize_ror(*values: Any) -> str | None:
-    """Bare lowercase ROR id from any candidate string, else None."""
-    for v in values:
-        if v and (m := _ROR_RE.search(str(v))):
-            return m.group(1).lower()
-    return None
 
 
 def normalize_fundref(*values: Any) -> str | None:

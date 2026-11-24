@@ -16,6 +16,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..identifiers import normalize_ror
 from ..models import (
     IssnMap,
     JiscFunder,
@@ -28,7 +29,7 @@ from ..models import (
     SourceRecord,
 )
 from .common import HarvestDataError, normalize_issn, run_harvest
-from .funders import normalize_fundref, normalize_ror
+from .funders import normalize_fundref
 from .jisc_opf import SOURCE, SWEEP_TYPES
 
 logger = logging.getLogger(__name__)

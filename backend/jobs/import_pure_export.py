@@ -31,8 +31,8 @@ from journal_browser.harvest.common import resolve_institution
 from journal_browser.harvest.pure.doi import extract_doi
 from journal_browser.harvest.pure.transport import CRIS_PUBLICATIONS_SET, SOURCE, oai_tag
 from journal_browser.harvest.pure.xmlrecords import (
-    _cerif_publication_fields,
-    _header_fields,
+    cerif_publication_fields,
+    header_fields,
     record_payload,
 )
 from journal_browser.ingest import IngestSession
@@ -62,7 +62,7 @@ async def import_pure_export(session, file: Path, institution) -> dict:
     try:
         page: list[tuple[str, dict[str, Any]]] = []
         for record in _iter_records(file):
-            oai_identifier, datestamp, _set_specs, status = _header_fields(record)
+            oai_identifier, datestamp, _set_specs, status = header_fields(record)
             if status == "deleted":
                 ingest.parse_failures += 1
                 ingest.records_seen += 1
@@ -71,7 +71,7 @@ async def import_pure_export(session, file: Path, institution) -> dict:
                 )
                 continue
             _pk, payload = record_payload(record)
-            cerif = _cerif_publication_fields(record.find(oai_tag("metadata")))
+            cerif = cerif_publication_fields(record.find(oai_tag("metadata")))
             if cerif:
                 payload["cerif"] = cerif
                 if "doi_normalized" not in payload and (doi := extract_doi(cerif.get("doi") or "")):

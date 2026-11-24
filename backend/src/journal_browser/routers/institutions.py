@@ -4,7 +4,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from ..deps import SessionDep
-from ..harvest.common import get_active_institutions
+from ..queries import get_active_institutions
 
 router = APIRouter(prefix="/institutions", tags=["institutions"])
 

@@ -11,20 +11,14 @@ from typing import Any
 
 import httpx
 from bibliofabric.exceptions import NotFoundError
-from sqlalchemy import case, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..ingest import IngestSession, store_raw_file
-from ..models import CacheEpoch, Institution, IssnMap
+from ..models import Institution, IssnMap
 
 logger = logging.getLogger(__name__)
-
-
-async def cache_epoch(session: AsyncSession) -> Any:
-    """Current harvest epoch; in-process caches key on this so a harvest in
-    another process invalidates them on the next request."""
-    return await session.scalar(select(CacheEpoch.bumped_at).where(CacheEpoch.id == 1))
 
 
 ISSN_RE = re.compile(r"^\d{4}-?\d{3}[\dXx]$")
@@ -79,37 +73,6 @@ def canonical_oa_status(raw: str | None) -> str | None:
     if not raw:
         return None
     return raw if raw in OA_STATUSES else "closed"
-
-
-def oa_openness_rank(column: Any):
-    """Ascending openness rank for an oa_status column (owner decision
-    2026-11-05, canonical merge across duplicate OpenAlex records):
-    diamond > gold > hybrid > bronze > green > closed."""
-    return case(
-        (column == "diamond", 5),
-        (column == "gold", 4),
-        (column == "hybrid", 3),
-        (column == "bronze", 2),
-        (column == "green", 1),
-        (column == "closed", 0),
-        else_=-1,
-    )
-
-
-def oa_openness_desc(column: Any):
-    """Sort expression: most open oa_status first."""
-    return oa_openness_rank(column).desc()
-
-
-def normalize_doi(doi: str | None) -> str | None:
-    """Lower-cased bare DOI form for cross-source dedupe ('', None -> None)."""
-    if not doi:
-        return None
-    value = doi.strip().lower()
-    for prefix in ("https://doi.org/", "http://doi.org/", "doi.org/", "doi:"):
-        if value.startswith(prefix):
-            value = value[len(prefix) :]
-    return value or None
 
 
 async def fetch_bytes(
@@ -307,17 +270,6 @@ async def ensure_home_institution(session: AsyncSession) -> Institution:
     assert inst is not None
     await session.flush()
     return inst
-
-
-async def get_active_institutions(session: AsyncSession) -> list[Institution]:
-    """Hosted institutions (code + active), by id (the home institution
-    keeps the first slot)."""
-    rows = await session.execute(
-        select(Institution)
-        .where(Institution.active.is_(True), Institution.code.is_not(None))
-        .order_by(Institution.id)
-    )
-    return list(rows.scalars().all())
 
 
 async def get_institution_by_code(session: AsyncSession, code: str) -> Institution | None:

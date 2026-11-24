@@ -32,8 +32,8 @@ from typing import Any
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..identifiers import normalize_ror
 from ..models import PartnerInstitution
-from .funders import normalize_ror
 
 #: Parent-name terms indicating a federated system, society, ministry or
 #: umbrella consortium rather than one organisation/campus.

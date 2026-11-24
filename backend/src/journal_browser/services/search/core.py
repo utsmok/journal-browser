@@ -8,7 +8,7 @@ from ...vocab import GreenOa
 from ..funder_fit import JournalFacts, compute_funder_fit
 from .cursors import encode_cursor, parse_cursor
 from .facets import facet_counts
-from .query import NUMERIC_SORTS, SortKey, _order, attach_apc_display, base_query
+from .query import NUMERIC_SORTS, SortKey, attach_apc_display, base_query, sort_order
 
 
 async def search_journals(
@@ -80,7 +80,7 @@ async def search_journals(
     if need_total:
         total = await session.scalar(select(func.count()).select_from(subq)) or 0
 
-    order_col, direction = _order(sort, subq)
+    order_col, direction = sort_order(sort, subq)
     if dir in ("asc", "desc"):
         direction = dir
     tiebreak = subq.c.issn_l

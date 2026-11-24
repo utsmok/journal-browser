@@ -5,10 +5,9 @@ copies get rejected in review."""
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import and_, false, func, or_
+from sqlalchemy import and_, false, or_
 from sqlalchemy.sql.elements import ColumnElement
 
-from ..config import EXCLUDED_WORK_TYPES
 from ..models import Author, AuthorWork, Work
 
 WORKS_STRATA = ("1-4", "5-19", "20-49", "50+")
@@ -57,25 +56,6 @@ def clamped_year_range(
             f"year range {year_from}-{year_to} lies outside the data window ({start}-{end})"
         )
     return (lo, hi)
-
-
-def work_type_normalized(column: Any) -> ColumnElement:
-    """The normalized work type (lower-cased, info:eu-repo/semantics/
-    stripped, hyphens collapsed) so SQL filters match Python's
-    config.normalize_work_type exactly."""
-    return func.lower(
-        func.replace(
-            func.replace(func.coalesce(column, ""), "info:eu-repo/semantics/", ""), "-", ""
-        )
-    )
-
-
-def work_type_not_excluded(column: Any) -> ColumnElement:
-    """SQL twin of config.work_type_excluded: the normalized work type
-    is not one of the never-journal-output types. One definition for every
-    query that must describe the same population as the pure_canon stats
-    (write_pure_canon_stats was the first consumer)."""
-    return work_type_normalized(column).not_in(sorted(EXCLUDED_WORK_TYPES))
 
 
 def author_works_join(institution_id: int, author_uuid: str) -> ColumnElement:

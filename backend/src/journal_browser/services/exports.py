@@ -9,10 +9,7 @@ source_records payloads; the roster attribution plus journal/publisher
 joins batch over the whole result before streaming.
 """
 
-import csv
-import io
-import re
-from collections.abc import AsyncIterator, Iterable, Sequence
+from collections.abc import AsyncIterator, Iterable
 from types import SimpleNamespace
 from typing import Any
 
@@ -22,7 +19,7 @@ from sqlalchemy import column, func, select, true
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..harvest.openalex_works import AUTHOR_SWEEP_PREFIX
+from ..config import AUTHOR_SWEEP_PREFIX
 from ..models import (
     Author,
     AuthorWork,
@@ -32,6 +29,7 @@ from ..models import (
     OpenalexWork,
     Work,
 )
+from ..queries import work_type_not_excluded
 from .authors import author_gap_works
 from .authorship import (
     OPENALEX_URL,
@@ -43,9 +41,10 @@ from .authorship import (
     ut_roster_by_aids,
     work_authors_of,
 )
+from .csv_export import FLUSH_EVERY, csv_response, csv_safe, safe_filename
 from .publishers import group_issns
 from .work_sources import authorships_by_wid
-from .works_query import author_works_join, work_type_not_excluded, work_year_window
+from .works_query import author_works_join, work_year_window
 
 #: CSV column order; every export uses exactly this header row.
 CSV_COLUMNS = (
@@ -81,27 +80,11 @@ CSV_COLUMNS = (
     "part_of",
 )
 
-#: Rows buffered per streaming chunk (both the server-side cursor's
-#: yield_per and the CSV flush cadence).
-FLUSH_EVERY = 500
-
-#: Spreadsheet-active leading characters (OWASP CSV injection): a cell
-#: starting with one of these would evaluate as a formula in Excel, so it
-#: gets a leading apostrophe. Text comes from OpenAlex/Pure and is not
-#: trusted.
-_FORMULA_LEADS = ("=", "+", "-", "@", "\t", "\r")
-
-
-def _csv_safe(value: str) -> str:
-    """One cell of CSV output: neutralize spreadsheet formula injection
-    by prefixing a `'` to dangerous leading characters."""
-    return "'" + value if value.startswith(_FORMULA_LEADS) else value
-
 
 def _t(value: Any) -> str:
     """Cell text: empty string when missing, str() otherwise, formula
     guard applied."""
-    return "" if value is None else _csv_safe(str(value))
+    return "" if value is None else csv_safe(str(value))
 
 
 def _part_of(parent_works: Any) -> str:
@@ -113,10 +96,6 @@ def _part_of(parent_works: Any) -> str:
         for p in parent_works or []
         if isinstance(p, dict) and p.get("rel") and p.get("name")
     )
-
-
-def _safe_filename(name: str) -> str:
-    return re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-") or "export"
 
 
 def _ut_affiliations(ut: list[dict[str, Any]]) -> str:
@@ -203,13 +182,13 @@ def _store_csv_row(
         _t(f"https://doi.org/{doi}" if doi else None),
         _t(r.pdf_url),
         _t(r.landing_page_url),
-        _csv_safe(";".join(a["name"] for a in authors if a["name"])),
-        _csv_safe(";".join(a["openalex_id"] for a in authors)),
-        _csv_safe(";".join(a["orcid"] for a in authors if a["orcid"])),
+        csv_safe(";".join(a["name"] for a in authors if a["name"])),
+        csv_safe(";".join(a["openalex_id"] for a in authors)),
+        csv_safe(";".join(a["orcid"] for a in authors if a["orcid"])),
         _t(r.institution_rors),
-        _csv_safe(";".join(a["name"] for a in ut)),
-        _csv_safe(";".join(a["orcid"] for a in ut if a["orcid"])),
-        _csv_safe(_ut_affiliations(ut)),
+        csv_safe(";".join(a["name"] for a in ut)),
+        csv_safe(";".join(a["orcid"] for a in ut if a["orcid"])),
+        csv_safe(_ut_affiliations(ut)),
         _t(r.venue_name),
         _t(r.venue_issn_l),
         _t(publisher),
@@ -255,9 +234,9 @@ def _canon_csv_row(
         "",
         "",
         "",
-        _csv_safe(author.name),
+        csv_safe(author.name),
         _t(author.orcid),
-        _csv_safe(_ut_affiliations(ut)),
+        csv_safe(_ut_affiliations(ut)),
         _t(row.journal_title),
         _t(row.journal_issn_l),
         _t(publisher),
@@ -320,44 +299,13 @@ async def _store_csv_response(
             for r in partition:
                 yield _store_csv_row(r, roster, publishers, rors)
 
-    return _csv_response(filename, rows())
+    return csv_response(filename, rows(), CSV_COLUMNS)
 
 
 async def _empty_rows() -> AsyncIterator[list[str]]:
     """Header-only exports iterate nothing."""
     return
     yield  # pragma: no cover
-
-
-def _csv_response(
-    filename: str, rows: AsyncIterator[list[str]], header: Sequence[str] = CSV_COLUMNS
-) -> StreamingResponse:
-    """CSV attachment; the csv module owns the quoting, rows arrive
-    lazily (one flush per FLUSH_EVERY rows)."""
-
-    async def _stream() -> AsyncIterator[str]:
-        buf = io.StringIO()
-        writer = csv.writer(buf, lineterminator="\n")
-        writer.writerow(header)
-        yield buf.getvalue()
-        buf = io.StringIO()
-        writer = csv.writer(buf, lineterminator="\n")
-        written = 0
-        async for row in rows:
-            writer.writerow(row)
-            written += 1
-            if written % FLUSH_EVERY == 0:
-                yield buf.getvalue()
-                buf = io.StringIO()
-                writer = csv.writer(buf, lineterminator="\n")
-        if written % FLUSH_EVERY:
-            yield buf.getvalue()
-
-    return StreamingResponse(
-        _stream(),
-        media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
 
 
 async def journal_openalex_only_csv(
@@ -382,7 +330,7 @@ async def journal_openalex_only_csv(
         institution,
         _export_stmt(institution, predicate),
         predicate,
-        f"{_safe_filename(issn)}-openalex-only.csv",
+        f"{safe_filename(issn)}-openalex-only.csv",
     )
 
 
@@ -412,7 +360,7 @@ async def publisher_openalex_only_csv(
         institution,
         _export_stmt(institution, predicate),
         predicate,
-        f"{_safe_filename(name)}-openalex-only.csv",
+        f"{safe_filename(name)}-openalex-only.csv",
     )
 
 
@@ -450,10 +398,10 @@ async def _missed_csv(
     refinement), so card headline, sub-count and this download quote the
     same population; the old raw not_in_pure anti-join served a wider set
     that matched neither number."""
-    filename = f"{_safe_filename(author.pure_uuid)}-works-missed.csv"
+    filename = f"{safe_filename(author.pure_uuid)}-works-missed.csv"
     gap = await author_gap_works(session, institution, author, year_range)
     if gap is None or not gap[1]:
-        return _csv_response(filename, _empty_rows())
+        return csv_response(filename, _empty_rows(), CSV_COLUMNS)
     missing = gap[1]
     # The profile fetch keeps authorships scalar; the authors/ut_authors
     # columns need them. One keyed query over the author-bounded set.
@@ -502,7 +450,7 @@ async def _missed_csv(
         for r in rows:
             yield _store_csv_row(r, roster, publishers, rors)
 
-    return _csv_response(filename, rows_iter())
+    return csv_response(filename, rows_iter(), CSV_COLUMNS)
 
 
 async def _canon_csv(
@@ -548,4 +496,4 @@ async def _canon_csv(
             for r in partition:
                 yield _canon_csv_row(r, author, publishers, rors)
 
-    return _csv_response(f"{_safe_filename(author.pure_uuid)}-works-canon.csv", rows())
+    return csv_response(f"{safe_filename(author.pure_uuid)}-works-canon.csv", rows(), CSV_COLUMNS)

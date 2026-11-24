@@ -61,7 +61,7 @@ async def resolve_institution_openalex_id(
     return i_id
 
 
-def _payload_dict(item: Any) -> dict[str, Any] | None:
+def payload_dict(item: Any) -> dict[str, Any] | None:
     """Verbatim JSON payload for a parsed source entity."""
     dump = getattr(item, "model_dump", None)
     if dump is None:
@@ -192,7 +192,7 @@ async def seed_deal_journals(client: AlethecaClient, session: AsyncSession) -> d
         found = await client.sources.batch_get(batch, field="issn")
         page = []
         for source in found.values():
-            payload = _payload_dict(source)
+            payload = payload_dict(source)
             if payload and payload.get("id"):
                 page.append((payload["id"], payload))
         await ingest.ingest_records(page)
@@ -307,7 +307,7 @@ async def sweep_all_sources(
         on_error="skip",
         failures=parse_failures,
     ):
-        payload = _payload_dict(item)
+        payload = payload_dict(item)
         pk = payload.get("id") if payload else None
         if not pk:
             seen += 1
@@ -399,7 +399,7 @@ async def harvest_journals_delta(
     page: list[tuple[str, dict[str, Any]]] = []
     for pk in todo:
         entity = payloads.get(f"https://openalex.org/{pk}")
-        payload = _payload_dict(entity)
+        payload = payload_dict(entity)
         if payload is None:
             stats["missing"] += 1
             continue
@@ -475,7 +475,7 @@ async def refresh_existing_journals(session: AsyncSession, limit: int | None = N
         page: list[tuple[str, dict[str, Any]]] = []
         for pk in chunk:
             entity = payloads.get(f"https://openalex.org/{pk}")
-            payload = _payload_dict(entity)
+            payload = payload_dict(entity)
             if payload is None:
                 stats["missing"] += 1
                 continue

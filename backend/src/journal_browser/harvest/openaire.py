@@ -117,7 +117,7 @@ async def harvest_openaire_products(
             _kind, _ = await ingest.ingest_record(item.id, payload)
             doi = _extract_doi(item)
             if doi and (uuid := doi_to_work.get(doi)):
-                await _confirm(
+                await confirm(
                     session,
                     institution_id=institution.id,
                     source_pk=item.id,
@@ -135,7 +135,7 @@ async def harvest_openaire_products(
     return final
 
 
-async def _confirm(
+async def confirm(
     session: AsyncSession, *, institution_id: int, source_pk: str, work_id: str
 ) -> None:
     stmt = (

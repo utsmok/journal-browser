@@ -23,7 +23,7 @@ from journal_browser.harvest.journal_citations import cited_by_institution
 from journal_browser.harvest.openalex_journals import prune_orphan_issn_map
 from journal_browser.models import HarvestState, Institution, IssnMap, Journal
 from journal_browser.services import source_health
-from journal_browser.services.search import _year_rate
+from journal_browser.services.search import year_rate
 
 
 def _api_error(status: int) -> APIError:
@@ -96,7 +96,7 @@ async def test_freshness_endpoint_carries_degraded_entry(client, db_engine):
 
 async def test_currency_failure_records_degradation():
     source_health.clear("currency-rates")
-    assert _year_rate("NOT_A_CURRENCY") is None
+    assert year_rate("NOT_A_CURRENCY") is None
     entries = source_health.snapshot()
     assert entries[0]["source"] == "currency-rates" and "NOT_A_CURRENCY" in entries[0]["detail"]
     source_health.clear("currency-rates")

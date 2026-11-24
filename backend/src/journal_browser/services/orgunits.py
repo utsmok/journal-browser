@@ -21,7 +21,6 @@ from sqlalchemy import Numeric, case, cast, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
-from ..harvest.common import cache_epoch
 from ..models import (
     ApcEvidence,
     Author,
@@ -31,6 +30,7 @@ from ..models import (
     JournalFlags,
     Work,
 )
+from ..queries import cache_epoch, work_type_not_excluded
 from .authorship import aids_gap_predicate, author_ids_openalex_only, chapter_rollup
 from .cache import (
     SNAPSHOT_CACHE,
@@ -43,7 +43,7 @@ from .cache import (
     swr_schedule,
 )
 from .collaborations import top_partners_for_orgunit
-from .search import _oa_type
+from .search import oa_type_case
 from .works_query import (
     WORKS_STRATA,
     YEAR_BUCKETS,
@@ -52,7 +52,6 @@ from .works_query import (
     unit_author_join,
     unit_key,
     unit_work_join,
-    work_type_not_excluded,
     work_window,
     work_year_window,
 )
@@ -633,7 +632,7 @@ async def _build_unit_bundle(
                 Journal.title.label("title"),
                 func.count(func.distinct(Work.pure_uuid)).label("n_works"),
                 flags.c.deal_covered,
-                _oa_type(flags.c.deal_covered, flags.c.openaire_diamond).label("oa_type"),
+                oa_type_case(flags.c.deal_covered, flags.c.openaire_diamond).label("oa_type"),
                 Journal.latest_quartile.label("quartile"),
             )
             .select_from(Author)

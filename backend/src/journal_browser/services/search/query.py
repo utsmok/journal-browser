@@ -27,8 +27,8 @@ from ...models import (
 from ...vocab import GreenOa
 from ..deal_coverage import dj_scope
 from ..funder_fit import fit_case
-from .classify import _oa_type
-from .currency import _to_eur
+from .classify import oa_type_case
+from .currency import to_eur
 
 # Sort keys: relevance | title | publisher | institution_works | quartile |
 # topic | apc | 2yr_mean_citedness
@@ -116,12 +116,12 @@ def _list_price(currency: str) -> Any:
     )
 
 
-def _like(term: str) -> str:
+def escape_like(term: str) -> str:
     """Escapes LIKE wildcards so user input matches literally."""
     return term.replace("\\", "\\\\").replace("%", r"\%").replace("_", r"\_")
 
 
-def _norm_issn(term: str) -> str:
+def normalize_issn(term: str) -> str:
     return term.replace("-", "").replace(" ", "").upper()
 
 
@@ -227,14 +227,14 @@ def base_query(
         # an established flagship outranks a niche journal with a
         # momentarily higher citedness metric.
         rank = (
-            case((J.title.ilike(f"{_like(qstr)}%", escape="\\"), 100.0), else_=0.0)
+            case((J.title.ilike(f"{escape_like(qstr)}%", escape="\\"), 100.0), else_=0.0)
             + func.ts_rank(J.search_vector, func.websearch_to_tsquery(text("'english'"), qstr))
             + func.least(func.coalesce(J.works_count, 0), 100000) * 0.00001
             + func.least(func.coalesce(year_works, 0), 100000) * 0.00001
         ).label("rank")
     else:
         rank = cast(text("0"), Numeric).label("rank")
-    oa_type = _oa_type(covered, openaire_diamond)
+    oa_type = oa_type_case(covered, openaire_diamond)
     query = (
         select(
             J.issn_l,
@@ -329,7 +329,7 @@ def base_query(
             tsq = func.websearch_to_tsquery(text("'english'"), q)
             conds = []
             if search_in in ("all", "title"):
-                norm = _norm_issn(qstr)
+                norm = normalize_issn(qstr)
                 # ISSN lookup: normalized comparison so hyphens/spaces/case
                 # in the query never matter; IssnMap resolves print/online
                 # variants to their ISSN-L.
@@ -346,17 +346,17 @@ def base_query(
                 conds.append(
                     or_(
                         J.search_vector.op("@@")(tsq),
-                        J.search_text.ilike(f"{_like(qstr)}%", escape="\\"),
+                        J.search_text.ilike(f"{escape_like(qstr)}%", escape="\\"),
                         *issn_conds,
                     )
                 )
             if search_in in ("all", "publisher"):
-                conds.append(J.publisher_name.ilike(f"%{_like(qstr)}%", escape="\\"))
+                conds.append(J.publisher_name.ilike(f"%{escape_like(qstr)}%", escape="\\"))
             # Topic stays an explicit scope: casting topics to text per row
             # defeats every index, and inside the all-scope OR it forced a
             # seq scan (2s). search_in=topic uses the trgm expression index.
             if search_in == "topic":
-                conds.append(cast(J.topics, Text).ilike(f"%{_like(qstr)}%", escape="\\"))
+                conds.append(cast(J.topics, Text).ilike(f"%{escape_like(qstr)}%", escape="\\"))
             query = query.where(or_(*conds))
     if deal == "covered":
         query = query.where(flags.c.deal_covered.is_(True))
@@ -402,7 +402,7 @@ def base_query(
     return query
 
 
-def _order(sort: SortKey, subq: Any) -> tuple[Any, str]:
+def sort_order(sort: SortKey, subq: Any) -> tuple[Any, str]:
     """Returns (order expression, natural direction)."""
     if sort == "title":
         return func.lower(func.coalesce(subq.c.title, "")), "asc"
@@ -441,9 +441,9 @@ async def attach_apc_display(session: AsyncSession, items: list[dict[str, Any]])
         by_currency = {p.get("currency"): p["price"] for p in entries}
         matched = next((c for c in ("EUR", "USD") if c in by_currency), None)
         if matched:
-            list_price[issn_l] = _to_eur(float(by_currency[matched]), matched)
+            list_price[issn_l] = to_eur(float(by_currency[matched]), matched)
         elif entries:
-            list_price[issn_l] = _to_eur(
+            list_price[issn_l] = to_eur(
                 float(entries[0]["price"]), str(entries[0].get("currency") or "")
             )
 
