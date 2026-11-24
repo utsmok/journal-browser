@@ -1157,12 +1157,9 @@ async def funders_fixture(db, institution_factory):
     await db.flush()
     db.add_all(
         [
-            FunderLink(
-                funder_id=1, source="openalex", source_id="https://openalex.org/F-A", via="ror"
-            ),
-            FunderLink(
-                funder_id=1, source="openalex", source_id="https://openalex.org/F-B", via="ror"
-            ),
+            FunderLink(funder_id=1, source="openalex", source_id="F-A", via="ror"),
+            FunderLink(funder_id=1, source="openalex", source_id="F-B", via="ror"),
+            # One link stored before ids were normalised to bare.
             FunderLink(
                 funder_id=2, source="openalex", source_id="https://openalex.org/F-C", via="ror"
             ),

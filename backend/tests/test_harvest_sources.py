@@ -955,12 +955,19 @@ async def test_funder_normalization_idempotent(db):
     # wins (used to violate funder_links_pkey on the fundref insert).
     db.add(JiscFunder(id=702, ror="04ad7pn51", fundref="100009795"))
     db.add(OpenalexFunder(openalex_id="F1", ror="04ad7pn51", fundref="100009795"))
+    # A twin row still stored with the URL prefix links by its bare id.
+    db.add(JiscFunder(id=703, fundref="100000001"))
+    db.add(OpenalexFunder(openalex_id="https://openalex.org/F2", fundref="100000001"))
     await db.flush()
-    assert await refresh_funder_links(db) == 2  # 701 and 702, one link each
+    assert await refresh_funder_links(db) == 3  # 701, 702 and 703, one link each
     links = (
         (await db.execute(select(FunderLink).where(FunderLink.funder_id == 702))).scalars().all()
     )
     assert [(x.source, x.source_id, x.via) for x in links] == [("openalex", "F1", "ror")]
+    link_703 = (
+        await db.execute(select(FunderLink).where(FunderLink.funder_id == 703))
+    ).scalar_one()
+    assert (link_703.source_id, link_703.via) == ("F2", "fundref")
 
 
 # ── Journals delta (free singleton gap-fill) ──────────────────────────────

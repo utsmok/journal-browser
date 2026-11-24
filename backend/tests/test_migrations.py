@@ -75,3 +75,69 @@ async def test_upgrade_head_down_base_up_head(mig_db):
     await conn.close()
 
     await _alembic(command.upgrade, "head")  # and the tree reinstalls cleanly
+
+
+@requires_db
+async def test_openalex_funder_ids_bare_up_and_prefixed_back(mig_db):
+    """0005 leaves one bare row per OpenAlex funder id: a prefixed twin is
+    dropped when the bare row exists and renamed otherwise. The downgrade
+    puts a prefixed twin back next to every bare row."""
+    _name, url = mig_db
+    await _alembic(command.upgrade, "0004_journal_listed_in")
+    conn = await asyncpg.connect(url.replace("+asyncpg", ""))
+    prefix = "https://openalex.org/"
+    twins = "F4320320300"
+    lone = "F4320320888"
+    await conn.execute(
+        "insert into openalex_funders (openalex_id, display_name) "
+        "values ($1, 'fresh'), ($2, 'stale copy'), ($3, 'old form')",
+        twins,
+        prefix + twins,
+        prefix + lone,
+    )
+    await conn.execute("insert into jisc_funders (id, name) values (1, 'A'), (2, 'B')")
+    await conn.execute(
+        "insert into funder_links (funder_id, source, source_id, via) values "
+        "(1, 'openalex', $1, 'ror'), (1, 'openalex', $2, 'ror'), "
+        "(2, 'openalex', $3, 'fundref')",
+        twins,
+        prefix + twins,
+        prefix + lone,
+    )
+    await conn.close()
+
+    await _alembic(command.upgrade, "head")
+    conn = await asyncpg.connect(url.replace("+asyncpg", ""))
+    funders = await conn.fetch(
+        "select openalex_id, display_name from openalex_funders order by openalex_id"
+    )
+    assert [tuple(r.values()) for r in funders] == [(twins, "fresh"), (lone, "old form")]
+    links = await conn.fetch(
+        "select funder_id, source_id, via from funder_links order by funder_id"
+    )
+    assert [tuple(r.values()) for r in links] == [(1, twins, "ror"), (2, lone, "fundref")]
+    await conn.close()
+
+    await _alembic(command.downgrade, "0004_journal_listed_in")
+    conn = await asyncpg.connect(url.replace("+asyncpg", ""))
+    funders = await conn.fetch(
+        "select openalex_id, display_name from openalex_funders order by openalex_id"
+    )
+    assert [tuple(r.values()) for r in funders] == [
+        (twins, "fresh"),
+        (lone, "old form"),
+        (prefix + twins, "fresh"),
+        (prefix + lone, "old form"),
+    ]
+    links = await conn.fetch(
+        "select funder_id, source_id from funder_links order by funder_id, source_id"
+    )
+    assert [tuple(r.values()) for r in links] == [
+        (1, twins),
+        (1, prefix + twins),
+        (2, lone),
+        (2, prefix + lone),
+    ]
+    await conn.close()
+
+    await _alembic(command.upgrade, "head")  # and 0005 reruns cleanly
