@@ -4,6 +4,7 @@ Funders are canon (not institution-scoped); only the UT-work attribution
 is per institution. work_funders (migration 0049) may be absent — the
 counts degrade to zeros instead of erroring."""
 
+from collections.abc import Collection
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -52,21 +53,22 @@ def _req_filter(raw: str | None) -> set[str]:
 
 def _to_item(
     funder: JiscFunder,
-    urls: list[str],
     ids: set[str],
     counts: dict[str, int],
     n_ut_works: int,
+    whole_ids: Collection[str] | None = None,
 ) -> FunderListItem:
     pub_policy = funder.publications_policy if isinstance(funder.publications_policy, dict) else {}
     data_policy = (
         funder.data_archiving_policy if isinstance(funder.data_archiving_policy, dict) else {}
     )
     structured = bool(pub_policy.get("archiving_policy"))
-    # Display the twin the works actually cite (per-id counts); bare-id
-    # keys everywhere. n_ut_works is the twin-set-deduped count from
-    # ut_funder_work_counts: one work crediting two stream twins of the
-    # same funder counts once.
-    openalex_url = max(urls, key=lambda u: counts.get(str(u).rsplit("/", 1)[-1], 0), default=None)
+    # Link to the twin that stands for the funder itself where programme
+    # records share its twins; elsewhere to the twin the works cite most,
+    # ties to the lowest id. Bare ids everywhere. n_ut_works is the
+    # twin-set-deduped count from ut_funder_work_counts: one work
+    # crediting two twins of the same funder counts once.
+    openalex_id = max(sorted(whole_ids or ids), key=lambda bare: counts.get(bare, 0), default=None)
     return FunderListItem(
         id=funder.id,
         name=funder.name,
@@ -74,7 +76,7 @@ def _to_item(
         url=funder.url,
         ror=funder.ror,
         fundref=funder.fundref,
-        openalex_funder_id=openalex_url,
+        openalex_funder_id=openalex_id,
         policy_structured=structured,
         oa_publishing_req=_norm_req(pub_policy.get("publishing_policy")),
         green_archiving_req=_norm_req(pub_policy.get("archiving_policy")),
@@ -136,10 +138,10 @@ async def search_funders(
         base_items.append(
             _to_item(
                 funder,
-                canon.urls.get(funder.id, []),
                 canon.bare_ids.get(funder.id, set()),
                 counts,
                 union_counts.get(funder.id, 0),
+                canon.whole_ids.get(funder.id),
             )
         )
 
@@ -307,7 +309,9 @@ async def _build_funder_detail(
         session, institution, canon.bare_ids, year_range
     )
     ids = canon.bare_ids.get(funder_id, set())
-    item = _to_item(funder, sorted(ids), ids, counts, union_counts.get(funder_id, 0))
+    item = _to_item(
+        funder, ids, counts, union_counts.get(funder_id, 0), canon.whole_ids.get(funder_id)
+    )
     # Top journals across every twin the works may cite.
     top: list[dict[str, Any]] = []
     for bare in sorted(ids, key=lambda b: -counts.get(b, 0)):
