@@ -114,8 +114,11 @@ def _test_db():
         engine = create_async_engine(TEST_URL)
         async with engine.begin() as conn:
             # journals.embedding is a vector column; the pgvector type must
-            # exist before create_all issues the table DDL.
+            # exist before create_all issues the table DDL. Author search's
+            # %> operator (trigram typo tolerance) needs pg_trgm the same
+            # way; production gets both from migration 0001.
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
             await conn.run_sync(Base.metadata.create_all)
         await engine.dispose()
 

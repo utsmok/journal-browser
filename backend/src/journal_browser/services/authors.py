@@ -70,6 +70,39 @@ OPENALEX_ONLY_CAP = 50
 _FOLD_SRC = "áàâäãåéèêëíìîïóòôöõúùûüýÿñçšž"
 _FOLD_DST = "aaaaaaeeeeiiiioooooouuuuyyncsz"
 
+#: Trigram word-similarity thresholds for q matching: names stay strict
+#: (0.5 so a 40k-row roster surfaces plausible near-names without noise),
+#: topic and research-group fallbacks use pg_trgm's default (0.3). Set
+#: per pass via SET LOCAL so the %> operator stays index-accelerated.
+_NAME_SIMILARITY_THRESHOLD = 0.5
+_FALLBACK_SIMILARITY_THRESHOLD = 0.3
+
+#: Where q can still match after zero name hits: what the author works
+#: on, then where they sit. The response reports the field that matched
+#: (q_match) so the UI can label the result set ("authors working on X").
+_Q_FALLBACK_FIELDS = (("primary_topic", "topic"), ("research_group", "group"))
+
+
+def _fold(column: Any) -> Any:
+    """Diacritics fold so "Follmer" finds "Föllmer"; translate() keeps
+    this extension-free."""
+    return func.translate(func.lower(column), _FOLD_SRC, _FOLD_DST)
+
+
+def _q_cond(column: Any, qstr: str) -> Any:
+    """Substring match OR trigram word similarity for typos ("vermoer"
+    finds "Vermeer"); the folded expression hits the trigram GIN index
+    on both arms."""
+    fold = _fold(column)
+    return or_(
+        fold.like(
+            func.translate(func.lower(f"%{escape_like(qstr)}%"), _FOLD_SRC, _FOLD_DST),
+            escape="\\",
+        ),
+        fold.op("%>")(qstr),
+    )
+
+
 #: Response buckets of works.oa_status are shared (works_query.YEAR_BUCKETS);
 #: the contract's year split historically had no diamond column but now does.
 
@@ -150,9 +183,80 @@ async def search_authors(
 ) -> dict[str, Any]:
     """Author roster for one institution. total is the filter match count
     (the whole roster when nothing is set); items are the offset/limit page
-    of the sorted matches. require_confirmed restricts the search list to
-    authors.confirmed; profile endpoints stay unfiltered. When the gate
-    empties a q search, the query reruns without it so a real (unconfirmed)
+    of the sorted matches.
+
+    q first matches names (substring + trigram typos). When that finds
+    nothing and the user typed a q, it falls back to primary_topic, then
+    research_group, so "philosophy" surfaces the authors working on
+    philosophy or sitting in the Philosophy group. Each response carries
+    q_match: the field that produced the results ("name", "topic" or
+    "group"), which the UI turns into a label."""
+    result = await _search_authors(
+        session,
+        institution_id,
+        q,
+        limit,
+        require_confirmed,
+        faculty=faculty,
+        org=org,
+        has_orcid=has_orcid,
+        works=works,
+        last_pub=last_pub,
+        topic=topic,
+        sort=sort,
+        offset=offset,
+        year_range=year_range,
+    )
+    if not (q and q.strip()) or result["total"] > 0:
+        return result
+    for field, match in _Q_FALLBACK_FIELDS:
+        result = await _search_authors(
+            session,
+            institution_id,
+            q,
+            limit,
+            require_confirmed,
+            faculty=faculty,
+            org=org,
+            has_orcid=has_orcid,
+            works=works,
+            last_pub=last_pub,
+            topic=topic,
+            sort=sort,
+            offset=offset,
+            year_range=year_range,
+            q_field=field,
+            q_match=match,
+        )
+        if result["total"] > 0:
+            break
+    if result["total"] == 0:
+        # No pass matched: report the default field, not the last attempt.
+        result["q_match"] = "name"
+    return result
+
+
+async def _search_authors(
+    session: AsyncSession,
+    institution_id: int,
+    q: str | None,
+    limit: int,
+    require_confirmed: bool,
+    faculty: list[str] | None = None,
+    org: list[str] | None = None,
+    has_orcid: str | None = None,
+    works: list[str] | None = None,
+    last_pub: list[str] | None = None,
+    topic: list[str] | None = None,
+    sort: str = "works_desc",
+    offset: int = 0,
+    year_range: tuple[int, int] | None = None,
+    q_field: str = "name",
+    q_match: str = "name",
+) -> dict[str, Any]:
+    """One q pass over a single Author column (name, primary_topic or
+    research_group). When the confirmed-affiliation gate empties a q
+    search, the query reruns without it so a real (unconfirmed)
     researcher stays findable; total, items and facets then all come from
     the ungated pass. Facet counts and total describe the filtered set,
     never the page.
@@ -163,23 +267,25 @@ async def search_authors(
     of the denormalized snapshot columns — the same edge population the
     snapshot counts. Without a range nothing joins: the queries stay
     byte-identical to the snapshot-serving path."""
+    target_col = getattr(Author, q_field)
     roster = await session.scalar(
         select(func.count()).select_from(Author).where(Author.institution_id == institution_id)
     )
     if not roster:
-        return {"enabled": False, "total": 0, "items": [], "facets": {}}
+        return {"enabled": False, "total": 0, "items": [], "facets": {}, "q_match": q_match}
     base: list[Any] = [Author.institution_id == institution_id]
     if require_confirmed:
         base.append(Author.confirmed.is_(True))
     q_cond = None
     if q and q.strip():
         qstr = q.strip()
-        # Diacritics fold so "Follmer" finds "Föllmer"; translate() keeps
-        # this extension-free, and the roster is small enough to scan.
-        q_cond = func.translate(func.lower(Author.name), _FOLD_SRC, _FOLD_DST).like(
-            func.translate(func.lower(f"%{escape_like(qstr)}%"), _FOLD_SRC, _FOLD_DST),
-            escape="\\",
+        q_cond = _q_cond(target_col, qstr)
+        # Index-accelerated %> needs the session threshold; SET LOCAL dies
+        # with the request's transaction, so the pool is unaffected.
+        threshold = (
+            _NAME_SIMILARITY_THRESHOLD if q_field == "name" else _FALLBACK_SIMILARITY_THRESHOLD
         )
+        await session.execute(text(f"SET LOCAL pg_trgm.word_similarity_threshold = {threshold}"))
     # Year-scoped per-author aggregates over the stored work edges (the
     # same population the snapshot counts, so the clamped full window
     # reproduces the denormalized columns exactly); None = no range, no join.
@@ -216,26 +322,51 @@ async def search_authors(
     if scoped is not None:
         total_stmt = total_stmt.outerjoin(scoped, scoped.c.author_pure_uuid == Author.pure_uuid)
     total = await session.scalar(total_stmt)
-    if total == 0 and require_confirmed and q_cond is not None:
-        # The gate hid every q match (e.g. Loorbach is real but unconfirmed):
-        # rerun the same query ungated so total, page and facets describe
-        # what the caller gets.
-        return await search_authors(
-            session,
-            institution_id,
-            q,
-            limit,
-            require_confirmed=False,
-            faculty=faculty,
-            org=org,
-            has_orcid=has_orcid,
-            works=works,
-            last_pub=last_pub,
-            topic=topic,
-            sort=sort,
-            offset=offset,
-            year_range=year_range,
+    if require_confirmed and q_cond is not None:
+        # The confirmed gate hides a real (unconfirmed) q match in two ways:
+        # it can empty the search entirely, or — now that q also matches
+        # trigram cousins — leave only a fuzzy confirmed hit (confirmed
+        # "Harmen van Corbach" for q=loorbach) masking the exact-name
+        # person (unconfirmed "Nicole Loorbach"). One LIKE count answers
+        # both cases (the trgm index serves the arm), FILTERed by
+        # confirmed. An exact-field match is strong evidence a user typed
+        # a real name, so the search reruns ungated; fuzzy-only confirmed
+        # matches alone never trigger it.
+        like_arm = _fold(target_col).like(
+            func.translate(func.lower(f"%{escape_like(qstr)}%"), _FOLD_SRC, _FOLD_DST),
+            escape="\\",
         )
+        ungated_sub, gated_sub = (
+            await session.execute(
+                select(
+                    func.count(),
+                    func.count().filter(Author.confirmed.is_(True)),
+                )
+                .select_from(Author)
+                .where(Author.institution_id == institution_id, like_arm)
+            )
+        ).one()
+        if total == 0 or (ungated_sub > 0 and gated_sub == 0):
+            # Rerun the same query ungated so total, page and facets
+            # describe what the caller gets.
+            return await _search_authors(
+                session,
+                institution_id,
+                q,
+                limit,
+                require_confirmed=False,
+                faculty=faculty,
+                org=org,
+                has_orcid=has_orcid,
+                works=works,
+                last_pub=last_pub,
+                topic=topic,
+                sort=sort,
+                offset=offset,
+                year_range=year_range,
+                q_field=q_field,
+                q_match=q_match,
+            )
     # Sort after filters; stable tiebreak by name, then pure_uuid. The q
     # prefix-rank boost only applies to the default works sort.
     if sort == "name_asc":
@@ -250,7 +381,7 @@ async def search_authors(
         )
     elif q_cond is not None:
         order = (
-            case((Author.name.ilike(f"{escape_like(qstr)}%", escape="\\"), 1), else_=0).desc(),
+            case((target_col.ilike(f"{escape_like(qstr)}%", escape="\\"), 1), else_=0).desc(),
             n_col.desc(),
             func.lower(Author.name),
             Author.pure_uuid,
@@ -283,6 +414,7 @@ async def search_authors(
         "total": total,
         "offset": offset,
         "sort": sort,
+        "q_match": q_match,
         "items": [
             {
                 "pure_uuid": a.pure_uuid,

@@ -31,6 +31,7 @@ from ..models import (
     Work,
 )
 from ..queries import cache_epoch, work_type_not_excluded
+from . import fuzzy
 from .authorship import (
     aids_gap_predicate,
     author_ids_openalex_only,
@@ -410,9 +411,15 @@ def _order_units(sort: str, q: str | None) -> tuple[Any, str]:
 
 
 def _matches_q(u: _Unit, q: str) -> bool:
-    """SQL ilike '%q%' twin: case-insensitive substring of the raw name
-    (LIKE metacharacters stay literal, same as the escaped SQL path)."""
-    return q.lower() in u.name.lower()
+    """SQL ilike '%q%' twin plus trigram typo tolerance: case-insensitive
+    substring of the raw name (LIKE metacharacters stay literal, same as
+    the escaped SQL path), or fuzzy word similarity so "pilosophy" finds
+    the Philosophy group. Runs over the in-memory snapshot, so the fuzzy
+    arm mirrors pg_trgm's trigrams in Python (services.fuzzy)."""
+    ql = q.lower()
+    if ql in u.name.lower():
+        return True
+    return fuzzy.word_similarity(q, u.name) >= fuzzy.WORD_SIMILARITY_THRESHOLD
 
 
 def _snapshot_facets(

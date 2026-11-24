@@ -842,6 +842,10 @@ class AuthorSearchResponse(BaseModel):
     total: int
     offset: int = 0
     sort: str = "works_desc"
+    # Which field q matched: "name", or the fallback that fired when no
+    # name matched ("topic" = primary_topic, "group" = research_group);
+    # "name" without a q. The UI labels topic/group result sets.
+    q_match: Literal["name", "topic", "group"] = "name"
     items: list[AuthorItem]
     # faculty/org/works/last_pub/topic buckets under all filters except the
     # facet's own dimension; has_orcid is boolean and has no facet list.

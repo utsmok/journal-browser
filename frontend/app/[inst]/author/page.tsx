@@ -529,6 +529,13 @@ function AuthorsView() {
                   </div>
                 ) : (
                   <>
+                    {q && data?.q_match && data.q_match !== "name" && (
+                      <p className="mb-3 text-sm text-[var(--muted-foreground)]">
+                        {t(data.q_match === "topic" ? "results.matchTopic" : "results.matchGroup", {
+                          query: q,
+                        })}
+                      </p>
+                    )}
                     {q && rows.every((r) => !r.confirmed) && (
                       <p className="mb-3 text-sm text-[var(--muted-foreground)]">
                         {t("results.unverifiedHint", { query: q })}

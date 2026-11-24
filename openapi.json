@@ -10457,6 +10457,16 @@
             "title": "Sort",
             "default": "works_desc"
           },
+          "q_match": {
+            "type": "string",
+            "enum": [
+              "name",
+              "topic",
+              "group"
+            ],
+            "title": "Q Match",
+            "default": "name"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/AuthorItem"
