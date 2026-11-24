@@ -162,6 +162,9 @@ async def search_journals(
     q: Annotated[str | None, Query(max_length=200)] = None,
     search_in: SearchIn = "all",
     deal: Annotated[str, Query(pattern="^(any|covered|not_covered)$")] = "any",
+    deal_id: Annotated[
+        int | None, Query(ge=1, description="Filter to journals covered by a specific deal")
+    ] = None,
     oa: bool | None = None,
     doaj: bool | None = None,
     quartile: Annotated[str | None, Query(pattern="^Q[1-4]$")] = None,
@@ -217,6 +220,7 @@ async def search_journals(
         q=q,
         search_in=search_in,
         deal=deal,
+        deal_id=deal_id,
         oa=oa,
         doaj=doaj,
         quartile=quartile,

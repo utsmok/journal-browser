@@ -206,6 +206,7 @@ class FunderListItem(BaseModel):
 class FunderSearchResponse(BaseModel):
     items: list[FunderListItem]
     total: int
+    facets: dict[str, dict[str, int]] = {}
 
 
 class FunderTopJournal(BaseModel):
@@ -235,11 +236,24 @@ class FunderOpenaireBlock(BaseModel):
     streams: list[FunderOpenaireStream] = []
 
 
+class StatsYear(BaseModel):
+    year: int
+    works_count: int
+    works_count_source: WorksSource = WorksSource.OPENALEX_INSTITUTION_FILTER
+    oa_gold: int
+    oa_hybrid: int
+    oa_green: int
+    oa_bronze: int
+    oa_diamond: int
+    oa_closed: int
+
+
 class FunderDetailResponse(FunderListItem):
     publications_policy: dict[str, Any] | None = None
     data_archiving_policy: dict[str, Any] | None = None
     openaire: FunderOpenaireBlock | None = None
     top_journals: list[FunderTopJournal] = []
+    works_by_year: list[StatsYear] = []
 
 
 class SimilarJournalItem(BaseModel):
@@ -290,18 +304,6 @@ class ScimagojrOut(BaseModel):
     sjr: float | None
     best_quartile: str | None
     h_index: int | None
-
-
-class StatsYear(BaseModel):
-    year: int
-    works_count: int
-    works_count_source: WorksSource = WorksSource.OPENALEX_INSTITUTION_FILTER
-    oa_gold: int
-    oa_hybrid: int
-    oa_green: int
-    oa_bronze: int
-    oa_diamond: int
-    oa_closed: int
 
 
 class DealLinkOut(BaseModel):

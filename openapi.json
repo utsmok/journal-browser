@@ -1681,6 +1681,25 @@
             }
           },
           {
+            "name": "deal_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter to journals covered by a specific deal",
+              "title": "Deal Id"
+            },
+            "description": "Filter to journals covered by a specific deal"
+          },
+          {
             "name": "oa",
             "in": "query",
             "required": false,
@@ -2581,6 +2600,73 @@
                 }
               ],
               "title": "Q"
+            }
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Country"
+            }
+          },
+          {
+            "name": "policy_structured",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Policy Structured"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(works|name)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(asc|desc)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dir"
             }
           },
           {
@@ -12724,6 +12810,14 @@
             "type": "array",
             "title": "Top Journals",
             "default": []
+          },
+          "works_by_year": {
+            "items": {
+              "$ref": "#/components/schemas/StatsYear"
+            },
+            "type": "array",
+            "title": "Works By Year",
+            "default": []
           }
         },
         "type": "object",
@@ -12973,6 +13067,17 @@
           "total": {
             "type": "integer",
             "title": "Total"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Facets",
+            "default": {}
           }
         },
         "type": "object",

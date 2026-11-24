@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import EXCLUDED_WORK_TYPES, get_settings
 from ..models import FunderLink, Institution, OpenaireFunder, OpenaireFunderStream, OpenalexFunder
+from .works_query import YEAR_BUCKETS, empty_year_buckets
 
 
 @dataclass(slots=True)
@@ -264,3 +265,44 @@ async def top_journals(
     )
     rows = await session.execute(text(sql), params)
     return [{"title": r[0], "issn_l": r[1], "n_works": int(r[2])} for r in rows]
+
+
+async def works_by_year(
+    session: AsyncSession,
+    institution: Institution,
+    bare_ids: set[str],
+    year_range: tuple[int, int] | None = None,
+) -> list[dict[str, Any]]:
+    """Per-year OA status breakdown for distinct gated UT works crediting this funder."""
+    if not await _work_funders_ready(session) or not bare_ids:
+        return []
+    params = {
+        **_gate_params(institution.id, *_window_bounds(institution, year_range)),
+        "bares": sorted(bare_ids),
+    }
+    sql = (
+        "select w.year, w.oa_status, count(distinct wf.pure_uuid) as n"
+        " from work_funders wf" + _WORKS_JOIN_SQL + " where wf.institution_id = :i"
+        " and wf.funder_openalex_id = any(cast(:bares as text[]))"
+        " group by w.year, w.oa_status"
+    )
+    rows = await session.execute(text(sql), params)
+    by_year: dict[int, dict[str, int]] = {}
+    for yr, oa_status, n in rows:
+        if yr is None:
+            continue
+        year_int = int(yr)
+        count = int(n or 0)
+        bucket = by_year.setdefault(year_int, {"total": 0, **empty_year_buckets()})
+        bucket["total"] += count
+        if oa_status in YEAR_BUCKETS:
+            bucket[oa_status] += count
+    return [
+        {
+            "year": yr,
+            "works_count": by_year[yr]["total"],
+            "works_count_source": "pure_canon",
+            **{f"oa_{status}": by_year[yr][status] for status in YEAR_BUCKETS},
+        }
+        for yr in sorted(by_year, reverse=True)
+    ]

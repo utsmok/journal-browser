@@ -3041,6 +3041,11 @@ export interface components {
              * @default []
              */
             top_journals: components["schemas"]["FunderTopJournal"][];
+            /**
+             * Works By Year
+             * @default []
+             */
+            works_by_year: components["schemas"]["StatsYear"][];
         };
         /**
          * FunderFitOut
@@ -3123,6 +3128,15 @@ export interface components {
             items: components["schemas"]["FunderListItem"][];
             /** Total */
             total: number;
+            /**
+             * Facets
+             * @default {}
+             */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
         };
         /** FunderTopJournal */
         FunderTopJournal: {
@@ -6144,6 +6158,8 @@ export interface operations {
                 /** @description Field the free-text query matches against */
                 search_in?: "all" | "title" | "publisher" | "topic";
                 deal?: string;
+                /** @description Filter to journals covered by a specific deal */
+                deal_id?: number | null;
                 oa?: boolean | null;
                 doaj?: boolean | null;
                 quartile?: string | null;
@@ -6420,6 +6436,10 @@ export interface operations {
         parameters: {
             query?: {
                 q?: string | null;
+                country?: string | null;
+                policy_structured?: boolean | null;
+                sort?: string | null;
+                dir?: string | null;
                 offset?: number;
                 limit?: number;
                 /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */

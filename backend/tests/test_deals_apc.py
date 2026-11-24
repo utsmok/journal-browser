@@ -1213,6 +1213,48 @@ async def test_funder_counts_gate_dedupe_and_sort(db, client, funders_fixture):
     assert body["n_ut_works"] == 1
     # Only the live work's journal survives the gates.
     assert [(j["issn_l"], j["n_works"]) for j in body["top_journals"]] == [("1234-5678", 1)]
+    assert len(body["works_by_year"]) == 1
+    assert body["works_by_year"][0]["year"] == 2023
+    assert body["works_by_year"][0]["works_count"] == 1
+
+    # Facets, country/policy filtering, and sorting on /funders.
+    root = (await client.get("/api/v1/ut/funders")).json()
+    assert root["facets"]["country"] == {"NL": 2}
+    assert root["facets"]["policy_structured"] == {"true": 0, "false": 2}
+
+    by_name_desc = (await client.get("/api/v1/ut/funders?sort=name&dir=desc")).json()["items"]
+    assert [i["id"] for i in by_name_desc[:2]] == [2, 1]
+    by_name_asc = (await client.get("/api/v1/ut/funders?sort=name&dir=asc")).json()["items"]
+    assert [i["id"] for i in by_name_asc[:2]] == [1, 2]
+
+    only_nl = (await client.get("/api/v1/ut/funders?country=NL")).json()
+    assert only_nl["total"] == 2
+    only_gb = (await client.get("/api/v1/ut/funders?country=GB")).json()
+    assert only_gb["total"] == 0
+    only_struct = (await client.get("/api/v1/ut/funders?policy_structured=true")).json()
+    assert only_struct["total"] == 0
+
+
+@requires_db
+async def test_journals_filter_by_deal_id(db, client, deals_api):
+    """?deal_id= restricts journal search to venues covered by that specific deal."""
+    _, (twente_id, foreign_id, issn) = deals_api
+    inst = (await db.execute(select(Institution).where(Institution.code == "ut"))).scalar_one()
+    db.add(
+        JournalFlags(institution_id=inst.id, issn_l=issn, deal_covered=True, works_window_plus=10)
+    )
+    db.add(Journal(issn_l="2222-2222", title="Other", type="journal"))
+    db.add(
+        JournalFlags(
+            institution_id=inst.id, issn_l="2222-2222", deal_covered=False, works_window_plus=10
+        )
+    )
+    await db.commit()
+
+    matching = (await client.get(f"/api/v1/ut/journals?deal_id={twente_id}")).json()
+    assert [i["issn_l"] for i in matching["items"]] == [issn]
+    foreign = (await client.get(f"/api/v1/ut/journals?deal_id={foreign_id}")).json()
+    assert foreign["items"] == []
 
 
 # ── Owner-curation provenance restore (scripts/restore_deal_curation.py) ───

@@ -15,8 +15,17 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...models import InstitutionWorksStats, IssnMap, Journal, JournalApcAggregate, JournalFlags
+from ...models import (
+    DealInstitution,
+    DealJournal,
+    InstitutionWorksStats,
+    IssnMap,
+    Journal,
+    JournalApcAggregate,
+    JournalFlags,
+)
 from ...vocab import GreenOa
+from ..deal_coverage import dj_scope
 from ..funder_fit import fit_case
 from .classify import _oa_type
 from .currency import _to_eur
@@ -122,6 +131,7 @@ def base_query(
     q: str | None = None,
     search_in: str = "all",
     deal: str = "any",
+    deal_id: int | None = None,
     oa: bool | None = None,
     doaj: bool | None = None,
     quartile: str | None = None,
@@ -352,6 +362,23 @@ def base_query(
         query = query.where(flags.c.deal_covered.is_(True))
     elif deal == "not_covered":
         query = query.where(flags.c.deal_covered.is_(False))
+    if deal_id is not None:
+        query = query.where(
+            J.issn_l.in_(
+                select(DealJournal.issn_l)
+                .select_from(DealJournal)
+                .join(
+                    DealInstitution,
+                    (DealInstitution.deal_id == DealJournal.deal_id)
+                    & (DealInstitution.institution_id == institution_id),
+                )
+                .where(
+                    DealJournal.deal_id == deal_id,
+                    dj_scope(institution_id),
+                    DealJournal.excluded.is_not(True),
+                )
+            )
+        )
     if oa is not None:
         query = query.where(J.is_oa.is_(oa))
     if doaj is not None:

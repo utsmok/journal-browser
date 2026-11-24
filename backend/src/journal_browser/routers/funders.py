@@ -21,6 +21,7 @@ from ..schemas import (
 )
 from ..services import funders as funders_service
 from ..services.works_query import clamped_year_range
+from .params import split_multi
 
 router = APIRouter(prefix="/funders", tags=["funders"])
 
@@ -60,6 +61,10 @@ async def search_funders(
     session: SessionDep,
     institution: InstitutionDep,
     q: Annotated[str | None, Query(max_length=200)] = None,
+    country: Annotated[str | None, Query(max_length=200)] = None,
+    policy_structured: bool | None = None,
+    sort: Annotated[str | None, Query(pattern="^(works|name)$")] = None,
+    dir: Annotated[str | None, Query(pattern="^(asc|desc)$")] = None,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = DEFAULT_LIMIT,
     year_from: Annotated[
@@ -91,13 +96,13 @@ async def search_funders(
         session, institution, canon.bare_ids, year_range
     )
     needle = (q or "").strip().lower()
-    items = []
+    base_items: list[FunderListItem] = []
     for funder in funders:
         if needle:
             haystack = [(funder.name or ""), *canon.aliases.get(funder.id, [])]
             if not any(needle in name.lower() for name in haystack):
                 continue
-        items.append(
+        base_items.append(
             _to_item(
                 funder,
                 canon.urls.get(funder.id, []),
@@ -106,9 +111,50 @@ async def search_funders(
                 union_counts.get(funder.id, 0),
             )
         )
-    # Order: n_ut_works desc nulls last (counts default 0), then name.
-    items.sort(key=lambda f: (-f.n_ut_works, (f.name or "").lower()))
-    return FunderSearchResponse(items=items[offset : offset + limit], total=len(items))
+
+    countries = {c.strip().upper() for c in (split_multi(country) or []) if c.strip()}
+
+    def _matches(
+        item: FunderListItem, *, use_country: bool = True, use_policy: bool = True
+    ) -> bool:
+        if use_country and countries and (item.country or "").upper() not in countries:
+            return False
+        return not (
+            use_policy
+            and policy_structured is not None
+            and item.policy_structured != policy_structured
+        )
+
+    # Drop-own-dimension facets over the query-matched base.
+    country_counts: dict[str, int] = {}
+    for item in base_items:
+        if not _matches(item, use_country=False, use_policy=True):
+            continue
+        code = (item.country or "").strip().upper()
+        if code:
+            country_counts[code] = country_counts.get(code, 0) + 1
+    policy_counts = {"true": 0, "false": 0}
+    for item in base_items:
+        if not _matches(item, use_country=True, use_policy=False):
+            continue
+        key = "true" if item.policy_structured else "false"
+        policy_counts[key] += 1
+    facets: dict[str, dict[str, int]] = {
+        "country": dict(sorted(country_counts.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "policy_structured": policy_counts,
+    }
+
+    items = [item for item in base_items if _matches(item)]
+    sort_key = sort or "works"
+    if sort_key == "name":
+        items.sort(key=lambda f: ((f.name or "").lower(), -f.n_ut_works), reverse=(dir == "desc"))
+    elif dir == "asc":
+        items.sort(key=lambda f: (f.n_ut_works, (f.name or "").lower()))
+    else:
+        items.sort(key=lambda f: (-f.n_ut_works, (f.name or "").lower()))
+    return FunderSearchResponse(
+        items=items[offset : offset + limit], total=len(items), facets=facets
+    )
 
 
 @router.get("/{funder_id}", response_model=FunderDetailResponse)
@@ -158,10 +204,12 @@ async def funder_detail(
         if j["issn_l"] not in seen:
             seen.add(j["issn_l"])
             deduped.append(j)
+    yearly = await funders_service.works_by_year(session, institution, ids, year_range)
     return FunderDetailResponse(
         **item.model_dump(),
         publications_policy=funder.publications_policy,
         data_archiving_policy=funder.data_archiving_policy,
         openaire=canon.openaire.get(funder_id),
         top_journals=[FunderTopJournal(**j) for j in deduped[:5]],
+        works_by_year=yearly,
     )
