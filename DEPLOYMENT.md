@@ -80,6 +80,7 @@ in citation links on journal pages. Set it in `.env` before the first
 | `JB_RATE_LIMIT_PER_MINUTE` | Requests per minute each client IP may make to `/api`; `0` turns the limit off. See [Public API](#public-api) | `600` |
 | `JB_RATE_LIMIT_HEAVY_PER_MINUTE` | Separate per-IP limit for CSV exports and the semantic search, recommendation and similar-journal routes | `60` |
 | `JB_RATE_LIMIT_FEEDBACK_PER_MINUTE` | Separate per-IP limit for feedback submissions | `10` |
+| `JB_CACHE_MAX_MB` | RAM the three in-process caches (search facets, list snapshots, stale detail bundles) may hold together, estimated from the cached objects. Above it the least recently used entry goes first, whichever cache holds it. One orgunit snapshot holds about 100 MB, so leave room for it inside the backend's 2 GB container limit | `256` |
 | Country lookups | `jobs/enrich_usage_geo.py` resolves visitor IPs locally against DB-IP's free Country Lite database (downloaded monthly into `landing/dbip/`). Country data by DB-IP.com, CC BY 4.0 (https://db-ip.com) | — |
 | `JB_IGNORED_ISSNS` | JSON list of ISSNs the browser treats as nonexistent on every journal surface | empty |
 | `JB_SOURCE_WAVE_CRON` | Cron schedule (UTC) for the weekly source wave, run by the `scheduler` service | `0 22 * * 0` (Sunday 22:00) |

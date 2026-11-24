@@ -4,6 +4,7 @@ previous epoch's bundle is served immediately while a background task
 rebuilds on a fresh session (services/cache.py SWR helpers)."""
 
 import asyncio
+import tracemalloc
 from datetime import UTC, datetime, timedelta
 
 from pydantic import BaseModel
@@ -21,9 +22,11 @@ from journal_browser.models import (
     Work,
 )
 from journal_browser.services.cache import (
+    FACET_CACHE,
     SNAPSHOT_CACHE,
     SNAPSHOT_TTL,
     SWR_CACHE,
+    _nbytes,
     cache_get,
     cache_put,
     swr_get,
@@ -161,6 +164,61 @@ async def test_byte_cap_evicts_least_recently_used(monkeypatch, tmp_path):
         assert cache_get(store, ("d",), SNAPSHOT_TTL) == Bundle(text="d" * 2_000_000)
     finally:
         reset_settings_cache()
+
+
+async def test_byte_budget_is_shared_and_follows_reads(monkeypatch, tmp_path):
+    """One budget covers the three stores: a write evicts the least
+    recently used entry wherever it sits, and a read keeps its entry."""
+    monkeypatch.setenv("JB_SETTINGS_YAML", str(tmp_path / "missing.yaml"))
+    monkeypatch.setenv("JB_CACHE_MAX_MB", "1")
+    reset_settings_cache()
+    try:
+        for store in (FACET_CACHE, SNAPSHOT_CACHE, SWR_CACHE):
+            store.clear()
+        swr_put(SWR_CACHE, ("old",), "e1", {"t": "o" * 400_000})
+        cache_put(SNAPSHOT_CACHE, ("snap",), {"t": "s" * 400_000})
+        cache_put(FACET_CACHE, ("facet",), {"t": "f" * 400_000})
+        assert list(SWR_CACHE) == [] and list(SNAPSHOT_CACHE) == [("snap",)]
+        # Reading the snapshot makes the facet entry the oldest.
+        cache_get(SNAPSHOT_CACHE, ("snap",), SNAPSHOT_TTL)
+        cache_put(FACET_CACHE, ("facet2",), {"t": "g" * 400_000})
+        assert list(FACET_CACHE) == [("facet2",)]
+        assert list(SNAPSHOT_CACHE) == [("snap",)]
+    finally:
+        for store in (FACET_CACHE, SNAPSHOT_CACHE, SWR_CACHE):
+            store.clear()
+        reset_settings_cache()
+
+
+def test_nbytes_scales_a_sampled_container():
+    """A container past the sample size is sized from a sample of its
+    items, scaled to the full count: the estimate stays close to sizing
+    every item."""
+
+    def row(i: int) -> dict:
+        return {"name": f"institute number {i}", "n": i, "tags": ["a", "b"]}
+
+    many = [row(i) for i in range(5000)]
+    every_item = sum(_nbytes(many[i : i + 100]) for i in range(0, 5000, 100))
+    assert abs(_nbytes(many) - every_item) < 0.1 * every_item
+
+
+def test_nbytes_matches_allocated_memory_for_models():
+    """The estimate tracks what Python allocated for a list of pydantic
+    models, including the set of assigned fields that pydantic keeps
+    outside the instance dict."""
+
+    class Row(BaseModel):
+        value: str
+        count: int
+
+    tracemalloc.start()
+    try:
+        rows = [Row(value="x", count=1) for _ in range(2000)]
+        allocated, _ = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert abs(_nbytes(rows) - allocated) < 0.3 * allocated
 
 
 @requires_db

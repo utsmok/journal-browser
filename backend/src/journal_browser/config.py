@@ -84,10 +84,11 @@ class Settings(BaseSettings):
     # Default sits above the measured cold publisher-snapshot build
     # (~59 s under harvest load); lower via env for stricter cuts.
     statement_timeout_ms: int = 60_000
-    # JSON bytes each in-process cache (facet, snapshot and SWR store)
-    # may hold, estimated from the serialised value. Above it the least
-    # recently used entries go first. The entry caps alone let a few
-    # hundred multi-megabyte snapshots add up to gigabytes.
+    # RAM the three in-process caches (search facets, list snapshots and
+    # stale detail bundles) may hold together, estimated from the cached
+    # objects. Above it the least recently used entry goes first. The
+    # entry caps alone let a few hundred multi-megabyte snapshots add up
+    # to gigabytes; one orgunit snapshot holds about 100 MB.
     cache_max_mb: int = 256
 
     # ut-metadata Postgres (canonical Twente publications). Empty = the
