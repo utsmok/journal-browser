@@ -277,6 +277,9 @@ export default function AboutPage() {
                     : site.windowStart,
               })}
             </p>
+            <p className="mt-3 max-w-prose text-xs text-[var(--muted-foreground)]">
+              {t("privacy.note")}
+            </p>
           </CardContent>
         </Card>
       </section>

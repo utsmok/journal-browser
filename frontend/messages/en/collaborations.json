@@ -109,7 +109,9 @@
     "presetFit": "Fit results",
     "caption": "Circle colour shows organisation type and size reflects shared works. Click a legend type to filter, or click a partner to open its profile.",
     "unmapped": "{count, plural, one {# partner has no coordinates and is not on the map.} other {# partners have no coordinates and are not on the map.}}",
-    "failed": "The map did not load. The table below lists every partner."
+    "failed": "The map did not load. The table below lists every partner.",
+    "a11yFallback": "If the map cannot load, the partner list below shows every partner.",
+    "tilesNote": "Map tiles load directly from tiles.openfreemap.org (OpenFreeMap); your browser contacts that service whenever the map is shown."
   },
   "summary": {
     "line": "{partners, plural, one {One partner appears} other {# partners appear}} on {withPartner, plural, one {one} other {#}} of the {works} works that {inst} published from {from} to {to}.",

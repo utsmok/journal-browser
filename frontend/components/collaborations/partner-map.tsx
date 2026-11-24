@@ -670,6 +670,7 @@ export function PartnerMap({
         <>
           <div className="relative">
             <div ref={containerRef} className="jb-map h-[22rem] w-full sm:h-[26rem]" />
+            <p className="sr-only">{t("map.a11yFallback")}</p>
             <div className="pointer-events-auto absolute left-2.5 top-2.5 z-10 flex flex-wrap gap-1">
               <button type="button" onClick={() => fitTo(WORLD, 3)} className={presetBtn}>
                 {t("map.presetWorld")}
@@ -726,6 +727,7 @@ export function PartnerMap({
                 );
               })}
             </ul>
+            <p className="basis-full text-[var(--muted-foreground)]">{t("map.tilesNote")}</p>
           </div>
         </>
       )}
