@@ -17,7 +17,7 @@ export const SOURCES: SourceRow[] = [
   { id: "doaj", name: "DOAJ" },
   { id: "scimago", name: "Scimago Journal Rank" },
   { id: "jisc", name: "Jisc Open Policy Finder" },
-  { id: "ipApi", name: "ip-api.com" },
+  { id: "dbip", name: "DB-IP Country Lite" },
   { id: "purePortal", name: "Pure research portal" },
   { id: "utMetadata", name: "institutional metadata platform" },
   { id: "embeddings", name: "BAAI/bge-small-en-v1.5" },
