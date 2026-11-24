@@ -5,6 +5,11 @@ agreements (one row per ESAC ID, with a per-agreement published-CSV URL) and
 one CSV per agreement whose rows are a journals x institutions cross product.
 Everything is collected verbatim (landing copy + source_records) before any
 normalization; publisher names are placeholder codes until reconcile.
+
+openaccess.nl is the primary source for the Dutch deals. A journal list is
+stored only when it is the agreement's own (deal_publishers judges it by
+the publisher its journals resolve to), and JCT never overwrites the
+publisher, status or period of a deal row that openaccess.nl owns.
 """
 
 import asyncio
@@ -14,7 +19,8 @@ import re
 from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import func, select, text
+from sqlalchemy import case, func, select, text
+from sqlalchemy import delete as sa_delete
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +33,19 @@ from .common import (
     parse_csv_rows,
     require_headers,
     run_harvest,
+)
+from .deal_publishers import (
+    SHEET_REJECTED_KEY,
+    SheetPublishers,
+    family_of,
+    flag,
+    flag_owned,
+    issn_publisher_counts,
+    judge,
+    list_flag_dismissed,
+    load_sheet_publishers,
+    rejected_sheet,
+    withheld,
 )
 
 logger = logging.getLogger(__name__)
@@ -216,7 +235,17 @@ async def _store_agreement(
     journals: list[dict[str, str]],
     institutions: list[dict[str, str]],
     fetched_at: str,
-) -> None:
+    sheets: SheetPublishers | None = None,
+) -> str | None:
+    """Upsert the agreement row and its sheet. Returns the reason when the
+    sheet belongs to another publisher and was withheld.
+
+    A withheld sheet leaves no journal list on the deal: rows an earlier
+    ingest stored from it go too. Excluded rows stay (an admin's removals
+    are tombstones the next upsert must not resurrect). The participant list
+    is stored either way: participation is a fact of the agreement, not of
+    its journal list.
+    """
     code, start_year, consortium = split_esac_id(agreement["esac_id"])
     # Refresh this source's provenance entries; entries from other sources
     # (owner curation docs, openaccess.nl merges) are history and stay.
@@ -226,6 +255,24 @@ async def _store_agreement(
         for entry in ((existing.provenance or []) if existing is not None else [])
         if not (isinstance(entry, dict) and entry.get("source") == "jct")
     ]
+    if sheets is None:
+        sheets = await load_sheet_publishers(session)
+    sheet_entry: dict[str, Any] = {
+        "source": "jct",
+        "url": agreement["data_url"],
+        "fetched_at": fetched_at,
+    }
+    withheld_reason = withheld(
+        judge(
+            await issn_publisher_counts(session, [i for r in journals if (i := row_issn(r))]),
+            family=family_of(agreement["esac_id"], code.upper() if code else None),
+            exclude=existing.id if existing is not None else None,
+            sheets=sheets,
+        ),
+        rejected_sheet(existing.provenance if existing is not None else None),
+    )
+    if withheld_reason is not None:
+        sheet_entry[SHEET_REJECTED_KEY] = withheld_reason
     values = {
         "publisher_id": await _upsert_publisher(session, code) if code else None,
         "esac_id": agreement["esac_id"],
@@ -234,52 +281,81 @@ async def _store_agreement(
         "start_year": start_year,
         "end_year": _parse_year(agreement["end_date"]),
         "corresponding_authors_only": agreement["ca_only"] == "yes",
-        "jct_data_url": agreement["data_url"],
+        "jct_data_url": None if withheld_reason is not None else agreement["data_url"],
         "last_reviewed": _parse_date(agreement["last_reviewed"]),
         "provenance": [
             *prior,
             {"source": "jct", "url": INDEX_URL, "fetched_at": fetched_at},
-            {"source": "jct", "url": agreement["data_url"], "fetched_at": fetched_at},
+            sheet_entry,
         ],
     }
+    stmt = pg_insert(Deal).values(**values)
+    has_page = Deal.openaccess_nl_url.is_not(None)
     deal_id = (
         await session.execute(
-            pg_insert(Deal)
-            .values(**values)
-            .on_conflict_do_update(
-                index_elements=["esac_id"], set_={**values, "updated_at": func.now()}
-            )
-            .returning(Deal.id)
+            stmt.on_conflict_do_update(
+                index_elements=["esac_id"],
+                set_={
+                    **values,
+                    # openaccess.nl is the primary source. JCT's publisher
+                    # is a placeholder code, so it never replaces one another
+                    # source set; on a row with an openaccess.nl page that
+                    # source also owns the status and the period.
+                    "publisher_id": Deal.publisher_id,
+                    "status": case((has_page, Deal.status), else_=stmt.excluded.status),
+                    "start_year": case((has_page, Deal.start_year), else_=stmt.excluded.start_year),
+                    "end_year": case((has_page, Deal.end_year), else_=stmt.excluded.end_year),
+                    "updated_at": func.now(),
+                },
+            ).returning(Deal.id)
         )
     ).scalar_one()
     deal = await session.get(Deal, deal_id)
-    if deal is not None:  # pragma: no cover - identity map always has it here
-        await apply_overrides(session, "deals", str(deal_id), deal, _DEAL_FIELDS)
+    assert deal is not None
+    await session.refresh(deal)  # the upsert ran in SQL; the loaded row is stale
+    await apply_overrides(session, "deals", str(deal_id), deal, _DEAL_FIELDS)
 
-    for row in journals:
-        issn = row_issn(row)
-        if issn is None:  # pragma: no cover - parse_agreement already filtered
-            continue
-        name = _clean(row.get("Journal Name"))
-        first_seen = _clean(row.get("Journal First Seen"))
-        last_seen = _clean(row.get("Journal Last Seen"))
-        # issn_l stays NULL; a later issn_map sweep resolves it.
+    if withheld_reason is not None:
         await session.execute(
-            pg_insert(DealJournal)
-            .values(
-                deal_id=deal_id,
-                issn=issn,
-                journal_name=name,
-                first_seen=first_seen,
-                last_seen=last_seen,
-                source="jct",
-            )
-            .on_conflict_do_update(
-                index_elements=["deal_id", "issn"],
-                index_where=text("institution_id IS NULL"),
-                set_={"journal_name": name, "first_seen": first_seen, "last_seen": last_seen},
+            sa_delete(DealJournal).where(
+                DealJournal.deal_id == deal_id,
+                DealJournal.source == "jct",
+                DealJournal.institution_id.is_(None),
+                DealJournal.excluded.is_not(True),
             )
         )
+        owned = await flag_owned(session, [deal_id])
+        if deal_id not in owned and not list_flag_dismissed(deal, withheld_reason):
+            flag(deal, withheld_reason)
+    else:
+        for row in journals:
+            issn = row_issn(row)
+            if issn is None:  # pragma: no cover - parse_agreement already filtered
+                continue
+            name = _clean(row.get("Journal Name"))
+            first_seen = _clean(row.get("Journal First Seen"))
+            last_seen = _clean(row.get("Journal Last Seen"))
+            # issn_l stays NULL; a later issn_map sweep resolves it.
+            await session.execute(
+                pg_insert(DealJournal)
+                .values(
+                    deal_id=deal_id,
+                    issn=issn,
+                    journal_name=name,
+                    first_seen=first_seen,
+                    last_seen=last_seen,
+                    source="jct",
+                )
+                .on_conflict_do_update(
+                    index_elements=["deal_id", "issn"],
+                    index_where=text("institution_id IS NULL"),
+                    set_={
+                        "journal_name": name,
+                        "first_seen": first_seen,
+                        "last_seen": last_seen,
+                    },
+                )
+            )
 
     for row in institutions:
         ror = row.get("ROR ID", "").strip()
@@ -310,6 +386,7 @@ async def _store_agreement(
                 set_={"first_seen": first_seen, "last_seen": last_seen},
             )
         )
+    return withheld_reason
 
 
 async def main(session: AsyncSession, limit: int | None = None) -> dict[str, Any]:
@@ -323,6 +400,9 @@ async def main(session: AsyncSession, limit: int | None = None) -> dict[str, Any
         agreements = parse_index(parse_csv_rows(index_data))
         if limit is not None:
             agreements = agreements[:limit]
+        # One snapshot of the stored sheets; each agreement's list is judged
+        # against it.
+        sheets = await load_sheet_publishers(session)
         stats: dict[str, Any] = {
             "agreements": 0,
             "agreements_failed": 0,
@@ -331,6 +411,7 @@ async def main(session: AsyncSession, limit: int | None = None) -> dict[str, Any
             "journals": 0,
             "institutions": 0,
             "skipped_no_issn": 0,
+            "sheets_withheld": [],
         }
         for agreement in agreements:
             # Google throttles bursts of published-CSV fetches; pace with jitter.
@@ -366,7 +447,9 @@ async def main(session: AsyncSession, limit: int | None = None) -> dict[str, Any
                         "institutions": institutions,
                     },
                 )
-                await _store_agreement(session, agreement, journals, institutions, fetched_at)
+                withheld_reason = await _store_agreement(
+                    session, agreement, journals, institutions, fetched_at, sheets
+                )
             except Exception as exc:
                 await session.rollback()
                 stats["agreements_failed"] += 1
@@ -382,7 +465,10 @@ async def main(session: AsyncSession, limit: int | None = None) -> dict[str, Any
                 )
                 continue
             stats["agreements"] += 1
-            stats["journals"] += len(journals)
+            if withheld_reason is not None:
+                stats["sheets_withheld"].append(agreement["esac_id"])
+            else:
+                stats["journals"] += len(journals)
             stats["institutions"] += len(institutions)
             stats["skipped_no_issn"] += skipped
             await ingest.commit()
@@ -413,6 +499,7 @@ async def main(session: AsyncSession, limit: int | None = None) -> dict[str, Any
         f"default_deals={stats.get('default_deals')}"
     )
     print(f"jct default-institution esac_ids: {stats.get('default_esac_ids')}")
+    print(f"jct sheets withheld (another publisher's): {stats.get('sheets_withheld')}")
     for failure in stats.get("failed_downloads", []):
         print(f"jct failed download: {failure}")
     return stats

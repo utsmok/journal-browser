@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..ingest import IngestSession, apply_overrides
 from ..models import Deal, Publisher
 from .common import HarvestDataError, download_to_landing, run_harvest
+from .deal_publishers import is_list_reason
 
 logger = logging.getLogger(__name__)
 
@@ -387,8 +388,11 @@ async def _upsert_deal(
         # owner_curation pointer stays and keeps re-asserting the pin).
         for field in ("duration_text", "start_year", "end_year"):
             del values[field]
-    if not suppressed:
+    if not suppressed and not (deal is not None and is_list_reason(deal.curation_resolved_reason)):
         # Re-flagging voids any stale dismissal; a clean page retires it.
+        # The exception is a dismissed journal-list flag (JCT ingest or
+        # reconcile): that reason is not this page's, so the page leaves
+        # the dismissal and reconcile retires it.
         values["curation_resolved_reason"] = None
     if deal is None:
         deal = Deal(publisher_id=publisher_id, **values)
