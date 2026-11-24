@@ -79,7 +79,7 @@
     "apc": "APC",
     "topics": "Topics"
   },
-  "apcCoverage": "{count, plural, one {# journal has} other {# journals have}} a known APC. Publisher list prices and OpenAPC ranges are combined.",
+  "apcCoverage": "{count, plural, one {# journal has} other {# journals have}} a known APC: a list price, or else amounts reported paid to OpenAPC.",
   "quartileChipHint": "{quartile}: {count, plural, one {# journal} other {# journals}}",
   "quartileChipNoneHint": "No {quartile} journals",
   "detail": {

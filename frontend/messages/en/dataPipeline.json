@@ -96,7 +96,7 @@
     "dealsIssnLRequest": "No network. Fills missing coverage ISSNs from issn_map.",
     "dealsIssnLWrites": "deal_journals.issn_l, needs_curation flags",
     "openapcRequest": "GET 5 CSV files from raw.githubusercontent.com/OpenAPC/openapc-de.",
-    "openapcWrites": "raw_files, source_records, journal_apc_aggregates, apc_evidence, journals.latest_apc_euro",
+    "openapcWrites": "raw_files, source_records, journal_apc_aggregates, apc_evidence, journals.latest_apc_euro, journals.list_price_*",
     "doajRequest": "GET the full CSV from https://doaj.org/csv.",
     "doajWrites": "raw_files, journals doaj_* columns",
     "scimagoRequest": "No network. Unpacks the seed CSVs kept in the repository.",

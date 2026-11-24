@@ -51,6 +51,7 @@ import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { useYearRange } from "@/hooks/use-year-filter";
 import { encodeNamePath, errorMessage, type OpenalexTopic } from "@/lib/api";
+import { apcRowGap, apcSummary } from "@/lib/format";
 import { useFunderPrefs } from "@/lib/funder-prefs";
 
 const SIMILAR_PREVIEW = 5;
@@ -114,15 +115,12 @@ function JournalPageInner() {
     (tp): tp is OpenalexTopic & { display_name: string } => Boolean(tp?.display_name),
   );
   const hasApc = data.apc_aggregates.length > 0 || data.apc_evidence.length > 0;
-
-  const latestApcAgg = data.apc_aggregates[0];
-  const latestApcPrice = data.apc_prices[0] as { price?: number; currency?: string } | undefined;
-  const apcHeadline =
-    latestApcAgg?.euro_mean != null
-      ? `€${Math.round(latestApcAgg.euro_mean).toLocaleString("en")}`
-      : latestApcPrice?.price != null
-        ? `${latestApcPrice.currency ?? "€"} ${Math.round(latestApcPrice.price).toLocaleString("en")}`
-        : "—";
+  // The APC tile states which price it shows: the publisher's list price,
+  // or else the mean amount paid to OpenAPC.
+  const apc = apcSummary(journal);
+  const apcYear = apc.year ?? "—";
+  const apcSource = apc.source ?? "";
+  const apcPaid = apc.paid;
 
   const summaryStats: DetailStatItem[] = [
     {
@@ -164,14 +162,55 @@ function JournalPageInner() {
         metrics && metrics.fwci_n > 0 ? t("metrics.fwciN", { count: metrics.fwci_n }) : undefined,
     },
     {
-      label: t("header.kpiApc"),
-      value: apcHeadline,
+      label:
+        apc.kind === "list"
+          ? t("header.kpiListPrice")
+          : apc.kind === "paid"
+            ? t("header.kpiPaidApc")
+            : t("header.kpiApc"),
+      value: apc.kind === "list" ? (apc.amount ?? "—") : (apcPaid?.amount ?? "—"),
       icon: (
         <DataIcon className={`size-3.5 ${ACCESS_TEXT.brand}`}>
           <ApcGlyph />
         </DataIcon>
       ),
-      sub: latestApcAgg ? `OpenAPC ${latestApcAgg.period}` : undefined,
+      sub:
+        apc.kind === "list" ? (
+          <>
+            {t("header.kpiListSub", { source: apcSource, year: apcYear })}
+            {apcPaid ? (
+              <span className="hidden xl:inline">
+                {` · ${t("header.kpiPaidShort", { amount: apcPaid.amount })}`}
+              </span>
+            ) : (
+              apc.original && ` · ${apc.original}`
+            )}
+          </>
+        ) : apc.kind === "paid" && apcPaid ? (
+          t("header.kpiPaidSub", { period: apcPaid.period, count: apcPaid.count })
+        ) : undefined,
+      hint:
+        apc.kind === "list"
+          ? [
+              t("header.kpiListHint", { source: apcSource, year: apcYear }),
+              apc.original
+                ? t("header.kpiListConvertedHint", { original: apc.original })
+                : apc.currency !== "EUR"
+                  ? t("header.kpiListNoRateHint", { currency: apc.currency ?? "" })
+                  : null,
+              apcPaid
+                ? t("header.kpiPaidHint", {
+                    amount: apcPaid.amount,
+                    count: apcPaid.count,
+                    period: apcPaid.period,
+                  })
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" ")
+          : apc.kind === "paid"
+            ? t("header.kpiPaidTileHint", { period: apcPaid?.period ?? apcYear })
+            : undefined,
     },
     {
       label: t("header.kpiTotalWorks"),
@@ -559,7 +598,7 @@ function JournalPageInner() {
               title={t("apc.title")}
               count={data.apc_aggregates.length > 0 ? data.apc_aggregates.length : undefined}
               compact
-              contentClassName="text-sm [&_td]:py-1.5 [&_th]:h-8"
+              contentClassName="text-xs sm:text-sm [&_td]:px-2 [&_td]:py-1.5 [&_th]:h-8 [&_th]:px-2"
             >
               {data.apc_aggregates.length > 0 && (
                 <Table>
@@ -570,6 +609,9 @@ function JournalPageInner() {
                       <TableHead className="text-right" title={t("apc.countColHint")}>
                         {t("apc.countCol")}
                       </TableHead>
+                      <TableHead className="text-right" title={t("apc.zeroColHint")}>
+                        {t("apc.zeroCol")}
+                      </TableHead>
                       <TableHead className="text-right" title={t("apc.meanColHint")}>
                         {t("apc.meanCol")}
                       </TableHead>
@@ -579,22 +621,66 @@ function JournalPageInner() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {data.apc_aggregates.map((a) => (
-                      <TableRow key={a.period}>
-                        <TableCell className="tabular-nums">{a.period}</TableCell>
-                        <TableCell className="text-right tabular-nums">{a.article_count}</TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {a.euro_mean !== null
-                            ? `€${Math.round(a.euro_mean).toLocaleString("en")}`
-                            : "—"}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {a.euro_min !== null && a.euro_max !== null
-                            ? `€${Math.round(a.euro_min).toLocaleString("en")}–€${Math.round(a.euro_max).toLocaleString("en")}`
-                            : "—"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {data.apc_aggregates.map((a) => {
+                      // A line under the period says why it has no mean, or why
+                      // its mean is approximate.
+                      const gap = apcRowGap(a);
+                      const zero = a.zero_count ?? 0;
+                      const note =
+                        gap === "legacyMean"
+                          ? t("apc.legacyMeanNote")
+                          : gap === "noneAboveZero"
+                            ? t("apc.noneAboveZeroNote")
+                            : gap === "noAmount"
+                              ? t("apc.noAmountNote")
+                              : gap === "allDealPaid"
+                                ? t("apc.allDealPaidNote", { count: zero })
+                                : gap === "partDealPaid"
+                                  ? t("apc.partDealPaidNote", {
+                                      zero,
+                                      rest: a.article_count - zero,
+                                    })
+                                  : null;
+                      const eur = (v: number) => `€${Math.round(v).toLocaleString("en")}`;
+                      return (
+                        <React.Fragment key={a.period}>
+                          <TableRow className={note ? "border-b-0" : undefined}>
+                            <TableCell className="tabular-nums">{a.period}</TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {a.article_count}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {a.zero_count ?? "—"}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {a.euro_mean != null ? eur(a.euro_mean) : "—"}
+                              {a.euro_mean != null && a.paid_count != null && (
+                                <div className="text-[11px] text-[var(--muted-foreground)]">
+                                  {t("apc.paidCount", { count: a.paid_count })}
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {a.euro_max == null
+                                ? "—"
+                                : a.euro_min == null
+                                  ? t("apc.upTo", { amount: eur(a.euro_max) })
+                                  : `${eur(a.euro_min)}–${eur(a.euro_max)}`}
+                            </TableCell>
+                          </TableRow>
+                          {note && (
+                            <TableRow>
+                              <TableCell
+                                colSpan={5}
+                                className="py-0 pb-1.5 text-[11px] text-[var(--muted-foreground)]"
+                              >
+                                {note}
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}

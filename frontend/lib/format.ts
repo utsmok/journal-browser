@@ -66,13 +66,105 @@ export function apcStatsText(stats: JournalListItem["apc_stats"]): string {
     .join("\n");
 }
 
-/** APC display for one journal: OpenAlex list price, else OpenAPC range.
- * Symbol-first like apcAmount/deals copy ("€2,200"), en dash in ranges. */
-export function journalApcText(j: JournalListItem): string | null {
-  if (j.apc_source === "openalex" && j.apc_price != null) return `€${formatEur(j.apc_price)}`;
-  if (j.apc_source === "openapc" && j.apc_low != null)
-    return j.apc_high != null && j.apc_high !== j.apc_low
-      ? `€${formatEur(j.apc_low)}–${formatEur(j.apc_high)}`
-      : `€${formatEur(j.apc_low)}`;
-  return null;
+/** The price fields of a list row: the shown price and the OpenAPC paid block. */
+export type ApcFields = Pick<
+  JournalListItem,
+  | "apc_source"
+  | "apc_currency"
+  | "apc_price"
+  | "apc_year"
+  | "apc_original_currency"
+  | "apc_original_price"
+  | "apc_low"
+  | "apc_high"
+  | "apc_stats"
+>;
+
+const LIST_SOURCE_NAMES: Record<string, string> = { openalex: "OpenAlex", doaj: "DOAJ" };
+
+/** Name of the dataset a list price comes from. */
+export function apcSourceName(source: string): string {
+  return LIST_SOURCE_NAMES[source] ?? source;
+}
+
+/** What a journal's APC display shows. `amount` is the price to show: a
+ * publisher list price, or else the range of amounts paid. `paid` is the
+ * mean of the newest OpenAPC period with an article paid above €0. */
+export type ApcSummary = {
+  kind: "list" | "paid" | "none";
+  /** The dataset a list price comes from; null for a paid range. */
+  source: string | null;
+  /** The year the list price source was last harvested, or the paid period. */
+  year: number | null;
+  currency: string | null;
+  amount: string | null;
+  /** The list price as published, when it was converted to euros. */
+  original: string | null;
+  paid: { amount: string; period: number; count: number } | null;
+};
+
+export function apcSummary(apc: ApcFields): ApcSummary {
+  // The newest OpenAPC period with an article paid above €0 comes first.
+  const newest = apc.apc_stats[0];
+  // With the shown price from OpenAPC, apc_price and apc_year are the mean
+  // and the period of that newest period.
+  const fromOpenapc = apc.apc_source === "openapc";
+  const mean = (fromOpenapc ? apc.apc_price : null) ?? newest?.euro_mean ?? null;
+  const period = (fromOpenapc ? apc.apc_year : null) ?? newest?.period ?? null;
+  const paid =
+    mean != null && period != null
+      ? { amount: `€${formatApc(mean)}`, period, count: newest?.article_count ?? 0 }
+      : null;
+  const { apc_source: source, apc_price: price } = apc;
+  if (source != null && source !== "openapc" && price != null) {
+    const originalCurrency = apc.apc_original_currency;
+    const originalPrice = apc.apc_original_price;
+    return {
+      kind: "list",
+      source: apcSourceName(source),
+      year: apc.apc_year ?? null,
+      currency: apc.apc_currency ?? null,
+      amount: apcAmount(apc.apc_currency, price),
+      original:
+        originalCurrency != null && originalPrice != null && originalCurrency !== apc.apc_currency
+          ? apcAmount(originalCurrency, originalPrice)
+          : null,
+      paid,
+    };
+  }
+  const range =
+    apc.apc_low != null ? `€${formatApcRange(apc.apc_low, apc.apc_high)}` : (paid?.amount ?? null);
+  return {
+    kind: range != null ? "paid" : "none",
+    source: null,
+    year: period ?? null,
+    currency: "EUR",
+    amount: range,
+    original: null,
+    paid,
+  };
+}
+
+/** Range of two euro amounts: "2,000 to 2,500", or "2,000" when they are equal. */
+export function formatApcRange(low: number, high: number | null | undefined): string {
+  return high != null && high !== low ? `${formatApc(low)} to ${formatApc(high)}` : formatApc(low);
+}
+
+/** Why an OpenAPC period lacks exact paid figures; null when they are exact. */
+export type ApcRowGap =
+  | "legacyMean"
+  | "noneAboveZero"
+  | "noAmount"
+  | "allDealPaid"
+  | "partDealPaid";
+
+export function apcRowGap(a: JournalListItem["apc_stats"][number]): ApcRowGap | null {
+  // paid_count and zero_count are missing until migration 0005 and the OpenAPC job have run.
+  const count = a.paid_count ?? null;
+  if (a.euro_mean != null) return count == null ? "legacyMean" : null;
+  if (count !== 0) return null;
+  const zero = a.zero_count ?? null;
+  if (zero == null) return "noneAboveZero";
+  if (zero === 0) return "noAmount";
+  return zero === a.article_count ? "allDealPaid" : "partDealPaid";
 }
