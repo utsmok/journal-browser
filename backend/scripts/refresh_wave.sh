@@ -16,13 +16,19 @@
 # JB_OPENALEX_RESERVE_USD reserve (default 0.25); harvest_publishers only
 # costs credits on a fresh install, when its publisher cache is still empty.
 #
-# A failing stage names itself and stops the wave. Resume past the completed
-# stages with --from STAGE, e.g.:
+# A failing stage names itself and alerts (scripts/lib.sh). The stages that
+# depend on it are skipped, every other stage still runs, and the wave
+# exits 1. Resume with the command it prints: --from STAGE runs that stage
+# and every later one, e.g.:
 #   bash scripts/refresh_wave.sh --from harvest_openalex_funders
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/lib.sh
 
-# Stage names match the backend/jobs/ scripts so --from takes a job name.
+# "stage[||requires]". Stage names match the backend/jobs/ scripts so --from
+# takes a job name. requires lists the stages whose output this one reads:
+# a failed stage skips its dependents and nothing else. Every stage comes
+# after the stages it reads.
 STAGES=(
   # Credit-priced sweep, while the daily budget is fresh (see header).
   harvest_stats
@@ -31,25 +37,26 @@ STAGES=(
   # rewrite (bootstrap DAG: author-ids depends on openalex-works and
   # pure-authors).
   build_openalex_works
-  backfill_parts
+  "backfill_parts||build_openalex_works"
   backfill_pure_authors
-  resolve_author_ids
+  "resolve_author_ids||build_openalex_works,backfill_pure_authors"
   # Local projection right after identity resolution: publishes confirmed
   # author identities to the served roster; no API calls.
-  ingest_authors
+  "ingest_authors||resolve_author_ids"
   # Local derivation from stored data, no API calls; reads works.oa_status,
   # which build_openalex_works re-synced above.
-  harvest_oa_colors
-  # Funder backfills: $0 single-entity GETs, then OpenAIRE.
+  "harvest_oa_colors||build_openalex_works"
+  # Funder backfills: $0 single-entity GETs, then OpenAIRE. The OpenAlex
+  # gap-fill reads work_funders; the alias derive reads both funders.
   harvest_work_funders
-  harvest_openalex_funders
+  "harvest_openalex_funders||harvest_work_funders"
   harvest_openaire_funders
   # Partner links from the stored OpenAlex and OpenAIRE work payloads, the
   # OpenAIRE funder names resolved to OpenAlex funders, then the ROR records
   # of new and stale partners (free, no key).
   derive_work_partners
-  derive_funder_aliases
-  harvest_ror
+  "derive_funder_aliases||harvest_work_funders,harvest_openaire_funders"
+  "harvest_ror||derive_work_partners"
   # Credit-priced only on a fresh install (empty publisher cache).
   harvest_publishers
   # Slow CPU step last, so it never delays the priced stages.
@@ -71,20 +78,24 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-start=""
+names=()
+requires=()
+for entry in "${STAGES[@]}"; do
+  names+=("${entry%%||*}")
+  if [[ "$entry" == *"||"* ]]; then requires+=("${entry#*||}"); else requires+=(""); fi
+done
+
+start=0
 if [[ -n "$from" ]]; then
-  for i in "${!STAGES[@]}"; do
-    if [[ "${STAGES[i]}" == "$from" ]]; then
-      start="$i"
-      break
-    fi
+  start=""
+  for i in "${!names[@]}"; do
+    if [[ "${names[i]}" == "$from" ]]; then start="$i"; break; fi
   done
-  if [[ -z "$start" ]]; then
-    echo "wave: unknown --from stage '$from' (stages: ${STAGES[*]})"
-    exit 2
-  fi
+  [[ -n "$start" ]] || usage_error refresh_wave "unknown --from stage '$from' (stages: ${names[*]})"
 fi
-start="${start:-0}"
+
+wave_begin refresh_wave "${from:+resume}"
+reap_orphans
 
 echo "== 0. OpenAlex daily credit budget"
 budget="$(uv run --no-dev python -c '
@@ -102,12 +113,27 @@ else:
 ')" || { echo "wave: budget check failed"; exit 1; }
 echo "wave: daily OpenAlex credit budget: $budget"
 
-for i in "${!STAGES[@]}"; do
+for i in "${!names[@]}"; do
   (( i < start )) && continue
-  stage="${STAGES[i]}"
+  stage="${names[i]}"
+  if [[ -n "${requires[i]}" ]] && wave_failed_any "${requires[i]}"; then
+    echo "wave: skipping $stage (needs ${requires[i]})"
+    wave_skip "$stage"
+    continue
+  fi
+  wave_stage "$stage"
   echo "== $(( i + 1 )). $stage"
-  uv run --no-dev python "jobs/$stage.py" || { echo "wave: $stage failed"; exit 1; }
+  if uv run --no-dev python "jobs/$stage.py"; then
+    continue
+  fi
+  wave_fail "$stage"
 done
+
+if [[ -n "$WAVE_FAILED" ]]; then
+  echo "wave: failed stages: $WAVE_FAILED"
+  echo "wave: resume with: $(job_command bash refresh_wave.sh "${WAVE_FAILED%% *}")"
+  exit 1
+fi
 
 echo "wave: complete"
 # Re-warm the caches the wave just invalidated, so the first visitor after

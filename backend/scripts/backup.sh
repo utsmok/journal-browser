@@ -1,9 +1,12 @@
 #!/bin/sh
-# Nightly database backup: pg_dump -Fc into $JB_BACKUP_DIR, keeping the
-# newest $JB_BACKUP_KEEP archives. Scheduled by scripts/crontab in the
-# scheduler service; safe to run by hand. Restore steps: DEPLOYMENT.md,
-# section "Backups and restore".
+# Nightly database backup: pg_dump -Fc with zstd compression into
+# $JB_BACKUP_DIR, keeping the newest $JB_BACKUP_KEEP archives. Scheduled by
+# scripts/crontab in the scheduler service; safe to run by hand. Alerts on
+# failure and pings JB_HEARTBEAT_URL after success (scripts/lib.sh). Restore
+# steps: DEPLOYMENT.md, section "Backups and restore".
 set -eu
+
+. "$(dirname "$0")/lib.sh"
 
 : "${JB_BACKUP_DIR:=/backups}"
 : "${JB_BACKUP_KEEP:=7}"
@@ -18,14 +21,29 @@ mkdir -p "$JB_BACKUP_DIR"
 stamp="$(date -u +%Y%m%d-%H%M%S)"
 out="$JB_BACKUP_DIR/journalbrowser-$stamp.dump"
 
+fail() {
+    # $1: what failed. The archive is incomplete or unreadable, so it goes;
+    # rerunning the backup is the whole repair.
+    rm -f "$out.tmp" "$out"
+    alert_post "[$host] backup failed: $1. Resume: $(job_command sh backup.sh)" || :
+    exit 1
+}
+
 echo "backup: dumping to $out"
 # --no-password: fail instead of prompting if the DSN lacks credentials.
-pg_dump --no-password --format=custom --file="$out.tmp" "$pgdsn"
+# zstd in place of pg_dump's default gzip: measured on a sample of the
+# live data, a third smaller archive and decompression 4.5 times faster,
+# with no extra dump time (DEPLOYMENT.md, "Backups and restore"). Reading
+# the archive back needs pg_restore 17 built with zstd, as the scheduler
+# image has; the file name and pg_restore commands stay the same.
+pg_dump --no-password --format=custom --compress=zstd:9 --file="$out.tmp" "$pgdsn" ||
+    fail "pg_dump exited $?"
 mv "$out.tmp" "$out"
 
 # Fail loudly if the archive cannot be read back.
-pg_restore --list "$out" > /dev/null
+pg_restore --list "$out" > /dev/null || fail "pg_restore --list cannot read $out"
 echo "backup: ok ($(du -h "$out" | cut -f1))"
+heartbeat
 
 # Retention: keep the newest JB_BACKUP_KEEP archives.
 ls -1t "$JB_BACKUP_DIR"/journalbrowser-*.dump 2>/dev/null |

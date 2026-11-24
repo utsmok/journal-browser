@@ -4,7 +4,15 @@
 # so a typo'd .env fails the container loudly instead of silently), then
 # run supercronic in the foreground. Job output goes to the container log,
 # which compose keeps rotated (json-file, 5 x 50 MB).
+#
+# Before the first job: a wave the previous container was running when it
+# was recreated reports itself here, and harvest runs that a killed job
+# left 'running' become 'failed' (scripts/lib.sh).
 set -eu
+
+. /app/scripts/lib.sh
+report_dead_waves
+reap_orphans
 
 src="${JB_CRONTAB:-/app/scripts/crontab}"
 rendered=/tmp/jb-crontab
