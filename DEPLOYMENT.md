@@ -204,9 +204,10 @@ paid. Both are recomputed by `harvest.denorm.refresh_apcs`, which runs after
   refresh, or NULL when the currency has no rate.
 - `journals.latest_apc_euro` and `latest_apc_period` hold the mean amount
   paid in the newest OpenAPC period with an article paid above €0. OpenAPC
-  records an article that an agreement paid for as €0. Those articles are
-  counted in `journal_apc_aggregates.zero_count` and left out of the
-  `euro_min`, `euro_max` and `euro_mean` figures.
+  records an article that an agreement paid for as €0, and some rows carry
+  no amount (`NA`). Both kinds count in `article_count` only, and the €0
+  ones also in `journal_apc_aggregates.zero_count`; `paid_count` counts the
+  rest. `euro_min`, `euro_max` and `euro_mean` cover the paid articles.
 
 Browse, the APC filter and sort, and the finder budget use the list price.
 They fall back to the paid mean for a journal without a list price. After
