@@ -4,7 +4,6 @@ writes. No response body, no user accounts, no cookies — the client mints
 its own session id.
 """
 
-import ipaddress
 import json
 from typing import Annotated, Any, Literal
 
@@ -15,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import get_settings
 from ..db import get_session
 from ..models import UsageEvent
+from ..ratelimit import client_ip
 
 router = APIRouter(prefix="/usage", tags=["usage"])
 
@@ -78,23 +78,12 @@ class UsageBatchIn(BaseModel):
     )
 
 
-def _client_ip(request: Request) -> str | None:
-    xff = request.headers.get("x-forwarded-for")
-    raw = xff.split(",")[0].strip() if xff else (request.client.host if request.client else None)
-    if not raw:
-        return None
-    try:
-        return str(ipaddress.ip_address(raw))
-    except ValueError:
-        return None
-
-
 @router.post("/events", status_code=204)
 async def create_events(body: UsageBatchIn, request: Request, session: SessionDep) -> Response:
     if not get_settings().enable_usage_tracking:
         return Response(status_code=204)
 
-    ip = _client_ip(request)
+    ip = client_ip(request.headers, request.client.host if request.client else None)
     ua = (request.headers.get("user-agent") or "")[:UA_MAX] or None
     tz = body.client.tz if body.client else None
     locale = body.client.locale if body.client else None

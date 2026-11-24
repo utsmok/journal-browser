@@ -81,6 +81,15 @@ def _offline_openalex(monkeypatch):
     monkeypatch.setattr("journal_browser.harvest.common.openalex_credits_remaining", _no_credits)
 
 
+@pytest.fixture(autouse=True)
+def _fresh_rate_limits():
+    """Requests carrying X-Forwarded-For count against the in-process API
+    limiter; start every test with empty counters."""
+    from journal_browser.ratelimit import reset_rate_limiter
+
+    reset_rate_limiter()
+
+
 @pytest.fixture(scope="session")
 def _test_db():
     """Create the throwaway database and its schema once per process.

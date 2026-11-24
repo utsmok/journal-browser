@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...config import get_settings
 from ...db import get_session
+from ...ratelimit import client_ip
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -75,13 +76,8 @@ def reset_login_limiter() -> None:
 
 
 def _client_key(request: Request) -> str:
-    # The backend sits behind the frontend /api proxy, so request.client.host
-    # is the proxy container; the real client arrives as the first
-    # X-Forwarded-For hop.
-    first_hop = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-    if first_hop:
-        return first_hop
-    return request.client.host if request.client else "unknown"
+    peer = request.client.host if request.client else None
+    return client_ip(request.headers, peer) or "unknown"
 
 
 class LoginIn(BaseModel):
@@ -108,7 +104,7 @@ def _valid_token(token: str) -> bool:
     return hmac.compare_digest(expected, mac)
 
 
-async def _require_admin(request: Request) -> None:
+async def require_admin(request: Request) -> None:
     if not get_settings().admin_password:
         raise HTTPException(403, "admin disabled: set JB_ADMIN_PASSWORD")
     token = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
@@ -116,7 +112,7 @@ async def _require_admin(request: Request) -> None:
         raise HTTPException(401, "invalid or expired token")
 
 
-AdminDep = Annotated[None, Depends(_require_admin)]
+AdminDep = Annotated[None, Depends(require_admin)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 

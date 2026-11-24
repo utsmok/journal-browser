@@ -16,8 +16,10 @@ from . import __version__
 from .config import get_settings
 from .db import get_engine, get_session
 from .logging_setup import REQUEST_ID_HEADER, configure_logging, new_request_id, request_id_ctx
+from .ratelimit import RateLimitMiddleware
 from .routers import (
     admin,
+    api_docs,
     authors,
     collaborations,
     deals,
@@ -46,6 +48,8 @@ api_router.include_router(feedback.router)
 api_router.include_router(docs.router)
 # Usage intake before the scoped router, same reason as /admin.
 api_router.include_router(usage.router)
+# Public API reference before the scoped router, same reason as /admin.
+api_router.include_router(api_docs.router)
 # Institution-scoped surface: /api/v1/{code}/journals|deals|meta/...
 scoped_router = APIRouter(prefix="/{institution_code}")
 scoped_router.include_router(journals.router)
@@ -309,9 +313,10 @@ def create_app() -> "FastAPI":
     settings = get_settings()
     configure_logging()
     app = FastAPI(title="Journal Browser API", version=__version__, lifespan=_lifespan)
-    # CORS first, observability second: add_middleware prepends, so the
-    # request-id middleware runs outermost and even CORS-rejected requests
-    # get a request id.
+    # Rate limit innermost, CORS next, observability outermost: add_middleware
+    # prepends, so the request-id middleware runs first, even CORS-rejected
+    # requests get a request id, and 429s still carry CORS headers.
+    app.add_middleware(RateLimitMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

@@ -76,6 +76,9 @@ in citation links on journal pages. Set it in `.env` before the first
 | `JB_UT_METADATA_DSN` | Twente-only: read-only ut-metadata Postgres for canonical works + the author roster (`authors` bootstrap step; skips cleanly when empty). Leave empty elsewhere; the works endpoints degrade to stats-only and `/authors` reports `enabled: false`. Currently off on the live demo — the works-merge features run on stats data only | empty |
 | `JB_ENABLE_USAGE_TRACKING` | Anonymous usage events (page paths, searches, coarse audience info; no cookies). `false` accepts and drops event batches instead of storing | `true` |
 | `JB_USAGE_RETENTION_DAYS` | Days usage events are kept before being nulled; `0` disables expiry | `90` |
+| `JB_RATE_LIMIT_PER_MINUTE` | Requests per minute each client IP may make to `/api`; `0` turns the limit off. See [Public API](#public-api) | `600` |
+| `JB_RATE_LIMIT_HEAVY_PER_MINUTE` | Separate per-IP limit for CSV exports and the semantic search, recommendation and similar-journal routes | `60` |
+| `JB_RATE_LIMIT_FEEDBACK_PER_MINUTE` | Separate per-IP limit for feedback submissions | `10` |
 | Country lookups | `jobs/enrich_usage_geo.py` resolves visitor IPs locally against DB-IP's free Country Lite database (downloaded monthly into `landing/dbip/`). Country data by DB-IP.com, CC BY 4.0 (https://db-ip.com) | — |
 | `JB_IGNORED_ISSNS` | JSON list of ISSNs the browser treats as nonexistent on every journal surface | empty |
 | `JB_SOURCE_WAVE_CRON` | Cron schedule (UTC) for the weekly source wave, run by the `scheduler` service | `0 22 * * 0` (Sunday 22:00) |
@@ -246,6 +249,32 @@ an institution column — shared/global steps are labeled "shared", and a
 dropdown filters the list to one institution. Login exchanges the password
 for a 12-hour signed token; changing the password in the panel invalidates
 old tokens immediately.
+
+## Public API
+
+Anyone can read the data routes at `/api/v1/institutions` and
+`/api/v1/{code}/...` without a key. The reference lives at
+`/api/v1/api-docs` (Swagger UI), and its schema at `/api/v1/openapi.json`.
+On the live site that is
+https://journalbrowser.samuelmok.cc/api/v1/api-docs. The site does not link
+to it. The public schema leaves out the admin, feedback, usage, health and
+in-app docs routes. The repo-root `openapi.json` is the full schema that the
+frontend types come from.
+
+`backend/src/journal_browser/ratelimit.py` limits each client IP per
+60-second window, using the three `JB_RATE_LIMIT_*` settings above. An
+over-limit request gets `429` with `Retry-After`. Request bodies over 2 MB get
+`413`. The client IP is `CF-Connecting-IP` when present, else the first
+`X-Forwarded-For` hop, because the live site runs behind Cloudflare. Requests
+without either header from a private address are internal (Next.js server
+fetches, healthchecks) and skip the limits. The counters live in the single
+uvicorn process, so a backend restart resets them.
+
+Every admin route except `POST /api/v1/admin/login` requires the bearer
+token. The admin router enforces the token for all of its sub-routers, so a
+new admin endpoint is protected even without its own `AdminDep`. Failed
+logins lock out a client IP after 5 attempts in 15 minutes, and all clients
+after 50.
 
 ## Adding a second institution
 

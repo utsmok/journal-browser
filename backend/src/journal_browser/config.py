@@ -163,6 +163,12 @@ class Settings(BaseSettings):
     usage_retention_days: int = 90
     jisc_api_key: str = ""
 
+    # Per-client /api request limits per minute (ratelimit.py); 0 turns a
+    # group off. "heavy" is CSV exports and the embedding-model endpoints.
+    rate_limit_per_minute: int = 600
+    rate_limit_heavy_per_minute: int = 60
+    rate_limit_feedback_per_minute: int = 10
+
     # Pure OAI-PMH endpoint (anonymous) and request pacing.
     pure_oai_base_url: str = "https://ris.utwente.nl/ws/oai"
     pure_oai_min_spacing: float = 1.0
