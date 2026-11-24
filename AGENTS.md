@@ -59,8 +59,9 @@ All commands run from the repo root unless noted.
 - CI (`.github/workflows/ci.yml`) runs: ruff check + format, ty,
   lint-imports, alembic upgrade, pytest, the openapi drift check, eslint,
   madge (`lint:cycles`), biome format:check, the vitest suite
-  (`npm run test`), and `next build`. The `deps-hygiene` job
-  (deptry + depcheck) reports unused or unlisted dependencies and is
+  (`npm run test`), and `next build`. The `docker-build` job builds the
+  backend, frontend and db images without pushing them. The `deps-hygiene`
+  job (deptry + depcheck) reports unused or unlisted dependencies and is
   advisory: it never blocks a merge.
 - Logging: `logging_setup.configure_logging()` runs at app start; every
   request gets an `X-Request-ID` (honored inbound, echoed out) that lands
@@ -107,7 +108,7 @@ fails if the committed file drifted.
 - Read before edit; keep the suite green; run the verify commands before
   reporting done.
 - Audit reports live in the gitignored `.audit/` folder
-  (`.audit/2026-11-10/REPORT.md` is the latest full audit).
+  (`.audit/2026-11-19-sweep/FINAL.md` is the latest audit).
 - The live deployment runs on this host, the media VM `192.168.2.153`
   (Proxmox LXC 101 "media", hostname `media`), since 2026-11-06. Since
   2026-11-09 the agent also runs on that same host, so reach the stack

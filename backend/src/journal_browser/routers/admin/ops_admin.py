@@ -131,8 +131,8 @@ def _backup_status() -> dict[str, Any]:
         "modified_at": None,
     }
     # backup.sh writes journalbrowser-<stamp>.dump here in the scheduler
-    # container; the backend container only sees it when compose mounts
-    # ./backups in (currently it does not, so live reports unavailable).
+    # container; compose mounts ./backups read-only into the backend, so
+    # this lists the newest archive.
     backup_dir = Path(os.environ.get("JB_BACKUP_DIR") or "/backups")
     try:
         candidates = sorted(backup_dir.glob(BACKUP_GLOB), key=lambda p: p.stat().st_mtime)
