@@ -7,6 +7,7 @@ loudly unless JB_SKIP_DB_TESTS=1 explicitly opts out.
 import asyncio
 import os
 import secrets
+from datetime import UTC, datetime
 
 import asyncpg
 import pytest
@@ -204,7 +205,8 @@ def institution_factory(db):
 
 
 def journal_factory(issn_l: str, **kw) -> Journal:
-    """Union of the ten former per-file _journal() defaults."""
+    """Union of the ten former per-file _journal() defaults: an active
+    (works this year) journal on a curated list, so it is recommendable."""
     base = {
         "issn_l": issn_l,
         "title": f"Journal {issn_l}",
@@ -214,6 +216,8 @@ def journal_factory(issn_l: str, **kw) -> Journal:
         "is_in_doaj": False,
         "in_scimago": False,
         "works_2020_plus": 10,
+        "last_active_year": datetime.now(UTC).year,
+        "listed_in": ["cwts-core"],
     }
     base.update(kw)
     return Journal(**base)

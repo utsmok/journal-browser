@@ -44,7 +44,8 @@ async def similar_journals(
 
     Falls back to shared-topic ranking (same three lists) when the journal
     has no embedding yet. None when the journal itself is unknown. Shares
-    base_query, so the corpus cutoff and proceedings exclusion always apply.
+    base_query in recommendable mode, so the corpus cutoff, proceedings
+    exclusion and recommendation eligibility (active, vouched for) apply.
     """
     self_row = (
         await session.execute(
@@ -77,7 +78,7 @@ async def similar_journals(
         distance = Journal.embedding.cosine_distance(self_row.embedding).label("dist")
         for key, (cond, limit) in scopes.items():
             subq = (
-                base_query(institution_id=institution_id)
+                base_query(institution_id=institution_id, recommendable=True)
                 .add_columns(distance)
                 .where(Journal.issn_l != self_row.issn_l, Journal.embedding.is_not(None))
                 .subquery()
@@ -102,7 +103,7 @@ async def similar_journals(
     )
     for key, (cond, limit) in scopes.items():
         subq = (
-            base_query(institution_id=institution_id)
+            base_query(institution_id=institution_id, recommendable=True)
             .add_columns(shared)
             .where(Journal.issn_l != self_row.issn_l, shared > 0)
             .subquery()

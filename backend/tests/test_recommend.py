@@ -140,13 +140,15 @@ async def recommend_fixture(client, db_engine, monkeypatch):
                 topics=[{"display_name": "Membrane Technology"}],
                 embedding=_unit_vec(16.0),
             ),
-            # 3. Active capped deal journal (not reached yet)
+            # 3. Active capped deal journal (not reached yet). On no curated
+            # list: the deal alone keeps it recommendable.
             journal_factory(
                 "1000-0003",
                 title="Capped Deal Sensors",
                 publisher_name="Capped Publisher",
                 is_oa=False,
                 latest_quartile="Q1",
+                listed_in=[],
                 embedding=_unit_vec(16.0),
             ),
             # 4. Gold OA within €2,000 cap (€1,500)
@@ -217,6 +219,30 @@ async def recommend_fixture(client, db_engine, monkeypatch):
                 doaj_in_doaj=True,
                 doaj_has_apc=False,
                 embedding=_unit_vec(80.0),
+            ),
+            # 10. Ceased journal: nearest vector, but no works since 2021.
+            journal_factory(
+                "1000-0010",
+                title="Defunct Microfluidics Letters",
+                publisher_name="Gone Press",
+                last_active_year=2021,
+                embedding=_unit_vec(1.0),
+            ),
+            # 11. Active, but only on a weak list and nowhere else.
+            journal_factory(
+                "1000-0011",
+                title="International Journal of Multidisciplinary Fluids",
+                publisher_name="Mill Press",
+                listed_in=["sinta-s5"],
+                embedding=_unit_vec(2.0),
+            ),
+            # 12. Active, never listed (NULL: no OpenAlex listing data).
+            journal_factory(
+                "1000-0012",
+                title="Global Fluids Review",
+                publisher_name="Mill Press",
+                listed_in=None,
+                embedding=_unit_vec(3.0),
             ),
         ]
         session.add_all(journals)
@@ -298,6 +324,10 @@ async def recommend_fixture(client, db_engine, monkeypatch):
                 works_count=0,
                 works_window_plus=15,
                 deal_covered=False,
+            ),
+            *(
+                JournalFlags(institution_id=inst.id, issn_l=issn, works_window_plus=500)
+                for issn in ("1000-0010", "1000-0011", "1000-0012")
             ),
         ]
         session.add_all(flags)
@@ -460,6 +490,28 @@ async def test_recommend_include_non_journals_and_established_boost(recommend_fi
     issns = [r["issn_l"] for r in body["recommendations"]]
     assert "1000-0008" in issns
     assert any("Scimago Q1" in f for f in body["ranking_factors"])
+
+
+@requires_db
+async def test_recommend_skips_inactive_and_unlisted_journals(recommend_fixture):
+    """The three nearest vectors are inactive or unlisted: none is offered,
+    not even when every budget passes."""
+    res = await recommend_fixture.post(
+        "/api/v1/ut/journals/recommend",
+        json={"title": "Microfluidic droplet dynamics", "budget_mode": "any"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    offered = {r["issn_l"] for r in body["recommendations"] + body["alternatives"]}
+    assert offered, "the eligible journals still match"
+    assert offered.isdisjoint({"1000-0010", "1000-0011", "1000-0012"})
+    assert any(f.startswith("Quality filter") for f in body["ranking_factors"])
+
+    # The journal-detail similar lists apply the same rule.
+    similar = (await recommend_fixture.get("/api/v1/ut/journals/1000-0001/similar")).json()
+    listed = {i["issn_l"] for items in similar.values() for i in items}
+    assert "1000-0004" in listed
+    assert listed.isdisjoint({"1000-0010", "1000-0011", "1000-0012"})
 
 
 @requires_db

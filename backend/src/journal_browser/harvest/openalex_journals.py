@@ -139,6 +139,7 @@ def journal_values(payload: dict[str, Any]) -> dict[str, Any] | None:
         "works_count": payload.get("works_count"),
         "cited_by_count": payload.get("cited_by_count"),
         "last_active_year": last_active,
+        "listed_in": [x for x in (payload.get("listed_in") or []) if isinstance(x, str)],
         "works_2020_plus": works_2020_plus,
         "harvested_at": datetime.now(UTC),
         "search_text": " ".join([title or "", *alternate_titles]).strip(),

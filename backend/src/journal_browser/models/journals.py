@@ -50,6 +50,10 @@ class Journal(Base):
     last_active_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     works_2020_plus: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     in_scimago: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    # OpenAlex listed_in: curated lists naming the venue (cwts-core, doaj,
+    # norway-1, jufo-1, erih-plus, ...). NULL = never harvested with it.
+    # Feeds the recommendation eligibility rule (services/search/recommendable.py).
+    listed_in: Mapped[list[Any] | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
     # Global denormalized search columns (institution-neutral), refreshed by
     # harvest.denorm; the per-institution state lives in journal_flags.
     latest_quartile: Mapped[str | None] = mapped_column(String(4), nullable=True)

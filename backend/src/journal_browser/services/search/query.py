@@ -29,6 +29,7 @@ from ..deal_coverage import dj_scope
 from ..funder_fit import fit_case
 from .classify import oa_type_case
 from .currency import to_eur
+from .recommendable import recommendable_clause
 
 # Sort keys: relevance | title | publisher | institution_works | quartile |
 # topic | apc | 2yr_mean_citedness
@@ -148,6 +149,7 @@ def base_query(
     languages: list[str] | None = None,
     year_from: int | None = None,
     year_to: int | None = None,
+    recommendable: bool = False,
 ):
     """Filtered select with computed columns; search + facet counts share it.
 
@@ -165,7 +167,10 @@ def base_query(
     the flags column's own pipeline (harvest.denorm WORKS_COUNT_SQL:
     pure_canon rows only, LEFT JOIN semantics -> 0 without rows); journal
     attributes, the corpus cutoff (works_window_plus) and the relevance
-    rank's global-prominence term stay unfiltered."""
+    rank's global-prominence term stay unfiltered.
+
+    recommendable=True narrows the corpus to journals the recommendation
+    surfaces may suggest (active and vouched for; see recommendable.py)."""
     J = Journal
     F = JournalFlags
     # Admin ignore-list (settings.yaml): hidden from every listing, detail
@@ -299,6 +304,8 @@ def base_query(
             *([J.issn_l.not_in(sorted(set(ignored)))] if ignored else []),
         )
     )
+    if recommendable:
+        query = query.where(recommendable_clause(covered))
     if yearly is not None:
         # Journals without in-range stats rows must stay listed (works: 0),
         # so the year sum joins outside.

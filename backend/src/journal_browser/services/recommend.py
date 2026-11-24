@@ -46,6 +46,7 @@ from . import embeddings
 from .deal_coverage import deal_institution_join, dj_scope
 from .funder_fit import FunderFit, JournalFacts, compute_funder_fit, policy_structured
 from .search.query import attach_apc_display, base_query
+from .search.recommendable import active_since
 
 #: Maximum character budget sent into bge-small-en-v1.5 (512-token window).
 MAX_QUERY_CHARS = 1800
@@ -756,6 +757,11 @@ def _build_ranking_factors(
         factors.append("Venue filter: peer-reviewed journals only.")
     else:
         factors.append("Venue filter: includes book series and conference series.")
+    factors.append(
+        f"Quality filter: journals with OpenAlex works in {active_since()} or later, listed "
+        "in Scimago, DOAJ, an institutional deal, or a curated index (CWTS core, national "
+        "journal lists, ERIH PLUS, MEDLINE, SciELO)."
+    )
     return factors
 
 
@@ -786,6 +792,7 @@ async def recommend_journals(
         base_query(
             institution_id=institution.id,
             pub_type=None if req.include_non_journals else "journal",
+            recommendable=True,
         )
         .add_columns(
             dist_expr.label("dist"),

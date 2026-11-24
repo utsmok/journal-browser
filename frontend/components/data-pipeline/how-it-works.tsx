@@ -178,6 +178,7 @@ const TOPICS: TopicGuide[] = [
       "Search queries and paper abstracts are encoded locally on CPU with bge-small-en-v1.5 and are never logged or stored.",
       "PostgreSQL pgvector retrieves the closest journals by cosine similarity.",
       "The journal finder ranks matching journals with fixed bonuses for diamond open access, active deals, gold open access within budget, and funder compliance.",
+      "Recommendations skip journals without OpenAlex works in the current or previous year, and journals that no curated source lists: Scimago, DOAJ, an institutional deal, CWTS core, or a national journal list such as JUFO or the Norwegian register.",
     ],
     details: [
       {

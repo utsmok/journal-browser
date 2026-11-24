@@ -177,6 +177,14 @@ wave (see "Daily refresh wave" below) repeats a subset of these stages.
 | `harvest_people_utwente` | people.utwente.nl directory (its own JSON-RPC search endpoint) | Per-author people profile: portrait, canonical name, email, org list, org edges resolved onto `pure_orgs` (`people_utwente_person_orgs`, gap-fill evidence like `pure_person_orgs`), and the profile's research.utwente.nl portal link as the match oracle. Runs 20 author pipelines in flight (`--concurrency`), so the confirmed roster takes roughly 30-45 minutes; external — keep it out of the daily wave. Outcomes are stamped in batches of 50, so re-runs only see new authors (`--retry-missed` / `--refresh` re-open old ones) |
 | `embed_journals` | stats-built text | Journal embeddings for similar-journals |
 
+Recommendation surfaces (journal similar lists, author similar lists and
+alternatives, the journal finder) only offer journals with OpenAlex works in
+the current or previous year that Scimago, DOAJ, an institutional deal, or an
+OpenAlex `listed_in` entry vouches for (`services/search/recommendable.py`).
+`harvest_journals` refreshes `journals.listed_in` and `last_active_year`, so
+run it with `--refresh` when those inputs look stale. Browse and search keep
+the full corpus.
+
 ### Manual and repair jobs
 
 Not in bootstrap or the daily wave. All run from `backend/` as
