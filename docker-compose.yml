@@ -30,6 +30,17 @@ x-backend-env: &backend-env
   JB_ENABLE_USAGE_TRACKING: ${JB_ENABLE_USAGE_TRACKING:-}
   JB_USAGE_RETENTION_DAYS: ${JB_USAGE_RETENTION_DAYS:-}
   JB_IGNORED_ISSNS: ${JB_IGNORED_ISSNS:-}
+  # API limits, statement timeout and OpenAlex budget floor (DEPLOYMENT.md,
+  # Operations). Empty means the default: config.Settings ignores empty
+  # variables.
+  JB_RATE_LIMIT_PER_MINUTE: ${JB_RATE_LIMIT_PER_MINUTE:-}
+  JB_RATE_LIMIT_HEAVY_PER_MINUTE: ${JB_RATE_LIMIT_HEAVY_PER_MINUTE:-}
+  JB_RATE_LIMIT_FEEDBACK_PER_MINUTE: ${JB_RATE_LIMIT_FEEDBACK_PER_MINUTE:-}
+  JB_STATEMENT_TIMEOUT_MS: ${JB_STATEMENT_TIMEOUT_MS:-}
+  JB_OPENALEX_RESERVE_USD: ${JB_OPENALEX_RESERVE_USD:-}
+  JB_WORK_FUNDERS_TTL_DAYS: ${JB_WORK_FUNDERS_TTL_DAYS:-}
+  # "json" for one JSON object per log line; any other value is text.
+  JB_LOG_FORMAT: ${JB_LOG_FORMAT:-}
   # Admin-editable settings overlay, seeded by the entrypoint on first
   # boot (see backend/settings.yaml.example and DEPLOYMENT.md).
   JB_SETTINGS_YAML: /app/state/settings.yaml
@@ -38,6 +49,13 @@ x-backend-env: &backend-env
   JB_REFRESH_WAVE_CRON: ${JB_REFRESH_WAVE_CRON:-30 1 * * *}
   JB_BACKUP_CRON: ${JB_BACKUP_CRON:-0 4 * * *}
   JB_BACKUP_KEEP: ${JB_BACKUP_KEEP:-7}
+  # Job alerts and heartbeat (backend/scripts/lib.sh): a failed wave or
+  # backup POSTs to the webhook, and each job that ends well pings the URL.
+  # JB_ALERT_HOST names this deployment in the alerts (default: the
+  # container hostname).
+  JB_ALERT_WEBHOOK_URL: ${JB_ALERT_WEBHOOK_URL:-}
+  JB_ALERT_HOST: ${JB_ALERT_HOST:-}
+  JB_HEARTBEAT_URL: ${JB_HEARTBEAT_URL:-}
   TZ: ${TZ:-UTC}
   JB_DOCS_DIR: /app/docs
 
@@ -82,6 +100,13 @@ services:
       - random_page_cost=1.1
       - -c
       - jit=off
+      # Query statistics for finding slow statements (DEPLOYMENT.md, "Query
+      # statistics"). track=top times whole statements, not the statements
+      # nested in functions. Needs a db restart to take effect.
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=top
     ports:
       - "127.0.0.1:5433:5432" # host 5433: machines often run a local postgres on 5432
     volumes:
@@ -114,17 +139,10 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     healthcheck:
-      # /api/v1/healthz executes SELECT 1 against the DB.
-      test:
-        [
-          "CMD",
-          "uv",
-          "run",
-          "--no-dev",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/healthz', timeout=3)",
-        ]
+      # /api/v1/healthz executes SELECT 1 against the DB. Plain curl, which
+      # the image ships (backend/Dockerfile): `uv run` started a Python
+      # interpreter every 30 s for that one request.
+      test: ["CMD", "curl", "-fsS", "--max-time", "3", "http://127.0.0.1:8000/api/v1/healthz"]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -192,6 +210,8 @@ services:
       JB_DATA_WINDOW_END: ${JB_DATA_WINDOW_END:-0}
       JB_BOOTSTRAP: ${JB_BOOTSTRAP:-auto}
       OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
+      # The first boot's credit-priced stages stop at the same reserve.
+      JB_OPENALEX_RESERVE_USD: ${JB_OPENALEX_RESERVE_USD:-}
     volumes:
       - ./backend/landing:/app/landing
       - ./backend/state:/app/state

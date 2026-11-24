@@ -111,7 +111,7 @@ counts, dwell time, client-side errors, and coarse audience info: IP ->
 country, user agent, timezone, locale). There are no cookies and no
 accounts — only a localStorage session id that rotates after 30 idle
 minutes. `backend/jobs/enrich_usage_geo.py` backfills the country column
-from IP addresses in batches (ip-api.com). Set
+from IP addresses against a local DB-IP Country Lite file. Set
 `JB_ENABLE_USAGE_TRACKING=false` (env or the admin settings panel) to turn
 it off; the ingest endpoint then accepts and drops batches. Raw IPs are
 nulled after `JB_USAGE_RETENTION_DAYS` (default 90, `0` disables the

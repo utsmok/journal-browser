@@ -25,7 +25,8 @@ def _ttl_days(argv: list[str] | None) -> int:
     parser.add_argument(
         "--ttl-days",
         type=int,
-        default=int(os.environ.get("JB_WORK_FUNDERS_TTL_DAYS", "30")),
+        # compose passes an unset variable through as "", which is the default.
+        default=int(os.environ.get("JB_WORK_FUNDERS_TTL_DAYS") or 30),
         help="re-fetch a work when its last funders fetch is older than this",
     )
     args, _ = parser.parse_known_args(argv)

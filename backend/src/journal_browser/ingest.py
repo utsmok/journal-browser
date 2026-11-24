@@ -10,6 +10,7 @@ values after normalization so re-ingestion never overwrites them.
 import hashlib
 import json
 import logging
+import weakref
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import get_settings
 from .models import CacheEpoch, HarvestRun, HarvestState, ManualOverride, RawFile, SourceRecord
+from .runlocks import (
+    LockState,
+    acquire_run_lock,
+    discard_run_lock,
+    release_run_lock,
+    run_lock_state,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +98,7 @@ class IngestSession:
         self.parse_failures: int = 0
         self._pending: list[dict[str, Any]] = []
         self._seen_keys: set[tuple[str, str, str, str]] = set()
+        self._release_lock: weakref.finalize | None = None
 
     async def start_run(
         self,
@@ -157,6 +166,12 @@ class IngestSession:
         await self.session.flush()
         assert run.id is not None
         self.run_id = run.id
+        lock_fd = acquire_run_lock(self.run_id)
+        if lock_fd is not None:
+            # finish_run() releases the lock. A session dropped without one
+            # (an abandoned job) releases it here, so its run stops looking
+            # alive to the reaper.
+            self._release_lock = weakref.finalize(self, release_run_lock, lock_fd, self.run_id)
         logger.info("Started harvest run %s for %s/%s", run.id, source, entity_type)
         return self.run_id
 
@@ -251,6 +266,15 @@ class IngestSession:
         )
 
     async def finish_run(self, status: str, stats: dict[str, Any] | None = None) -> dict:
+        """Close the run and drop its liveness lock, also when the close is
+        discarded because a newer run superseded this one."""
+        try:
+            return await self._close_run(status, stats)
+        finally:
+            if self._release_lock is not None:
+                self._release_lock()
+
+    async def _close_run(self, status: str, stats: dict[str, Any] | None = None) -> dict:
         assert self.run_id is not None, "call start_run() first"
         await self._flush()
         final = dict(stats or {})
@@ -350,6 +374,48 @@ class IngestSession:
                 self._pending,
             )
             self._pending.clear()
+
+
+async def reap_orphaned_runs(session: AsyncSession) -> list[HarvestRun]:
+    """Fail every 'running' run whose process is gone; return the ones closed.
+
+    Only the in-process exception path marks a run failed, so a process
+    killed under it (container recreate, OOM) left its row 'running'
+    forever: run 408, 2026-11-22. Each row's flock tells the two apart (see
+    runlocks). A run whose lock is held, or cannot be checked, is left
+    alone. harvest_state is untouched: it still describes the last run
+    that finished. Callers commit.
+    """
+    running = (
+        await session.scalars(select(HarvestRun).where(HarvestRun.status == "running"))
+    ).all()
+    orphaned = [run for run in running if run_lock_state(run.id) is LockState.FREE]
+    if not orphaned:
+        return []
+    now = datetime.now(UTC)
+    closed = await session.execute(
+        update(HarvestRun)
+        .where(
+            HarvestRun.id.in_([run.id for run in orphaned]),
+            HarvestRun.status == "running",
+        )
+        .values(
+            status="failed",
+            finished_at=now,
+            stats={"error": f"orphaned: process gone at {now:%Y-%m-%dT%H:%M:%SZ}"},
+        )
+        .returning(HarvestRun.id)
+    )
+    reaped = set(closed.scalars().all())
+    if not reaped:
+        return []
+    for run_id in reaped:
+        discard_run_lock(run_id)
+    # Any close invalidates epoch-keyed caches: per-page commits may have
+    # changed served rows before the process died.
+    await bump_cache_epoch(session)
+    logger.warning("Failed %s orphaned harvest run(s): %s", len(reaped), sorted(reaped))
+    return [run for run in orphaned if run.id in reaped]
 
 
 async def store_raw_file(

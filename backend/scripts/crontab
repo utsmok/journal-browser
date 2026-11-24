@@ -13,6 +13,6 @@
 # Sunday 22:00 UTC, ahead of the Monday nightly wave so both fit in one
 # weekend night; all stages are free routes or self-gating.
 0 22 * * 0 /bin/bash /app/scripts/source_wave.sh
-# Dump (~10 GB on a full instance) after the wave's priced stages are
+# Dump (~6.5 GB on a full instance) after the wave's priced stages are
 # normally done; backup.sh prunes to the newest JB_BACKUP_KEEP archives.
 0 4 * * * /bin/sh /app/scripts/backup.sh

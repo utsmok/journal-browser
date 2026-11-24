@@ -11,6 +11,8 @@ RUN useradd --create-home --uid 1000 app
 # Runtime tooling outside Python, installed before the dependency layers so
 # rebuilds of the deps below never redo it:
 # - tzdata: the scheduler's cron schedules follow the container TZ.
+# - curl: the compose healthcheck, and the job alerts and heartbeat pings
+#   the scheduler posts (scripts/lib.sh).
 # - postgresql-client-17 (PGDG): nightly pg_dump/pg_restore must match the
 #   db service's Postgres major; Debian bookworm's own client stops at 15.
 # - supercronic: runs the scheduler crontab; release binary, checksum-verified.

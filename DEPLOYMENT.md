@@ -13,11 +13,11 @@ root unless noted.
   `!override` merging feature).
 - Disk, measured on the Twente-scale live instance: about 130 GB for the
   database volume, plus the raw landing zone and one `pg_dump -Fc` archive
-  per night (~10 GB each; the default retention keeps 7). The bulk of the
-  database was the `journal_flags` table materialized for every known
-  institution; pruning it to active institutions shrinks the database by
-  roughly 90 GB. A narrower data window or a smaller institution needs
-  far less.
+  per night (an estimated 6.5 GB each with zstd compression; the default
+  retention keeps 7). The bulk of the database was the `journal_flags`
+  table materialized for every known institution; pruning it to active
+  institutions shrinks the database by roughly 90 GB. A narrower data
+  window or a smaller institution needs far less.
 - A free [OpenAlex API key](https://openalex.org) for the journals sweep.
 
 ## Configuration
@@ -79,12 +79,16 @@ in citation links on journal pages. Set it in `.env` before the first
 | `JB_RATE_LIMIT_PER_MINUTE` | Requests per minute each client IP may make to `/api`; `0` turns the limit off. See [Public API](#public-api) | `600` |
 | `JB_RATE_LIMIT_HEAVY_PER_MINUTE` | Separate per-IP limit for CSV exports and the semantic search, recommendation and similar-journal routes | `60` |
 | `JB_RATE_LIMIT_FEEDBACK_PER_MINUTE` | Separate per-IP limit for feedback submissions | `10` |
+| `JB_STATEMENT_TIMEOUT_MS` | Longest API statement, in ms, before it fails instead of holding a pool connection | `60000` |
 | Country lookups | `jobs/enrich_usage_geo.py` resolves visitor IPs locally against DB-IP's free Country Lite database (downloaded monthly into `landing/dbip/`). Country data by DB-IP.com, CC BY 4.0 (https://db-ip.com) | — |
 | `JB_IGNORED_ISSNS` | JSON list of ISSNs the browser treats as nonexistent on every journal surface | empty |
 | `JB_SOURCE_WAVE_CRON` | Cron schedule (UTC) for the weekly source wave, run by the `scheduler` service | `0 22 * * 0` (Sunday 22:00) |
 | `JB_REFRESH_WAVE_CRON` | Cron schedule (UTC) for the nightly harvest wave, run by the `scheduler` service | `30 1 * * *` |
 | `JB_BACKUP_CRON` | Cron schedule (UTC) for the nightly database backup | `0 4 * * *` |
 | `JB_BACKUP_KEEP` | Nightly dump archives kept in `./backups` | `7` |
+| `JB_ALERT_WEBHOOK_URL` | Incoming webhook (Slack or Mattermost) that receives one JSON message when a wave or the backup fails, or when a killed wave is found. See [Nightly scheduler](#nightly-scheduler) | unset |
+| `JB_ALERT_HOST` | Name of this deployment in those alerts | container hostname |
+| `JB_HEARTBEAT_URL` | URL that each wave and the backup ping once after ending well (healthchecks.io style) | unset |
 
 ## First boot
 
@@ -430,8 +434,9 @@ request there bills $0. On
 budget on the then credit-priced oa colors step. The funder harvest after it
 crashed five seconds in, and the wave's exit gate stopped the remaining
 stages. The wave encodes both lessons. Credit-priced stages run at the top,
-while the budget is fresh. A failing stage names itself and stops the wave,
-and `--from` resumes past the stages that already completed.
+while the budget is fresh. A failing stage no longer stops the wave: the
+stages that need its output are skipped, every other stage still runs, and
+the wave exits with code 1 (details follow the stage list).
 
 The stages, in order:
 
@@ -498,11 +503,15 @@ The stages, in order:
    and on CPU it is the slow step of the wave, at about 45 minutes for a
    full run.
 
-A failed stage prints `wave: <stage> failed` and the wave exits with code 1.
-Fix the cause and resume without rerunning completed stages. `--from STAGE`
-starts at the named stage and runs it and everything after it; stage names
-match the `backend/jobs/` script names, and an unknown name exits with code
-2 and prints the valid list:
+A failed stage prints `wave: <stage> failed` and does not stop the wave: the
+stages that read its output are skipped, and with them every stage that
+reads theirs (the log names each one); all other stages still run, and
+the wave exits with code 1 after printing its failed stages and the
+command that resumes it. Both waves work this way; see "Nightly
+scheduler" for the alert. `--from STAGE` starts at the named stage and
+runs it and everything after it; stage names match the `backend/jobs/`
+script names, and an unknown name exits with code 2 and prints the
+valid list:
 
 ```bash
 bash scripts/refresh_wave.sh --from harvest_openalex_funders
@@ -538,21 +547,26 @@ cd backend
 bash scripts/source_wave.sh
 ```
 
-Every job is idempotent, so rerunning the wave or any stage is safe, and
-`--from STAGE` resumes past completed stages (STAGE is a job name like
-`reconcile` or a per-institution step like `pure:rug`). A failing stage
-names itself and stops the wave, like the nightly wave. The stages:
+Every job is idempotent, so rerunning the wave or any stage is safe. A
+failing stage does not stop the wave (the nightly wave's rule, above), and
+`--from STAGE` runs that stage and every later one. STAGE is a stage name
+(`deals-reconcile`, `openapc`, `pure:rug`, `stats:rug`) or a job script name
+with or without `.py` (`reconcile`, `harvest_doaj.py`); the script prints
+the full list when the name is unknown. The stages, in order:
 
 1. Global deal and reference sources, in bootstrap GLOBAL_STEPS order:
    `scrape_openaccess_nl`, `ingest_jct`, `reconcile` (publisher-pattern
-   coverage re-derives here, so new journals join their deal),
-   `backfill_issn_l`, `ingest_openapc`, `harvest_doaj`, `harvest_jisc`.
+   coverage re-derives here, so new journals join their deal; needs the two
+   deal sources), `backfill_issn_l` (needs `reconcile`; the OpenAIRE match
+   needs it), `ingest_openapc`, `harvest_doaj`, `harvest_jisc`.
 2. Per institution, in bootstrap INST_STEPS order: `harvest_pure`
    (incremental current-year sweep), `harvest_pure --cerif`,
-   `harvest_pure_entities`, `enrich_works`, `harvest_openaire`,
-   `derive_openaire_facts`.
+   `harvest_pure_entities`, `enrich_works` (all need `harvest_pure`),
+   `harvest_openaire`, `derive_openaire_facts` (needs the OpenAIRE match).
 3. `backfill_flags` once (works_2020_plus / last_active_year recompute over
-   the fresh corpus), then `harvest_stats --institution` per institution.
+   the fresh corpus), then `harvest_stats --institution` per institution
+   (needs that institution's enrichment, OpenAIRE and facts stages, and
+   `openapc` and `flags`).
 
 Only free routes run here by design. The Pure sweep reads the institution's
 OAI endpoint, the deal sources are two scrapes plus local ingests, DOAJ and
@@ -590,10 +604,13 @@ container log:
 docker compose logs scheduler
 ```
 
-Run a job by hand through the same service:
+Run a job by hand through the same service. The waves need bash, so pass it
+as the entrypoint:
 
 ```bash
-docker compose run --rm --entrypoint /bin/sh scheduler /app/scripts/refresh_wave.sh
+docker compose run --rm --entrypoint /bin/bash scheduler /app/scripts/refresh_wave.sh
+docker compose run --rm --entrypoint /bin/bash scheduler /app/scripts/source_wave.sh --from enrich:ut
+docker compose run --rm --entrypoint /bin/sh scheduler /app/scripts/backup.sh
 ```
 
 Both waves end by running `backend/scripts/prewarm.py`, which requests the
@@ -605,14 +622,49 @@ it by hand after a redeploy or before a demo:
 docker compose exec scheduler uv run --no-dev python scripts/prewarm.py
 ```
 
+
+### Alerts and recovery
+
+A wave must not die unnoticed. On 2026-11-22 a redeploy recreated the
+scheduler in the middle of the source wave: the rest of the wave never ran
+and nothing reported it. Three mechanisms in `backend/scripts/lib.sh` cover
+that:
+
+- **Failure alerts.** With `JB_ALERT_WEBHOOK_URL` set, a failing stage, a
+  failing backup and a wave that could not start POST one JSON message,
+  `{"text": "..."}`, to that URL. A Slack or Mattermost incoming webhook
+  takes the body as is. The text names the host (`JB_ALERT_HOST`, else the
+  container hostname), the job, the stage that failed and the command that
+  resumes it. Without the URL the same line is only logged.
+- **Dead waves.** A wave writes the stage it is about to run to
+  `backend/landing/waves/<wave>.state` and removes the file when it exits.
+  A wave killed before that (SIGKILL, the OOM killer, a container recreate)
+  leaves the file, and the next scheduler start or wave start reports it
+  with the resume command: from the first stage that failed, or else from
+  the stage that was running. A wave that still runs holds
+  `waves/<wave>.lock`; it is left alone, and a second copy of the same wave
+  refuses to start.
+- **Heartbeat.** With `JB_HEARTBEAT_URL` set, each wave and the backup send
+  one GET after ending well, as a healthchecks.io check expects. Nothing
+  pings while the scheduler is down or a job never starts, so the check
+  goes late there.
+
+The scheduler start and the start of each wave also run
+`jobs/reap_orphaned_runs.py`: harvest runs that a killed process left
+`running` become `failed`, with `{"error": "orphaned: process gone at
+<timestamp>"}` in their stats. A run whose process still holds its lock
+(`backend/landing/run-locks/<run id>.lock`) is left alone.
+
 ## Backups and restore
 
-`backend/scripts/backup.sh` runs nightly: `pg_dump --format=custom` into
-`./backups/journalbrowser-<UTC timestamp>.dump` (~10 GB on a full
-instance), followed by a `pg_restore --list` sanity check on the archive
-and pruning to the newest `JB_BACKUP_KEEP` (default 7) dumps. The backend
-image installs `postgresql-client-17` from the PGDG apt repo, so the dump
-client always matches the db service's Postgres major. The first
+`backend/scripts/backup.sh` runs nightly: `pg_dump --format=custom
+--compress=zstd:9` into `./backups/journalbrowser-<UTC timestamp>.dump`
+(an estimated 6.5 GB on a full instance; with pg_dump's default gzip the
+live archives were about 10 GB), followed by a `pg_restore --list` sanity
+check on the archive and pruning to the newest `JB_BACKUP_KEEP` (default 7)
+dumps. The backend image installs `postgresql-client-17` from the PGDG apt
+repo, so the dump client always matches the db service's Postgres major,
+and its `pg_dump` and `pg_restore` read and write zstd. The first
 `mkdir backend/state`-style fresh-host cases are handled by the bootstrap
 service, which hands the root-owned `./backups` bind mount to uid 1000.
 
@@ -621,6 +673,28 @@ Run a backup on demand:
 ```bash
 docker compose run --rm --entrypoint /bin/sh scheduler /app/scripts/backup.sh
 ```
+
+Why zstd:9. A 1.16 GB sample of the live `source_records` JSONB (63,099
+rows), dumped into the test Postgres with the scheduler image's `pg_dump`
+17.12, three runs per setting, gave:
+
+| Compression | Archive | Share of the gzip archive | Dump | Decompress |
+|---|---|---|---|---|
+| none | 1,173 MB | 742% | 15.4 s | 0.3 s |
+| gzip:6, the pg_dump default | 158 MB | 100% | 18.0 s | 2.65 s |
+| zstd:3 | 130 MB | 82% | 15.2 s | 0.73 s |
+| zstd:6 | 113 MB | 72% | 15.1 s | 0.64 s |
+| zstd:9 | 104 MB | 66% | 15.4 s | 0.59 s |
+
+The dump time barely moved: Postgres produced the JSONB text at about
+75 MB/s, and pg_dump compresses while it waits for the server, so only
+gzip:6 cost extra time (2.6 s per 1.16 GB here). The live nightly dump
+takes about 18 minutes; expect the same duration and an archive near
+6.5 GB. That size is an extrapolation: the sample is `source_records`
+only. Decompression is 4.5 times faster than gzip's, but a real restore
+spends its time building tables and indexes, so it saves little there.
+Archives written before the switch (gzip) still restore with the same
+commands.
 
 Restore drill — prove an archive reads back, without touching the live
 database (the scheduler container has `pg_restore` and the `./backups`
@@ -653,6 +727,40 @@ docker compose up -d
 
 The nightly dump stays on the same disk as the database. Copy at least one
 archive off-machine; an off-host target is a known open decision.
+
+## Query statistics
+
+The `db` service preloads `pg_stat_statements`: compose starts Postgres with
+`shared_preload_libraries=pg_stat_statements` and
+`pg_stat_statements.track=top`, so only the statements clients send are
+counted, not those inside functions. Migration `0005_pg_stat_statements`
+creates the extension; it skips that step on a server that does not preload
+the library (CI). On an instance that predates the setting, check the
+library is loaded, then create the extension by hand:
+
+```sql
+SHOW shared_preload_libraries;  -- must list pg_stat_statements
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+```
+
+Postgres 17 keeps the counters across a clean restart of the db container
+and loses them on a crash. The statements that used the most time, with the
+first 100 characters of each:
+
+```sql
+SELECT calls,
+       round(total_exec_time::numeric) AS total_ms,
+       round(mean_exec_time::numeric, 1) AS mean_ms,
+       rows,
+       left(query, 100) AS query
+FROM pg_stat_statements
+ORDER BY total_exec_time DESC
+LIMIT 20;
+```
+
+`queryid` identifies a statement across readings, so compare two readings
+around a change. To start over, `SELECT pg_stat_statements_reset(0, 0, 0,
+false);` clears every counter of every database.
 
 ## Maintenance
 

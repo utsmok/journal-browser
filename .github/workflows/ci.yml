@@ -65,6 +65,19 @@ jobs:
       - run: npm run test
       - run: npm run build
 
+  # The three images must build: backend (also the scheduler and bootstrap
+  # image), frontend and db. Build only; nothing is pushed.
+  docker-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        path: [backend, frontend, db]
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker build --tag journal-browser-${{ matrix.path }}:ci ./${{ matrix.path }}
+
   # Advisory dependency hygiene: reports unused/unlisted dependencies but
   # never blocks a merge (monitoring, not gating). Tune via backend
   # [tool.deptry] in pyproject.toml and frontend/.depcheckrc.
