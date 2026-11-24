@@ -60,6 +60,16 @@ export function GuideResults({
   const semanticQuery = (prefs.title.trim() || prefs.abstract.trim()).slice(0, 260);
   const semanticHref = `/${inst}/?q=${encodeURIComponent(semanticQuery)}&mode=semantic`;
 
+  // Structured browse handoff carrying deal/OA/funder filters cleanly.
+  const browseQs = new URLSearchParams();
+  if (prefs.budgetMode === "none") browseQs.set("deal", "covered");
+  else if (prefs.budgetMode === "capped" || prefs.budgetMode === "funder_pays")
+    browseQs.set("oa_type", "diamond,gold,hybrid");
+  if (prefs.hasFunder && funder && response.funder_policy_structured)
+    browseQs.set("funder_fit", "compliant");
+  if (!prefs.includeNonJournals) browseQs.set("pub_type", "journal");
+  const browseHref = `/${inst}/${browseQs.toString() ? `?${browseQs.toString()}` : ""}`;
+
   return (
     <div className="guide-step-enter space-y-8">
       {/* Results header + editable criteria chips */}
@@ -89,26 +99,26 @@ export function GuideResults({
         {/* Clickable criteria chips jump right to the matching step */}
         <div
           aria-label={t("results.criteriaAria")}
-          className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-3.5 text-xs"
+          className="mt-4 flex flex-wrap items-center gap-1.5 border-t border-[var(--border)] pt-3.5 text-xs"
         >
           <button
             type="button"
             onClick={() => onAdjustStep(1)}
-            className="max-w-xs truncate rounded-full border border-[var(--border)] bg-[var(--muted)] px-3 py-1 font-medium text-[var(--foreground)] transition-colors hover:border-[var(--brand-tint-border)] hover:bg-[var(--brand-tint-bg)]"
+            className="max-w-xs truncate rounded-md border border-[var(--brand-tint-border)] bg-[var(--brand-tint-bg)] px-2.5 py-1 font-medium text-[var(--primary-text)] transition-colors hover:border-[var(--primary)]"
           >
             {prefs.title.trim() || prefs.abstract.trim().slice(0, 60)}
           </button>
           <button
             type="button"
             onClick={() => onAdjustStep(2)}
-            className="rounded-full border border-[var(--border)] bg-[var(--muted)] px-3 py-1 font-medium text-[var(--foreground)] transition-colors hover:border-[var(--brand-tint-border)] hover:bg-[var(--brand-tint-bg)]"
+            className="rounded-md border border-[var(--border)] bg-[var(--muted)] px-2.5 py-1 font-medium text-[var(--foreground)] transition-colors hover:border-[var(--primary)]"
           >
             {prefs.hasFunder && funder ? funder.name : t("preferences.funderSummaryNone")}
           </button>
           <button
             type="button"
             onClick={() => onAdjustStep(3)}
-            className="rounded-full border border-[var(--border)] bg-[var(--muted)] px-3 py-1 font-medium text-[var(--foreground)] transition-colors hover:border-[var(--brand-tint-border)] hover:bg-[var(--brand-tint-bg)]"
+            className="rounded-md border border-[var(--border)] bg-[var(--muted)] px-2.5 py-1 font-medium text-[var(--foreground)] transition-colors hover:border-[var(--primary)]"
           >
             {budgetChip}
           </button>
@@ -116,7 +126,7 @@ export function GuideResults({
             <button
               type="button"
               onClick={() => onAdjustStep(4)}
-              className="rounded-full border border-[var(--border)] bg-[var(--muted)] px-3 py-1 font-medium text-[var(--foreground)] transition-colors hover:border-[var(--brand-tint-border)] hover:bg-[var(--brand-tint-bg)]"
+              className="rounded-md border border-[var(--border)] bg-[var(--muted)] px-2.5 py-1 font-medium text-[var(--foreground)] transition-colors hover:border-[var(--primary)]"
             >
               {instLabel} history
             </button>
@@ -125,7 +135,7 @@ export function GuideResults({
             <button
               type="button"
               onClick={() => onAdjustStep(4)}
-              className="rounded-full border border-[var(--border)] bg-[var(--muted)] px-3 py-1 font-medium text-[var(--foreground)] transition-colors hover:border-[var(--brand-tint-border)] hover:bg-[var(--brand-tint-bg)]"
+              className="rounded-md border border-[var(--border)] bg-[var(--muted)] px-2.5 py-1 font-medium text-[var(--foreground)] transition-colors hover:border-[var(--primary)]"
             >
               Q1–Q2 nudge
             </button>
@@ -134,7 +144,7 @@ export function GuideResults({
             <button
               type="button"
               onClick={() => onAdjustStep(4)}
-              className="rounded-full border border-[var(--border)] bg-[var(--muted)] px-3 py-1 font-medium text-[var(--foreground)] transition-colors hover:border-[var(--brand-tint-border)] hover:bg-[var(--brand-tint-bg)]"
+              className="rounded-md border border-[var(--border)] bg-[var(--muted)] px-2.5 py-1 font-medium text-[var(--foreground)] transition-colors hover:border-[var(--primary)]"
             >
               + Book &amp; conf. series
             </button>
@@ -256,20 +266,28 @@ export function GuideResults({
         </div>
       </CollapsibleCard>
 
-      {/* Semantic search handoff */}
+      {/* Browse & semantic search handoff */}
       {semanticQuery.length >= 2 && (
         <div className="flex flex-col items-start justify-between gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-5 py-4 sm:flex-row sm:items-center">
           <div className="flex items-center gap-2.5 text-sm text-[var(--muted-foreground)]">
             <Search aria-hidden className="size-4 shrink-0 text-[var(--primary-text)]" />
             <span>{t("results.handoffLead")}</span>
           </div>
-          <Link
-            href={semanticHref}
-            className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold text-[var(--primary-text)] underline-offset-4 hover:underline"
-          >
-            {t("results.handoffCta")}
-            <ArrowRight aria-hidden className="size-4" />
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              href={browseHref}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] hover:border-[var(--primary)] hover:text-[var(--primary-text)]"
+            >
+              {t("results.browseWithFilters")}
+            </Link>
+            <Link
+              href={semanticHref}
+              className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold text-[var(--primary-text)] underline-offset-4 hover:underline"
+            >
+              {t("results.handoffCta")}
+              <ArrowRight aria-hidden className="size-4" />
+            </Link>
+          </div>
         </div>
       )}
     </div>

@@ -31,6 +31,14 @@ import { SectionNav, useLastSearchHref } from "@/components/journal/section-nav"
 import { SourceNote } from "@/components/source-note";
 import { ErrorPanel, JournalDetailSkeleton } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useJournal, useJournalWorks, useSimilar } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
@@ -132,7 +140,7 @@ function JournalPageInner() {
   return (
     <>
       <SectionNav sections={sections} />
-      <div className="mx-auto max-w-5xl px-4 py-10">
+      <div className="mx-auto max-w-screen-2xl px-4 py-10">
         <header className="mb-8">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-3xl font-bold">
@@ -314,43 +322,41 @@ function JournalPageInner() {
           {hasApc && (
             <CollapsibleCard id="apc" title={t("apc.title")} contentClassName="text-sm">
               {data.apc_aggregates.length > 0 && (
-                <table className="w-full text-xs">
+                <Table>
                   <caption className="sr-only">{t("apc.caption")}</caption>
-                  <thead>
-                    <tr className="text-left text-[var(--muted-foreground)]">
-                      <th className="py-1 pr-2 font-medium" title={t("apc.yearColHint")}>
-                        {t("apc.yearCol")}
-                      </th>
-                      <th className="py-1 pr-2 font-medium" title={t("apc.countColHint")}>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead title={t("apc.yearColHint")}>{t("apc.yearCol")}</TableHead>
+                      <TableHead className="text-right" title={t("apc.countColHint")}>
                         {t("apc.countCol")}
-                      </th>
-                      <th className="py-1 pr-2 font-medium" title={t("apc.meanColHint")}>
+                      </TableHead>
+                      <TableHead className="text-right" title={t("apc.meanColHint")}>
                         {t("apc.meanCol")}
-                      </th>
-                      <th className="py-1 font-medium" title={t("apc.rangeColHint")}>
+                      </TableHead>
+                      <TableHead className="text-right" title={t("apc.rangeColHint")}>
                         {t("apc.rangeCol")}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {data.apc_aggregates.map((a) => (
-                      <tr key={a.period} className="border-t border-[var(--border)]">
-                        <td className="py-1 pr-2 tabular-nums">{a.period}</td>
-                        <td className="py-1 pr-2 tabular-nums">{a.article_count}</td>
-                        <td className="py-1 pr-2 tabular-nums">
+                      <TableRow key={a.period}>
+                        <TableCell className="tabular-nums">{a.period}</TableCell>
+                        <TableCell className="text-right tabular-nums">{a.article_count}</TableCell>
+                        <TableCell className="text-right tabular-nums">
                           {a.euro_mean !== null
-                            ? Math.round(a.euro_mean).toLocaleString("en")
+                            ? `€${Math.round(a.euro_mean).toLocaleString("en")}`
                             : "—"}
-                        </td>
-                        <td className="py-1 tabular-nums">
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
                           {a.euro_min !== null && a.euro_max !== null
-                            ? `${Math.round(a.euro_min)}–${Math.round(a.euro_max)}`
+                            ? `€${Math.round(a.euro_min).toLocaleString("en")}–€${Math.round(a.euro_max).toLocaleString("en")}`
                             : "—"}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               )}
               {data.apc_evidence.length > 0 && (
                 <p className="mt-3 text-xs text-[var(--muted-foreground)]">
@@ -498,8 +504,8 @@ function JournalPageInner() {
                 ? (allTopics ? oaTopics : oaTopics.slice(0, TOPICS_LIMIT)).map((topic) => (
                     <Link
                       key={topic.id}
-                      href={`/?topic=${encodeURIComponent(topic.display_name)}&search_in=topic`}
-                      className="inline-flex items-center gap-1.5 rounded-full bg-[var(--muted)] px-2.5 py-1 text-sm font-normal normal-case underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                      href={`/${inst}/?topic=${encodeURIComponent(topic.display_name)}&search_in=topic`}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--muted)] px-2.5 py-1 text-sm font-normal normal-case underline-offset-2 hover:border-[var(--primary)] hover:text-[var(--primary-text)] hover:underline"
                       title={[
                         [
                           topic.subfield?.display_name,
@@ -712,15 +718,17 @@ function JournalPageInner() {
 
           {data.alternate_titles.length > 0 && <OtherNamesCard names={data.alternate_titles} />}
 
-          <IdentifiersCard
-            issnL={journal.issn_l}
-            issns={data.issns}
-            doajUrl={data.doaj_homepage_url}
-            openalexUrl={openalex?.url}
-            oaNlSlug={data.openaccess_nl_slug}
-          />
+          <div className="grid gap-6 lg:grid-cols-2">
+            <IdentifiersCard
+              issnL={journal.issn_l}
+              issns={data.issns}
+              doajUrl={data.doaj_homepage_url}
+              openalexUrl={openalex?.url}
+              oaNlSlug={data.openaccess_nl_slug}
+            />
 
-          <CitationCard data={data} />
+            <CitationCard data={data} />
+          </div>
         </div>
       </div>
     </>

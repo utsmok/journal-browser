@@ -1,5 +1,11 @@
-import { GuideWizard } from "@/components/guide/guide-wizard";
+import * as React from "react";
+
+import { JournalsLanding } from "@/components/search/journals-landing";
 
 export default function GuidePage() {
-  return <GuideWizard />;
+  return (
+    <React.Suspense fallback={null}>
+      <JournalsLanding initialView="guide" />
+    </React.Suspense>
+  );
 }

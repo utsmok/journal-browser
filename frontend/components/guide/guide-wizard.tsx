@@ -32,7 +32,7 @@ import { combinedManuscriptLength, MIN_MANUSCRIPT_CHARS, StepManuscript } from "
 import { StepPreferences } from "./step-preferences";
 
 /** Four-step Guided Journal Finder wizard + podium results surface. */
-export function GuideWizard() {
+export function GuideWizard({ embedded = false }: { embedded?: boolean }) {
   const t = useTranslations("guide");
   const tc = useTranslations("common");
   const inst = useInstitution();
@@ -92,52 +92,71 @@ export function GuideWizard() {
     setMaxReached(1);
   };
 
-  return (
-    <div className="mx-auto max-w-4xl px-4 py-8 sm:py-10">
-      {/* Page header */}
-      <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--primary-text)]">
-            <Compass aria-hidden className="size-3.5" />
-            {t("header.eyebrow")}
-          </p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
-            {t("header.heading")}
-          </h1>
-          <p className="mt-1.5 max-w-2xl text-sm text-[var(--muted-foreground)]">
-            {t("header.intro", { institution: instLabel })}
-          </p>
-        </div>
-
-        {hasSavedData && !result && (
-          <div className="flex shrink-0 items-center gap-2 text-xs text-[var(--muted-foreground)]">
-            <span>{t("header.savedNote")}</span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              aria-label={t("header.resetAria")}
-              onClick={handleStartOver}
-            >
-              <RotateCcw aria-hidden className="size-3.5" />
-              {t("header.reset")}
-            </Button>
+  const body = (
+    <>
+      {!embedded && (
+        <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--primary-text)]">
+              <Compass aria-hidden className="size-3.5" />
+              {t("header.eyebrow")}
+            </p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
+              {t("header.heading")}
+            </h1>
+            <p className="mt-1.5 max-w-2xl text-sm text-[var(--muted-foreground)]">
+              {t("header.intro", { institution: instLabel })}
+            </p>
           </div>
-        )}
-      </header>
+
+          {hasSavedData && !result && (
+            <div className="flex shrink-0 items-center gap-2 text-xs text-[var(--muted-foreground)]">
+              <span>{t("header.savedNote")}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-label={t("header.resetAria")}
+                onClick={handleStartOver}
+              >
+                <RotateCcw aria-hidden className="size-3.5" />
+                {t("header.reset")}
+              </Button>
+            </div>
+          )}
+        </header>
+      )}
+
+      {embedded && hasSavedData && !result && (
+        <div className="mb-4 flex max-w-4xl items-center justify-end gap-2 text-xs text-[var(--muted-foreground)]">
+          <span>{t("header.savedNote")}</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label={t("header.resetAria")}
+            onClick={handleStartOver}
+          >
+            <RotateCcw aria-hidden className="size-3.5" />
+            {t("header.reset")}
+          </Button>
+        </div>
+      )}
 
       {result ? (
-        <GuideResults
-          response={result}
-          prefs={prefs}
-          funder={funder}
-          inst={inst}
-          instLabel={instLabel}
-          onAdjustStep={(target) => goToStep(target)}
-          onStartOver={handleStartOver}
-        />
+        <div className={embedded ? "max-w-5xl" : undefined}>
+          <GuideResults
+            response={result}
+            prefs={prefs}
+            funder={funder}
+            inst={inst}
+            instLabel={instLabel}
+            onAdjustStep={(target) => goToStep(target)}
+            onStartOver={handleStartOver}
+          />
+        </div>
       ) : (
-        <>
+        <div className={embedded ? "max-w-4xl" : undefined}>
           <GuideStepper
             current={step}
             maxReached={maxReached}
@@ -270,8 +289,12 @@ export function GuideWizard() {
               </div>
             </CardContent>
           </Card>
-        </>
+        </div>
       )}
-    </div>
+    </>
   );
+
+  if (embedded) return body;
+
+  return <div className="mx-auto max-w-4xl px-4 py-8 sm:py-10">{body}</div>;
 }

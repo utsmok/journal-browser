@@ -1,7 +1,6 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -11,6 +10,7 @@ import { DealBadge, OaStatusChip, OaTypeBadge } from "@/components/badges";
 import { CardPager } from "@/components/card-pager";
 import { orgTypeCssVar } from "@/components/collaborations/labels";
 import { CollapsibleCard } from "@/components/collapsible-card";
+import { DetailKpiStrip } from "@/components/detail-kpi-strip";
 import {
   doiHref,
   External,
@@ -19,9 +19,9 @@ import {
   WorkTypeCell,
 } from "@/components/gap-entries";
 import { GapCsvButton } from "@/components/gap-csv-button";
+import { SectionNav, useLastDirectoryHref } from "@/components/journal/section-nav";
 import { OaTrend } from "@/components/oa-trend";
 import { SourceNote } from "@/components/source-note";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -34,107 +34,15 @@ import { DetailSkeleton, ErrorPanel } from "@/components/states";
 import { useInstitution } from "@/hooks/use-institution";
 import { useYearRange, yearQuery } from "@/hooks/use-year-filter";
 import {
+  encodeNamePath,
   errorMessage,
   fetchAuthor,
   type AuthorProfile,
   type AuthorSimilarJournal,
   type StatsYear,
 } from "@/lib/api";
+import { countryName } from "@/lib/format";
 import { entriesTotal, toGapEntries } from "@/lib/gap-entries";
-import { cn } from "@/lib/utils";
-
-/** href for "Back to search": the last search this tab ran, else this
- * university's search home (never the global landing). */
-function useLastSearchHref(): string {
-  const inst = useInstitution();
-  const fallback = `/${inst}/`;
-  const [href, setHref] = React.useState(fallback);
-  React.useEffect(() => {
-    setHref(sessionStorage.getItem("jb-last-search") ?? fallback);
-  }, [fallback]);
-  return href;
-}
-
-/** Highlight the id of the topmost section currently in view. */
-function useSectionSpy(ids: string[]) {
-  const [active, setActive] = React.useState<string | null>(null);
-  const key = ids.join(",");
-  React.useEffect(() => {
-    const els = key
-      .split(",")
-      .map((id) => document.getElementById(id))
-      .filter((el): el is HTMLElement => el !== null);
-    if (els.length === 0) return;
-    const visible = new Set<Element>();
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) visible.add(entry.target);
-          else visible.delete(entry.target);
-        }
-        // Topmost visible section wins; keep the last one across gaps.
-        const top = [...visible].sort(
-          (a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top,
-        )[0];
-        if (top) setActive(top.id);
-      },
-      // Only the band just below the sticky bar counts as "in view".
-      { rootMargin: "-56px 0px -55% 0px" },
-    );
-    els.forEach((el) => io.observe(el));
-    return () => io.disconnect();
-  }, [key]);
-  return active;
-}
-
-function SectionNav({ sections }: { sections: { id: string; label: string }[] }) {
-  const active = useSectionSpy(sections.map((s) => s.id));
-  const t = useTranslations("authors");
-  // Muted-foreground/primary-text both fail 4.5:1 on the navy bar, so this
-  // nav speaks in white and separates the active item with weight+underline.
-  const backHref = useLastSearchHref();
-  return (
-    <nav
-      aria-label={t("detail.navLabel")}
-      className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--secondary)] text-[var(--secondary-foreground)]"
-    >
-      <div className="mx-auto flex max-w-screen-2xl items-center gap-3 overflow-x-auto px-4 py-2">
-        <Link
-          href={backHref}
-          className="inline-flex shrink-0 items-center gap-1 text-sm text-white/80 hover:text-white"
-        >
-          <ArrowLeft aria-hidden className="size-4" /> {t("detail.backToSearch")}
-        </Link>
-        <span aria-hidden className="h-4 w-px shrink-0 bg-[var(--border)]" />
-        {/* Wrap instead of a single clipped line: long section lists stay
-            fully reachable on narrow screens. */}
-        <ul className="flex min-w-0 flex-wrap items-center gap-1">
-          {sections.map((s) => (
-            <li key={s.id}>
-              <a
-                href={`#${s.id}`}
-                aria-current={active === s.id ? "true" : undefined}
-                onClick={(e) => {
-                  e.preventDefault();
-                  document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth" });
-                  // Collapsed (default-closed) cards listen for this so a
-                  // nav jump never lands on a hidden section.
-                  window.dispatchEvent(new CustomEvent("jb-open-section", { detail: s.id }));
-                }}
-                className={cn(
-                  "inline-block whitespace-nowrap rounded px-2 py-1 text-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white",
-                  active === s.id ? "font-medium text-white underline" : "text-white/80",
-                )}
-              >
-                {s.label}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </nav>
-  );
-}
 
 /** Chip cloud cap before the "+N more" expander. */
 const TOPICS_LIMIT = 8;
@@ -185,7 +93,7 @@ export default function AuthorPage() {
   const params = useParams<{ authorId: string }>();
   const inst = useInstitution();
   const authorId = params?.authorId ? decodeURIComponent(params.authorId) : undefined;
-  const backHref = useLastSearchHref();
+  const backHref = useLastDirectoryHref("jb-last-authors", `/${inst}/author`);
   const { year_from, year_to } = useYearRange();
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["author", inst, authorId ?? "", year_from ?? null, year_to ?? null],
@@ -214,15 +122,6 @@ export default function AuthorPage() {
 
   const { author, oa_by_year, journals, topics, similar, alternatives, works, top_partners } = data;
   const partners = top_partners ?? [];
-  const regions = new Intl.DisplayNames(["en"], { type: "region" });
-  const regionName = (code: string | null | undefined) => {
-    if (!code) return "—";
-    try {
-      return regions.of(code.toUpperCase()) ?? code;
-    } catch {
-      return code;
-    }
-  };
   const journalPages = Math.max(1, Math.ceil(journals.length / PAGE_SIZE));
   const workPages = Math.max(1, Math.ceil(works.length / PAGE_SIZE));
   const journalRows = journals.slice((journalPage - 1) * PAGE_SIZE, journalPage * PAGE_SIZE);
@@ -253,9 +152,14 @@ export default function AuthorPage() {
 
   return (
     <>
-      <SectionNav sections={sections} />
+      <SectionNav
+        sections={sections}
+        backFallback={`/${inst}/author`}
+        backStorageKey="jb-last-authors"
+        backLabel={t("detail.backToSearch")}
+      />
       <div className="mx-auto max-w-screen-2xl px-4 py-10">
-        <header className="mb-8">
+        <header className="mb-6">
           <div className="flex items-center gap-4">
             {author.people?.has_photo && (
               // eslint-disable-next-line @next/next/no-img-element -- same-origin API bytes, no optimization pipeline wanted
@@ -279,30 +183,36 @@ export default function AuthorPage() {
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {author.faculty && (
-              <Badge variant="muted" className="font-normal">
+              <Link
+                href={`/${inst}/orgunit/faculty/${encodeNamePath(author.faculty)}`}
+                className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--muted)] px-2.5 py-0.5 text-xs text-[var(--foreground)] underline-offset-2 hover:border-[var(--primary)] hover:text-[var(--primary-text)] hover:underline"
+              >
                 {author.faculty}
-              </Badge>
+              </Link>
             )}
             {author.research_group && (
-              <Badge variant="muted" className="font-normal">
+              <Link
+                href={`/${inst}/orgunit/group/${encodeNamePath(author.research_group)}`}
+                className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--muted)] px-2.5 py-0.5 text-xs text-[var(--foreground)] underline-offset-2 hover:border-[var(--primary)] hover:text-[var(--primary-text)] hover:underline"
+              >
                 {author.research_group}
-              </Badge>
+              </Link>
             )}
             {author.institute && (
-              <Badge variant="muted" className="font-normal">
+              <Link
+                href={`/${inst}/orgunit/institute/${encodeNamePath(author.institute)}`}
+                className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--muted)] px-2.5 py-0.5 text-xs text-[var(--foreground)] underline-offset-2 hover:border-[var(--primary)] hover:text-[var(--primary-text)] hover:underline"
+              >
                 {author.institute}
-              </Badge>
+              </Link>
             )}
-            <span className="text-sm text-[var(--muted-foreground)]">
-              {t("worksCount", { count: author.n_works })}
-            </span>
           </div>
           {(author.orcid ||
             author.openalex_author_id ||
             author.openaire_person_id ||
             author.people ||
             author.research_portal_url) && (
-            <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+            <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
               {author.people && (
                 <External href={author.people.url}>{t("detail.peoplePage")}</External>
               )}
@@ -327,6 +237,15 @@ export default function AuthorPage() {
             </p>
           )}
         </header>
+
+        <DetailKpiStrip
+          items={[
+            { label: t("results.colWorks"), value: author.n_works.toLocaleString("en") },
+            { label: t("sections.journals"), value: journals.length.toLocaleString("en") },
+            { label: t("sections.topics"), value: topics.length.toLocaleString("en") },
+            { label: t("sections.partners"), value: partners.length.toLocaleString("en") },
+          ]}
+        />
 
         <div className="space-y-6">
           {trendStats.length > 0 && (
@@ -390,14 +309,14 @@ export default function AuthorPage() {
               contentClassName="flex flex-wrap items-center gap-1.5"
             >
               {(allTopics ? topics : topics.slice(0, TOPICS_LIMIT)).map((topic) => (
-                <Badge
+                <Link
                   key={topic.name}
-                  variant="muted"
-                  className="font-normal normal-case"
+                  href={`/${inst}/author?topic=${encodeURIComponent(topic.name)}`}
+                  className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--muted)] px-2.5 py-1 text-xs text-[var(--foreground)] underline-offset-2 hover:border-[var(--primary)] hover:text-[var(--primary-text)] hover:underline"
                   title={t("worksCount", { count: topic.n })}
                 >
                   {topic.name}
-                </Badge>
+                </Link>
               ))}
               {topics.length > TOPICS_LIMIT && (
                 <button
@@ -449,7 +368,7 @@ export default function AuthorPage() {
                         </span>
                       </TableCell>
                       <TableCell className="text-[var(--muted-foreground)]">
-                        {regionName(p.country_code)}
+                        {countryName(p.country_code)}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {p.works.toLocaleString("en")}

@@ -1,15 +1,18 @@
 "use client";
 
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
+import { ActiveFiltersBar, type ActiveFilterChip } from "@/components/active-filters-bar";
 import { CollapsibleCard } from "@/components/collapsible-card";
+import { DirectoryPager } from "@/components/directory-pager";
 import { FacetGroupList, type FacetGroupDef, type FacetValue } from "@/components/filter-panel";
+import { rememberDirectoryUrl } from "@/components/journal/section-nav";
 import { OrcidLink } from "@/components/orcid-link";
+import { SortHead } from "@/components/search/sort-head";
 import { ListSkeletonRows } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,6 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useInstitution } from "@/hooks/use-institution";
+import { useSearchShortcut } from "@/hooks/use-search-shortcut";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { useYearRange } from "@/hooks/use-year-filter";
 import {
@@ -32,6 +36,7 @@ import {
   type AuthorSearchFilters,
   type AuthorSearchSort,
 } from "@/lib/api";
+import { AUTHOR_COLUMN_SORTS } from "@/lib/search-config";
 
 const SEARCH_INPUT_ID = "author-search";
 
@@ -41,15 +46,19 @@ const PAGE_SIZES = [25, 50, 100];
 const SELECT_CLASS =
   "h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2";
 
-/** Comma-joined multi-select param → list of values (journal-search convention). */
+/** Pipe-joined multi-select param → list of values. */
 function paramValues(sp: { get(key: string): string | null }, key: string): string[] {
   return (sp.get(key) ?? "").split("|").filter(Boolean);
 }
 
-/** Top 8 buckets, with every active value kept visible even outside the top 8. */
-function topBuckets(buckets: AuthorFacetBucket[] | undefined, active: string[]): FacetValue[] {
+/** Top N buckets, with every active value kept visible even outside the slice. */
+function topBuckets(
+  buckets: AuthorFacetBucket[] | undefined,
+  active: string[],
+  limit = 8,
+): FacetValue[] {
   const list: FacetValue[] = (buckets ?? [])
-    .slice(0, 8)
+    .slice(0, limit)
     .map((b) => ({ value: b.value, count: b.count }));
   for (const value of active) if (!list.some((b) => b.value === value)) list.unshift({ value });
   return list;
@@ -81,6 +90,7 @@ function AuthorsView() {
   // The publication-year lens is context state (header control), like the
   // journal search: it scopes the counts, not the URL.
   const { year_from, year_to } = useYearRange();
+  useSearchShortcut(SEARCH_INPUT_ID);
 
   const q = sp.get("q") ?? "";
   const [input, setInput] = React.useState(q);
@@ -141,6 +151,19 @@ function AuthorsView() {
     return () => clearTimeout(t);
   }, [input, q, update]);
 
+  const yearsKey = `${year_from ?? ""}-${year_to ?? ""}`;
+  const prevYearsKey = React.useRef(yearsKey);
+  React.useEffect(() => {
+    if (prevYearsKey.current === yearsKey) return;
+    prevYearsKey.current = yearsKey;
+    if (offset > 0) setParams({ offset: undefined });
+  }, [yearsKey, offset, setParams]);
+
+  React.useEffect(() => {
+    const qs = sp.toString();
+    rememberDirectoryUrl("jb-last-authors", qs ? `${pathname}?${qs}` : pathname);
+  }, [pathname, sp]);
+
   const filters: AuthorSearchFilters = {
     faculty: selected.faculty.length > 0 ? selected.faculty : undefined,
     org: selected.org.length > 0 ? selected.org : undefined,
@@ -167,11 +190,38 @@ function AuthorsView() {
   const disabled = data != null && !data.enabled;
   const facets = data?.facets;
 
-  // Pager math; total is the unpaginated filtered count.
   const total = data?.total ?? 0;
-  const pageCount = Math.max(1, Math.ceil(total / pageSize));
-  const page = Math.min(Math.floor(offset / pageSize) + 1, pageCount);
-  const showPager = total > pageSize;
+
+  const sortHeadState = {
+    sort: sort === "name_desc" ? "name_asc" : sort,
+    dir: (sort === "name_asc" ? "asc" : "desc") as "asc" | "desc",
+    specs: AUTHOR_COLUMN_SORTS,
+    cycleSort: (columnId: string) => {
+      if (columnId === "name") {
+        if (sort === "name_asc") setParams({ sort: "name_desc" });
+        else if (sort === "name_desc") setParams({ sort: undefined });
+        else setParams({ sort: "name_asc" });
+        return;
+      }
+      if (columnId === "works") {
+        setParams({ sort: undefined });
+        return;
+      }
+      if (columnId === "last_pub") {
+        setParams({ sort: sort === "last_pub_desc" ? undefined : "last_pub_desc" });
+      }
+    },
+  };
+  const ariaSortFor = (columnId: string): "ascending" | "descending" | undefined => {
+    if (columnId === "name") {
+      if (sort === "name_asc") return "ascending";
+      if (sort === "name_desc") return "descending";
+      return undefined;
+    }
+    if (columnId === "works" && sort === "works_desc") return "descending";
+    if (columnId === "last_pub" && sort === "last_pub_desc") return "descending";
+    return undefined;
+  };
 
   const toggleFacet = (key: string, value: string) => {
     if (key === "has_orcid") {
@@ -183,8 +233,10 @@ function AuthorsView() {
     setParams({ [key]: next.join("|") || undefined });
   };
 
-  const clearFilters = () =>
+  const clearFilters = () => {
+    setInput("");
     setParams({
+      q: undefined,
       faculty: undefined,
       org: undefined,
       works: undefined,
@@ -192,6 +244,7 @@ function AuthorsView() {
       topic: undefined,
       has_orcid: undefined,
     });
+  };
 
   const worksLabels: Record<string, string> = {
     "1-4": t("filters.works1to4"),
@@ -211,14 +264,18 @@ function AuthorsView() {
       key: "faculty",
       label: t("filters.faculty"),
       defaultOpen: true,
-      values: topBuckets(facets?.faculty, selected.faculty),
+      searchable: true,
+      initialVisible: 8,
+      values: topBuckets(facets?.faculty, selected.faculty, 30),
       activeValues: selected.faculty,
     },
     {
       key: "org",
       label: t("filters.group"),
       defaultOpen: true,
-      values: topBuckets(facets?.org, selected.org),
+      searchable: true,
+      initialVisible: 8,
+      values: topBuckets(facets?.org, selected.org, 40),
       activeValues: selected.org,
     },
     {
@@ -247,7 +304,9 @@ function AuthorsView() {
       key: "topic",
       label: t("filters.topic"),
       defaultOpen: false,
-      values: topBuckets(facets?.topic, selected.topic),
+      searchable: true,
+      initialVisible: 8,
+      values: topBuckets(facets?.topic, selected.topic, 30),
       activeValues: selected.topic,
     },
     {
@@ -262,63 +321,124 @@ function AuthorsView() {
     },
   ].filter((group) => group.values.length > 0);
 
+  const filterChips: ActiveFilterChip[] = [
+    ...(q
+      ? [
+          {
+            id: "q",
+            label: `Search: “${q}”`,
+            onRemove: () => {
+              setInput("");
+              setParams({ q: undefined });
+            },
+          },
+        ]
+      : []),
+    ...selected.faculty.map((v) => ({
+      id: `faculty:${v}`,
+      label: `${t("filters.faculty")}: ${v}`,
+      onRemove: () => toggleFacet("faculty", v),
+    })),
+    ...selected.org.map((v) => ({
+      id: `org:${v}`,
+      label: `${t("filters.group")}: ${v}`,
+      onRemove: () => toggleFacet("org", v),
+    })),
+    ...selected.works.map((v) => ({
+      id: `works:${v}`,
+      label: `${t("filters.publications")}: ${worksLabels[v] ?? v}`,
+      onRemove: () => toggleFacet("works", v),
+    })),
+    ...selected.last_pub.map((v) => ({
+      id: `last_pub:${v}`,
+      label: `${t("filters.lastPublication")}: ${lastPubLabels[v] ?? v}`,
+      onRemove: () => toggleFacet("last_pub", v),
+    })),
+    ...selected.topic.map((v) => ({
+      id: `topic:${v}`,
+      label: `${t("filters.topic")}: ${v}`,
+      onRemove: () => toggleFacet("topic", v),
+    })),
+    ...(hasOrcid
+      ? [
+          {
+            id: `has_orcid:${hasOrcid}`,
+            label: `${t("filters.orcid")}: ${hasOrcid === "yes" ? t("filters.hasOrcid") : t("filters.noOrcid")}`,
+            onRemove: () => toggleFacet("has_orcid", hasOrcid),
+          },
+        ]
+      : []),
+  ];
+
   return (
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
-      <div className="flex flex-col min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[960px]:gap-6 min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
-        <section className="order-1 mb-8 min-[960px]:col-start-2 min-[960px]:row-start-1 min-[960px]:mb-6">
-          <h1 className="mb-3 text-3xl font-bold text-balance">{t("list.heading")}</h1>
-          <p className="mb-6 max-w-2xl text-[var(--muted-foreground)]">
-            {t("list.intro", { name: site.name })}
-          </p>
-          {!disabled && (
-            <form
-              className="flex max-w-2xl gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                update(input);
-              }}
-            >
-              <div className="relative flex-1">
-                <Input
-                  id={SEARCH_INPUT_ID}
-                  value={input}
-                  onChange={(event) => setInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") event.currentTarget.blur();
-                  }}
-                  placeholder={t("list.searchPlaceholder")}
-                  aria-label={t("list.searchLabel")}
-                />
-                {input === "" && (
-                  <kbd
-                    aria-hidden
-                    className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-[var(--border)] bg-[var(--muted)] px-1.5 py-0.5 text-[11px] text-[var(--muted-foreground)] [@media(hover:hover)_and_(pointer:fine)]:block"
-                  >
-                    /
-                  </kbd>
-                )}
-              </div>
-              <Button type="submit">{t("list.searchButton")}</Button>
-            </form>
-          )}
-        </section>
-
-        {/* Stacked filter card: the only filter UI below 960px. */}
-        {!disabled && data != null && (
-          <section className="order-2 mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
-            <FacetGroupList groups={groups} onToggle={toggleFacet} variant="chips" />
-          </section>
+      <header className="mb-6">
+        <h1 className="mb-2 text-3xl font-bold text-balance">{t("list.heading")}</h1>
+        <p className="mb-4 max-w-2xl text-sm text-[var(--muted-foreground)]">
+          {t("list.intro", { name: site.name })}
+        </p>
+        {!disabled && (
+          <form
+            className="flex max-w-2xl gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              update(input);
+            }}
+          >
+            <div className="relative flex-1">
+              <Input
+                id={SEARCH_INPUT_ID}
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") event.currentTarget.blur();
+                }}
+                placeholder={t("list.searchPlaceholder")}
+                aria-label={t("list.searchLabel")}
+              />
+              {input === "" && (
+                <kbd
+                  aria-hidden
+                  className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-[var(--border)] bg-[var(--muted)] px-1.5 py-0.5 text-[11px] text-[var(--muted-foreground)] [@media(hover:hover)_and_(pointer:fine)]:block"
+                >
+                  /
+                </kbd>
+              )}
+            </div>
+            <Button type="submit">{t("list.searchButton")}</Button>
+          </form>
         )}
+      </header>
 
+      {/* Stacked filter card: the only filter UI below 960px. */}
+      {!disabled && data != null && (
+        <section className="mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
+          <FacetGroupList groups={groups} onToggle={toggleFacet} variant="chips" />
+        </section>
+      )}
+
+      <div className="flex flex-col gap-6 min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
         {/* Wide-screen sidebar: sticky, scrolls on its own when long. */}
-        {!disabled && data != null && (
-          <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:col-start-1 min-[960px]:row-span-2 min-[960px]:row-start-1 min-[960px]:block">
+        {!disabled && data != null ? (
+          <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:block">
             <FacetGroupList groups={groups} onToggle={toggleFacet} variant="rows" />
           </aside>
+        ) : (
+          <div className="hidden min-[960px]:block" />
         )}
 
-        <div className="order-3 min-w-0 min-[960px]:col-start-2 min-[960px]:row-start-2">
-          {/* Sort, page size, and reset belong with the results they act on. */}
+        <div className="min-w-0">
+          {!disabled && (
+            <ActiveFiltersBar
+              chips={filterChips}
+              onClearAll={clearFilters}
+              ariaLabel={tc("activeFilters.label")}
+              clearLabel={tc("activeFilters.clearAll")}
+              removeAriaPrefix={tc("activeFilters.remove")}
+            />
+          )}
+
+          {/* Sort and reset belong with the results they act on. */}
           {!disabled && (
             <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
               <label htmlFor="author-sort" className="whitespace-nowrap">
@@ -341,27 +461,7 @@ function AuthorsView() {
                   </option>
                 ))}
               </select>
-              <label htmlFor="author-per-page" className="whitespace-nowrap">
-                {t("list.perPage")}
-              </label>
-              <select
-                id="author-per-page"
-                title={t("list.perPageTitle")}
-                value={pageSize}
-                onChange={(event) =>
-                  setParams({
-                    limit: event.target.value === "50" ? undefined : event.target.value,
-                  })
-                }
-                className={SELECT_CLASS}
-              >
-                {PAGE_SIZES.map((size) => (
-                  <option key={size} value={size}>
-                    {size}
-                  </option>
-                ))}
-              </select>
-              {anyFilter && (
+              {(anyFilter || q) && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -398,35 +498,6 @@ function AuthorsView() {
                     </span>
                     {isFetching && data ? ` · ${t("results.updating")}` : ""}
                   </p>
-                  {showPager && (
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        aria-label={t("results.prevLabel")}
-                        disabled={offset === 0}
-                        onClick={() =>
-                          setParams({
-                            offset: String(Math.max(0, offset - pageSize)),
-                          })
-                        }
-                      >
-                        <ChevronLeft aria-hidden className="size-4" /> {t("results.prevShort")}
-                      </Button>
-                      <span className="whitespace-nowrap text-sm tabular-nums text-[var(--muted-foreground)]">
-                        {t("results.pageOf", { page, total: pageCount })}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        aria-label={t("results.nextLabel")}
-                        disabled={offset + pageSize >= total}
-                        onClick={() => setParams({ offset: String(offset + pageSize) })}
-                      >
-                        {t("results.nextShort")} <ChevronRight aria-hidden className="size-4" />
-                      </Button>
-                    </div>
-                  )}
                 </div>
 
                 {isError ? (
@@ -502,11 +573,29 @@ function AuthorsView() {
                         <caption className="sr-only">{t("results.caption")}</caption>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>{t("results.colName")}</TableHead>
+                            <TableHead aria-sort={ariaSortFor("name")}>
+                              <SortHead
+                                columnId="name"
+                                label={t("results.colName")}
+                                state={sortHeadState}
+                              />
+                            </TableHead>
                             <TableHead>{t("results.colFaculty")}</TableHead>
                             <TableHead>{t("results.colGroup")}</TableHead>
-                            <TableHead className="text-right">{t("results.colWorks")}</TableHead>
-                            <TableHead className="text-right">{t("results.colLastPub")}</TableHead>
+                            <TableHead className="text-right" aria-sort={ariaSortFor("works")}>
+                              <SortHead
+                                columnId="works"
+                                label={t("results.colWorks")}
+                                state={sortHeadState}
+                              />
+                            </TableHead>
+                            <TableHead className="text-right" aria-sort={ariaSortFor("last_pub")}>
+                              <SortHead
+                                columnId="last_pub"
+                                label={t("results.colLastPub")}
+                                state={sortHeadState}
+                              />
+                            </TableHead>
                             <TableHead>{t("results.colTopic")}</TableHead>
                             <TableHead>{t("results.colOrcid")}</TableHead>
                           </TableRow>
@@ -567,9 +656,22 @@ function AuthorsView() {
                         </TableBody>
                       </Table>
                     </div>
-                    <p className="mt-4 text-xs text-[var(--muted-foreground)]">
-                      {t("results.showing", { shown: rows.length, total: data?.total ?? 0 })}
-                    </p>
+                    <DirectoryPager
+                      offset={offset}
+                      shown={rows.length}
+                      total={total}
+                      limit={pageSize}
+                      onOffset={(nextOffset) =>
+                        setParams({ offset: nextOffset > 0 ? String(nextOffset) : undefined })
+                      }
+                      onLimit={(nextLimit) =>
+                        setParams({ limit: nextLimit === 50 ? undefined : String(nextLimit) })
+                      }
+                      perPageLabel={t("list.perPage")}
+                      prevLabel={t("results.prevShort")}
+                      nextLabel={t("results.nextShort")}
+                      isFetching={isFetching}
+                    />
                   </>
                 )}
               </CardContent>

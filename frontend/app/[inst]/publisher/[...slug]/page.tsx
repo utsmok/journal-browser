@@ -9,13 +9,13 @@ import * as React from "react";
 import { DealBadge, OaTypeBadge, QuartileBadge } from "@/components/badges";
 import { CardPager } from "@/components/card-pager";
 import { CollapsibleCard } from "@/components/collapsible-card";
+import { DetailKpiStrip } from "@/components/detail-kpi-strip";
 import { GapEntryList } from "@/components/gap-entries";
 import { GapCsvButton } from "@/components/gap-csv-button";
+import { SectionNav } from "@/components/journal/section-nav";
 import { OaCompositionBar, OaCompositionLegend } from "@/components/oa-composition";
 import { OaTrend } from "@/components/oa-trend";
-import { BackLink } from "@/components/back-link";
 import { DetailSkeleton, ErrorPanel } from "@/components/states";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/table";
 import { usePublisher } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
+import { useSiteMeta } from "@/hooks/use-site-meta";
 import { useYearRange, yearQuery } from "@/hooks/use-year-filter";
 import {
   errorMessage,
@@ -186,11 +187,13 @@ function UtAuthorshipCard({ authorship, inst }: { authorship: UtAuthorship; inst
           {(
             [
               {
+                level: "faculty" as const,
                 heading: t("detail.faculties"),
                 caption: t("detail.authorshipCaptionFaculty"),
                 rows: authorship.faculties,
               },
               {
+                level: "group" as const,
                 heading: t("detail.researchGroups"),
                 caption: t("detail.authorshipCaptionGroup"),
                 rows: authorship.research_groups,
@@ -212,7 +215,14 @@ function UtAuthorshipCard({ authorship, inst }: { authorship: UtAuthorship; inst
                     <TableBody>
                       {section.rows.map((row) => (
                         <TableRow key={row.name}>
-                          <TableCell className="font-medium">{row.name}</TableCell>
+                          <TableCell className="font-medium">
+                            <Link
+                              href={`/${inst}/orgunit/${section.level}/${encodeNamePath(row.name)}`}
+                              className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                            >
+                              {row.name}
+                            </Link>
+                          </TableCell>
                           <TableCell className="text-right tabular-nums">
                             {row.works.toLocaleString("en")}
                           </TableCell>
@@ -404,6 +414,7 @@ export default function PublisherPage() {
   const tc = useTranslations("common");
   const params = useParams<{ slug: string[] }>();
   const inst = useInstitution();
+  const site = useSiteMeta();
   const backHref = `/${inst}/publisher`;
   const name = params?.slug?.map(decodeURIComponent).join("/") ?? "";
   const { year_from, year_to } = useYearRange();
@@ -449,25 +460,44 @@ export default function PublisherPage() {
   );
   const journalPages = Math.max(1, Math.ceil(journals.length / PAGE_SIZE));
   const journalRows = journals.slice((journalPage - 1) * PAGE_SIZE, journalPage * PAGE_SIZE);
+  const { n_journals: apcJournals, eur_min: apcMin, eur_max: apcMax } = publisher.apc;
+  const apcValue =
+    apcJournals === 0 || (apcMin == null && apcMax == null)
+      ? "—"
+      : apcMin != null && apcMax != null && apcMin !== apcMax
+        ? `€${formatEur(apcMin)}–${formatEur(apcMax)}`
+        : `€${formatEur(apcMax ?? (apcMin as number))}`;
+
+  const sections: { id: string; label: string }[] = [
+    { id: "overview", label: t("detail.navOverview") },
+    ...(deals.length > 0 || n_discrepancies > 0
+      ? [{ id: "deals", label: t("detail.navDeals") }]
+      : []),
+    ...(publisher.topics.length > 0 ? [{ id: "topics", label: t("detail.topics") }] : []),
+    ...(trendYears.length > 0 ? [{ id: "oa-over-time", label: t("detail.navTrend") }] : []),
+    ...(journals.length > 0 ? [{ id: "journals", label: t("detail.navJournals") }] : []),
+    { id: "ut-authorship", label: t("detail.navAuthorship", { inst: site.short }) },
+    ...(data.chapter_rollup.chapters_total > 0
+      ? [{ id: "book-chapters", label: t("detail.bookChapters") }]
+      : []),
+    ...(data.openalex_only.available ? [{ id: "cris-gaps", label: t("detail.navCrisGaps") }] : []),
+  ];
 
   return (
-    <div className="mx-auto max-w-screen-2xl px-4 py-10">
-      <BackLink href={backHref} label={t("detail.backToList")} />
-      <header className="mb-6 mt-4">
-        <h1 className="text-3xl font-bold text-balance">{displayPublisherName(publisher.name)}</h1>
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-[var(--muted-foreground)]">
-          <span>{t("units.journals", { count: publisher.n_journals })}</span>
-          <span aria-hidden>·</span>
-          <span>{t("units.works", { count: publisher.n_works })}</span>
-          {publisher.deal_journals > 0 && (
-            <>
-              <span aria-hidden>·</span>
-              <span>{t("units.dealCovered", { count: publisher.deal_journals })}</span>
-            </>
-          )}
-          {publisher.external_ids?.openaccess_nl_slug && (
-            <>
-              <span aria-hidden>·</span>
+    <>
+      <SectionNav
+        sections={sections}
+        backFallback={backHref}
+        backStorageKey="jb-last-publishers"
+        backLabel={t("detail.backToList")}
+      />
+      <div className="mx-auto max-w-screen-2xl px-4 py-10">
+        <header className="mb-6">
+          <h1 className="text-3xl font-bold text-balance">
+            {displayPublisherName(publisher.name)}
+          </h1>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-[var(--muted-foreground)]">
+            {publisher.external_ids?.openaccess_nl_slug && (
               <a
                 href={`https://openaccess.nl/en/publisher/${publisher.external_ids.openaccess_nl_slug}`}
                 target="_blank"
@@ -478,11 +508,11 @@ export default function PublisherPage() {
                 {t("detail.openAccessNl")}{" "}
                 <ExternalLink aria-hidden className="size-3.5 shrink-0" />
               </a>
-            </>
-          )}
-          {publisher.external_ids?.ror && (
-            <>
+            )}
+            {publisher.external_ids?.openaccess_nl_slug && publisher.external_ids?.ror && (
               <span aria-hidden>·</span>
+            )}
+            {publisher.external_ids?.ror && (
               <a
                 href={publisher.external_ids.ror}
                 target="_blank"
@@ -492,162 +522,185 @@ export default function PublisherPage() {
               >
                 {t("detail.ror")} <ExternalLink aria-hidden className="size-3.5 shrink-0" />
               </a>
-            </>
+            )}
+          </div>
+        </header>
+
+        <section id="overview">
+          <DetailKpiStrip
+            items={[
+              {
+                label: t("detail.kpiJournals"),
+                value: publisher.n_journals.toLocaleString("en"),
+              },
+              {
+                label: t("detail.kpiWorks", { inst: site.short }),
+                value: publisher.n_works.toLocaleString("en"),
+              },
+              {
+                label: t("detail.kpiDeals"),
+                value: publisher.deal_journals.toLocaleString("en"),
+              },
+              {
+                label: t("detail.kpiApc"),
+                value: apcValue,
+                hint: apcJournals > 0 ? t("apcCoverage", { count: apcJournals }) : undefined,
+              },
+            ]}
+          />
+          <AggregateCards publisher={publisher} />
+        </section>
+
+        <div className="mt-6 space-y-6">
+          {(deals.length > 0 || n_discrepancies > 0) && (
+            <CollapsibleCard id="deals" title={t("detail.deals")} contentClassName="text-sm">
+              {deals.length > 0 && (
+                <ul className="divide-y divide-[var(--border)]">
+                  {deals.map((deal) => (
+                    <DealRow key={deal.id} deal={deal} />
+                  ))}
+                </ul>
+              )}
+              {n_discrepancies > 0 && (
+                <div className="mt-3 border-t border-[var(--border)] pt-3 text-xs text-[var(--muted-foreground)]">
+                  <p>{t("detail.discrepancies", { count: n_discrepancies })}</p>
+                  <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
+                    {deal_discrepancies.map((d) => (
+                      <li key={d.title ?? d.publisher_name}>
+                        {d.title}
+                        {d.publisher_name && (
+                          <span className="text-[var(--muted-foreground)]">
+                            {" "}
+                            ({d.publisher_name})
+                          </span>
+                        )}{" "}
+                        {t("detail.discrepancyCovered", {
+                          publisher: d.deal_publisher ?? t("detail.anotherPublisher"),
+                        })}
+                      </li>
+                    ))}
+                    {n_discrepancies > deal_discrepancies.length && (
+                      <li>
+                        {t("detail.moreDiscrepancies", {
+                          count: n_discrepancies - deal_discrepancies.length,
+                        })}
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              )}
+            </CollapsibleCard>
+          )}
+
+          {publisher.topics.length > 0 && (
+            <CollapsibleCard
+              id="topics"
+              title={t("detail.topics")}
+              contentClassName="flex flex-wrap gap-1.5"
+            >
+              {publisher.topics.map((topic) => (
+                <Link
+                  key={topic.name}
+                  href={`/${inst}/?publisher=${encodeURIComponent(publisher.name)}&topic=${encodeURIComponent(topic.name)}`}
+                  className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--muted)] px-2.5 py-1 text-xs text-[var(--foreground)] underline-offset-2 hover:border-[var(--primary)] hover:text-[var(--primary-text)] hover:underline"
+                  title={t("detail.topicHint", { count: Math.round(topic.n) })}
+                >
+                  {topic.name}
+                </Link>
+              ))}
+            </CollapsibleCard>
+          )}
+
+          {trendYears.length > 0 && (
+            <CollapsibleCard id="oa-over-time" title={t("detail.oaOverTime")}>
+              <OaTrend stats={trendYears} />
+            </CollapsibleCard>
+          )}
+
+          {journals.length > 0 && (
+            <CollapsibleCard id="journals" title={t("detail.journals")} contentClassName="text-sm">
+              <Table>
+                <caption className="sr-only">{t("detail.journalsCaption")}</caption>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("detail.journal")}</TableHead>
+                    <TableHead className="text-right">{t("detail.works")}</TableHead>
+                    <TableHead>{t("detail.access")}</TableHead>
+                    <TableHead>{t("detail.quartile")}</TableHead>
+                    <TableHead>{t("detail.apc")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {journalRows.map((j) => {
+                    const apc = journalApcText(j);
+                    return (
+                      <TableRow key={j.issn_l}>
+                        <TableCell className="font-medium">
+                          <Link
+                            href={`/${inst}/journals/${j.issn_l}`}
+                            className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                          >
+                            {j.title || j.issn_l}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {j.works.toLocaleString("en")}
+                        </TableCell>
+                        <TableCell>
+                          <OaTypeBadge oaType={j.oa_type} isOa={j.is_oa} />
+                        </TableCell>
+                        <TableCell>
+                          <QuartileBadge quartile={j.quartile ?? null} />
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap tabular-nums">
+                          {apc ?? <span className="text-[var(--muted-foreground)]">—</span>}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+              {publisher.n_journals > journals.length && (
+                <p className="mt-3 text-xs text-[var(--muted-foreground)]">
+                  {t("detail.showingTopJournals", {
+                    count: journals.length,
+                    total: publisher.n_journals,
+                  })}{" "}
+                  <Link
+                    href={`/${inst}/journals?publisher=${encodeURIComponent(publisher.name)}`}
+                    className="text-[var(--primary-text)] hover:underline"
+                  >
+                    {t("detail.searchAllJournals")}
+                  </Link>
+                </p>
+              )}
+              {journalPages > 1 && (
+                <CardPager
+                  page={journalPage}
+                  pages={journalPages}
+                  total={journals.length}
+                  onPage={setJournalPage}
+                  label={t("detail.pagerLabel")}
+                />
+              )}
+            </CollapsibleCard>
+          )}
+
+          <UtAuthorshipCard authorship={data.ut_authorship} inst={inst} />
+
+          <ChapterRollupCard rollup={data.chapter_rollup} />
+
+          {data.openalex_only.available && (
+            <CrisGapsCard
+              openalexOnly={data.openalex_only}
+              inst={inst}
+              name={name}
+              parts={parts}
+              onPartsChange={setParts}
+            />
           )}
         </div>
-      </header>
-
-      <AggregateCards publisher={publisher} />
-
-      <div className="mt-6 space-y-6">
-        {(deals.length > 0 || n_discrepancies > 0) && (
-          <CollapsibleCard id="deals" title={t("detail.deals")} contentClassName="text-sm">
-            {deals.length > 0 && (
-              <ul className="divide-y divide-[var(--border)]">
-                {deals.map((deal) => (
-                  <DealRow key={deal.id} deal={deal} />
-                ))}
-              </ul>
-            )}
-            {n_discrepancies > 0 && (
-              <p className="mt-3 border-t border-[var(--border)] pt-3 text-xs text-[var(--muted-foreground)]">
-                {t("detail.discrepancies", { count: n_discrepancies })}
-                <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
-                  {deal_discrepancies.map((d) => (
-                    <li key={d.title ?? d.publisher_name}>
-                      {d.title}
-                      {d.publisher_name && (
-                        <span className="text-[var(--muted-foreground)]">
-                          {" "}
-                          ({d.publisher_name})
-                        </span>
-                      )}{" "}
-                      {t("detail.discrepancyCovered", {
-                        publisher: d.deal_publisher ?? t("detail.anotherPublisher"),
-                      })}
-                    </li>
-                  ))}
-                  {n_discrepancies > deal_discrepancies.length && (
-                    <li>
-                      {t("detail.moreDiscrepancies", {
-                        count: n_discrepancies - deal_discrepancies.length,
-                      })}
-                    </li>
-                  )}
-                </ul>
-              </p>
-            )}
-          </CollapsibleCard>
-        )}
-
-        {publisher.topics.length > 0 && (
-          <CollapsibleCard
-            id="topics"
-            title={t("detail.topics")}
-            contentClassName="flex flex-wrap gap-1.5"
-          >
-            {publisher.topics.map((topic) => (
-              <Badge
-                key={topic.name}
-                variant="muted"
-                className="font-normal normal-case"
-                title={t("detail.topicHint", { count: Math.round(topic.n) })}
-              >
-                {topic.name}
-              </Badge>
-            ))}
-          </CollapsibleCard>
-        )}
-
-        {trendYears.length > 0 && (
-          <CollapsibleCard id="oa-over-time" title={t("detail.oaOverTime")}>
-            <OaTrend stats={trendYears} />
-          </CollapsibleCard>
-        )}
-
-        {journals.length > 0 && (
-          <CollapsibleCard id="journals" title={t("detail.journals")} contentClassName="text-sm">
-            <Table>
-              <caption className="sr-only">{t("detail.journalsCaption")}</caption>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("detail.journal")}</TableHead>
-                  <TableHead className="text-right">{t("detail.works")}</TableHead>
-                  <TableHead>{t("detail.access")}</TableHead>
-                  <TableHead>{t("detail.quartile")}</TableHead>
-                  <TableHead>{t("detail.apc")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {journalRows.map((j) => {
-                  const apc = journalApcText(j);
-                  return (
-                    <TableRow key={j.issn_l}>
-                      <TableCell className="font-medium">
-                        <Link
-                          href={`/${inst}/journals/${j.issn_l}`}
-                          className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-                        >
-                          {j.title || j.issn_l}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {j.works.toLocaleString("en")}
-                      </TableCell>
-                      <TableCell>
-                        <OaTypeBadge oaType={j.oa_type} isOa={j.is_oa} />
-                      </TableCell>
-                      <TableCell>
-                        <QuartileBadge quartile={j.quartile ?? null} />
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap tabular-nums">
-                        {apc ?? <span className="text-[var(--muted-foreground)]">—</span>}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-            {publisher.n_journals > journals.length && (
-              <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-                {t("detail.showingTopJournals", {
-                  count: journals.length,
-                  total: publisher.n_journals,
-                })}{" "}
-                <Link
-                  href={`/${inst}/journals?publisher=${encodeURIComponent(publisher.name)}`}
-                  className="text-[var(--primary-text)] hover:underline"
-                >
-                  {t("detail.searchAllJournals")}
-                </Link>
-              </p>
-            )}
-            {journalPages > 1 && (
-              <CardPager
-                page={journalPage}
-                pages={journalPages}
-                total={journals.length}
-                onPage={setJournalPage}
-                label={t("detail.pagerLabel")}
-              />
-            )}
-          </CollapsibleCard>
-        )}
-
-        <UtAuthorshipCard authorship={data.ut_authorship} inst={inst} />
-
-        <ChapterRollupCard rollup={data.chapter_rollup} />
-
-        {data.openalex_only.available && (
-          <CrisGapsCard
-            openalexOnly={data.openalex_only}
-            inst={inst}
-            name={name}
-            parts={parts}
-            onPartsChange={setParts}
-          />
-        )}
       </div>
-    </div>
+    </>
   );
 }

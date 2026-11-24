@@ -8,6 +8,8 @@ import * as React from "react";
 
 import { OjbWordmark } from "@/components/logo";
 import { NavLink } from "@/components/nav-link";
+import { useInstitutionsDirectory } from "@/hooks/use-api";
+import { useSiteMeta } from "@/hooks/use-site-meta";
 import { instFromSegment } from "@/lib/global-segments";
 import { cn } from "@/lib/utils";
 
@@ -117,8 +119,12 @@ export function SiteNav() {
       className="order-last w-full whitespace-nowrap text-sm sm:order-none sm:w-auto"
     >
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 sm:gap-x-6">
-        <NavLink href={`${prefix}/`} label={t("nav.search")} />
-        <NavLink href={`${prefix}/guide`} label={t("nav.guide")} />
+        <NavLink
+          href={`${prefix}/`}
+          label={t("nav.search")}
+          exact
+          alsoMatchPrefixes={[`${prefix}/guide`, `${prefix}/journals`]}
+        />
         <NavLink href={`${prefix}/deals`} label={t("nav.deals")} />
         <NavLink href={`${prefix}/funders`} label={t("nav.funders")} />
         <NavLink href={`${prefix}/publisher`} label={t("nav.publishers")} />
@@ -126,25 +132,113 @@ export function SiteNav() {
         <NavLink href={`${prefix}/orgunit`} label={t("nav.faculties")} />
         <DataExplorerMenu prefix={prefix} />
         <NavLink href={`${prefix}/about`} label={t("nav.about")} />
-        <NavLink href="/" label={t("nav.allUniversities")} />
       </div>
     </nav>
   );
 }
 
-/** Brand link: back to the scoped search page (or the chooser). */
+/** Compact university switcher pill next to the logo; replaces the top-nav
+ * "All universities" link and makes the active institution unmistakable. */
+function InstitutionSwitcher({ inst }: { inst: string }) {
+  const t = useTranslations("common");
+  const site = useSiteMeta();
+  const directory = useInstitutionsDirectory();
+  const [open, setOpen] = React.useState(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    setOpen(false);
+  }, [inst]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const label = site.short || inst.toUpperCase();
+  const entries = directory.data ?? [];
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={`${t("nav.switchInstitution")} (${label})`}
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1 rounded-full border border-white/25 bg-white/10 px-2.5 py-0.5 text-xs font-semibold text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+      >
+        <span>{label}</span>
+        <ChevronDown
+          aria-hidden
+          className={cn("size-3 transition-transform", open && "rotate-180")}
+        />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute left-0 top-full z-50 mt-1.5 w-60 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-1.5 text-[var(--card-foreground)] shadow-lg"
+        >
+          {entries.map((entry) => (
+            <Link
+              key={entry.code}
+              role="menuitem"
+              href={`/${entry.code}/`}
+              onClick={() => setOpen(false)}
+              className={cn(
+                "flex items-center justify-between gap-2 rounded-[calc(var(--radius)-2px)] px-3 py-1.5 text-xs transition-colors hover:bg-[var(--muted)]",
+                entry.code === inst && "bg-[var(--muted)] font-semibold",
+              )}
+            >
+              <span className="truncate text-[var(--foreground)]">{entry.name}</span>
+              <span className="shrink-0 uppercase text-[var(--muted-foreground)]">
+                {entry.short_name || entry.code}
+              </span>
+            </Link>
+          ))}
+          {entries.length > 0 && <div className="my-1 border-t border-[var(--border)]" />}
+          <Link
+            role="menuitem"
+            href="/"
+            onClick={() => setOpen(false)}
+            className="block rounded-[calc(var(--radius)-2px)] px-3 py-1.5 text-xs font-medium text-[var(--primary-text)] hover:bg-[var(--muted)]"
+          >
+            {t("nav.allUniversities")}
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Brand link + optional institution pill: back to the scoped search page (or chooser). */
 export function BrandLink() {
   const t = useTranslations("common");
   const pathname = usePathname() ?? "/";
   const seg = pathname.split("/")[1] ?? "";
-  const prefix = instFromSegment(seg) && `/${instFromSegment(seg)}`;
+  const inst = instFromSegment(seg);
+  const prefix = inst ? `/${inst}` : "";
   return (
-    <Link
-      href={`${prefix}/`}
-      aria-label={t("appTitle")}
-      className="flex items-center whitespace-nowrap"
-    >
-      <OjbWordmark className="h-11 w-auto" />
-    </Link>
+    <div className="flex items-center gap-2.5 whitespace-nowrap">
+      <Link
+        href={`${prefix}/`}
+        aria-label={t("appTitle")}
+        className="flex items-center whitespace-nowrap"
+      >
+        <OjbWordmark className="h-11 w-auto" />
+      </Link>
+      {inst && <InstitutionSwitcher inst={inst} />}
+    </div>
   );
 }

@@ -10,6 +10,22 @@ export function formatInt(n: number): string {
   return n.toLocaleString("en");
 }
 
+const regionNames =
+  typeof Intl !== "undefined" && typeof Intl.DisplayNames === "function"
+    ? new Intl.DisplayNames(["en"], { type: "region" })
+    : null;
+
+/** Human-readable English country name for an ISO-3166-1 alpha-2 code. */
+export function countryName(code: string | null | undefined): string {
+  const clean = (code ?? "").trim().toUpperCase();
+  if (!clean) return "—";
+  try {
+    return regionNames?.of(clean) ?? clean;
+  } catch {
+    return clean;
+  }
+}
+
 /** Admin/list datetimes: "2 Nov 2026, 18:34". Naive timestamps (no zone)
  * parse as local — same semantics every existing caller relied on. */
 export function formatDateTime(iso: string | null | undefined): string {

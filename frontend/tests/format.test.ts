@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { apcAmount, apcStatsText, formatApc, formatEur, journalApcText } from "@/lib/format";
+import {
+  apcAmount,
+  apcStatsText,
+  countryName,
+  formatApc,
+  formatEur,
+  journalApcText,
+} from "@/lib/format";
 
 describe("formatEur / formatApc", () => {
   it("rounds and locale-groups euros without decimals", () => {
@@ -52,5 +59,14 @@ describe("apcStatsText", () => {
       "2024: €2,500 · 8 articles · mean €2,200",
       "2023: €1,800–2,000 · 1 article · mean €1,900",
     ]);
+  });
+});
+
+describe("countryName", () => {
+  it("resolves ISO-2 country codes and falls back cleanly", () => {
+    expect(countryName("nl")).toBe("Netherlands");
+    expect(countryName("GB")).toBe("United Kingdom");
+    expect(countryName("")).toBe("—");
+    expect(countryName(null)).toBe("—");
   });
 });

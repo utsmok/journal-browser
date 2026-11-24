@@ -16,9 +16,9 @@
   "hero": {
     "title": "Find the best home for your next article",
     "intro": "Search journals to see whether they are covered by an open access deal, what publishing there costs, and how the {institution} publishes in them.",
-    "guideTitle": "Not sure where to publish?",
-    "guideBody": "Paste your title and abstract to get recommended journals matched to open access deals, funder rules, and your budget.",
-    "guideCta": "Open journal finder"
+    "modeBrowse": "Browse & filter",
+    "modeGuide": "Guided finder",
+    "modeGuideIntro": "Paste your title and abstract to get ranked open access journal recommendations tailored to your funder, deal coverage, and budget."
   },
   "search": {
     "placeholder": "Search journals, ISSNs, publishers, or topics",
@@ -38,7 +38,10 @@
     "resetFilters": "Reset filters",
     "resetSearch": "Reset search",
     "semanticStatusActive": "Ranked by meaning. Filters and sorting are off in this mode.",
-    "semanticStatusPending": "Match by meaning activates once the query has two characters. Regular search runs until then."
+    "semanticStatusPending": "Match by meaning activates once the query has two characters. Regular search runs until then.",
+    "chipSearch": "Search: “{value}”",
+    "chipScope": "In: {value}",
+    "chipDealId": "Deal: {name}"
   },
   "table": {
     "journal": "Journal",

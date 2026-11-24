@@ -18,7 +18,7 @@
 
   "nav": {
     "mainLabel": "Main",
-    "search": "Search",
+    "search": "Journals",
     "guide": "Journal finder",
     "deals": "Deals",
     "funders": "Funders",
@@ -30,7 +30,8 @@
     "dataExplorerPartnersDesc": "Organisations we co-publish with",
     "faculties": "Faculties",
     "about": "About",
-    "allUniversities": "All universities"
+    "allUniversities": "All universities",
+    "switchInstitution": "Switch university"
   },
 
   "footer": {
@@ -58,7 +59,8 @@
     "last5Years": "Last 5 years",
     "customRange": "Custom range…",
     "fromYear": "From year",
-    "toYear": "To year"
+    "toYear": "To year",
+    "inactivePageHint": "The publication-year filter applies to publication counts across directories and detail views (not on this page)."
   },
 
   "states": {
@@ -112,6 +114,9 @@
     "countPending": "Count is loading or unavailable",
     "loadError": "Facet counts could not be loaded.",
     "retry": "Retry",
+    "filterPlaceholder": "Filter {label}…",
+    "showMore": "Show {count} more",
+    "showLess": "Show less",
 
     "oaTypeGold": "Gold OA",
     "oaTypeDiamond": "Diamond OA",
@@ -261,7 +266,14 @@
     "count": "{count, plural, one {# journal} other {# journals}}",
     "updating": " · updating…",
     "prev": "Prev",
-    "next": "Next"
+    "next": "Next",
+    "perPage": "Per page"
+  },
+
+  "activeFilters": {
+    "label": "Active filters",
+    "clearAll": "Clear all",
+    "remove": "Remove filter"
   },
 
   "sortHead": {

@@ -8,16 +8,36 @@ import * as React from "react";
 import { useInstitution } from "@/hooks/use-institution";
 import { cn } from "@/lib/utils";
 
+/** Store the latest directory URL + query string in sessionStorage so
+ * sibling detail pages can return without losing active filters/facets. */
+export function rememberDirectoryUrl(storageKey: string, url: string | null) {
+  try {
+    if (!url) sessionStorage.removeItem(storageKey);
+    else sessionStorage.setItem(storageKey, url);
+  } catch {
+    // ignore storage errors in private browsing / SSR
+  }
+}
+
+/** href for returning to the last viewed directory list in this tab,
+ * falling back to `fallback`. */
+export function useLastDirectoryHref(storageKey: string, fallback: string): string {
+  const [href, setHref] = React.useState(fallback);
+  React.useEffect(() => {
+    try {
+      setHref(sessionStorage.getItem(storageKey) ?? fallback);
+    } catch {
+      setHref(fallback);
+    }
+  }, [storageKey, fallback]);
+  return href;
+}
+
 /** href for "Back to search": the last search this tab ran, else this
  * university's search home (never the global landing). */
 export function useLastSearchHref(): string {
   const inst = useInstitution();
-  const fallback = `/${inst}/`;
-  const [href, setHref] = React.useState(fallback);
-  React.useEffect(() => {
-    setHref(sessionStorage.getItem("jb-last-search") ?? fallback);
-  }, [fallback]);
-  return href;
+  return useLastDirectoryHref("jb-last-search", `/${inst}/`);
 }
 
 /** Highlight the id of the topmost section currently in view. */
@@ -54,25 +74,36 @@ export function useSectionSpy(ids: string[]) {
 
 export function SectionNav({
   sections,
+  backHref: explicitBackHref,
+  backFallback,
+  backStorageKey = "jb-last-search",
+  backLabel,
 }: {
   sections: { id: string; label: string; hint?: string }[];
+  backHref?: string;
+  backFallback?: string;
+  backStorageKey?: string;
+  backLabel?: string;
 }) {
   const active = useSectionSpy(sections.map((s) => s.id));
   const t = useTranslations("journals");
+  const inst = useInstitution();
   // Muted-foreground/primary-text both fail 4.5:1 on the navy bar, so this
   // nav speaks in white and separates the active item with weight+underline.
-  const backHref = useLastSearchHref();
+  const storedBackHref = useLastDirectoryHref(backStorageKey, backFallback ?? `/${inst}/`);
+  const backHref = explicitBackHref ?? storedBackHref;
+  const resolvedBackLabel = backLabel ?? t("nav.backToSearch");
   return (
     <nav
       aria-label={t("nav.sections")}
       className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--secondary)] text-[var(--secondary-foreground)]"
     >
-      <div className="mx-auto flex max-w-5xl items-center gap-3 overflow-x-auto px-4 py-2">
+      <div className="mx-auto flex max-w-screen-2xl items-center gap-3 overflow-x-auto px-4 py-2">
         <Link
           href={backHref}
           className="inline-flex shrink-0 items-center gap-1 text-sm text-white/80 hover:text-white"
         >
-          <ArrowLeft aria-hidden className="size-4" /> {t("nav.backToSearch")}
+          <ArrowLeft aria-hidden className="size-4" /> {resolvedBackLabel}
         </Link>
         <span aria-hidden className="h-4 w-px shrink-0 bg-[var(--border)]" />
         {/* Wrap instead of a single clipped line: long section lists stay

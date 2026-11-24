@@ -1,12 +1,14 @@
 "use client";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
+import { ActiveFiltersBar, type ActiveFilterChip } from "@/components/active-filters-bar";
+import { DirectoryPager } from "@/components/directory-pager";
 import { FacetGroupList, type FacetGroupDef, type FacetValue } from "@/components/filter-panel";
+import { rememberDirectoryUrl } from "@/components/journal/section-nav";
 import { SortHead } from "@/components/search/sort-head";
 import { ListSkeletonRows } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -22,7 +24,9 @@ import {
 } from "@/components/ui/table";
 import { useOrgUnits } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
+import { useSearchShortcut } from "@/hooks/use-search-shortcut";
 import { useSiteMeta } from "@/hooks/use-site-meta";
+import { useYearRange } from "@/hooks/use-year-filter";
 import {
   encodeNamePath,
   errorMessage,
@@ -49,16 +53,20 @@ const WORKS_BUCKET_KEYS: Record<string, string> = {
 const SELECT_CLASS =
   "h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2";
 
-/** Comma-joined multi-select param → list of values (journal-search convention). */
+/** Pipe-joined multi-select param → list of values. */
 function paramValues(sp: { get(key: string): string | null }, key: string): string[] {
   return (sp.get(key) ?? "").split("|").filter(Boolean);
 }
 
-/** Top 8 buckets of a facet record, with active values kept visible. */
-function facetValues(counts: Record<string, number> | undefined, active: string[]): FacetValue[] {
+/** Top N buckets of a facet record, with active values kept visible. */
+function facetValues(
+  counts: Record<string, number> | undefined,
+  active: string[],
+  limit = 8,
+): FacetValue[] {
   const list: FacetValue[] = Object.entries(counts ?? {})
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
+    .slice(0, limit)
     .map(([value, count]) => ({ value, count }));
   for (const value of active) if (!list.some((v) => v.value === value)) list.unshift({ value });
   return list;
@@ -93,6 +101,8 @@ function OrgUnitsView() {
   const sp = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const { year_from, year_to } = useYearRange();
+  useSearchShortcut(SEARCH_INPUT_ID);
 
   const q = sp.get("q") ?? "";
   const [input, setInput] = React.useState(q);
@@ -155,6 +165,19 @@ function OrgUnitsView() {
     return () => clearTimeout(t);
   }, [input, q, update]);
 
+  const yearsKey = `${year_from ?? ""}-${year_to ?? ""}`;
+  const prevYearsKey = React.useRef(yearsKey);
+  React.useEffect(() => {
+    if (prevYearsKey.current === yearsKey) return;
+    prevYearsKey.current = yearsKey;
+    if (offset > 0) setParams({ offset: undefined });
+  }, [yearsKey, offset, setParams]);
+
+  React.useEffect(() => {
+    const qs = sp.toString();
+    rememberDirectoryUrl("jb-last-orgunits", qs ? `${pathname}?${qs}` : pathname);
+  }, [pathname, sp]);
+
   const { data, isPending, isFetching, isError, error, refetch } = useOrgUnits({
     level,
     q: q || undefined,
@@ -166,6 +189,8 @@ function OrgUnitsView() {
     offset: offset > 0 ? offset : undefined,
     limit: pageSize === 50 ? undefined : pageSize,
     include_facets: true,
+    year_from,
+    year_to,
   });
 
   const rows = data?.items ?? [];
@@ -176,9 +201,6 @@ function OrgUnitsView() {
 
   // Pager math; total is the unpaginated filtered count.
   const total = data?.total ?? 0;
-  const pageCount = Math.max(1, Math.ceil(total / pageSize));
-  const page = Math.min(Math.floor(offset / pageSize) + 1, pageCount);
-  const showPager = total > pageSize;
 
   const toggleFacet = (key: string, value: string) => {
     if (key === "faculty") {
@@ -198,8 +220,10 @@ function OrgUnitsView() {
     }
   };
 
-  const clearFilters = () =>
-    setParams({ faculty: undefined, works: undefined, uses_deals: undefined });
+  const clearFilters = () => {
+    setInput("");
+    setParams({ q: undefined, faculty: undefined, works: undefined, uses_deals: undefined });
+  };
 
   // Tri-state column sort: natural → reversed → off (journal-table
   // convention). Off removes both params so the backend default applies
@@ -232,7 +256,9 @@ function OrgUnitsView() {
             key: "faculty",
             label: t("columns.faculty"),
             defaultOpen: true,
-            values: facetValues(facets?.faculty, faculty),
+            searchable: true,
+            initialVisible: 8,
+            values: facetValues(facets?.faculty, faculty, 30),
             activeValues: faculty,
           },
         ]
@@ -258,19 +284,90 @@ function OrgUnitsView() {
     },
   ];
 
+  const filterChips: ActiveFilterChip[] = [
+    ...(q
+      ? [
+          {
+            id: "q",
+            label: `Search: “${q}”`,
+            onRemove: () => {
+              setInput("");
+              setParams({ q: undefined });
+            },
+          },
+        ]
+      : []),
+    ...faculty.map((v) => ({
+      id: `faculty:${v}`,
+      label: `${t("columns.faculty")}: ${v}`,
+      onRemove: () => toggleFacet("faculty", v),
+    })),
+    ...works.map((v) => ({
+      id: `works:${v}`,
+      label: `${t("list.filter.publications")}: ${
+        WORKS_BUCKET_KEYS[v] ? t(WORKS_BUCKET_KEYS[v]) : v
+      }`,
+      onRemove: () => toggleFacet("works", v),
+    })),
+    ...(usesDeals
+      ? [
+          {
+            id: "uses_deals",
+            label: `${t("list.filter.deal")}: ${t("list.filter.usesDeals")}`,
+            onRemove: () => toggleFacet("uses_deals", "yes"),
+          },
+        ]
+      : []),
+  ];
+
   const unitHref = (unit: { level: OrgUnitLevel; name: string }) =>
     `/${inst}/orgunit/${unit.level}/${encodeNamePath(unit.name)}`;
 
   return (
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
-      <div className="flex flex-col min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[960px]:gap-6 min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
-        <section className="order-1 mb-8 min-[960px]:col-start-2 min-[960px]:row-start-1 min-[960px]:mb-6">
-          <h1 className="mb-3 text-3xl font-bold text-balance">{t("list.title")}</h1>
-          <p className="mb-6 max-w-2xl text-[var(--muted-foreground)]">
-            {t("list.intro", { institution: site.name })}
-          </p>
+      <header className="mb-6">
+        <h1 className="mb-2 text-3xl font-bold text-balance">{t("list.title")}</h1>
+        <p className="mb-4 max-w-2xl text-sm text-[var(--muted-foreground)]">
+          {t("list.intro", { institution: site.name })}
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Level toggle: switching also drops the faculty facet, which
+            only applies to research groups. */}
+          <div
+            role="group"
+            aria-label={t("list.levelLabel")}
+            className="flex overflow-hidden rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)]"
+          >
+            <Button
+              variant={level === "faculty" ? "secondary" : "ghost"}
+              size="sm"
+              className="rounded-none"
+              aria-pressed={level === "faculty"}
+              onClick={() => setParams({ level: undefined, faculty: undefined })}
+            >
+              {t("list.levelToggle.faculty")}
+            </Button>
+            <Button
+              variant={level === "group" ? "secondary" : "ghost"}
+              size="sm"
+              className="rounded-none"
+              aria-pressed={level === "group"}
+              onClick={() => setParams({ level: "group", faculty: undefined })}
+            >
+              {t("list.levelToggle.group")}
+            </Button>
+            <Button
+              variant={level === "institute" ? "secondary" : "ghost"}
+              size="sm"
+              className="rounded-none"
+              aria-pressed={level === "institute"}
+              onClick={() => setParams({ level: "institute", faculty: undefined })}
+            >
+              {t("list.levelToggle.institute")}
+            </Button>
+          </div>
           <form
-            className="flex max-w-2xl gap-2"
+            className="flex min-w-64 max-w-2xl flex-1 gap-2"
             onSubmit={(event) => {
               event.preventDefault();
               update(input);
@@ -298,59 +395,36 @@ function OrgUnitsView() {
             </div>
             <Button type="submit">{t("list.search.action")}</Button>
           </form>
+        </div>
+      </header>
+
+      {/* Stacked filter card: the only filter UI below 960px. */}
+      {data != null && (
+        <section className="mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
+          <FacetGroupList groups={groups} onToggle={toggleFacet} variant="chips" />
         </section>
+      )}
 
-        {/* Stacked filter card: the only filter UI below 960px. */}
-        {data != null && (
-          <section className="order-2 mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
-            <FacetGroupList groups={groups} onToggle={toggleFacet} variant="chips" />
-          </section>
-        )}
-
+      <div className="flex flex-col gap-6 min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
         {/* Wide-screen sidebar: sticky, scrolls on its own when long. */}
-        {data != null && (
-          <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:col-start-1 min-[960px]:row-span-2 min-[960px]:row-start-1 min-[960px]:block">
+        {data != null ? (
+          <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:block">
             <FacetGroupList groups={groups} onToggle={toggleFacet} variant="rows" />
           </aside>
+        ) : (
+          <div className="hidden min-[960px]:block" />
         )}
 
-        <div className="order-3 min-w-0 min-[960px]:col-start-2 min-[960px]:row-start-2">
+        <div className="min-w-0">
+          <ActiveFiltersBar
+            chips={filterChips}
+            onClearAll={clearFilters}
+            ariaLabel={tc("activeFilters.label")}
+            clearLabel={tc("activeFilters.clearAll")}
+            removeAriaPrefix={tc("activeFilters.remove")}
+          />
+
           <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
-            {/* Level toggle: switching also drops the faculty facet, which
-              only applies to research groups. */}
-            <div
-              role="group"
-              aria-label={t("list.levelLabel")}
-              className="flex overflow-hidden rounded-[var(--radius)] border border-[var(--input)]"
-            >
-              <Button
-                variant={level === "faculty" ? "secondary" : "ghost"}
-                size="sm"
-                className="rounded-none"
-                aria-pressed={level === "faculty"}
-                onClick={() => setParams({ level: undefined, faculty: undefined })}
-              >
-                {t("list.levelToggle.faculty")}
-              </Button>
-              <Button
-                variant={level === "group" ? "secondary" : "ghost"}
-                size="sm"
-                className="rounded-none"
-                aria-pressed={level === "group"}
-                onClick={() => setParams({ level: "group", faculty: undefined })}
-              >
-                {t("list.levelToggle.group")}
-              </Button>
-              <Button
-                variant={level === "institute" ? "secondary" : "ghost"}
-                size="sm"
-                className="rounded-none"
-                aria-pressed={level === "institute"}
-                onClick={() => setParams({ level: "institute", faculty: undefined })}
-              >
-                {t("list.levelToggle.institute")}
-              </Button>
-            </div>
             <label htmlFor="orgunit-sort" className="whitespace-nowrap">
               {t("list.sortBy")}
             </label>
@@ -384,27 +458,7 @@ function OrgUnitsView() {
                 </option>
               ))}
             </select>
-            <label htmlFor="orgunit-per-page" className="whitespace-nowrap">
-              {t("list.perPage")}
-            </label>
-            <select
-              id="orgunit-per-page"
-              title={t("list.perPageTitle")}
-              value={pageSize}
-              onChange={(event) =>
-                setParams({
-                  limit: event.target.value === "50" ? undefined : event.target.value,
-                })
-              }
-              className={SELECT_CLASS}
-            >
-              {PAGE_SIZES.map((size) => (
-                <option key={size} value={size}>
-                  {size}
-                </option>
-              ))}
-            </select>
-            {anyFilter && (
+            {(anyFilter || q) && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -429,35 +483,6 @@ function OrgUnitsView() {
                   </span>
                   {isFetching && data ? ` ${t("list.updating")}` : ""}
                 </p>
-                {showPager && (
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      aria-label={t("list.pager.prevLabel")}
-                      disabled={offset === 0}
-                      onClick={() =>
-                        setParams({
-                          offset: String(Math.max(0, offset - pageSize)),
-                        })
-                      }
-                    >
-                      <ChevronLeft aria-hidden className="size-4" /> {t("list.pager.prev")}
-                    </Button>
-                    <span className="whitespace-nowrap text-sm tabular-nums text-[var(--muted-foreground)]">
-                      {t("list.pager.page", { page, pages: pageCount })}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      aria-label={t("list.pager.nextLabel")}
-                      disabled={offset + pageSize >= total}
-                      onClick={() => setParams({ offset: String(offset + pageSize) })}
-                    >
-                      {t("list.pager.next")} <ChevronRight aria-hidden className="size-4" />
-                    </Button>
-                  </div>
-                )}
               </div>
 
               {isError ? (
@@ -649,9 +674,22 @@ function OrgUnitsView() {
                       </TableBody>
                     </Table>
                   </div>
-                  <p className="mt-4 text-xs text-[var(--muted-foreground)]">
-                    {t("list.showing", { shown: rows.length, total: data?.total ?? 0 })}
-                  </p>
+                  <DirectoryPager
+                    offset={offset}
+                    shown={rows.length}
+                    total={total}
+                    limit={pageSize}
+                    onOffset={(nextOffset) =>
+                      setParams({ offset: nextOffset > 0 ? String(nextOffset) : undefined })
+                    }
+                    onLimit={(nextLimit) =>
+                      setParams({ limit: nextLimit === 50 ? undefined : String(nextLimit) })
+                    }
+                    perPageLabel={t("list.perPage")}
+                    prevLabel={t("list.pager.prev")}
+                    nextLabel={t("list.pager.next")}
+                    isFetching={isFetching}
+                  />
                 </>
               )}
             </CardContent>

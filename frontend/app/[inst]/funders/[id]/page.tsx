@@ -6,17 +6,27 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
-import { BackLink } from "@/components/back-link";
 import { CollapsibleCard } from "@/components/collapsible-card";
+import { DetailKpiStrip } from "@/components/detail-kpi-strip";
+import { SectionNav, useLastDirectoryHref } from "@/components/journal/section-nav";
+import { OaTrend } from "@/components/oa-trend";
 import { SourceNote } from "@/components/source-note";
-import { ListSkeletonRows } from "@/components/states";
-import { Card, CardContent } from "@/components/ui/card";
+import { DetailSkeleton, ErrorPanel } from "@/components/states";
 import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useFunder } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { useYearRange } from "@/hooks/use-year-filter";
 import { errorMessage, type FunderDetailResponse } from "@/lib/api";
+import { countryName } from "@/lib/format";
 import { useFunderPrefs } from "@/lib/funder-prefs";
 
 const ROR_URL = "https://ror.org/";
@@ -41,7 +51,7 @@ function CanonLinks({ funder }: { funder: FunderDetailResponse }) {
           href={l.href}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex items-center gap-0.5 underline decoration-dotted underline-offset-2"
+          className="inline-flex items-center gap-0.5 text-[var(--primary-text)] underline-offset-2 hover:underline"
         >
           {l.label}
           <ExternalLink aria-hidden className="size-3.5" />
@@ -66,7 +76,6 @@ function policyValue(v: unknown, yesLabel: string, noLabel: string): string {
   return String(v ?? "");
 }
 
-/** Known OPF rule keys → message keys; unknown keys render humanized. */
 const POLICY_LABEL_KEYS: Record<string, string> = {
   what: "detail.policy.what",
   when: "detail.policy.when",
@@ -77,12 +86,8 @@ const POLICY_LABEL_KEYS: Record<string, string> = {
   conditions: "detail.policy.conditions",
 };
 
-// Payload wrapper keys rendered elsewhere; never show them as JSON fallback.
 const NON_RULE_KEYS: Record<string, true> = { urls: true, notes: true, scope: true };
 
-/** One OPF policy sub-block (archiving_policy / publishing_policy):
- * every key renders as a label row — known keys get curated labels,
- * unknown keys get a humanized label, never a raw JSON dump. */
 function PolicyRules({ rules }: { rules: Record<string, unknown> }) {
   const t = useTranslations("funders");
   const rows: [string, unknown][] = [];
@@ -111,7 +116,6 @@ function PolicyRules({ rules }: { rules: Record<string, unknown> }) {
   );
 }
 
-/** A curated OPF link list ([{url, type, description}]). */
 function PolicyUrls({ urls }: { urls: unknown }) {
   if (!Array.isArray(urls) || urls.length === 0) return null;
   return (
@@ -123,7 +127,7 @@ function PolicyUrls({ urls }: { urls: unknown }) {
               href={u.url}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 underline decoration-dotted underline-offset-2"
+              className="inline-flex items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline"
             >
               {u.description || u.url}
               <ExternalLink aria-hidden className="size-3" />
@@ -135,18 +139,12 @@ function PolicyUrls({ urls }: { urls: unknown }) {
   );
 }
 
-/** Full rendered view of a harvested OPF policy payload (urls, notes,
- * scope, structured rules); unknown shapes render as humanized rows
- * rather than a raw JSON dump. */
 function PolicyBlock({ data }: { data: Record<string, unknown> | null | undefined }) {
   const t = useTranslations("funders");
   if (!data)
     return (
       <p className="text-sm text-[var(--muted-foreground)]">{t("detail.policy.notHarvested")}</p>
     );
-  // Nested shape (publications_policy: archiving_policy/publishing_policy
-  // sub-blocks) and flat shape (data_archiving_policy: rule keys directly
-  // on the payload) both occur in the OPF payloads.
   const RULE_KEYS = [
     "what",
     "when",
@@ -202,7 +200,6 @@ function PolicyBlock({ data }: { data: Record<string, unknown> | null | undefine
   );
 }
 
-/** OpenAIRE Graph identity for the same funder (canon-linked via ROR). */
 function OpenaireCard({ oa }: { oa: NonNullable<FunderDetailResponse["openaire"]> }) {
   const t = useTranslations("funders");
   return (
@@ -264,59 +261,78 @@ export default function FunderPage() {
   const [funder, setFunder] = useFunderPrefs();
   const id = params?.id ? Number(params.id) : undefined;
   const { year_from, year_to } = useYearRange();
-  const { data, isPending, isError, error, refetch } = useFunder(id, { year_from, year_to });
+  const backHref = useLastDirectoryHref("jb-last-funders", `/${inst}/funders`);
+  const { data, isPending, isError, error } = useFunder(id, { year_from, year_to });
+
+  if (isPending) {
+    return (
+      <DetailSkeleton
+        sections={[
+          t("detail.oaTrendTitle"),
+          t("detail.publicationsPolicy"),
+          t("detail.dataPolicy"),
+        ]}
+      />
+    );
+  }
+  if (isError || !data) {
+    return (
+      <ErrorPanel
+        message={errorMessage(tc, error)}
+        backHref={backHref}
+        backLabel={t("detail.backToList")}
+      />
+    );
+  }
+
+  const trendYears = [...(data.works_by_year ?? [])].sort((a, b) => a.year - b.year);
+  const mine = funder?.id === data.id;
+
+  const sections: { id: string; label: string }[] = [
+    ...(trendYears.length > 0 ? [{ id: "funder-oa-trend", label: t("detail.navTrend") }] : []),
+    ...(data.top_journals.length > 0
+      ? [{ id: "funder-top-journals", label: t("detail.navJournals") }]
+      : []),
+    { id: "funder-publications-policy", label: t("detail.navPubPolicy") },
+    { id: "funder-data-policy", label: t("detail.navDataPolicy") },
+    ...(data.openaire ? [{ id: "funder-openaire", label: t("detail.navOpenaire") }] : []),
+  ];
 
   return (
-    <div className="mx-auto max-w-screen-2xl px-4 py-10">
-      <BackLink href={`/${inst}/funders`} label={t("detail.backToList")} />
-      {isPending && <ListSkeletonRows rows={6} />}
-      {isError && (
-        <div>
-          <p className="text-[var(--destructive)]">{errorMessage(tc, error)}</p>
-          <Button variant="outline" size="sm" className="mt-2" onClick={() => refetch()}>
-            {t("detail.retry")}
-          </Button>
-        </div>
-      )}
-      {data && (
-        <>
-          <h1 className="mb-1 text-3xl font-bold text-balance">{data.name}</h1>
-          <p className="mb-2 text-sm text-[var(--muted-foreground)]">
-            {(data.country ?? "").toUpperCase() || "—"}
-            {" · "}
-            {t("detail.worksByInst", { count: data.n_ut_works, inst: site.short })}
-            {" · "}
-            {data.policy_structured ? t("detail.policyStructured") : t("detail.policyTextOnly")}
-          </p>
-          <div className="mb-6 flex flex-wrap items-center gap-4">
+    <>
+      <SectionNav
+        sections={sections}
+        backFallback={`/${inst}/funders`}
+        backStorageKey="jb-last-funders"
+        backLabel={t("detail.backToList")}
+      />
+      <div className="mx-auto max-w-screen-2xl px-4 py-10">
+        <header className="mb-6">
+          <h1 className="mb-2 text-3xl font-bold text-balance">{data.name}</h1>
+          <div className="flex flex-wrap items-center gap-4">
             <CanonLinks funder={data} />
-            {(() => {
-              const mine = funder?.id === data.id;
-              return (
-                <Button
-                  variant={mine ? "default" : "outline"}
-                  size="sm"
-                  aria-pressed={mine}
-                  onClick={() =>
-                    setFunder(
-                      mine
-                        ? null
-                        : { id: data.id, name: data.name ?? t("unnamedFunder", { id: data.id }) },
-                    )
-                  }
-                  title={mine ? t("detail.myFunderHintOn") : t("detail.myFunderHintOff")}
-                >
-                  {mine ? (
-                    <>
-                      <Check aria-hidden className="size-4" />
-                      {t("detail.yourFunder")}
-                    </>
-                  ) : (
-                    t("detail.useAsMyFunder")
-                  )}
-                </Button>
-              );
-            })()}
+            <Button
+              variant={mine ? "default" : "outline"}
+              size="sm"
+              aria-pressed={mine}
+              onClick={() =>
+                setFunder(
+                  mine
+                    ? null
+                    : { id: data.id, name: data.name ?? t("unnamedFunder", { id: data.id }) },
+                )
+              }
+              title={mine ? t("detail.myFunderHintOn") : t("detail.myFunderHintOff")}
+            >
+              {mine ? (
+                <>
+                  <Check aria-hidden className="size-4" />
+                  {t("detail.yourFunder")}
+                </>
+              ) : (
+                t("detail.useAsMyFunder")
+              )}
+            </Button>
             {data.openalex_funder_id && (
               <Link
                 href={`/${inst}/collaborations?funder=${encodeURIComponent(`openalex:${data.openalex_funder_id.replace(/^https?:\/\/openalex\.org\//, "")}`)}`}
@@ -327,77 +343,104 @@ export default function FunderPage() {
               </Link>
             )}
           </div>
+        </header>
 
-          {data.top_journals.length > 0 && (
-            <section className="mb-8">
-              <h2 className="mb-2 text-xl font-bold">{t("instWorks", { inst: site.short })}</h2>
-              <Card>
-                <CardContent className="p-0">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-[var(--border)] text-left text-[var(--muted-foreground)]">
-                        <th className="px-3 py-2 font-medium">{t("detail.journal")}</th>
-                        <th className="px-3 py-2 font-medium">{t("detail.issnL")}</th>
-                        <th className="px-3 py-2 text-right font-medium">{t("detail.works")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.top_journals.map((j) => (
-                        <tr
-                          key={j.issn_l}
-                          className="border-b border-[var(--border)] last:border-0"
-                        >
-                          <td className="px-3 py-2">
-                            <Link
-                              href={`/${inst}/journals/${j.issn_l}`}
-                              className="underline decoration-dotted underline-offset-2"
-                            >
-                              {j.title ?? j.issn_l}
-                            </Link>
-                          </td>
-                          <td className="px-3 py-2 tabular-nums">{j.issn_l}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{j.n_works}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </CardContent>
-              </Card>
-              <div className="mt-1">
+        <DetailKpiStrip
+          items={[
+            { label: t("detail.kpiCountry"), value: countryName(data.country) },
+            {
+              label: t("detail.kpiWorks", { inst: site.short }),
+              value: data.n_ut_works.toLocaleString("en"),
+            },
+            {
+              label: t("detail.kpiPolicy"),
+              value: data.policy_structured
+                ? t("detail.policyShortStructured")
+                : t("detail.policyShortText"),
+            },
+            {
+              label: t("detail.kpiTopJournals"),
+              value: data.top_journals.length.toLocaleString("en"),
+            },
+          ]}
+        />
+
+        <div className="space-y-6">
+          {trendYears.length > 0 && (
+            <CollapsibleCard id="funder-oa-trend" title={t("detail.oaTrendTitle")}>
+              <OaTrend stats={trendYears} />
+              <div className="mt-2">
                 <SourceNote
                   source={t("detail.worksSource", { inst: site.short })}
                   url={OPENAIRE_URL}
                   codes={["openalex-coverage", "openaire-enrichment"]}
                 />
               </div>
-            </section>
+            </CollapsibleCard>
           )}
 
-          <div className="space-y-4">
-            <CollapsibleCard id="funder-publications-policy" title={t("detail.publicationsPolicy")}>
-              <PolicyBlock data={data.publications_policy} />
-              <div className="mt-2">
+          {data.top_journals.length > 0 && (
+            <CollapsibleCard
+              id="funder-top-journals"
+              title={t("instWorks", { inst: site.short })}
+              contentClassName="text-sm"
+            >
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("detail.journal")}</TableHead>
+                    <TableHead>{t("detail.issnL")}</TableHead>
+                    <TableHead className="text-right">{t("detail.works")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.top_journals.map((j) => (
+                    <TableRow key={j.issn_l}>
+                      <TableCell className="font-medium">
+                        <Link
+                          href={`/${inst}/journals/${j.issn_l}`}
+                          className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                        >
+                          {j.title ?? j.issn_l}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="tabular-nums text-[var(--muted-foreground)]">
+                        {j.issn_l}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {j.n_works.toLocaleString("en")}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <div className="mt-3">
                 <SourceNote
-                  source={t("sourceJisc")}
-                  url={OPF_URL}
-                  codes={["jisc-policy-currency"]}
+                  source={t("detail.worksSource", { inst: site.short })}
+                  url={OPENAIRE_URL}
+                  codes={["openalex-coverage", "openaire-enrichment"]}
                 />
               </div>
             </CollapsibleCard>
-            <CollapsibleCard id="funder-data-policy" title={t("detail.dataPolicy")}>
-              <PolicyBlock data={data.data_archiving_policy} />
-              <div className="mt-2">
-                <SourceNote
-                  source={t("sourceJisc")}
-                  url={OPF_URL}
-                  codes={["jisc-policy-currency"]}
-                />
-              </div>
-            </CollapsibleCard>
-            {data.openaire && <OpenaireCard oa={data.openaire} />}
-          </div>
-        </>
-      )}
-    </div>
+          )}
+
+          <CollapsibleCard id="funder-publications-policy" title={t("detail.publicationsPolicy")}>
+            <PolicyBlock data={data.publications_policy} />
+            <div className="mt-2">
+              <SourceNote source={t("sourceJisc")} url={OPF_URL} codes={["jisc-policy-currency"]} />
+            </div>
+          </CollapsibleCard>
+
+          <CollapsibleCard id="funder-data-policy" title={t("detail.dataPolicy")}>
+            <PolicyBlock data={data.data_archiving_policy} />
+            <div className="mt-2">
+              <SourceNote source={t("sourceJisc")} url={OPF_URL} codes={["jisc-policy-currency"]} />
+            </div>
+          </CollapsibleCard>
+
+          {data.openaire && <OpenaireCard oa={data.openaire} />}
+        </div>
+      </div>
+    </>
   );
 }

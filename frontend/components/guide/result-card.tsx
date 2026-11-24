@@ -9,7 +9,7 @@ import { DealBadge, FunderFitBadge, OaTypeBadge, QuartileBadge } from "@/compone
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import type { RecommendedJournal, RecommendReason } from "@/lib/api";
+import { encodeNamePath, type RecommendedJournal, type RecommendReason } from "@/lib/api";
 import { formatInt } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -122,7 +122,14 @@ export function PodiumJournalCard({
               </Link>
             </div>
             {journal.publisher && (
-              <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">{journal.publisher}</p>
+              <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
+                <Link
+                  href={`/${inst}/publisher/${encodeNamePath(journal.publisher)}`}
+                  className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                >
+                  {journal.publisher}
+                </Link>
+              </p>
             )}
           </div>
 
@@ -196,12 +203,13 @@ export function PodiumJournalCard({
               <span>{t("results.hIndexLabel", { value: formatInt(journal.h_index) })}</span>
             )}
             {journal.topics?.slice(0, 3).map((topic) => (
-              <span
+              <Link
                 key={topic}
-                className="rounded-full bg-[var(--muted)] px-2 py-0.5 text-[11px] text-[var(--foreground)]"
+                href={`/${inst}/?topic=${encodeURIComponent(topic)}`}
+                className="rounded-md border border-[var(--border)] bg-[var(--muted)] px-2 py-0.5 text-[11px] text-[var(--foreground)] hover:border-[var(--primary)] hover:text-[var(--primary-text)]"
               >
                 {topic}
-              </span>
+              </Link>
             ))}
           </div>
 
@@ -246,7 +254,15 @@ export function RunnerUpJournalRow({
               {journal.title ?? journal.issn_l}
             </Link>
             {journal.publisher && (
-              <span className="text-xs text-[var(--muted-foreground)]">· {journal.publisher}</span>
+              <span className="text-xs text-[var(--muted-foreground)]">
+                ·{" "}
+                <Link
+                  href={`/${inst}/publisher/${encodeNamePath(journal.publisher)}`}
+                  className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                >
+                  {journal.publisher}
+                </Link>
+              </span>
             )}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">

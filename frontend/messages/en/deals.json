@@ -6,6 +6,22 @@
     "heading": "Open access deals",
     "intro": "Transformative and read-and-publish agreements that cover {institution} authors. Each entry shows the caps, the conditions, and the workflow."
   },
+  "kpi": {
+    "currentDeals": "Current deals",
+    "coveredJournals": "Covered journal entries",
+    "cappedDeals": "Capped deals",
+    "archivedDeals": "Archived deals"
+  },
+  "filter": {
+    "searchPlaceholder": "Search deals, publishers, or conditions…",
+    "searchAria": "Search deals",
+    "all": "All",
+    "capped": "Capped",
+    "capReached": "At cap",
+    "correspondingOnly": "Corresponding only",
+    "clear": "Clear filter",
+    "empty": "No deals match the current filter."
+  },
   "section": {
     "current": "Current deals",
     "count": "{count, plural, one {# deal relevant to {institution} authors} other {# deals relevant to {institution} authors}}",

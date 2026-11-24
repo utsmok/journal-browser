@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { UtAuthorship } from "@/components/journal/shared";
+import { encodeNamePath } from "@/lib/api";
 
 /** Who at this institution authors the journal's works: distinct works
  * per faculty and research group, plus the most prolific UT authors. */
@@ -41,11 +42,13 @@ export function UtAuthorshipCard({ authorship, inst }: { authorship: UtAuthorshi
           {(
             [
               {
+                level: "faculty" as const,
                 heading: t("utAuthorship.facultiesHeading"),
                 caption: t("utAuthorship.captionFaculties"),
                 rows: authorship.faculties,
               },
               {
+                level: "group" as const,
                 heading: t("utAuthorship.groupsHeading"),
                 caption: t("utAuthorship.captionGroups"),
                 rows: authorship.research_groups,
@@ -67,7 +70,14 @@ export function UtAuthorshipCard({ authorship, inst }: { authorship: UtAuthorshi
                     <TableBody>
                       {table.rows.map((row) => (
                         <TableRow key={row.name}>
-                          <TableCell className="font-medium">{row.name}</TableCell>
+                          <TableCell className="font-medium">
+                            <Link
+                              href={`/${inst}/orgunit/${table.level}/${encodeNamePath(row.name)}`}
+                              className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                            >
+                              {row.name}
+                            </Link>
+                          </TableCell>
                           <TableCell className="text-right tabular-nums">
                             {row.works.toLocaleString("en")}
                           </TableCell>

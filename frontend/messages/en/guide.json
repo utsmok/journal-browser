@@ -127,7 +127,8 @@
     "transparencyLead": "The server encodes your text locally with the bge-small-en-v1.5 model, compares it with journal embeddings in PostgreSQL, and ranks candidates using the fixed rules below.",
     "transparencyStats": "Candidate pool: {pool} journals. Exact matches: {strict}.",
     "transparencyPipelineLink": "Read the full data pipeline documentation",
-    "handoffLead": "Want a wider list without policy or budget filters?",
-    "handoffCta": "Open semantic search"
+    "handoffLead": "Want to explore or filter the full journal list?",
+    "handoffCta": "Open semantic search",
+    "browseWithFilters": "Browse with these filters"
   }
 }

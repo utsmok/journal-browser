@@ -98,6 +98,18 @@
   },
   "detail": {
     "unknownType": "Unknown unit type. Use a faculty, group, or institute page.",
+    "navOverview": "Overview",
+    "navGroups": "Groups",
+    "navTrend": "OA over time",
+    "navDeals": "Deal usage",
+    "navJournals": "Journals",
+    "navAuthors": "Top authors",
+    "navPartners": "Partners",
+    "navCrisGaps": "Not in Pure",
+    "kpiAuthors": "Authors",
+    "kpiWorks": "Works",
+    "kpiDealWorks": "Deal-covered",
+    "kpiApcSpend": "APC spend",
     "back": {
       "faculty": "Back to faculties",
       "group": "Back to research groups",

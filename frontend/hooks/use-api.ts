@@ -20,6 +20,7 @@ import {
   type DealOut,
   type FreshnessResponse,
   type FunderDetailResponse,
+  type FunderSearchParams,
   type FunderSearchResponse,
   type JournalDetailResponse,
   type JournalSearchParams,
@@ -86,6 +87,7 @@ function useFetchEpoch(params: JournalSearchParams) {
 const FILTER_KEYS = [
   "search_in",
   "deal",
+  "deal_id",
   "oa",
   "doaj",
   "quartile",
@@ -230,11 +232,15 @@ export function useJournalWorks(issnL: string | undefined, page: number, years?:
   });
 }
 
-export function useDeals(status: "current" | "archive" | "all" = "current") {
+export function useDeals(
+  status: "current" | "archive" | "all" = "current",
+  { enabled = true }: { enabled?: boolean } = {},
+) {
   const inst = useInstitution();
   return useQuery({
     queryKey: qk.deals(inst, status),
     queryFn: () => apiGet<DealOut[]>(`/${inst}/deals`, { status }),
+    enabled: enabled && inst !== "",
     placeholderData: keepPreviousData,
   });
 }
@@ -343,20 +349,26 @@ export function useFunders(q: string | undefined, enabled: boolean) {
   });
 }
 
-/** Funder directory listing: paged over the whole canon with no
- * minimum query length (the picker hook above requires 2 chars). */
-export function useFunderDirectory(q: string, offset: number, limit: number) {
+/** Funder directory listing: paged, faceted, and year-scoped over the canon. */
+export function useFunderDirectory(params: FunderSearchParams) {
   const inst = useInstitution();
   return useQuery({
-    queryKey: [...qk.funders(inst, q), offset, limit] as const,
+    queryKey: [...qk.funders(inst, params.q ?? ""), params] as const,
     queryFn: async () => {
       const data = await apiGet<FunderSearchResponse>(`/${inst}/funders`, {
-        q: q || undefined,
-        offset,
-        limit,
+        q: params.q || undefined,
+        country: params.country?.join("|"),
+        policy_structured:
+          params.policy_structured === undefined ? undefined : String(params.policy_structured),
+        sort: params.sort,
+        dir: params.dir,
+        offset: params.offset ?? 0,
+        limit: params.limit ?? 50,
+        year_from: params.year_from,
+        year_to: params.year_to,
       });
       trackSearch({
-        query: q,
+        query: params.q ?? "",
         results_count: data.total,
         search_scope: "funders",
       });

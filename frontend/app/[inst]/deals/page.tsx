@@ -7,18 +7,21 @@ import { useState } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 
 import { SourceNote } from "@/components/source-note";
+import { DetailKpiStrip } from "@/components/detail-kpi-strip";
 import { Badge } from "@/components/ui/badge";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { DealBadge } from "@/components/badges";
 import { DealCapUsage } from "@/components/deal-cap-usage";
 import { useDeals } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
+import { useSearchShortcut } from "@/hooks/use-search-shortcut";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { errorMessage, type DealLink, type DealOut } from "@/lib/api";
 import { capReached, latestYearUsage } from "@/lib/deal-caps";
 import { dealLinkLabel, displayPublisherName, orderedDealLinks } from "@/lib/deal-links";
-import { formatApc, formatEur } from "@/lib/format";
+import { formatApc, formatEur, formatInt } from "@/lib/format";
 import { cleanProse } from "@/lib/utils";
 
 /** One card line for a condition the deal has. False conditions never
@@ -214,7 +217,7 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
         {!archived && (
           <Link
-            href={`/${inst}?deal=covered`}
+            href={`/${inst}/?deal_id=${deal.id}`}
             className="inline-flex items-center gap-1 text-[var(--primary-text)] hover:underline"
           >
             {t("card.coveredJournals")}
@@ -274,6 +277,31 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
   );
 }
 
+type DealFilterMode = "all" | "capped" | "cap_reached" | "corresponding";
+
+function matchesDealFilter(deal: DealOut, query: string, mode: DealFilterMode): boolean {
+  if (mode === "capped") {
+    const hasCaps = Boolean(deal.cap_text || Object.keys(deal.cap_numbers ?? {}).length > 0);
+    if (!hasCaps) return false;
+  } else if (mode === "cap_reached") {
+    if (!latestYearUsage(deal.cap_usage).some(capReached)) return false;
+  } else if (mode === "corresponding") {
+    if (deal.corresponding_authors_only !== true) return false;
+  }
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  const hay = [
+    deal.publisher_name ?? "",
+    displayPublisherName(deal.publisher_name),
+    deal.summary ?? "",
+    deal.conditions_text ?? "",
+    deal.cap_text ?? "",
+  ]
+    .join(" ")
+    .toLowerCase();
+  return hay.includes(needle);
+}
+
 export default function DealsPage() {
   const t = useTranslations("deals");
   const tc = useTranslations("common");
@@ -281,26 +309,78 @@ export default function DealsPage() {
   const current = useDeals("current");
   const archive = useDeals("archive");
   const [archiveOpen, setArchiveOpen] = useState(false);
-  const section = (label: string, query: UseQueryResult<DealOut[], Error>, archived?: boolean) => (
+  const [query, setQuery] = useState("");
+  const [mode, setMode] = useState<DealFilterMode>("all");
+  useSearchShortcut("deals-search");
+
+  const currentList = current.data ?? [];
+  const archiveList = archive.data ?? [];
+  const filteredCurrent = currentList.filter((d) => matchesDealFilter(d, query, mode));
+  const filteredArchive = archiveList.filter((d) => matchesDealFilter(d, query, mode));
+  const hasFilter = query.trim() !== "" || mode !== "all";
+
+  const kpiItems = current.data
+    ? [
+        { label: t("kpi.currentDeals"), value: formatInt(currentList.length) },
+        {
+          label: t("kpi.coveredJournals"),
+          value: formatInt(currentList.reduce((sum, d) => sum + (d.journal_count ?? 0), 0)),
+        },
+        {
+          label: t("kpi.cappedDeals"),
+          value: formatInt(
+            currentList.filter((d) =>
+              Boolean(d.cap_text || Object.keys(d.cap_numbers ?? {}).length > 0),
+            ).length,
+          ),
+        },
+        {
+          label: t("kpi.archivedDeals"),
+          value: archive.data ? formatInt(archiveList.length) : "—",
+        },
+      ]
+    : [];
+
+  const section = (
+    label: string,
+    listQuery: UseQueryResult<DealOut[], Error>,
+    filtered: DealOut[],
+    archived?: boolean,
+  ) => (
     <section className="mb-10">
       <h2 className="mb-1 text-xl font-bold">{label}</h2>
       <p className="mb-4 text-sm text-[var(--muted-foreground)]">
-        {query.data
-          ? t("section.count", { count: query.data.length, institution: site.short })
-          : query.isError
+        {listQuery.data
+          ? t("section.count", { count: filtered.length, institution: site.short })
+          : listQuery.isError
             ? t("section.loadFailed")
             : t("section.loading")}
       </p>
-      {query.isError ? (
+      {listQuery.isError ? (
         <div>
-          <p className="text-[var(--destructive)]">{errorMessage(tc, query.error)}</p>
-          <Button variant="outline" size="sm" className="mt-2" onClick={() => query.refetch()}>
+          <p className="text-[var(--destructive)]">{errorMessage(tc, listQuery.error)}</p>
+          <Button variant="outline" size="sm" className="mt-2" onClick={() => listQuery.refetch()}>
             {t("section.retry")}
+          </Button>
+        </div>
+      ) : filtered.length === 0 && listQuery.data && hasFilter ? (
+        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-4 py-8 text-center text-sm text-[var(--muted-foreground)]">
+          <p>{t("filter.empty")}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-3"
+            onClick={() => {
+              setQuery("");
+              setMode("all");
+            }}
+          >
+            {t("filter.clear")}
           </Button>
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
-          {(query.data ?? []).map((deal) => (
+          {filtered.map((deal) => (
             <DealCard key={deal.id} deal={deal} archived={archived} />
           ))}
         </div>
@@ -310,16 +390,80 @@ export default function DealsPage() {
 
   // Archived deals are rarely consulted, so they load behind a toggle; the
   // count rides in the heading so readers know what is folded away.
-  const archiveCount = archive.data?.length ?? 0;
+  const archiveCount = filteredArchive.length;
   return (
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
       <h1 className="mb-2 text-3xl font-bold">{t("page.heading")}</h1>
-      <p className="mb-8 max-w-2xl text-[var(--muted-foreground)]">
+      <p className="mb-6 max-w-2xl text-[var(--muted-foreground)]">
         {t("page.intro", { institution: site.short })}
       </p>
-      {section(t("section.current"), current)}
+      <DetailKpiStrip items={kpiItems} />
+
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <div className="relative w-full max-w-sm">
+          <Input
+            id="deals-search"
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("filter.searchPlaceholder")}
+            aria-label={t("filter.searchAria")}
+            className="pr-8"
+          />
+          {query === "" && (
+            <kbd
+              aria-hidden
+              className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-[var(--border)] bg-[var(--muted)] px-1.5 py-0.5 text-[11px] text-[var(--muted-foreground)] [@media(hover:hover)_and_(pointer:fine)]:block"
+            >
+              /
+            </kbd>
+          )}
+        </div>
+        <div
+          role="group"
+          aria-label={t("filter.searchAria")}
+          className="flex flex-wrap overflow-hidden rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)]"
+        >
+          {(
+            [
+              ["all", t("filter.all")],
+              ["capped", t("filter.capped")],
+              ["cap_reached", t("filter.capReached")],
+              ["corresponding", t("filter.correspondingOnly")],
+            ] as const
+          ).map(([key, label]) => (
+            <Button
+              key={key}
+              type="button"
+              size="sm"
+              variant={mode === key ? "secondary" : "ghost"}
+              aria-pressed={mode === key}
+              className="rounded-none"
+              onClick={() => setMode(key)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+        {hasFilter && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-[var(--muted-foreground)]"
+            onClick={() => {
+              setQuery("");
+              setMode("all");
+            }}
+          >
+            {t("filter.clear")}
+          </Button>
+        )}
+      </div>
+
+      {section(t("section.current"), current, filteredCurrent)}
       {archive.data ? (
-        archiveCount > 0 ? (
+        archiveList.length > 0 ? (
           <section className="mb-10">
             <h2 className="text-xl font-bold">
               <button
@@ -341,7 +485,7 @@ export default function DealsPage() {
             </p>
             {archiveOpen && (
               <div id="archive-deals" className="mt-4 grid gap-4 lg:grid-cols-2">
-                {archive.data.map((deal) => (
+                {filteredArchive.map((deal) => (
                   <DealCard key={deal.id} deal={deal} archived />
                 ))}
               </div>

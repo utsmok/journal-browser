@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
-import type { ReactNode } from "react";
+import * as React from "react";
 import { useTranslations } from "next-intl";
 
 import { ACCESS_TEXT, DealGlyph, LockIcon, QuartileGlyph } from "@/components/badges";
@@ -56,13 +56,19 @@ export type FacetGroupDef = {
   values: FacetValue[];
   activeValues: string[];
   defaultOpen: boolean;
+  searchable?: boolean;
+  initialVisible?: number;
 };
 
-/** Top 8 by count, with the active value kept visible even outside the top 8. */
-function topValues(counts: Record<string, number> | undefined, active: string): FacetValue[] {
+/** Top N by count, with the active value kept visible even outside the top N. */
+function topValues(
+  counts: Record<string, number> | undefined,
+  active: string,
+  limit = 8,
+): FacetValue[] {
   const values: FacetValue[] = Object.entries(counts ?? {})
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
+    .slice(0, limit)
     .map(([value, count]) => ({ value, count }));
   if (active && !values.some((t) => t.value === active)) values.unshift({ value: active });
   return values;
@@ -195,7 +201,7 @@ const FACET_ICON_TEXT: Record<string, string> = {
 };
 
 /** Icon + selected tint per facet option; unlisted options stay neutral. */
-function facetLook(key: string, value: string): { icon: ReactNode; tint: string } {
+function facetLook(key: string, value: string): { icon: React.ReactNode; tint: string } {
   switch (`${key}:${value}`) {
     case "deal:covered":
       return { icon: <DealGlyph />, tint: TINTS.emerald };
@@ -335,8 +341,29 @@ function FacetGroup({
 }) {
   const site = useSiteMeta();
   const t = useTranslations("common");
-  const { key, label, values, activeValues, defaultOpen } = group;
+  const { key, label, values, activeValues, defaultOpen, searchable, initialVisible } = group;
+  const [filter, setFilter] = React.useState("");
+  const [expanded, setExpanded] = React.useState(false);
   const chips = variant === "chips";
+  const initialLimit = initialVisible ?? 8;
+  const needle = filter.trim().toLowerCase();
+  const filteredValues = needle
+    ? values.filter(
+        (v) =>
+          (v.label ?? v.value).toLowerCase().includes(needle) ||
+          v.value.toLowerCase().includes(needle),
+      )
+    : values;
+  const visibleValues =
+    needle || expanded || filteredValues.length <= initialLimit
+      ? filteredValues
+      : [
+          ...filteredValues.filter((v) => activeValues.includes(v.value)),
+          ...filteredValues
+            .filter((v) => !activeValues.includes(v.value))
+            .slice(0, Math.max(0, initialLimit - activeValues.length)),
+        ];
+  const hiddenCount = filteredValues.length - visibleValues.length;
   const focus =
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2";
   // One look for both variants: a squared control (not the old pill) that
@@ -381,88 +408,104 @@ function FacetGroup({
           />
         </span>
       </summary>
-      <div
-        className={
-          chips ? "mt-2 flex flex-wrap items-center gap-1.5" : "mt-1.5 flex flex-col gap-1"
-        }
-      >
-        {values.map((f) => {
-          const active = activeValues.includes(f.value);
-          // Facets with zero results must not invite a click that empties the
-          // list, so they render inert.
-          const zero = !active && f.count === 0;
-          const look = facetLook(key, f.value);
-          const className = `jb-chip-row ${
-            active
-              ? `${layout} ${look.tint} border font-medium ${focus}`
-              : zero
-                ? zeroClasses
-                : idleClasses
-          }`;
-          const iconNode = look.icon ? (
-            // The glyphs are bare SVG shapes; they need an svg context here
-            // (inside badges they live inside the lockup's own svg).
-            <svg
-              aria-hidden
-              viewBox="0 0 16 16"
-              className={`h-4 w-auto shrink-0 overflow-visible ${
-                active ? "" : (FACET_ICON_TEXT[`${key}:${f.value}`] ?? "")
-              }`}
-            >
-              {look.icon}
-            </svg>
-          ) : null;
-          const labelText = f.label ?? f.value;
-          // An unknown count is never a zero: render the em dash so a slow
-          // facets request or an uncounted active value cannot read as
-          // "no journals".
-          const countNode =
-            f.count === undefined ? (
-              <span className="shrink-0 tabular-nums opacity-70" title={t("facets.countPending")}>
-                —
+      <div className="mt-1.5 space-y-1.5">
+        {searchable && values.length > initialLimit && (
+          <input
+            type="search"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder={t("facets.filterPlaceholder", { label: label.toLowerCase() })}
+            className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-xs text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+          />
+        )}
+        <div className={chips ? "flex flex-wrap items-center gap-1.5" : "flex flex-col gap-1"}>
+          {visibleValues.map((f) => {
+            const active = activeValues.includes(f.value);
+            // Facets with zero results must not invite a click that empties the
+            // list, so they render inert.
+            const zero = !active && f.count === 0;
+            const look = facetLook(key, f.value);
+            const className = `jb-chip-row ${
+              active
+                ? `${layout} ${look.tint} border font-medium ${focus}`
+                : zero
+                  ? zeroClasses
+                  : idleClasses
+            }`;
+            const iconNode = look.icon ? (
+              // The glyphs are bare SVG shapes; they need an svg context here
+              // (inside badges they live inside the lockup's own svg).
+              <svg
+                aria-hidden
+                viewBox="0 0 16 16"
+                className={`h-4 w-auto shrink-0 overflow-visible ${
+                  active ? "" : (FACET_ICON_TEXT[`${key}:${f.value}`] ?? "")
+                }`}
+              >
+                {look.icon}
+              </svg>
+            ) : null;
+            const labelText = f.label ?? f.value;
+            // An unknown count is never a zero: render the em dash so a slow
+            // facets request or an uncounted active value cannot read as
+            // "no journals".
+            const countNode =
+              f.count === undefined ? (
+                <span className="shrink-0 tabular-nums opacity-70" title={t("facets.countPending")}>
+                  —
+                </span>
+              ) : (
+                <span className={`shrink-0 tabular-nums ${chips ? "ml-0.5 opacity-80" : ""}`}>
+                  {f.count.toLocaleString("en")}
+                </span>
+              );
+            const inner = chips ? (
+              <>
+                {iconNode}
+                <span className="max-w-[14rem] truncate">{labelText}</span>
+                {countNode}
+              </>
+            ) : (
+              <>
+                <span className="flex min-w-0 items-center gap-1.5">
+                  {iconNode}
+                  <span className="truncate">{labelText}</span>
+                </span>
+                {countNode}
+              </>
+            );
+            const optionTitle =
+              facetTitle(t, key, f.value, site.name, site.short, site.windowStart) ??
+              (f.value.length > 24 ? f.value : undefined);
+            return zero ? (
+              <span key={f.value} aria-disabled="true" title={optionTitle} className={className}>
+                {inner}
               </span>
             ) : (
-              <span className={`shrink-0 tabular-nums ${chips ? "ml-0.5 opacity-80" : ""}`}>
-                {f.count.toLocaleString("en")}
-              </span>
+              <button
+                key={f.value}
+                type="button"
+                disabled={loading}
+                aria-disabled={loading || undefined}
+                onClick={() => onToggle(key, f.value)}
+                aria-pressed={active}
+                title={optionTitle}
+                className={className}
+              >
+                {inner}
+              </button>
             );
-          const inner = chips ? (
-            <>
-              {iconNode}
-              <span className="max-w-[14rem] truncate">{labelText}</span>
-              {countNode}
-            </>
-          ) : (
-            <>
-              <span className="flex min-w-0 items-center gap-1.5">
-                {iconNode}
-                <span className="truncate">{labelText}</span>
-              </span>
-              {countNode}
-            </>
-          );
-          const optionTitle =
-            facetTitle(t, key, f.value, site.name, site.short, site.windowStart) ??
-            (f.value.length > 24 ? f.value : undefined);
-          return zero ? (
-            <span key={f.value} aria-disabled="true" title={optionTitle} className={className}>
-              {inner}
-            </span>
-          ) : (
-            <button
-              key={f.value}
-              type="button"
-              disabled={loading}
-              aria-disabled={loading || undefined}
-              onClick={() => onToggle(key, f.value)}
-              aria-pressed={active}
-              title={optionTitle}
-              className={className}
-            >
-              {inner}
-            </button>
-          );
-        })}
+          })}
+        </div>
+        {!needle && (hiddenCount > 0 || (expanded && filteredValues.length > initialLimit)) && (
+          <button
+            type="button"
+            onClick={() => setExpanded((prev) => !prev)}
+            className="text-xs font-medium text-[var(--primary-text)] underline-offset-2 hover:underline"
+          >
+            {expanded ? t("facets.showLess") : t("facets.showMore", { count: hiddenCount })}
+          </button>
+        )}
       </div>
     </details>
   );
@@ -521,8 +564,8 @@ export function FilterPanel({
   const t = useTranslations("common");
   const ts = useTranslations("search");
   const loading = facets === undefined;
-  const topicValues = topValues(facets?.topic, selection.topic);
-  const publisherValues = topValues(facets?.publisher, selection.publisher);
+  const topicValues = topValues(facets?.topic, selection.topic, 30);
+  const publisherValues = topValues(facets?.publisher, selection.publisher, 30);
 
   // Options with a fixed value list render even before the facets request
   // returns, so the panel keeps its shape and shows — instead of 0.
@@ -593,7 +636,9 @@ export function FilterPanel({
       key: "language",
       label: t("facets.groupLanguage"),
       defaultOpen: true,
-      values: topValues(facets?.language, selection.language).map((v) => ({
+      searchable: true,
+      initialVisible: 8,
+      values: topValues(facets?.language, selection.language, 30).map((v) => ({
         ...v,
         label: ts.has(`languages.${v.value}`) ? ts(`languages.${v.value}`) : v.value,
       })),
@@ -692,6 +737,8 @@ export function FilterPanel({
             key: "topic",
             label: t("facets.groupTopic"),
             defaultOpen: false,
+            searchable: true,
+            initialVisible: 8,
             values: topicValues,
             activeValues: selection.topic ? [selection.topic] : [],
           },
@@ -703,6 +750,8 @@ export function FilterPanel({
             key: "publisher",
             label: t("facets.groupPublisher"),
             defaultOpen: false,
+            searchable: true,
+            initialVisible: 8,
             values: publisherValues,
             activeValues: selection.publisher ? [selection.publisher] : [],
           },

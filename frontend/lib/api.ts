@@ -243,6 +243,7 @@ export type JournalSearchParams = {
   q?: string;
   search_in?: JournalsSearchIn;
   deal?: "any" | "covered" | "not_covered";
+  deal_id?: number;
   oa?: boolean;
   doaj?: boolean;
   quartile?: string;
@@ -418,6 +419,20 @@ export type PublisherSearchSort = "relevance" | "name" | "journals" | "works" | 
 export type PublisherPartsFilter = "chapter" | "part" | "standalone";
 
 /** List params for the publisher surface; arrays are pipe-joined in the query. */
+export type FunderSearchSort = "works" | "name";
+
+export type FunderSearchParams = {
+  q?: string;
+  country?: string[];
+  policy_structured?: boolean;
+  sort?: FunderSearchSort;
+  dir?: "asc" | "desc";
+  offset?: number;
+  limit?: number;
+  year_from?: number;
+  year_to?: number;
+};
+
 export type PublisherSearchParams = {
   q?: string;
   oa_type?: string[];
@@ -433,6 +448,8 @@ export type PublisherSearchParams = {
   offset?: number;
   limit?: number;
   include_facets?: boolean;
+  year_from?: number;
+  year_to?: number;
 };
 
 /** Org-unit hierarchy level; institutes (MESA+, TechMed, DSI) are their
@@ -462,6 +479,8 @@ export type OrgUnitSearchParams = {
   offset?: number;
   limit?: number;
   include_facets?: boolean;
+  year_from?: number;
+  year_to?: number;
 };
 
 /** Unit names contain spaces, commas, "&" and "/": encode each segment,
@@ -503,6 +522,8 @@ export async function fetchPublishers(
     offset: params.offset,
     limit: params.limit,
     include_facets: params.include_facets ? "true" : undefined,
+    year_from: params.year_from,
+    year_to: params.year_to,
   });
   trackSearch({
     query: params.q ?? "",
@@ -541,6 +562,8 @@ export async function fetchOrgUnits(
     offset: params.offset,
     limit: params.limit,
     include_facets: params.include_facets ? "true" : undefined,
+    year_from: params.year_from,
+    year_to: params.year_to,
   });
   trackSearch({
     query: params.q ?? "",

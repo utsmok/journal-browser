@@ -12,12 +12,31 @@
     "funder": "Funder",
     "country": "Country",
     "empty": "No funder matches “{q}”.",
+    "emptyFilters": "No funders match these filters.",
     "range": "{from} to {to} of {total, number}",
     "prev": "Prev",
-    "next": "Next"
+    "next": "Next",
+    "facets": {
+      "country": "Country",
+      "policy": "Open access policy",
+      "policyStructured": "Structured rules",
+      "policyTextOnly": "Text-only"
+    }
   },
   "detail": {
     "backToList": "Funders",
+    "navTrend": "OA over time",
+    "navJournals": "Top journals",
+    "navPubPolicy": "Publications policy",
+    "navDataPolicy": "Data policy",
+    "navOpenaire": "OpenAIRE",
+    "kpiCountry": "Country",
+    "kpiWorks": "{inst} funded works",
+    "kpiPolicy": "Policy type",
+    "kpiTopJournals": "Top journals",
+    "policyShortStructured": "Structured rules",
+    "policyShortText": "Text-only",
+    "oaTrendTitle": "Open access over time",
     "retry": "Retry",
     "worksByInst": "{count, number} {inst} works",
     "policyStructured": "structured open access policy",

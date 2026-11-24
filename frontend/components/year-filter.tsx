@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import * as React from "react";
 import { useTranslations } from "next-intl";
 
@@ -15,11 +16,17 @@ const LAST5_SPAN = 5;
  */
 export function YearFilterControl() {
   const t = useTranslations("common");
+  const pathname = usePathname() ?? "/";
   const { inst, range, setRange } = useYearRange();
   const { start, end } = useYearBounds();
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
   if (!inst || !mounted) return null;
+
+  const yearScoped =
+    !pathname.startsWith(`/${inst}/deals`) &&
+    !pathname.startsWith(`/${inst}/about`) &&
+    !pathname.startsWith(`/${inst}/guide`);
 
   const active = effectiveYearRange(range, { start, end });
   const last5From = Math.max(start ?? 1900, (end ?? new Date().getFullYear()) - (LAST5_SPAN - 1));
@@ -45,7 +52,12 @@ export function YearFilterControl() {
   };
 
   return (
-    <div className="flex items-center gap-1" aria-label={t("yearFilter.groupLabel")} role="group">
+    <div
+      className={`flex items-center gap-1 ${yearScoped ? "" : "opacity-65"}`}
+      aria-label={t("yearFilter.groupLabel")}
+      role="group"
+      title={yearScoped ? undefined : t("yearFilter.inactivePageHint")}
+    >
       <select
         aria-label={t("yearFilter.presetLabel")}
         title={t("yearFilter.presetHint")}

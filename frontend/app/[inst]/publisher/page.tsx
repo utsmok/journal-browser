@@ -1,12 +1,14 @@
 "use client";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
+import { ActiveFiltersBar, type ActiveFilterChip } from "@/components/active-filters-bar";
+import { DirectoryPager } from "@/components/directory-pager";
 import { FacetGroupList, type FacetGroupDef, type FacetValue } from "@/components/filter-panel";
+import { rememberDirectoryUrl } from "@/components/journal/section-nav";
 import { OaCompositionBar } from "@/components/oa-composition";
 import { SortHead } from "@/components/search/sort-head";
 import { ListSkeletonRows } from "@/components/states";
@@ -23,7 +25,9 @@ import {
 } from "@/components/ui/table";
 import { useInstitution } from "@/hooks/use-institution";
 import { usePublishers } from "@/hooks/use-api";
+import { useSearchShortcut } from "@/hooks/use-search-shortcut";
 import { useSiteMeta } from "@/hooks/use-site-meta";
+import { useYearRange } from "@/hooks/use-year-filter";
 import {
   encodeNamePath,
   errorMessage,
@@ -65,20 +69,21 @@ function normalizeDeal(value: string): "covered" | "not_covered" | null {
 const SELECT_CLASS =
   "h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2";
 
-/** Comma-joined multi-select param → list of values (journal-search convention). */
+/** Pipe-joined multi-select param → list of values. */
 function paramValues(sp: { get(key: string): string | null }, key: string): string[] {
   return (sp.get(key) ?? "").split("|").filter(Boolean);
 }
 
-/** Top 8 buckets of a facet record, with active values kept visible. */
+/** Top N buckets of a facet record, with active values kept visible. */
 function facetValues(
   counts: Record<string, number> | undefined,
   active: string[],
   label?: (value: string) => string,
+  limit = 8,
 ): FacetValue[] {
   const list: FacetValue[] = Object.entries(counts ?? {})
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
+    .slice(0, limit)
     .map(([value, count]) => ({ value, count, label: label?.(value) }));
   for (const value of active)
     if (!list.some((v) => v.value === value)) list.unshift({ value, label: label?.(value) });
@@ -150,6 +155,8 @@ function PublishersView() {
   const sp = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const { year_from, year_to } = useYearRange();
+  useSearchShortcut(SEARCH_INPUT_ID);
 
   const q = sp.get("q") ?? "";
   const [input, setInput] = React.useState(q);
@@ -224,6 +231,19 @@ function PublishersView() {
     return () => clearTimeout(t);
   }, [input, q, update]);
 
+  const yearsKey = `${year_from ?? ""}-${year_to ?? ""}`;
+  const prevYearsKey = React.useRef(yearsKey);
+  React.useEffect(() => {
+    if (prevYearsKey.current === yearsKey) return;
+    prevYearsKey.current = yearsKey;
+    if (offset > 0) setParams({ offset: undefined });
+  }, [yearsKey, offset, setParams]);
+
+  React.useEffect(() => {
+    const qs = sp.toString();
+    rememberDirectoryUrl("jb-last-publishers", qs ? `${pathname}?${qs}` : pathname);
+  }, [pathname, sp]);
+
   const { data, isPending, isFetching, isError, error, refetch } = usePublishers({
     q: q || undefined,
     oa_type: oaTypes.length > 0 ? oaTypes : undefined,
@@ -238,6 +258,8 @@ function PublishersView() {
     offset: offset > 0 ? offset : undefined,
     limit: pageSize === 50 ? undefined : pageSize,
     include_facets: true,
+    year_from,
+    year_to,
   });
 
   const rows = data?.items ?? [];
@@ -245,9 +267,6 @@ function PublishersView() {
 
   // Pager math; total is the unpaginated filtered count.
   const total = data?.total ?? 0;
-  const pageCount = Math.max(1, Math.ceil(total / pageSize));
-  const page = Math.min(Math.floor(offset / pageSize) + 1, pageCount);
-  const showPager = total > pageSize;
 
   const toggleFacet = (key: string, value: string) => {
     if (key === "oa_type" || key === "quartile" || key === "size") {
@@ -276,8 +295,10 @@ function PublishersView() {
     }
   };
 
-  const clearFilters = () =>
+  const clearFilters = () => {
+    setInput("");
     setParams({
+      q: undefined,
       oa_type: undefined,
       deal: undefined,
       quartile: undefined,
@@ -286,6 +307,7 @@ function PublishersView() {
       has_apc: undefined,
       has_works: undefined,
     });
+  };
 
   // Tri-state column sort: natural → reversed → off (journal-table
   // convention). Off removes both params so the backend default applies
@@ -370,65 +392,151 @@ function PublishersView() {
       key: "topic",
       label: t("facets.topic"),
       defaultOpen: false,
-      values: facetValues(facets?.topic, topic ? [topic] : []),
+      searchable: true,
+      initialVisible: 8,
+      values: facetValues(facets?.topic, topic ? [topic] : [], undefined, 30),
       activeValues: topic ? [topic] : [],
     },
   ].filter((group) => group.values.length > 0);
 
+  const filterChips: ActiveFilterChip[] = [
+    ...(q
+      ? [
+          {
+            id: "q",
+            label: `Search: “${q}”`,
+            onRemove: () => {
+              setInput("");
+              setParams({ q: undefined });
+            },
+          },
+        ]
+      : []),
+    ...oaTypes.map((v) => ({
+      id: `oa_type:${v}`,
+      label: `${t("facets.openAccess")}: ${v in OA_TYPE_KEYS ? t(OA_TYPE_KEYS[v]) : v}`,
+      onRemove: () => toggleFacet("oa_type", v),
+    })),
+    ...(deal
+      ? [
+          {
+            id: `deal:${deal}`,
+            label: `${t("facets.deal")}: ${deal in DEAL_KEYS ? t(DEAL_KEYS[deal]) : deal}`,
+            onRemove: () => toggleFacet("deal", deal),
+          },
+        ]
+      : []),
+    ...quartiles.map((v) => ({
+      id: `quartile:${v}`,
+      label: `${t("facets.quartile")}: ${v}`,
+      onRemove: () => toggleFacet("quartile", v),
+    })),
+    ...(hasApc
+      ? [
+          {
+            id: `has_apc:${hasApc}`,
+            label: `${t("facets.apcPrice")}: ${
+              hasApc === "yes" ? t("facets.priceInfo") : t("facets.noPriceInfo")
+            }`,
+            onRemove: () => toggleFacet("has_apc", hasApc),
+          },
+        ]
+      : []),
+    ...(hasWorks
+      ? [
+          {
+            id: `has_works:${hasWorks}`,
+            label: `${t("facets.works")}: ${
+              hasWorks === "true" ? t("facets.hasWorks") : t("facets.noWorks")
+            }`,
+            onRemove: () => toggleFacet("has_works", hasWorks),
+          },
+        ]
+      : []),
+    ...sizes.map((v) => ({
+      id: `size:${v}`,
+      label: `${t("facets.journalCount")}: ${
+        v === "10+"
+          ? t("facets.sizeTenPlus")
+          : t("facets.sizeRange", { range: v.replace("-", " to ") })
+      }`,
+      onRemove: () => toggleFacet("size", v),
+    })),
+    ...(topic
+      ? [
+          {
+            id: `topic:${topic}`,
+            label: `${t("facets.topic")}: ${topic}`,
+            onRemove: () => toggleFacet("topic", topic),
+          },
+        ]
+      : []),
+  ];
+
   return (
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
-      <div className="flex flex-col min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[960px]:gap-6 min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
-        <section className="order-1 mb-8 min-[960px]:col-start-2 min-[960px]:row-start-1 min-[960px]:mb-6">
-          <h1 className="mb-3 text-3xl font-bold text-balance">{t("title")}</h1>
-          <p className="mb-6 max-w-2xl text-[var(--muted-foreground)]">
-            {t("search.intro", { inst: site.short })}
-          </p>
-          <form
-            className="flex max-w-2xl gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              update(input);
-            }}
-          >
-            <div className="relative flex-1">
-              <Input
-                id={SEARCH_INPUT_ID}
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") event.currentTarget.blur();
-                }}
-                placeholder={t("search.placeholder")}
-                aria-label={t("search.searchAria")}
-              />
-              {input === "" && (
-                <kbd
-                  aria-hidden
-                  className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-[var(--border)] bg-[var(--muted)] px-1.5 py-0.5 text-[11px] text-[var(--muted-foreground)] [@media(hover:hover)_and_(pointer:fine)]:block"
-                >
-                  /
-                </kbd>
-              )}
-            </div>
-            <Button type="submit">{t("search.searchButton")}</Button>
-          </form>
+      <header className="mb-6">
+        <h1 className="mb-2 text-3xl font-bold text-balance">{t("title")}</h1>
+        <p className="mb-4 max-w-2xl text-sm text-[var(--muted-foreground)]">
+          {t("search.intro", { inst: site.short })}
+        </p>
+        <form
+          className="flex max-w-2xl gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            update(input);
+          }}
+        >
+          <div className="relative flex-1">
+            <Input
+              id={SEARCH_INPUT_ID}
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") event.currentTarget.blur();
+              }}
+              placeholder={t("search.placeholder")}
+              aria-label={t("search.searchAria")}
+            />
+            {input === "" && (
+              <kbd
+                aria-hidden
+                className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-[var(--border)] bg-[var(--muted)] px-1.5 py-0.5 text-[11px] text-[var(--muted-foreground)] [@media(hover:hover)_and_(pointer:fine)]:block"
+              >
+                /
+              </kbd>
+            )}
+          </div>
+          <Button type="submit">{t("search.searchButton")}</Button>
+        </form>
+      </header>
+
+      {/* Stacked filter card: the only filter UI below 960px. */}
+      {data != null && (
+        <section className="mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
+          <FacetGroupList groups={groups} onToggle={toggleFacet} variant="chips" />
         </section>
+      )}
 
-        {/* Stacked filter card: the only filter UI below 960px. */}
-        {data != null && (
-          <section className="order-2 mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
-            <FacetGroupList groups={groups} onToggle={toggleFacet} variant="chips" />
-          </section>
-        )}
-
+      <div className="flex flex-col gap-6 min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
         {/* Wide-screen sidebar: sticky, scrolls on its own when long. */}
-        {data != null && (
-          <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:col-start-1 min-[960px]:row-span-2 min-[960px]:row-start-1 min-[960px]:block">
+        {data != null ? (
+          <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:block">
             <FacetGroupList groups={groups} onToggle={toggleFacet} variant="rows" />
           </aside>
+        ) : (
+          <div className="hidden min-[960px]:block" />
         )}
 
-        <div className="order-3 min-w-0 min-[960px]:col-start-2 min-[960px]:row-start-2">
+        <div className="min-w-0">
+          <ActiveFiltersBar
+            chips={filterChips}
+            onClearAll={clearFilters}
+            ariaLabel={tc("activeFilters.label")}
+            clearLabel={tc("activeFilters.clearAll")}
+            removeAriaPrefix={tc("activeFilters.remove")}
+          />
+
           <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
             <label htmlFor="publisher-sort" className="whitespace-nowrap">
               {t("search.sortBy")}
@@ -464,27 +572,7 @@ function PublishersView() {
                 </option>
               ))}
             </select>
-            <label htmlFor="publisher-per-page" className="whitespace-nowrap">
-              {t("search.perPage")}
-            </label>
-            <select
-              id="publisher-per-page"
-              title={t("search.perPageHint")}
-              value={pageSize}
-              onChange={(event) =>
-                setParams({
-                  limit: event.target.value === "50" ? undefined : event.target.value,
-                })
-              }
-              className={SELECT_CLASS}
-            >
-              {PAGE_SIZES.map((size) => (
-                <option key={size} value={size}>
-                  {size}
-                </option>
-              ))}
-            </select>
-            {anyFilter && (
+            {(anyFilter || q) && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -511,35 +599,6 @@ function PublishersView() {
                   </span>
                   {isFetching && data ? t("results.updating") : ""}
                 </p>
-                {showPager && (
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      aria-label={t("results.prevPageAria")}
-                      disabled={offset === 0}
-                      onClick={() =>
-                        setParams({
-                          offset: String(Math.max(0, offset - pageSize)),
-                        })
-                      }
-                    >
-                      <ChevronLeft aria-hidden className="size-4" /> {t("results.prev")}
-                    </Button>
-                    <span className="whitespace-nowrap text-sm tabular-nums text-[var(--muted-foreground)]">
-                      {t("results.pageOf", { page, pages: pageCount })}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      aria-label={t("results.nextPageAria")}
-                      disabled={offset + pageSize >= total}
-                      onClick={() => setParams({ offset: String(offset + pageSize) })}
-                    >
-                      {t("results.next")} <ChevronRight aria-hidden className="size-4" />
-                    </Button>
-                  </div>
-                )}
               </div>
 
               {isError ? (
@@ -712,9 +771,22 @@ function PublishersView() {
                       </TableBody>
                     </Table>
                   </div>
-                  <p className="mt-4 text-xs text-[var(--muted-foreground)]">
-                    {t("results.showingOf", { shown: rows.length, total: data?.total ?? 0 })}
-                  </p>
+                  <DirectoryPager
+                    offset={offset}
+                    shown={rows.length}
+                    total={total}
+                    limit={pageSize}
+                    onOffset={(nextOffset) =>
+                      setParams({ offset: nextOffset > 0 ? String(nextOffset) : undefined })
+                    }
+                    onLimit={(nextLimit) =>
+                      setParams({ limit: nextLimit === 50 ? undefined : String(nextLimit) })
+                    }
+                    perPageLabel={t("search.perPage")}
+                    prevLabel={t("results.prev")}
+                    nextLabel={t("results.next")}
+                    isFetching={isFetching}
+                  />
                 </>
               )}
             </CardContent>
