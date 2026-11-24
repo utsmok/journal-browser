@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 
 import { useInstitution } from "./use-institution";
 import { useFreshness, useInstitutionsDirectory } from "./use-api";
-import { useSiteFallback } from "../app/providers";
+import { useSiteFallback } from "./site-fallback";
 import { instFromSegment } from "@/lib/global-segments";
 
 /**

@@ -5,7 +5,7 @@ import { Building2, Check, ExternalLink, Landmark } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 
-import { FunderPicker } from "@/components/search/funder-picker";
+import { FunderPicker } from "@/components/funder/funder-picker";
 import { useInstitution } from "@/hooks/use-institution";
 import { apiGet, type FunderSearchResponse } from "@/lib/api";
 import type { FunderPrefs } from "@/lib/funder-prefs";

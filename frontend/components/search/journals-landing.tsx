@@ -14,7 +14,7 @@ import { GuideWizard } from "@/components/guide/guide-wizard";
 import { rememberDirectoryUrl } from "@/components/journal/section-nav";
 import { OnboardingBanner, useOnboardingState } from "@/components/onboarding-banner";
 import { PageTabs } from "@/components/page-tabs";
-import { FunderPicker } from "@/components/search/funder-picker";
+import { FunderPicker } from "@/components/funder/funder-picker";
 import { Pagination } from "@/components/search/pagination";
 import { SortHead } from "@/components/search/sort-head";
 import { SourceNote } from "@/components/source-note";
