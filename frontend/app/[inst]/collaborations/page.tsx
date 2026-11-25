@@ -285,7 +285,7 @@ function PartnersPageInner() {
           }}
         />
 
-        <MobileDisclosure label={t("overview.toggle")} className="mb-4 min-[960px]:mb-0">
+        <MobileDisclosure label={t("overview.toggle")} className="mb-6">
           {list.data && (
             <CollaborationOverview
               data={list.data}
@@ -293,7 +293,7 @@ function PartnersPageInner() {
             />
           )}
 
-          <section aria-labelledby="partners-map-title">
+          <section aria-labelledby="partners-map-title" className="mt-6">
             <h2 id="partners-map-title" className="text-base font-semibold">
               {t("map.title")}
             </h2>
@@ -380,7 +380,9 @@ function PartnersPageInner() {
           </div>
         </section>
 
-        <CollaborationSources />
+        <div className="mt-6">
+          <CollaborationSources />
+        </div>
       </FilterLayout>
     </div>
   );
