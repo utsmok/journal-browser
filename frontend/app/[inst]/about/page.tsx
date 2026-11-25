@@ -125,6 +125,16 @@ export default function AboutPage() {
     (b.finished_at ?? "").localeCompare(a.finished_at ?? ""),
   );
   const shownHarvests = showAllRuns ? harvestRows : harvestRows.slice(0, 10);
+  // Both layouts below (list on phones, table from tablet up) read these.
+  const runRows = shownHarvests.map((h, i) => ({
+    key: `${h.source}-${h.entity_type}-${i}`,
+    source: h.source,
+    url: SOURCES.find((s) => s.name.toLowerCase() === h.source.toLowerCase())?.url,
+    entityType: h.entity_type,
+    filterSet: h.filter_set,
+    status: h.status,
+    finished: fmt(h.finished_at, t("page.unknownValue")),
+  }));
 
   function stamp(info: SourceInfo) {
     if (info.table) return tables[info.table];
@@ -228,7 +238,28 @@ export default function AboutPage() {
         <h2 className="mb-3 text-xl font-bold">{t("sources.heading")}</h2>
         <Card>
           <CardContent className="pt-6">
-            <div className="overflow-x-auto">
+            {/* Phones get one block per source; from tablet up the table
+                has room and scrolls inside the card. */}
+            <ul className="divide-y divide-[var(--border)] text-sm md:hidden">
+              {SOURCES.map((info) => (
+                <li key={info.name} className="py-3 first:pt-0 last:pb-0">
+                  <a
+                    href={info.url || site.researchPortalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-h-11 min-w-11 items-center gap-0.5 font-semibold text-[var(--primary-text)] hover:underline"
+                  >
+                    {info.name} <ExternalIcon />
+                  </a>
+                  <p className="text-[var(--muted-foreground)]">{t(`sources.${info.roleKey}`)}</p>
+                  <p className="mt-1 text-xs whitespace-nowrap tabular-nums text-[var(--muted-foreground)]">
+                    {t("sources.columnLatest")}:{" "}
+                    {freshnessQuery.isPending ? "…" : fmt(stamp(info), t("page.unknownValue"))}
+                  </p>
+                </li>
+              ))}
+            </ul>
+            <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-sm">
                 <caption className="sr-only">{t("sources.tableCaption")}</caption>
                 <thead>
@@ -252,7 +283,7 @@ export default function AboutPage() {
                           href={info.url || site.researchPortalUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-0.5 font-semibold text-[var(--primary-text)] hover:underline"
+                          className="inline-flex min-h-11 min-w-11 items-center gap-0.5 font-semibold text-[var(--primary-text)] hover:underline min-[1024px]:min-h-0 min-[1024px]:min-w-0"
                         >
                           {info.name} <ExternalIcon />
                         </a>
@@ -285,56 +316,84 @@ export default function AboutPage() {
         <section>
           <h2 className="mb-3 text-xl font-bold">{t("harvests.heading")}</h2>
           <Card>
-            <CardContent className="overflow-x-auto pt-6">
-              <table className="w-full text-xs">
-                <caption className="sr-only">{t("harvests.tableCaption")}</caption>
-                <thead>
-                  <tr className="text-left text-[var(--muted-foreground)]">
-                    <th className="py-1 pr-3 font-medium">{t("harvests.columnSource")}</th>
-                    <th className="py-1 pr-3 font-medium">{t("harvests.columnEntity")}</th>
-                    <th className="py-1 pr-3 font-medium">{t("harvests.columnFilters")}</th>
-                    <th className="py-1 pr-3 font-medium">{t("harvests.columnStatus")}</th>
-                    <th className="py-1 font-medium">{t("harvests.columnFinished")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {shownHarvests.map((h, i) => {
-                    const url = SOURCES.find(
-                      (s) => s.name.toLowerCase() === h.source.toLowerCase(),
-                    )?.url;
-                    return (
-                      <tr
-                        key={`${h.source}-${h.entity_type}-${i}`}
-                        className="border-t border-[var(--border)]"
+            <CardContent className="pt-6">
+              {/* Phones get one block per run; from tablet up the table has
+                  room and scrolls inside the card. */}
+              <ul className="divide-y divide-[var(--border)] md:hidden">
+                {runRows.map((run) => (
+                  <li
+                    key={run.key}
+                    className="flex flex-wrap items-center gap-x-2 gap-y-1 py-2.5 text-sm first:pt-0 last:pb-0"
+                  >
+                    {run.url ? (
+                      <a
+                        href={run.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex min-h-11 min-w-11 items-center font-medium text-[var(--primary-text)] hover:underline"
                       >
+                        {run.source}
+                      </a>
+                    ) : (
+                      <span className="font-medium">{run.source}</span>
+                    )}
+                    <span className="text-[var(--muted-foreground)]">
+                      {run.entityType} · {run.filterSet}
+                    </span>
+                    <Badge
+                      variant={run.status === "completed" ? "muted" : "outline"}
+                      className="ml-auto"
+                    >
+                      {run.status ?? "—"}
+                    </Badge>
+                    <span className="basis-full text-xs tabular-nums text-[var(--muted-foreground)]">
+                      {t("harvests.columnFinished")}: {run.finished}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full text-xs">
+                  <caption className="sr-only">{t("harvests.tableCaption")}</caption>
+                  <thead>
+                    <tr className="text-left text-[var(--muted-foreground)]">
+                      <th className="py-1 pr-3 font-medium">{t("harvests.columnSource")}</th>
+                      <th className="py-1 pr-3 font-medium">{t("harvests.columnEntity")}</th>
+                      <th className="py-1 pr-3 font-medium">{t("harvests.columnFilters")}</th>
+                      <th className="py-1 pr-3 font-medium">{t("harvests.columnStatus")}</th>
+                      <th className="py-1 font-medium">{t("harvests.columnFinished")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {runRows.map((run) => (
+                      <tr key={run.key} className="border-t border-[var(--border)]">
                         <td className="py-1.5 pr-3">
-                          {url ? (
+                          {run.url ? (
                             <a
-                              href={url}
+                              href={run.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-[var(--primary-text)] hover:underline"
+                              className="inline-flex min-h-11 min-w-11 items-center text-[var(--primary-text)] hover:underline min-[1024px]:min-h-0 min-[1024px]:min-w-0"
                             >
-                              {h.source}
+                              {run.source}
                             </a>
                           ) : (
-                            h.source
+                            run.source
                           )}
                         </td>
-                        <td className="py-1.5 pr-3">{h.entity_type}</td>
+                        <td className="py-1.5 pr-3">{run.entityType}</td>
+                        <td className="py-1.5 pr-3">{run.filterSet}</td>
                         <td className="py-1.5 pr-3">
-                          <Badge variant={h.status === "completed" ? "muted" : "outline"}>
-                            {h.status ?? "—"}
+                          <Badge variant={run.status === "completed" ? "muted" : "outline"}>
+                            {run.status ?? "—"}
                           </Badge>
                         </td>
-                        <td className="py-1.5 tabular-nums">
-                          {fmt(h.finished_at, t("page.unknownValue"))}
-                        </td>
+                        <td className="py-1.5 tabular-nums">{run.finished}</td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               <p className="mt-3 text-xs text-[var(--muted-foreground)]">
                 {t("harvests.footnote")}
                 {harvestRows.length > shownHarvests.length && (
@@ -343,7 +402,7 @@ export default function AboutPage() {
                     <button
                       type="button"
                       onClick={() => setShowAllRuns(true)}
-                      className="font-medium text-[var(--primary-text)] underline underline-offset-2 hover:no-underline"
+                      className="inline-flex min-h-11 items-center font-medium text-[var(--primary-text)] underline underline-offset-2 hover:no-underline min-[1024px]:min-h-0"
                     >
                       {t("harvests.showAll", { count: harvestRows.length })}
                     </button>
@@ -419,7 +478,7 @@ export default function AboutPage() {
                       href={l.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="ml-2 inline-flex items-center gap-0.5 text-[var(--primary-text)] hover:underline"
+                      className="ml-2 inline-flex items-center gap-0.5 py-3 -my-3 text-[var(--primary-text)] hover:underline min-[1024px]:my-0 min-[1024px]:py-0"
                     >
                       {t("limitations.moreInfo")} <ExternalIcon />
                     </a>
@@ -449,7 +508,7 @@ export default function AboutPage() {
                 href={site.libraryUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-0.5 text-[var(--primary-text)] hover:underline"
+                className="inline-flex min-h-11 items-center gap-0.5 text-[var(--primary-text)] hover:underline min-[1024px]:min-h-0"
               >
                 {t("contact.libraryLink", { institution: site.name })} <ExternalIcon />
               </a>
@@ -459,7 +518,7 @@ export default function AboutPage() {
                 href={site.oaGuideUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-0.5 text-[var(--primary-text)] hover:underline"
+                className="inline-flex min-h-11 items-center gap-0.5 text-[var(--primary-text)] hover:underline min-[1024px]:min-h-0"
               >
                 {t("contact.guideLink")} <ExternalIcon />
               </a>
@@ -467,7 +526,7 @@ export default function AboutPage() {
             <li>
               <a
                 href={`mailto:${site.supportEmail}`}
-                className="text-[var(--primary-text)] hover:underline"
+                className="inline-flex min-h-11 items-center text-[var(--primary-text)] hover:underline min-[1024px]:min-h-0"
               >
                 {site.supportEmail}
               </a>

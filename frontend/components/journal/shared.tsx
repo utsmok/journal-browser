@@ -27,7 +27,7 @@ export function External({
       rel="noopener noreferrer"
       title={title}
       className={cn(
-        "inline-flex items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline",
+        "inline-flex min-h-11 min-w-11 max-w-full items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline [overflow-wrap:anywhere] min-[1024px]:min-h-0 min-[1024px]:min-w-0",
         className,
       )}
     >
@@ -67,6 +67,24 @@ export function Metric({
   );
 }
 
+/** A 24px bordered icon box. On phones the button around it is a 44px
+ * target; negative margins keep the box where the 24px button sat. */
+export function IconBoxButton({ className, children, ...props }: React.ComponentProps<"button">) {
+  return (
+    <button
+      {...props}
+      className={cn(
+        "inline-flex size-11 shrink-0 items-center justify-center rounded text-[var(--muted-foreground)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] -m-2.5 min-[1024px]:m-0 min-[1024px]:size-6",
+        className,
+      )}
+    >
+      <span className="inline-flex size-6 items-center justify-center rounded border border-[var(--border)]">
+        {children}
+      </span>
+    </button>
+  );
+}
+
 /** Clipboard write with a brief "Copied" affordance; no alerts. */
 export function CopyButton({ text, label }: { text: string; label: string }) {
   const t = useTranslations("journals");
@@ -89,13 +107,12 @@ export function CopyButton({ text, label }: { text: string; label: string }) {
         ? t("list.copyFailed")
         : t("list.copy");
   return (
-    <button
+    <IconBoxButton
       type="button"
       onClick={copy}
       aria-label={`${title} ${label}`}
       aria-live="polite"
       title={title}
-      className="inline-flex size-6 shrink-0 items-center justify-center rounded border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
     >
       {state === "copied" ? (
         <Check aria-hidden className="size-3.5 text-emerald-600" />
@@ -104,7 +121,7 @@ export function CopyButton({ text, label }: { text: string; label: string }) {
       ) : (
         <Copy aria-hidden className="size-3.5" />
       )}
-    </button>
+    </IconBoxButton>
   );
 }
 
@@ -138,7 +155,7 @@ export function MoreToggle({
   return (
     <button
       type="button"
-      className="self-start text-sm text-[var(--muted-foreground)] underline-offset-2 hover:underline"
+      className="inline-flex min-h-11 self-start items-center text-sm text-[var(--muted-foreground)] underline-offset-2 hover:underline min-[1024px]:min-h-0"
       aria-expanded={open}
       onClick={onToggle}
     >

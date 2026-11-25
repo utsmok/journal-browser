@@ -71,7 +71,13 @@ export function locationPhrase(
         <React.Fragment key={name}>
           {i > 0 && ", "}
           {/* Linked when the name matched a jisc_repositories row. */}
-          {links[name] ? <External href={links[name]}>{name}</External> : name}
+          {links[name] ? (
+            <External href={links[name]} className="min-h-0">
+              {name}
+            </External>
+          ) : (
+            name
+          )}
         </React.Fragment>
       ))}
     </>

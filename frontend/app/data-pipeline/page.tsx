@@ -241,7 +241,7 @@ export default async function DataPipelinePage() {
           {t.rich("dag.generatedCaption", { code, date: PLAN.generatedAt })}
         </p>
         <details className="max-w-4xl text-sm">
-          <summary className="cursor-pointer text-[var(--muted-foreground)]">
+          <summary className="inline-flex min-h-11 cursor-pointer items-center text-[var(--muted-foreground)] min-[1024px]:min-h-0">
             {t("dag.allEdges", {
               count: PLAN.steps.reduce((count, step) => count + step.deps.length, 0),
             })}

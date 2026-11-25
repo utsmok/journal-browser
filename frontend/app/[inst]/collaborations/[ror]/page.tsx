@@ -49,7 +49,10 @@ import { workTypeLabel } from "@/lib/work-type";
 const PAGE_SIZE = 10;
 const SUBLIST_CAP = 10;
 const linkClass = "underline-offset-2 hover:text-[var(--primary-text)] hover:underline";
-const dottedLink = "underline decoration-dotted underline-offset-2 hover:decoration-solid";
+/** `linkClass` as a 44px target on phones and tablets. */
+const rowLink = `inline-flex min-h-11 min-w-11 items-center ${linkClass} min-[1024px]:min-h-0 min-[1024px]:min-w-0`;
+const dottedLink =
+  "inline-flex min-h-11 min-w-11 items-center underline decoration-dotted underline-offset-2 hover:decoration-solid min-[1024px]:min-h-0 min-[1024px]:min-w-0";
 const external = { target: "_blank", rel: "noopener noreferrer" } as const;
 
 function CreditsList({
@@ -85,7 +88,7 @@ function CreditsList({
               >
                 <span className="min-w-0 truncate">
                   {row.href ? (
-                    <Link href={row.href} className={`font-medium ${linkClass}`}>
+                    <Link href={row.href} className={`font-medium ${rowLink}`}>
                       {row.label}
                     </Link>
                   ) : (
@@ -271,7 +274,7 @@ function PartnerPageInner() {
                 {rel.is_partner ? (
                   <Link
                     href={`/${inst}/collaborations/${encodeURIComponent(bareRor(rel.ror))}${listQuery ? `?${listQuery}` : ""}`}
-                    className={`font-medium ${linkClass}`}
+                    className={`font-medium ${rowLink}`}
                   >
                     {rel.label}
                   </Link>
@@ -500,9 +503,9 @@ function PartnerPageInner() {
                           >
                             <Link
                               href={`/${inst}/orgunit/faculty/${encodeNamePath(u.name)}`}
-                              className={`min-w-0 truncate font-medium ${linkClass}`}
+                              className={`min-w-0 font-medium ${rowLink}`}
                             >
-                              {u.name}
+                              <span className="truncate">{u.name}</span>
                             </Link>
                             <span className="shrink-0 tabular-nums">
                               {u.works.toLocaleString("en")}
@@ -533,9 +536,9 @@ function PartnerPageInner() {
                             >
                               <Link
                                 href={`/${inst}/orgunit/group/${encodeNamePath(u.name)}`}
-                                className={`min-w-0 truncate font-medium ${linkClass}`}
+                                className={`min-w-0 font-medium ${rowLink}`}
                               >
-                                {u.name}
+                                <span className="truncate">{u.name}</span>
                               </Link>
                               <span className="shrink-0 tabular-nums">
                                 {u.works.toLocaleString("en")}
@@ -570,9 +573,9 @@ function PartnerPageInner() {
                             <span className="min-w-0">
                               <Link
                                 href={`/${inst}/author/${encodeURIComponent(a.pure_uuid)}`}
-                                className={`block truncate font-medium ${linkClass}`}
+                                className={`min-w-0 font-medium ${rowLink}`}
                               >
-                                {a.name}
+                                <span className="truncate">{a.name}</span>
                               </Link>
                               {(a.research_group || a.faculty) && (
                                 <span className="block truncate text-xs text-[var(--muted-foreground)]">
@@ -625,7 +628,7 @@ function PartnerPageInner() {
                     {pagedJournals.map((j) => (
                       <TableRow key={j.issn_l}>
                         <TableCell className="font-medium">
-                          <Link href={`/${inst}/journals/${j.issn_l}`} className={linkClass}>
+                          <Link href={`/${inst}/journals/${j.issn_l}`} className={rowLink}>
                             {j.title}
                           </Link>
                         </TableCell>
@@ -718,7 +721,7 @@ function PartnerPageInner() {
                       <span className="flex flex-wrap items-center gap-2">
                         <Link
                           href={`/${inst}/collaborations/${encodeURIComponent(child.ror)}?rollup=0`}
-                          className={`font-medium ${linkClass}`}
+                          className={`font-medium ${rowLink}`}
                         >
                           {child.name}
                         </Link>
@@ -828,7 +831,7 @@ function PartnerPageInner() {
                                   <span className="inline-flex flex-wrap items-center gap-1.5">
                                     <Link
                                       href={`/${inst}/journals/${w.journal_issn_l}`}
-                                      className={linkClass}
+                                      className={rowLink}
                                     >
                                       {w.journal_title ?? w.journal_issn_l}
                                     </Link>

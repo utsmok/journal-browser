@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useSheetDialog } from "@/hooks/use-sheet-dialog";
 import { useTranslations } from "next-intl";
 
 const CATEGORY_VALUES = ["", "bug", "data", "feature", "improvement", "other"] as const;
@@ -62,6 +63,14 @@ export function FeedbackWidget() {
   const [description, setDescription] = React.useState("");
   const [category, setCategory] = React.useState("");
   const [phase, setPhase] = React.useState<Phase>("idle");
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const close = React.useCallback(() => setOpen(false), []);
+  const { panelRef } = useSheetDialog({
+    open,
+    modal: true,
+    onClose: close,
+    returnFocusTo: triggerRef,
+  });
 
   React.useEffect(() => {
     if (phase !== "success") return;
@@ -75,7 +84,8 @@ export function FeedbackWidget() {
     return () => clearTimeout(t);
   }, [phase]);
 
-  // Dialog semantics: keyboard users land in the first field; Escape closes.
+  // The sheet hook moves focus to the close button; the title field is where
+  // keyboard users should land.
   React.useEffect(() => {
     if (open) titleRef.current?.focus();
   }, [open]);
@@ -118,27 +128,29 @@ export function FeedbackWidget() {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-label={t("feedback.reportIssue")}
-        aria-expanded={open}
-        className={`fixed right-4 bottom-4 z-50 flex size-12 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] shadow-lg transition-opacity hover:opacity-90 sm:right-6 sm:bottom-6 ${
-          open ? "pointer-events-none opacity-0" : ""
-        }`}
-      >
-        <MessageSquarePlus className="size-6" aria-hidden="true" />
-      </button>
+      <div className="mx-auto flex w-full max-w-screen-2xl justify-end px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] lg:contents">
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label={t("feedback.reportIssue")}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          className={`flex size-12 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] shadow-lg transition-opacity hover:opacity-90 lg:fixed lg:right-6 lg:bottom-6 lg:z-50 ${
+            open ? "pointer-events-none opacity-0" : ""
+          }`}
+        >
+          <MessageSquarePlus className="size-6" aria-hidden="true" />
+        </button>
+      </div>
 
       {open && (
         <div
+          ref={panelRef}
           role="dialog"
           aria-modal="true"
           aria-label={t("feedback.reportIssue")}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setOpen(false);
-          }}
-          className="fixed inset-x-4 bottom-20 z-50 max-h-[75dvh] overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 sm:inset-x-auto sm:right-6 sm:bottom-24 sm:w-96"
+          className="fixed inset-x-4 bottom-4 z-50 max-h-[75dvh] overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 sm:inset-x-auto sm:bottom-6 sm:right-6 sm:w-96 lg:bottom-24"
         >
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold">{t("feedback.reportIssue")}</h2>
@@ -146,7 +158,7 @@ export function FeedbackWidget() {
               type="button"
               onClick={() => setOpen(false)}
               aria-label={t("feedback.close")}
-              className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+              className="-mr-2 inline-flex size-11 items-center justify-center rounded-[var(--radius)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)] sm:mr-0 sm:size-8"
             >
               <X className="size-4" aria-hidden="true" />
             </button>

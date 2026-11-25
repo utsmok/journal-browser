@@ -48,7 +48,7 @@ function CanonLinks({ funder }: { funder: FunderDetailResponse }) {
     links.push({ label: t("detail.openalex"), href: funder.openalex_funder_id });
   if (funder.url) links.push({ label: t("detail.website"), href: funder.url });
   return (
-    <p className="flex flex-wrap gap-3 text-xs">
+    <p className="flex flex-wrap gap-3 text-xs [&>a]:min-h-11 [&>a]:min-w-11 min-[1024px]:[&>a]:min-h-0 min-[1024px]:[&>a]:min-w-0">
       {links.map((l) => (
         <a
           key={l.label}
@@ -143,7 +143,7 @@ function PolicyUrls({ urls }: { urls: unknown }) {
               href={u.url}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline"
+              className="inline-flex min-h-11 min-w-11 items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline min-[1024px]:min-h-0 min-[1024px]:min-w-0"
             >
               {u.description || u.url}
               <ExternalLink aria-hidden className="size-3" />
@@ -382,7 +382,7 @@ export default function FunderPage() {
               {data.openalex_funder_id && (
                 <Link
                   href={`/${inst}/collaborations?funder=${encodeURIComponent(`openalex:${data.openalex_funder_id.replace(/^https?:\/\/openalex\.org\//, "")}`)}`}
-                  className="inline-flex h-8 items-center gap-1 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-3 text-xs font-medium hover:border-[var(--primary)] hover:text-[var(--primary-text)]"
+                  className="inline-flex min-h-11 items-center gap-1 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-3 text-sm font-medium hover:border-[var(--primary)] hover:text-[var(--primary-text)] min-[1024px]:h-8 min-[1024px]:min-h-0 min-[1024px]:text-xs"
                 >
                   {t("detail.explorePartners")}
                   <ArrowRight aria-hidden className="size-3.5" />
