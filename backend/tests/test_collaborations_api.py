@@ -19,6 +19,7 @@ from journal_browser.models import (
     WorkPartner,
     WorkPureAuthor,
 )
+from journal_browser.services import collaborations
 
 P1, P2, P3 = "01a2b3c04", "02b3c4d05", "03c4d5e06"
 
@@ -364,10 +365,10 @@ async def test_map_leaves_out_partners_without_coordinates(client, collab_api):
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["unmapped"] == 1
-    # The organisation type colours the map circles.
-    assert sorted(
-        (p["ror"], p["country_code"], p["org_type"], p["works"]) for p in body["items"]
-    ) == [
+    # Each item is a row: ror, name, country_code, city, org_type, lat, lng,
+    # works, corresponding_works, home_corresponding_works, oa_share. The
+    # organisation type colours the map circles.
+    assert sorted((p[0], p[2], p[4], p[7]) for p in body["items"]) == [
         (P1, "NL", "education", 3),
         (P3, "US", "education", 1),
     ]
@@ -375,6 +376,31 @@ async def test_map_leaves_out_partners_without_coordinates(client, collab_api):
         await client.get("/api/v1/ut/collaborations/map", params={"type": "nonprofit"})
     ).json()
     assert filtered == {"items": [], "unmapped": 1}
+
+
+@requires_db
+async def test_map_is_cached_per_filters(client, collab_api, monkeypatch):
+    """The map body is built once per filters and harvest epoch: a second
+    call with the same filters reads the cache, and other filters get an
+    entry of their own."""
+    built = []
+    build = collaborations._map_body
+
+    async def counting(session, institution, filters, deal_rors):
+        body = await build(session, institution, filters, deal_rors)
+        built.append(len(body))
+        return body
+
+    monkeypatch.setattr(collaborations, "_map_body", counting)
+    first = (await client.get("/api/v1/ut/collaborations/map")).text
+    assert (await client.get("/api/v1/ut/collaborations/map")).text == first
+    assert built == [len(first)]
+    other = await client.get("/api/v1/ut/collaborations/map", params={"type": "nonprofit"})
+    assert other.json() == {"items": [], "unmapped": 1}
+    assert len(built) == 2
+    # The default view is still the cached one.
+    assert (await client.get("/api/v1/ut/collaborations/map")).text == first
+    assert len(built) == 2
 
 
 @requires_db

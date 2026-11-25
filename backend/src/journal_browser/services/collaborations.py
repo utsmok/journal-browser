@@ -18,7 +18,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import (
     Numeric,
     Text,
@@ -1580,9 +1580,27 @@ async def collaboration_map(
     session: AsyncSession,
     institution: Institution,
     filters: CollaborationFilters,
-) -> CollaborationMapResponse:
+) -> Response:
+    """The filtered partners that have coordinates, as JSON text built
+    once per filters and harvest epoch and cached like the search summary.
+    A cold call aggregates every partner; a warm one returns the stored
+    text, which also skips validating about 9,000 rows per request."""
     deal_rors = await _shared_deal_rors(session, institution)
-    merged_counts = await _merged_counts(session) if filters.rollup else {}
+    epoch = await cache_epoch(session)
+    key = ("collab_map", institution.id, *_collab_filters_key(filters), epoch)
+    body = cache_get(FACET_CACHE, key, SNAPSHOT_TTL)
+    if body is None:
+        body = await _map_body(session, institution, filters, deal_rors)
+        cache_put(FACET_CACHE, key, body)
+    return Response(content=body, media_type="application/json")
+
+
+async def _map_body(
+    session: AsyncSession,
+    institution: Institution,
+    filters: CollaborationFilters,
+    deal_rors: frozenset[str],
+) -> str:
     per_partner = _per_partner(
         institution, _selected(institution, filters, deal_rors=deal_rors)
     ).subquery()
@@ -1603,25 +1621,26 @@ async def collaboration_map(
             )
         )
     ).all()
-    items = [
-        CollaborationMapPoint(
-            ror=r.ror,
-            name=r.name,
-            country_code=r.country_code,
-            city=r.city,
-            org_type=(r.org_type or "unknown").lower(),
-            lat=float(r.lat),
-            lng=float(r.lng),
-            works=int(r.works),
-            corresponding_works=int(r.corresponding_works),
-            home_corresponding_works=int(r.home_corresponding_works or 0),
-            oa_share=round(int(r.oa_works or 0) / int(r.works), 4) if int(r.works) else None,
-            merged_count=merged_counts.get(r.ror, 0) if filters.rollup else 0,
-        )
-        for r in rows
-        if r.lat is not None and r.lng is not None
-    ]
-    return CollaborationMapResponse(items=items, unmapped=len(rows) - len(items))
+    items = [_map_row(r) for r in rows if r.lat is not None and r.lng is not None]
+    return CollaborationMapResponse(items=items, unmapped=len(rows) - len(items)).model_dump_json()
+
+
+def _map_row(r: Any) -> CollaborationMapPoint:
+    works = int(r.works)
+    oa_works = int(r.oa_works or 0)
+    return (
+        r.ror,
+        r.name,
+        r.country_code,
+        r.city,
+        (r.org_type or "unknown").lower(),
+        float(r.lat),
+        float(r.lng),
+        works,
+        int(r.corresponding_works),
+        int(r.home_corresponding_works or 0),
+        round(oa_works / works, 4) if works else None,
+    )
 
 
 def _collab_filters_key(filters: CollaborationFilters) -> tuple[Any, ...]:

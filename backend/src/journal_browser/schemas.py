@@ -1757,22 +1757,23 @@ class CollaborationSearchResponse(BaseModel):
     facets: CollaborationFacets | None = None
 
 
-class CollaborationMapPoint(BaseModel):
-    """One partner with coordinates, for the map."""
-
-    ror: str
-    name: str
-    country_code: str | None = None
-    city: str | None = None
-    # ROR organisation type in lower case; "unknown" when ROR gives none.
-    org_type: str
-    lat: float
-    lng: float
-    works: int
-    corresponding_works: int
-    home_corresponding_works: int = 0
-    oa_share: float | None = None
-    merged_count: int = 0
+# One partner with coordinates, sent as a row: the map holds about 9,000
+# of them and object keys were more than half of the payload. Fields in
+# order: ror, name, country_code, city, org_type, lat, lng, works,
+# corresponding_works, home_corresponding_works, oa_share. org_type is the
+# ROR organisation type in lower case ("unknown" when ROR gives none);
+# oa_share is 0 to 1 rounded to four decimals, None without works.
+CollaborationMapPoint = Annotated[
+    tuple[str, str, str | None, str | None, str, float, float, int, int, int, float | None],
+    Field(
+        min_length=11,
+        max_length=11,
+        description=(
+            "(ror, name, country_code, city, org_type, lat, lng, works, "
+            "corresponding_works, home_corresponding_works, oa_share)"
+        ),
+    ),
+]
 
 
 class CollaborationMapResponse(BaseModel):

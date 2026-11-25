@@ -197,6 +197,9 @@ async def _warm_snapshots_task() -> None:
                             limit=25,
                             include_facets=True,
                         )
+                        await collaborations.collaboration_map(
+                            session, inst, collaborations.CollaborationFilters()
+                        )
                     except Exception:
                         logger.exception("warm collaborations failed for %s", inst.code)
 

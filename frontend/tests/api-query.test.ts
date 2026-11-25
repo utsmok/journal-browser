@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fetchAuthors } from "@/lib/api";
+import { fetchAuthors, fetchCollaborationMap } from "@/lib/api";
 
 describe("fetchAuthors query building", () => {
   afterEach(() => {
@@ -43,5 +43,58 @@ describe("fetchAuthors query building", () => {
 
     await fetchAuthors("ut");
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/ut/authors");
+  });
+});
+
+describe("fetchCollaborationMap decoding", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("turns each row the API sends into a point with named fields", async () => {
+    // ror, name, country_code, city, org_type, lat, lng, works,
+    // corresponding_works, home_corresponding_works, oa_share
+    const rows = [
+      ["01a2b3c04", "Alpha University", "NL", null, "education", 52.2, 6.9, 3, 1, 0, 0.5],
+      ["03c4d5e06", "Alpha College", "US", "Alpha", "education", 41, -74, 1, 0, 0, null],
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: rows, unmapped: 2 }), {})),
+    );
+
+    const map = await fetchCollaborationMap("ut", {});
+
+    expect(map).toEqual({
+      items: [
+        {
+          ror: "01a2b3c04",
+          name: "Alpha University",
+          country_code: "NL",
+          city: null,
+          org_type: "education",
+          lat: 52.2,
+          lng: 6.9,
+          works: 3,
+          corresponding_works: 1,
+          home_corresponding_works: 0,
+          oa_share: 0.5,
+        },
+        {
+          ror: "03c4d5e06",
+          name: "Alpha College",
+          country_code: "US",
+          city: "Alpha",
+          org_type: "education",
+          lat: 41,
+          lng: -74,
+          works: 1,
+          corresponding_works: 0,
+          home_corresponding_works: 0,
+          oa_share: null,
+        },
+      ],
+      unmapped: 2,
+    });
   });
 });
