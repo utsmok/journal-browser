@@ -7,6 +7,7 @@ x-backend-env: &backend-env
   # max_connections (100), which the scheduler's job engines share.
   JB_DB_POOL_SIZE: ${JB_DB_POOL_SIZE:-10}
   JB_DB_MAX_OVERFLOW: ${JB_DB_MAX_OVERFLOW:-20}
+  JB_DB_POOL_TIMEOUT: ${JB_DB_POOL_TIMEOUT:-30}
   # Canonical publications from a ut-metadata Postgres (read-only).
   # Empty/unset = feature off; wrong/unreachable DSN degrades the same
   # way at runtime. Inside compose, localhost is the container — point
