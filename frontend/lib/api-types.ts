@@ -2812,11 +2812,8 @@ export interface components {
             needs_curation_reason: string | null;
             /** Links */
             links?: components["schemas"]["DealLinkOut"][] | null;
-            /**
-             * Journal Count
-             * @default 0
-             */
-            journal_count: number;
+            /** Journal Count */
+            journal_count?: number | null;
             /**
              * Apc Euro Total
              * @default 0

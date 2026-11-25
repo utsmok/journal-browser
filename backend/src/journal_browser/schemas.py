@@ -409,7 +409,9 @@ class DealOut(BaseModel):
     needs_curation_reason: str | None
     # Register links; None on rows not yet seeded.
     links: list[DealLinkOut] | None = None
-    journal_count: int = 0
+    # Covered journals for the institution. Only the deals list computes it;
+    # deal cards embedded in a journal's detail carry None, never a false 0.
+    journal_count: int | None = None
     # Observed APC spend for the institution's works in the deal's
     # effective journal list (latest-period evidence per DOI, mirror of
     # orgunit APC aggregation).

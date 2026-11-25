@@ -12943,9 +12943,15 @@
             "title": "Links"
           },
           "journal_count": {
-            "type": "integer",
-            "title": "Journal Count",
-            "default": 0
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Count"
           },
           "apc_euro_total": {
             "type": "number",

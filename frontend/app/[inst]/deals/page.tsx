@@ -132,7 +132,7 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
       }
       description={
         <p className="line-clamp-2 text-sm text-[var(--muted-foreground)]">
-          {preview ?? t("card.descriptionFallback", { duration, count: deal.journal_count })}
+          {preview ?? t("card.descriptionFallback", { duration, count: deal.journal_count ?? 0 })}
         </p>
       }
       contentClassName="space-y-3 text-sm"
@@ -140,7 +140,7 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
       {/* Key figures at a glance; full per-year breakdowns follow below. */}
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs tabular-nums text-[var(--muted-foreground)]">
         <span>{duration}</span>
-        <span>{t("card.journals", { count: deal.journal_count })}</span>
+        <span>{t("card.journals", { count: deal.journal_count ?? 0 })}</span>
         {latestOa && (
           <span>{t("card.oaInYear", { count: Number(latestOa[1]), year: latestOa[0] })}</span>
         )}
