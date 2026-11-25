@@ -3628,12 +3628,17 @@ export interface components {
             language?: string | null;
             /** Primary Topic */
             primary_topic?: string | null;
-            /** Apc Source */
-            apc_source?: string | null;
+            apc_source?: components["schemas"]["ApcSource"] | null;
             /** Apc Currency */
             apc_currency?: string | null;
             /** Apc Price */
             apc_price?: number | null;
+            /** Apc Year */
+            apc_year?: number | null;
+            /** Apc Original Currency */
+            apc_original_currency?: string | null;
+            /** Apc Original Price */
+            apc_original_price?: number | null;
             /** Apc Low */
             apc_low?: number | null;
             /** Apc High */

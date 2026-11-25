@@ -15316,13 +15316,12 @@
           "apc_source": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/ApcSource"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Apc Source"
+            ]
           },
           "apc_currency": {
             "anyOf": [
@@ -15345,6 +15344,39 @@
               }
             ],
             "title": "Apc Price"
+          },
+          "apc_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apc Year"
+          },
+          "apc_original_currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apc Original Currency"
+          },
+          "apc_original_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apc Original Price"
           },
           "apc_low": {
             "anyOf": [

@@ -10,6 +10,7 @@ import pytest
 
 from conftest import journal_factory, requires_db
 from journal_browser.config import get_settings
+from journal_browser.harvest.denorm import refresh_apcs
 from journal_browser.models import (
     Deal,
     DealInstitution,
@@ -117,6 +118,8 @@ async def api(client, db, db_engine, institution_factory):
             ],
         ]
     )
+    await db.flush()
+    await refresh_apcs(db)
     await db.commit()
     return SimpleNamespace(client=client, ut_deal=ut_deal.id, rug_only=rug_only.id)
 
