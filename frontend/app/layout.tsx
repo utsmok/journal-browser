@@ -9,6 +9,7 @@ import { AboutUtilityLink, BrandLink, SiteNav } from "@/components/site-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { YearFilterControl } from "@/components/year-filter";
 import { FeedbackWidget } from "@/components/feedback/feedback-widget";
+import { SITE_URL } from "@/lib/site-url";
 import { Providers } from "./providers";
 
 const inter = Inter({
@@ -26,12 +27,20 @@ const montserrat = Montserrat({
 async function getMetadata(): Promise<Metadata> {
   const t = await getTranslations("common");
   return {
+    metadataBase: new URL(SITE_URL),
     title: {
       default: t("appTitle"),
       // Next's own %s placeholder stays in the message string.
       template: t("appTitleTemplate"),
     },
     description: t("appDescription"),
+    openGraph: {
+      type: "website",
+      siteName: t("appTitle"),
+      images: [{ url: "/og-image.png", width: 1200, height: 630, alt: t("appTitle") }],
+    },
+    // Title, description and image carry over from openGraph.
+    twitter: { card: "summary_large_image" },
   };
 }
 

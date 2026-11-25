@@ -1,6 +1,7 @@
 {
   "metadata": {
-    "title": "Journals"
+    "title": "Journals",
+    "description": "Browse the journals that {inst} researchers publish in, with open access shares, applicable deals and publication costs."
   },
   "landing": {
     "siteName": "Open Journal Browser",

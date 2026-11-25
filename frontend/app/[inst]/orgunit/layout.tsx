@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 
-import { getTranslations } from "next-intl/server";
+import { type InstRoute, instPage, pageContext } from "@/lib/page-meta";
 
-export async function generateMetadata(): Promise<Metadata> {
-  const t = await getTranslations("orgunits");
+export async function generateMetadata({ params }: InstRoute): Promise<Metadata> {
+  const { inst } = await params;
+  const { t, short } = await pageContext(inst, "orgunits");
   return {
     title: { default: t("meta.title"), template: t("meta.titleTemplate") },
+    ...instPage(inst, "/orgunit", t("meta.listDescription", { inst: short })),
   };
 }
 

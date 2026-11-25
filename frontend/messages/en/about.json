@@ -1,6 +1,7 @@
 {
   "meta": {
-    "title": "About"
+    "title": "About",
+    "description": "How the Open Journal Browser is built for {inst}: its data sources, known limitations, licences and contact."
   },
   "page": {
     "heading": "About this browser",

@@ -5,7 +5,7 @@ import { AdminGate } from "@/components/admin/admin-gate";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("admin");
-  return { title: t("meta.title") };
+  return { title: t("meta.title"), robots: { index: false, follow: false } };
 }
 
 export default async function InstAdminLayout({
