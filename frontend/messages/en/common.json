@@ -41,7 +41,10 @@
     "sourceLink": "Source code on GitHub",
     "dataPipelineLink": "Data pipeline",
     "docsLink": "Documentation",
-    "dataSources": "Data: OpenAlex, OpenAIRE, ROR, the cOAlition S Journal Checker Tool, openaccess.nl, OpenAPC, Scimago, and the Jisc Open Policy Finder. Links on every page lead to the upstream source."
+    "dataSources": "Data: OpenAlex, OpenAIRE, ROR, the cOAlition S Journal Checker Tool, openaccess.nl, OpenAPC, Scimago, and the Jisc Open Policy Finder. Links on every page lead to the upstream source.",
+    "dataUpdated": "Data updated {date}",
+    "dataFreshnessLink": "Data freshness per source",
+    "dataStale": "Some sources are not up to date."
   },
 
   "theme": {
