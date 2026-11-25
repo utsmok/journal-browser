@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 
-import { useInstitution } from "./use-institution";
+import { useInstitution, useInstitutionRow } from "./use-institution";
 import { useFreshness, useInstitutionsDirectory } from "./use-api";
 import { useSiteFallback } from "./site-fallback";
 import { instFromSegment } from "@/lib/global-segments";
@@ -19,10 +19,14 @@ export function useSiteMeta() {
   const seg = (usePathname() ?? "/").split("/")[1] ?? "";
   const inst = ctxInst || instFromSegment(seg);
   const { data } = useFreshness(inst);
-  const dir = useInstitutionsDirectory().data?.find((i) => i.code === inst);
+  const providedRow = useInstitutionRow(inst);
+  const queriedRow = useInstitutionsDirectory().data?.find((i) => i.code === inst);
+  const dir = providedRow ?? queriedRow;
   const seed = useSiteFallback();
   // Resolution order: freshness (authoritative) → directory row (per-inst,
-  // fast) → this stack's JB_* env seed (default institution only).
+  // fast) → this stack's JB_* env seed (default institution only). Inside
+  // app/[inst] the row is the one the layout fetched for its server render,
+  // so the server HTML and the first client render agree.
   return {
     name: data?.institution ?? dir?.name ?? seed?.name ?? "Open Journal Browser",
     short: data?.institution_short ?? dir?.short_name ?? seed?.short ?? "",
