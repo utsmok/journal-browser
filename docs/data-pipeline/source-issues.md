@@ -26,6 +26,11 @@ Status values: `open` (not reported upstream), `reported` (link to the report), 
 - What happens: the sheet for `asme2025delft` has no `Journal Name` column, so every JCT run reports `agreements_failed: 1`.
 - Handling: the agreement is skipped and logged.
 
+### Agreement sheet that returns an error
+- Status: open.
+- What happens: the JCT sheet for `portpress2026jisc` (a UK agreement) returns HTTP 400 instead of CSV (run of 2026-11-25).
+- Handling: the agreement is skipped and listed under `failed_downloads` in the run stats. No Dutch institution takes part in it.
+
 ## OpenAPC
 
 ### Deal-paid and missing amounts in the same rows as paid amounts
