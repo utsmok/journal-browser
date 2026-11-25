@@ -187,17 +187,17 @@
     "sjrHIndexHint": "The h-index of the journal as computed by SCImago."
   },
   "utAuthorship": {
-    "title": "UT authorship",
-    "description": "Distinct works with UT authors: {count} of the works counted here.",
-    "empty": "No UT-authorship records for this journal.",
+    "title": "Twente authorship",
+    "description": "Distinct works with Twente authors: {count} of the works counted here.",
+    "empty": "No Twente-authorship records for this journal.",
     "facultiesHeading": "Faculties",
     "groupsHeading": "Research groups",
-    "captionFaculties": "Distinct works with UT authors per faculty",
-    "captionGroups": "Distinct works with UT authors per research group",
+    "captionFaculties": "Distinct works with Twente authors per faculty",
+    "captionGroups": "Distinct works with Twente authors per research group",
     "nameCol": "Name",
     "worksCol": "Works",
     "topAuthorsHeading": "Top authors",
-    "captionTopAuthors": "Most prolific UT authors of this journal",
+    "captionTopAuthors": "Most prolific Twente authors of this journal",
     "authorCol": "Author",
     "affiliationCol": "Affiliation"
   },
@@ -246,7 +246,7 @@
   "crisGaps": {
     "title": "Works not matched in Pure",
     "description": "{count, plural, one {OpenAlex attributes # work from this journal that matches no Pure record, so it is likely missing from the research information system.} other {OpenAlex attributes # works from this journal that match no Pure record, so they are likely missing from the research information system.}}",
-    "matchNote": "Each item lists the UT authors that OpenAlex matched to the university roster.",
+    "matchNote": "Each item lists the Twente authors that OpenAlex matched to the university roster.",
     "showingRecent": "Showing the {count, plural, one {# most recent entry} other {# most recent entries}}.",
     "empty": "None found. Every work that OpenAlex attributes to this journal has a Pure record."
   },
