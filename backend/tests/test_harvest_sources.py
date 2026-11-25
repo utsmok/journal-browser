@@ -857,6 +857,42 @@ async def test_work_funders_upsert_and_raw_payloads(db, institution_factory, mon
     assert [f.funder_openalex_id for f in stored] == ["F1"]
 
 
+def test_grants_rows_reads_work_award_models():
+    """aletheca hands back WorkAward pydantic models, not dicts: the sweep
+    that reads them with .get dies on the first awarded work."""
+    from aletheca.models import WorkAward
+
+    awards = [
+        WorkAward(
+            funder_id="https://openalex.org/F1", funder_display_name="NWO", funder_award_id="100"
+        ),
+        WorkAward(funder_id="https://openalex.org/F1", funder_award_id="100 again"),
+        WorkAward(funder_display_name="no funder id"),
+        WorkAward(funder_id=None, funder_award_id="orphan"),
+    ]
+    assert grants_rows(7, "uuid-a", awards) == [
+        {
+            "institution_id": 7,
+            "pure_uuid": "uuid-a",
+            "funder_openalex_id": "F1",
+            "funder_name": "NWO",
+            "award": "100",
+        }
+    ]
+    # An attribute-only fake with no .get reads the same way, and a model
+    # without the optional fields (extra=allow) yields None, not an error.
+    bare = SimpleNamespace(funder_id="https://openalex.org/F2")
+    assert grants_rows(7, "uuid-b", [bare]) == [
+        {
+            "institution_id": 7,
+            "pure_uuid": "uuid-b",
+            "funder_openalex_id": "F2",
+            "funder_name": None,
+            "award": None,
+        }
+    ]
+
+
 @requires_db
 async def test_harvest_work_funders_stores_raw_payload(db, institution_factory, monkeypatch):
     """The sweep stores the fetched work payload verbatim in source_records

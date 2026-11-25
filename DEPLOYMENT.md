@@ -459,6 +459,10 @@ The stages, in order:
    `openalex_work_authors` and `work_pure_authors`, which the store
    rebuild and the pure-authors backfill rewrite — running resolution
    after them follows the bootstrap DAG instead of lagging one wave.
+   The resolver reads its stores in DOI slices and holds about 0.7 GB on
+   the University of Twente's 156k works, inside the scheduler's 2 GB
+   limit. Loading the same stores whole took 2.4 GB, and the scheduler
+   killed the job before it resolved anyone.
    `resolve_author_ids` also gates on the budget reserve like
    `harvest_stats`. `ingest_authors` is a local projection right after
    identity resolution: it publishes confirmed author identities to the
@@ -499,6 +503,9 @@ The stages, in order:
    `backend/state/ror/` and run `jobs/harvest_ror.py --dump
    /app/state/ror/<file>.zip`. The API pass then asks only about the
    partners the dump lacks; later nightly runs fetch the new and stale ones.
+   `derive_work_partners` advances a partner's `updated_at` only when the
+   stub gives the row a value it lacked, so the 30-day clock counts from
+   the last real change and not from last night's derive.
 6. `harvest_publishers`. It resolves journal host organizations in
    credit-priced 50-id pipe-filter batches ($0.0001 per page), gated by
    the budget reserve. Results cache in
@@ -506,7 +513,12 @@ The stages, in order:
    ~16k-host sweep once.
 7. `embed_journals` last. It re-embeds journals from the stats-built text,
    and on CPU it is the slow step of the wave, at about 45 minutes for a
-   full run.
+   full run. It streams the journal rows through a server-side cursor and
+   caps each model call at 256 times the square of the call's longest
+   text in tokens (attention cells), because ONNX Runtime's memory arena
+   only grows: uncapped 256-journal calls took the old job past 3 GB and
+   the scheduler's 2 GB limit killed it before it stored a row. The capped
+   calls keep a full run near 650 MB and produce the same vectors.
 
 A failed stage prints `wave: <stage> failed` and does not stop the wave: the
 stages that read its output are skipped, and with them every stage that

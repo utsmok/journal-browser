@@ -39,14 +39,20 @@ PROGRESS_EVERY = 20
 UPSERT_COLS = ("funder_name", "award")
 
 
-def grants_rows(
-    inst_id: int, pure_uuid: str, awards: list[dict[str, Any]] | None
-) -> list[dict[str, Any]]:
-    """work_funders rows from one work's awards payload; deduped by
-    funder (first award wins), entries without a funder id skipped."""
+def _award_field(award: Any, name: str) -> Any:
+    """One award field: an attribute on the WorkAward model aletheca
+    returns (bibliofabric 0.6 family), a key on a plain dict (tests,
+    stored payloads)."""
+    return award.get(name) if isinstance(award, dict) else getattr(award, name, None)
+
+
+def grants_rows(inst_id: int, pure_uuid: str, awards: Sequence[Any] | None) -> list[dict[str, Any]]:
+    """work_funders rows from one work's awards; deduped by funder (first
+    award wins), entries without a funder id skipped. Awards arrive as
+    aletheca WorkAward models, one per fetched work."""
     rows: dict[str, dict[str, Any]] = {}
     for g in awards or []:
-        funder_id = str(g.get("funder_id") or "").rsplit("/", 1)[-1]
+        funder_id = str(_award_field(g, "funder_id") or "").rsplit("/", 1)[-1]
         if not funder_id.startswith("F"):
             continue
         rows.setdefault(
@@ -55,8 +61,8 @@ def grants_rows(
                 "institution_id": inst_id,
                 "pure_uuid": pure_uuid,
                 "funder_openalex_id": funder_id,
-                "funder_name": g.get("funder_display_name"),
-                "award": g.get("funder_award_id"),
+                "funder_name": _award_field(g, "funder_display_name"),
+                "award": _award_field(g, "funder_award_id"),
             },
         )
     return list(rows.values())
