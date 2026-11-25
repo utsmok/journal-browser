@@ -54,6 +54,7 @@ CODE_ALIASES = {
     "eme": "Emerald Publishing group",
     "lww": "Lippincott Williams & Wilkins (LWW)",
     "degruyter": "De Gruyter Brill",
+    "degruy": "De Gruyter Brill",
     "dgbrill": "De Gruyter Brill",
     "dgb": "De Gruyter Brill",
     "brill": "De Gruyter Brill",

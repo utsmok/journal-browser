@@ -17,6 +17,7 @@ from journal_browser.harvest.deal_publishers import (
     Verdict,
     code_of,
     dominant_publisher,
+    family_of,
     judge,
     name_matches,
     rejected_sheet,
@@ -143,6 +144,20 @@ def test_name_matches_ignores_company_words():
     assert name_matches("AIP Publishing (AIPP)", "AIP Publishing")
     assert not name_matches("Emerald Publishing group", "Elsevier BV")
     assert not name_matches("ACM", "Association for Computing Machinery")
+
+
+def test_every_de_gruyter_code_is_one_family():
+    """JCT spells De Gruyter as degruy, dgb and degruyter; all must share the
+    family the sheet's journals resolve to, or the deal's own sheet is withheld."""
+    families = {
+        family_of(esac, code.upper())
+        for esac, code in [
+            ("degruy2025kemoe", "degruy"),
+            ("dgb2026malmad2", "dgb"),
+            ("degruyter2024x", "degruyter"),
+        ]
+    }
+    assert families == {"de gruyter brill"}
 
 
 def test_dominant_publisher_needs_a_majority():
