@@ -756,6 +756,28 @@ docker compose exec db psql -U journal -d restore_check -c \
 docker compose exec db dropdb -U journal restore_check
 ```
 
+The drill above restores into the live database service, so it adds a
+full copy (about 30 GB) to the live volume and loads production for the
+whole restore. To keep the live database untouched, restore into a
+throwaway container of the same image instead:
+
+```bash
+docker run -d --name jb-restore-drill --memory 2g \
+    -e POSTGRES_USER=journal -e POSTGRES_PASSWORD=journal -e POSTGRES_DB=restore_check \
+    -v "$PWD/backups/journalbrowser-<timestamp>.dump:/dump/db.dump:ro" journal-browser-db
+docker exec jb-restore-drill pg_restore -U journal -d restore_check --no-owner -j 2 /dump/db.dump
+docker exec jb-restore-drill psql -U journal -d restore_check -c "SELECT count(*) FROM journals;"
+docker rm -f jb-restore-drill
+```
+
+Last drill: 2026-11-25, archive `journalbrowser-20261125-040000.dump`
+(6.2 GB, zstd). The restore took 53 minutes with a 2 GB memory cap and
+two jobs, produced a 30 GB database at migration head, and matched live
+row counts on journals, works, deals, deal_journals, source_records,
+openalex_works, harvest_runs and authors. Most of the time goes to
+copying `source_records`; pruning it (see [source_records retention](#source-records-retention))
+shortens the restore accordingly.
+
 Disaster recovery: bring up only `db` on a fresh pgdata volume, recreate
 the database, and restore the same way before starting `backend`
 (schema is inside the custom-format archive; no migrations needed):
