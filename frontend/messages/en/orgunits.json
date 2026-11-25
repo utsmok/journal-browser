@@ -1,7 +1,9 @@
 {
   "meta": {
     "title": "Faculties",
-    "titleTemplate": "%s — OJB"
+    "titleTemplate": "%s — OJB",
+    "listDescription": "Faculties, research groups and institutes of {inst}, ranked by publication output and open access share.",
+    "description": "Publications of {name} at {inst}: open access share by year, deals, journals and researchers."
   },
   "columns": {
     "name": "Name",

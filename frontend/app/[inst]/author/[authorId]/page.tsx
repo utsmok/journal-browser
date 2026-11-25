@@ -1,6 +1,5 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { Sparkles } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
@@ -34,12 +33,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useAuthor } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
 import { useYearRange, yearQuery } from "@/hooks/use-year-filter";
 import {
   encodeNamePath,
   errorMessage,
-  fetchAuthor,
   type AuthorProfile,
   type AuthorSimilarJournal,
   type StatsYear,
@@ -97,11 +96,7 @@ export default function AuthorPage() {
   const authorId = params?.authorId ? decodeURIComponent(params.authorId) : undefined;
   const backHref = useLastDirectoryHref("jb-last-authors", `/${inst}/author`);
   const { year_from, year_to } = useYearRange();
-  const { data, isPending, isError, error } = useQuery({
-    queryKey: ["author", inst, authorId ?? "", year_from ?? null, year_to ?? null],
-    queryFn: () => fetchAuthor(inst, authorId ?? "", { year_from, year_to }),
-    enabled: Boolean(authorId),
-  });
+  const { data, isPending, isError, error } = useAuthor(authorId, { year_from, year_to });
 
   const [journalPage, setJournalPage] = React.useState(1);
   const [workPage, setWorkPage] = React.useState(1);

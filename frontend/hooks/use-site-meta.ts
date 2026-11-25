@@ -2,22 +2,15 @@
 
 import { usePathname } from "next/navigation";
 
-import {
-  useInstitution,
-  useInstitutionDirectoryRow,
-  useInstitutionWindowStart,
-} from "./use-institution";
+import { useInstitution, useInstitutionRow } from "./use-institution";
 import { useFreshness, useInstitutionsDirectory } from "./use-api";
 import { useSiteFallback } from "./site-fallback";
 import { instFromSegment } from "@/lib/global-segments";
 
 /**
  * Institution display values: the scoped /meta/freshness is authoritative
- * once loaded; the directory row the [inst] layout fetched server-side
- * covers the first render (server and hydrating client read the same
- * value, so no hydration mismatch), the institutions directory query
- * covers surfaces outside the provider, and the stack's JB_* env seeds
- * the default institution.
+ * once loaded; the institutions directory covers the pre-hydration render
+ * for non-default institutions, and the stack's JB_* env seeds the default.
  */
 export function useSiteMeta() {
   // The footer renders in the root layout, outside the [inst] provider, so
@@ -26,13 +19,14 @@ export function useSiteMeta() {
   const seg = (usePathname() ?? "/").split("/")[1] ?? "";
   const inst = ctxInst || instFromSegment(seg);
   const { data } = useFreshness(inst);
-  const layoutDir = useInstitutionDirectoryRow();
-  const dirQuery = useInstitutionsDirectory();
-  const dir = layoutDir ?? dirQuery.data?.find((i) => i.code === inst);
+  const providedRow = useInstitutionRow(inst);
+  const queriedRow = useInstitutionsDirectory().data?.find((i) => i.code === inst);
+  const dir = providedRow ?? queriedRow;
   const seed = useSiteFallback();
-  const layoutWindowStart = useInstitutionWindowStart();
   // Resolution order: freshness (authoritative) → directory row (per-inst,
-  // fast) → this stack's JB_* env seed (default institution only).
+  // fast) → this stack's JB_* env seed (default institution only). Inside
+  // app/[inst] the row is the one the layout fetched for its server render,
+  // so the server HTML and the first client render agree.
   return {
     name: data?.institution ?? dir?.name ?? seed?.name ?? "Open Journal Browser",
     short: data?.institution_short ?? dir?.short_name ?? seed?.short ?? "",
@@ -48,10 +42,9 @@ export function useSiteMeta() {
     researchPortalUrl:
       data?.research_portal_url ?? dir?.research_portal_url ?? seed?.researchPortalUrl ?? "",
     /** First publication year this institution's statistics cover. The
-     * directory row is required per the API contract; the [inst] layout
-     * passes it from its server fetch so the first server render and the
-     * hydrating client agree (no literal year guess: the old `?? 2020` was
-     * wrong for every real institution). */
-    windowStart: data?.data_window_start ?? dir?.data_window_start ?? layoutWindowStart,
+     * directory row is required per the API contract; undefined only in
+     * the transient no-directory-yet render (no literal year guess here —
+     * the old `?? 2020` was wrong for every real institution). */
+    windowStart: data?.data_window_start ?? dir?.data_window_start,
   };
 }

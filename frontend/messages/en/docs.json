@@ -1,6 +1,7 @@
 {
   "meta": {
-    "title": "Docs"
+    "title": "Docs",
+    "description": "What the browser shows, where the data comes from, and how to use it when you argue for open access."
   },
   "index": {
     "heading": "Documentation",

@@ -9,30 +9,28 @@ import type { InstitutionDirectoryEntry } from "@/lib/admin";
  * empty string for global surfaces (landing chooser, admin).
  */
 const InstitutionContext = React.createContext<string>("");
-/** First statistics year of the scoped institution, read by the server
- * layout, so server and client render the same window-dependent text. */
-const WindowStartContext = React.createContext<number | undefined>(undefined);
-/** Directory row of the scoped institution, fetched by the server layout,
- * so the first server render and the hydrating client resolve the display
- * values (name, short_name, urls) from the same source. */
-const DirectoryContext = React.createContext<InstitutionDirectoryEntry | undefined>(undefined);
+
+/**
+ * The institution's directory row as app/[inst]/layout fetched it on the
+ * server. React may hydrate a page only after the site header's effects have
+ * sent its own requests, so a page that waits for the browser's directory
+ * request can render values its server HTML never had. The row comes with the
+ * page instead, and both renders resolve the same values.
+ */
+const InstitutionRowContext = React.createContext<InstitutionDirectoryEntry | null>(null);
 
 export function InstitutionProvider({
   code,
-  windowStart,
-  directory,
+  row = null,
   children,
 }: {
   code: string;
-  windowStart?: number;
-  directory?: InstitutionDirectoryEntry;
+  row?: InstitutionDirectoryEntry | null;
   children: React.ReactNode;
 }) {
   return (
     <InstitutionContext.Provider value={code}>
-      <WindowStartContext.Provider value={windowStart}>
-        <DirectoryContext.Provider value={directory}>{children}</DirectoryContext.Provider>
-      </WindowStartContext.Provider>
+      <InstitutionRowContext.Provider value={row}>{children}</InstitutionRowContext.Provider>
     </InstitutionContext.Provider>
   );
 }
@@ -41,10 +39,8 @@ export function useInstitution(): string {
   return React.useContext(InstitutionContext);
 }
 
-export function useInstitutionWindowStart(): number | undefined {
-  return React.useContext(WindowStartContext);
-}
-
-export function useInstitutionDirectoryRow(): InstitutionDirectoryEntry | undefined {
-  return React.useContext(DirectoryContext);
+/** The server-fetched directory row for `inst`, or null when there is none. */
+export function useInstitutionRow(inst: string): InstitutionDirectoryEntry | null {
+  const row = React.useContext(InstitutionRowContext);
+  return row?.code === inst ? row : null;
 }

@@ -2,6 +2,10 @@
   "title": "Collaboration partners",
   "titleTemplate": "%s · Partners",
   "intro": "Organisations that {inst} co-published with, matched on ROR identifiers. Filter by faculty, country, sector, topic, funder or open access status, and open any partner for full faculty, researcher, journal and publication breakdowns.",
+  "meta": {
+    "description": "Organisations that {inst} co-published with, matched on ROR identifiers and filtered by faculty, country, sector, topic, funder and open access status.",
+    "detailDescription": "Co-publications of {name} and {inst} by faculty, researcher, journal and year."
+  },
   "years": {
     "range": "Showing works published from {from} to {to} (controlled by the year selector in the top bar)."
   },

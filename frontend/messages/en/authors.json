@@ -1,7 +1,9 @@
 {
   "worksCount": "{count, plural, one {# work} other {# works}}",
   "meta": {
-    "title": "Authors"
+    "title": "Authors",
+    "listDescription": "Researchers at {inst} with their publication counts, open access shares and co-authors.",
+    "description": "Publications of {name} at {inst}: open access share by year, journals, co-authors and topics."
   },
   "list": {
     "heading": "Authors",

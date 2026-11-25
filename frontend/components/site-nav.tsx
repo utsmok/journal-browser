@@ -2,11 +2,11 @@
 
 import { ChevronDown } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 
-import { OjbWordmark } from "@/components/logo";
 import { NavLink } from "@/components/nav-link";
 import { useInstitutionsDirectory } from "@/hooks/use-api";
 import { useSiteMeta } from "@/hooks/use-site-meta";
@@ -247,7 +247,15 @@ export function BrandLink() {
         aria-label={t("appTitle")}
         className="flex items-center whitespace-nowrap"
       >
-        <OjbWordmark className="h-10 w-auto" />
+        {/* The header bar is dark in both themes, so its wordmark is a static
+            file; only the landing hero needs the theme-aware inline copy. */}
+        <Image
+          src="/ojb-wordmark-header.svg"
+          alt=""
+          width={972}
+          height={542}
+          className="h-10 w-auto"
+        />
       </Link>
       {inst && (
         <>

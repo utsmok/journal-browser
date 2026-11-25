@@ -4,6 +4,10 @@
   "instWorks": "{inst} works",
   "unnamedFunder": "Funder {id}",
   "sourceJisc": "Jisc Open Policy Finder",
+  "meta": {
+    "listDescription": "Funders of {inst} research and their open access policies, ordered by the number of {inst} publications.",
+    "description": "Open access policy of {name}, and the {inst} publications it funded with the journals they appeared in."
+  },
   "search": {
     "intro": "Open access policies come from the Jisc Open Policy Finder, ordered by the number of {inst} author works. Open a funder to see its policy details and funding streams.",
     "placeholder": "Search funders…",

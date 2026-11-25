@@ -1,10 +1,10 @@
 {
   "metadata": {
-    "title": "Journals"
+    "title": "Journals",
+    "description": "Browse the journals that {inst} researchers publish in, with open access shares, applicable deals and publication costs."
   },
   "landing": {
     "siteName": "Open Journal Browser",
-    "loadingLabel": "Loading institutions",
     "loadError": "The institution list is unavailable. Check that the backend is running.",
     "retry": "Retry",
     "intro": "Choose your institution to browse its journal deals and publication data.",

@@ -1,20 +1,45 @@
 import type { Metadata } from "next";
 
-import { fetchEntityTitle } from "@/lib/entity-title";
+import { Seed } from "@/components/seed";
+import type { AuthorProfile } from "@/lib/api";
+import { docPage, pageContext } from "@/lib/page-meta";
+import { qk } from "@/lib/query-keys";
+import { fetchForRender } from "@/lib/server-fetch";
 
-/** Per-author document title; falls back to the layout default on failure. */
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ inst: string; authorId: string }>;
-}): Promise<Metadata> {
-  const { inst, authorId } = await params;
-  return fetchEntityTitle<{ author?: { name?: string | null; display_name?: string | null } }>(
-    `/api/v1/${encodeURIComponent(inst)}/authors/${encodeURIComponent(authorId)}`,
-    (d) => d.author?.name ?? d.author?.display_name,
-  );
+type AuthorRoute = { params: Promise<{ inst: string; authorId: string }> };
+
+/** The author document the page reads before a year lens is set. */
+function loadAuthor(inst: string, authorId: string) {
+  return fetchForRender<AuthorProfile>({
+    path: `/api/v1/${inst}/authors/${encodeURIComponent(authorId)}`,
+  });
 }
 
-export default function AuthorProfileLayout({ children }: { children: React.ReactNode }) {
-  return children;
+export async function generateMetadata({ params }: AuthorRoute): Promise<Metadata> {
+  const { inst, authorId } = await params;
+  const id = decodeURIComponent(authorId);
+  const path = `/author/${encodeURIComponent(id)}`;
+  const [{ t, short }, doc] = await Promise.all([
+    pageContext(inst, "authors"),
+    loadAuthor(inst, id),
+  ]);
+  const name = doc?.author?.name;
+  return docPage(inst, path, {
+    title: name,
+    description: name ? t("meta.description", { name, inst: short }) : undefined,
+  });
+}
+
+/** Seeds the cache, so the page renders its content on the server. */
+export default async function AuthorProfileLayout({
+  children,
+  params,
+}: AuthorRoute & { children: React.ReactNode }) {
+  const { inst, authorId } = await params;
+  const id = decodeURIComponent(authorId);
+  return (
+    <Seed queryKey={qk.author(inst, id)} data={await loadAuthor(inst, id)}>
+      {children}
+    </Seed>
+  );
 }

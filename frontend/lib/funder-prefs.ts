@@ -11,7 +11,6 @@ const KEY_LABEL = "funder_label";
 const EVENT = "funder-prefs-changed";
 
 function read(): FunderPrefs {
-  if (typeof window === "undefined") return null;
   const rawId = window.localStorage.getItem(KEY_ID);
   if (!rawId) return null;
   const id = Number(rawId);
@@ -33,9 +32,13 @@ function write(prefs: FunderPrefs) {
 /** React binding over the localStorage prefs; every mounted consumer
  * re-renders on any change (event + storage, so other tabs sync too). */
 export function useFunderPrefs(): [FunderPrefs, (p: FunderPrefs) => void] {
-  const [prefs, setPrefs] = React.useState<FunderPrefs>(read);
+  // Hydrate after mount: the server render and the first client render must
+  // agree. A stored funder applies once the page is mounted, and the scoped
+  // query then loads over the unscoped content the server rendered.
+  const [prefs, setPrefs] = React.useState<FunderPrefs>(null);
   React.useEffect(() => {
     const sync = () => setPrefs(read());
+    sync();
     window.addEventListener(EVENT, sync);
     window.addEventListener("storage", sync);
     return () => {

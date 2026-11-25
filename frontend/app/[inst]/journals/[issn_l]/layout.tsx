@@ -1,20 +1,48 @@
 import type { Metadata } from "next";
 
-import { fetchEntityTitle } from "@/lib/entity-title";
+import { Seed } from "@/components/seed";
+import { SectionMessages } from "@/i18n/section-messages";
+import type { JournalDetailResponse } from "@/lib/api";
+import { docPage, pageContext } from "@/lib/page-meta";
+import { qk } from "@/lib/query-keys";
+import { fetchForRender } from "@/lib/server-fetch";
 
-/** Per-journal document title; falls back to the layout default on failure. */
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ inst: string; issn_l: string }>;
-}): Promise<Metadata> {
-  const { inst, issn_l } = await params;
-  return fetchEntityTitle<{ journal?: { title?: string | null } }>(
-    `/api/v1/${encodeURIComponent(inst)}/journals/${encodeURIComponent(issn_l)}`,
-    (d) => d.journal?.title,
-  );
+type JournalRoute = { params: Promise<{ inst: string; issn_l: string }> };
+
+/** The journal document the page reads before a funder or year lens is set. */
+function loadJournal(inst: string, issnL: string) {
+  return fetchForRender<JournalDetailResponse>({
+    path: `/api/v1/${inst}/journals/${issnL}`,
+    query: { include_gaps: "false" },
+  });
 }
 
-export default function JournalLayout({ children }: { children: React.ReactNode }) {
-  return children;
+export async function generateMetadata({ params }: JournalRoute): Promise<Metadata> {
+  const { inst, issn_l } = await params;
+  const issnL = decodeURIComponent(issn_l);
+  const [{ t, short }, doc] = await Promise.all([
+    pageContext(inst, "journals"),
+    loadJournal(inst, issnL),
+  ]);
+  const title = doc?.journal?.title ?? undefined;
+  return docPage(inst, `/journals/${encodeURIComponent(issnL)}`, {
+    title,
+    description: title ? t("meta.description", { title, inst: short }) : undefined,
+  });
+}
+
+/** Seeds the cache, so the page renders its content on the server. */
+export default async function JournalLayout({
+  children,
+  params,
+}: JournalRoute & { children: React.ReactNode }) {
+  const { inst, issn_l } = await params;
+  const issnL = decodeURIComponent(issn_l);
+  return (
+    <SectionMessages namespaces={["journals", "authors", "orgunits", "publishers", "shortlist"]}>
+      <Seed queryKey={qk.journal(inst, issnL)} data={await loadJournal(inst, issnL)}>
+        {children}
+      </Seed>
+    </SectionMessages>
+  );
 }

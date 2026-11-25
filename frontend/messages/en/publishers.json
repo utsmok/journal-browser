@@ -1,6 +1,10 @@
 {
   "title": "Publishers",
   "titleTemplate": "%s — OJB",
+  "meta": {
+    "listDescription": "Publishers of {inst} research, ranked by journals, publications and open access share.",
+    "description": "Journals from {name} that {inst} researchers published in, with open access shares, deals and APC prices."
+  },
   "units": {
     "journals": "{count, plural, one {# journal} other {# journals}}",
     "works": "{count, plural, one {# work} other {# works}}",
