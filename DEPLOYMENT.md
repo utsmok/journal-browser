@@ -513,7 +513,12 @@ The stages, in order:
    ~16k-host sweep once.
 7. `embed_journals` last. It re-embeds journals from the stats-built text,
    and on CPU it is the slow step of the wave, at about 45 minutes for a
-   full run.
+   full run. It streams the journal rows through a server-side cursor and
+   caps each model call at 256 times the square of the call's longest
+   text in tokens (attention cells), because ONNX Runtime's memory arena
+   only grows: uncapped 256-journal calls took the old job past 3 GB and
+   the scheduler's 2 GB limit killed it before it stored a row. The capped
+   calls keep a full run near 650 MB and produce the same vectors.
 
 A failed stage prints `wave: <stage> failed` and does not stop the wave: the
 stages that read its output are skipped, and with them every stage that
