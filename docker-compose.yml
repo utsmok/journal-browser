@@ -81,8 +81,11 @@ services:
     # Headroom for HNSW builds and large sorts; the page cache counts too.
     # 5 GB since 2026-11-25: at 4 GB a publishers-directory query and the
     # nightly author resolver overlapped and the kernel killed a backend,
-    # which sent Postgres into crash recovery for two minutes.
-    mem_limit: 5g
+    # which sent Postgres into crash recovery for two minutes. 6 GB since
+    # later that day: the live journals-list query pinned the cgroup at the
+    # 5 GB ceiling while embed_journals wrote, and a backend was killed
+    # again (8 s recovery).
+    mem_limit: 6g
     logging: *default-logging
     environment:
       POSTGRES_USER: journal
