@@ -4,6 +4,7 @@ import { ExternalLink } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 
+import { FreshnessTable } from "@/components/freshness-table";
 import { GithubIcon } from "@/components/github-icon";
 import { SourceNote } from "@/components/source-note";
 import { Badge } from "@/components/ui/badge";
@@ -11,98 +12,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useFreshness, useLimitations } from "@/hooks/use-api";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { errorMessage } from "@/lib/api";
-
-type SourceInfo = {
-  name: string;
-  url: string;
-  /** Key of the role description in the "about" messages under "sources.". */
-  roleKey: string;
-  table?: string;
-  harvest?: string;
-};
-
-const SOURCES: SourceInfo[] = [
-  {
-    name: "Pure",
-    // Real portal URL comes from settings at render time (site.researchPortalUrl).
-    url: "",
-    roleKey: "pure",
-    table: "institution_works_stats",
-  },
-  {
-    name: "OpenAlex",
-    url: "https://openalex.org",
-    roleKey: "openalex",
-    table: "journals",
-  },
-  {
-    name: "DOAJ",
-    url: "https://doaj.org",
-    roleKey: "doaj",
-    table: "doaj",
-  },
-  {
-    name: "OpenAIRE",
-    url: "https://openaire.eu",
-    roleKey: "openaire",
-    harvest: "openaire",
-  },
-  {
-    name: "Crossref",
-    url: "https://www.crossref.org",
-    roleKey: "crossref",
-    harvest: "crossref",
-  },
-  {
-    name: "openaccess.nl",
-    url: "https://www.openaccess.nl/en/publishing/publisher-deals",
-    roleKey: "openaccessNl",
-    harvest: "openaccess.nl",
-  },
-  {
-    name: "JCT",
-    url: "https://journalcheckertool.org/transformative-agreements/",
-    roleKey: "jct",
-    harvest: "jct",
-  },
-  {
-    name: "OpenAPC",
-    url: "https://github.com/OpenAPC/openapc-de",
-    roleKey: "openapc",
-    table: "apc_evidence",
-  },
-  {
-    name: "Jisc Open Policy Finder",
-    url: "https://openpolicyfinder.jisc.ac.uk",
-    roleKey: "jiscOpf",
-    harvest: "jisc_opf",
-  },
-  {
-    name: "Scimago",
-    url: "https://www.scimagojr.com",
-    roleKey: "scimago",
-    table: "scimagojr_metrics",
-  },
-  {
-    name: "ROR",
-    url: "https://ror.org",
-    roleKey: "ror",
-    table: "partner_institutions",
-  },
-];
-
-/** Dates render with a fixed locale; unknown values fall back to the label
- * the caller passes in from the about messages. */
-function fmt(value: unknown, unknownLabel: string) {
-  if (value === null || value === undefined) return unknownLabel;
-  if (typeof value === "string" && /^\d{4}/.test(value))
-    return new Date(value).toLocaleDateString("en", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  return String(value);
-}
+import { formatDate } from "@/lib/format";
+import { harvestUrl } from "@/lib/freshness";
 
 function ExternalIcon() {
   return <ExternalLink aria-hidden className="size-3" />;
@@ -117,7 +28,6 @@ export default function AboutPage() {
   const freshness = freshnessQuery.data;
   const limitations = limitationsQuery.data;
 
-  const tables = (freshness?.tables ?? {}) as Record<string, unknown>;
   // Latest first; collapsed to the recent tail so the public page stays a
   // summary, not a pipeline log.
   const [showAllRuns, setShowAllRuns] = useState(false);
@@ -125,15 +35,6 @@ export default function AboutPage() {
     (b.finished_at ?? "").localeCompare(a.finished_at ?? ""),
   );
   const shownHarvests = showAllRuns ? harvestRows : harvestRows.slice(0, 10);
-
-  function stamp(info: SourceInfo) {
-    if (info.table) return tables[info.table];
-    const runs = (freshness?.harvests ?? [])
-      .filter((h) => h.source === info.harvest && h.finished_at)
-      .map((h) => h.finished_at)
-      .sort();
-    return runs.at(-1) ?? null;
-  }
 
   const ror = freshness?.ror ?? null;
   const institution = freshness?.institution ?? site.name;
@@ -224,56 +125,34 @@ export default function AboutPage() {
         </p>
       )}
 
-      <section>
-        <h2 className="mb-3 text-xl font-bold">{t("sources.heading")}</h2>
+      <section id="data-freshness" className="scroll-mt-24">
+        <h2 className="mb-3 text-xl font-bold">{t("freshness.heading")}</h2>
         <Card>
           <CardContent className="pt-6">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <caption className="sr-only">{t("sources.tableCaption")}</caption>
-                <thead>
-                  <tr className="text-left text-xs text-[var(--muted-foreground)]">
-                    <th scope="col" className="py-1 pr-4 font-medium">
-                      {t("sources.columnSource")}
-                    </th>
-                    <th scope="col" className="py-1 pr-4 font-medium">
-                      {t("sources.columnProvides")}
-                    </th>
-                    <th scope="col" className="py-1 font-medium">
-                      {t("sources.columnLatest")}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {SOURCES.map((info) => (
-                    <tr key={info.name} className="border-t border-[var(--border)] align-top">
-                      <td className="py-2 pr-4 whitespace-nowrap">
-                        <a
-                          href={info.url || site.researchPortalUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-0.5 font-semibold text-[var(--primary-text)] hover:underline"
-                        >
-                          {info.name} <ExternalIcon />
-                        </a>
-                      </td>
-                      <td className="py-2 pr-4 text-[var(--muted-foreground)]">
-                        {t(`sources.${info.roleKey}`)}
-                      </td>
-                      <td className="py-2 text-xs whitespace-nowrap tabular-nums text-[var(--muted-foreground)]">
-                        {freshnessQuery.isPending ? "…" : fmt(stamp(info), t("page.unknownValue"))}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <p className="mb-4 max-w-prose text-sm text-[var(--muted-foreground)]">
+              {t("freshness.intro")}
+            </p>
+            {freshnessQuery.isPending && (
+              <p aria-live="polite" className="text-sm text-[var(--muted-foreground)]">
+                …
+              </p>
+            )}
+            {freshness && freshness.sources.length === 0 && (
+              <p className="text-sm text-[var(--muted-foreground)]">{t("freshness.noRuns")}</p>
+            )}
+            {freshness && freshness.sources.length > 0 && (
+              <FreshnessTable
+                rows={freshness.sources}
+                institution={institution}
+                portalUrl={site.researchPortalUrl}
+              />
+            )}
             <p className="mt-4 max-w-prose text-xs text-[var(--muted-foreground)]">
-              {t("sources.footnote")}{" "}
-              {t("sources.statsWindow", {
+              {t("freshness.footnote")}{" "}
+              {t("freshness.statsWindow", {
                 window:
                   site.windowStart === undefined
-                    ? t("sources.statsWindowFallback")
+                    ? t("freshness.statsWindowFallback")
                     : site.windowStart,
               })}
             </p>
@@ -302,9 +181,7 @@ export default function AboutPage() {
                 </thead>
                 <tbody>
                   {shownHarvests.map((h, i) => {
-                    const url = SOURCES.find(
-                      (s) => s.name.toLowerCase() === h.source.toLowerCase(),
-                    )?.url;
+                    const url = harvestUrl(h.source);
                     return (
                       <tr
                         key={`${h.source}-${h.entity_type}-${i}`}
@@ -330,9 +207,7 @@ export default function AboutPage() {
                             {h.status ?? "—"}
                           </Badge>
                         </td>
-                        <td className="py-1.5 tabular-nums">
-                          {fmt(h.finished_at, t("page.unknownValue"))}
-                        </td>
+                        <td className="py-1.5 tabular-nums">{formatDate(h.finished_at)}</td>
                       </tr>
                     );
                   })}

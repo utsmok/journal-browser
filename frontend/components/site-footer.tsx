@@ -6,13 +6,17 @@ import { useTranslations } from "next-intl";
 
 import { GithubIcon } from "@/components/github-icon";
 import { instFromSegment } from "@/lib/global-segments";
-import { useInstitutionsDirectory } from "@/hooks/use-api";
+import { useFreshness, useInstitutionsDirectory } from "@/hooks/use-api";
 import { useSiteMeta } from "@/hooks/use-site-meta";
+import { formatDate } from "@/lib/format";
+import { staleSources } from "@/lib/freshness";
 
 /** Footer with institution links from settings when scoped to an
  * institution; the chooser at "/" gets only the repo link and attribution.
  * Discreet links to the data-pipeline page and the docs index (DECISIONS
- * 12); admin stays unlinked. */
+ * 12); admin stays unlinked. Institution pages also state when the data was
+ * last updated (the oldest of the institution's core sources) and warn when
+ * a source is overdue or failed. */
 export function SiteFooter() {
   const t = useTranslations("common");
   const site = useSiteMeta();
@@ -20,6 +24,8 @@ export function SiteFooter() {
   const seg = pathname.split("/")[1] ?? "";
   const inst = instFromSegment(seg);
   const firstInst = useInstitutionsDirectory().data?.[0]?.code;
+  const freshness = useFreshness(inst).data;
+  const stale = freshness ? staleSources(freshness.sources) : [];
   const docsHref = inst ? `/${inst}/docs` : firstInst ? `/${firstInst}/docs` : null;
   const scoped = Boolean(inst);
   const links: { href: string; label: string; icon?: "github" }[] = [
@@ -63,6 +69,23 @@ export function SiteFooter() {
             </li>
           ))}
         </ul>
+        {freshness && (freshness.data_updated_at || stale.length > 0) && (
+          <p className="mt-3 text-xs text-white/70" data-testid="footer-data-updated">
+            {freshness.data_updated_at && (
+              <>
+                {t("footer.dataUpdated", { date: formatDate(freshness.data_updated_at) })}
+                {" · "}
+              </>
+            )}
+            <Link
+              href={`/${inst}/about#data-freshness`}
+              className="text-white/60 underline-offset-2 hover:text-white/90 hover:underline"
+            >
+              {t("footer.dataFreshnessLink")}
+            </Link>
+            {stale.length > 0 && <span className="text-amber-300"> · {t("footer.dataStale")}</span>}
+          </p>
+        )}
         <p className="mt-3 text-xs text-white/70">
           <Link
             href="/data-pipeline"

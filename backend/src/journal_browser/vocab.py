@@ -135,3 +135,22 @@ class WorkIdentityStatus(StrEnum):
     CONFIRMED = "confirmed"
     MISSING = "missing"
     CANDIDATE = "candidate"
+
+
+class FreshnessSchedule(StrEnum):
+    """Which wave runs a data source (services/freshness.py): the nightly
+    refresh wave, the weekly source wave, or none (the job runs by hand)."""
+
+    NIGHTLY = "nightly"
+    WEEKLY = "weekly"
+    MANUAL = "manual"
+
+
+class FreshnessStatus(StrEnum):
+    """How fresh a data source is, judged from harvest_runs. ok: a run
+    succeeded within the expected interval. overdue: none did. failed: the
+    newest run failed."""
+
+    OK = "ok"
+    OVERDUE = "overdue"
+    FAILED = "failed"

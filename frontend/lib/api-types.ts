@@ -318,7 +318,7 @@ export interface paths {
          * Stored External Author
          * @description The harvest's stored OpenAlex author profile + recent works.
          *
-         *     The review drawer reads the verbatim source_records payload (the listing
+         *     The review drawer reads the stored source_records payload (the listing
          *     sweep lands every institutional author profile there) plus a recent-works
          *     sample from the openalex_works projection — no live API call. 404 when
          *     this id was never swept; the UI falls back to an OpenAlex link.
@@ -1314,7 +1314,7 @@ export interface components {
          * AdminExternalAuthorOut
          * @description Stored OpenAlex author profile (source_records) + recent works.
          *
-         *     Serves the identity review drawer from the harvest's verbatim payloads
+         *     Serves the identity review drawer from the harvest's stored payloads
          *     instead of the live API.
          */
         AdminExternalAuthorOut: {
@@ -1414,8 +1414,8 @@ export interface components {
             /** Schedules */
             schedules: components["schemas"]["OpsScheduleOut"][];
             backup: components["schemas"]["OpsBackupOut"];
-            /** Freshness */
-            freshness: components["schemas"]["OpsFreshnessEntryOut"][];
+            /** Sources */
+            sources: components["schemas"]["SourceFreshness"][];
             /** Tables */
             tables: {
                 [key: string]: string | null;
@@ -3145,19 +3145,31 @@ export interface components {
             data_window_end?: number | null;
             /** Harvests */
             harvests: components["schemas"]["FreshnessEntry"][];
-            /**
-             * Tables
-             * @default {}
-             */
-            tables: {
-                [key: string]: unknown;
-            };
+            /** Sources */
+            sources: components["schemas"]["SourceFreshness"][];
+            /** Data Updated At */
+            data_updated_at?: string | null;
             /**
              * Degraded
              * @default []
              */
             degraded: components["schemas"]["DegradedSource"][];
         };
+        /**
+         * FreshnessSchedule
+         * @description Which wave runs a data source (services/freshness.py): the nightly
+         *     refresh wave, the weekly source wave, or none (the job runs by hand).
+         * @enum {string}
+         */
+        FreshnessSchedule: "nightly" | "weekly" | "manual";
+        /**
+         * FreshnessStatus
+         * @description How fresh a data source is, judged from harvest_runs. ok: a run
+         *     succeeded within the expected interval. overdue: none did. failed: the
+         *     newest run failed.
+         * @enum {string}
+         */
+        FreshnessStatus: "ok" | "overdue" | "failed";
         /** FunderDetailResponse */
         FunderDetailResponse: {
             /** Id */
@@ -4248,20 +4260,6 @@ export interface components {
             modified_at?: string | null;
         };
         /**
-         * OpsFreshnessEntryOut
-         * @description Latest harvest state per (source, entity_type).
-         */
-        OpsFreshnessEntryOut: {
-            /** Source */
-            source: string;
-            /** Entity Type */
-            entity_type: string;
-            /** Status */
-            status: string;
-            /** Finished At */
-            finished_at: string | null;
-        };
-        /**
          * OpsLastWaveOut
          * @description The most recent burst of global harvest runs (the nightly wave).
          */
@@ -4859,6 +4857,32 @@ export interface components {
             deals: components["schemas"]["SimilarJournalItem"][];
             /** All */
             all: components["schemas"]["SimilarJournalItem"][];
+        };
+        /**
+         * SourceFreshness
+         * @description How fresh one data source is, for one institution or for all of them.
+         *     services/freshness.py defines the sources, their schedules and the
+         *     statuses.
+         */
+        SourceFreshness: {
+            /** Source */
+            source: string;
+            /** Institution Code */
+            institution_code?: string | null;
+            schedule: components["schemas"]["FreshnessSchedule"];
+            /** Expected Interval Hours */
+            expected_interval_hours?: number | null;
+            status: components["schemas"]["FreshnessStatus"];
+            /** Last Success At */
+            last_success_at?: string | null;
+            /** Last Run At */
+            last_run_at?: string | null;
+            last_run_status?: components["schemas"]["HarvestStatus"] | null;
+            /**
+             * Failed Parts
+             * @default []
+             */
+            failed_parts: string[];
         };
         /** StatsYear */
         StatsYear: {

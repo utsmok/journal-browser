@@ -4,24 +4,15 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
 from ..deps import InstitutionDep
-from ..models import (
-    ApcEvidence,
-    Deal,
-    HarvestRun,
-    HarvestState,
-    InstitutionWorksStats,
-    Journal,
-    Limitation,
-    PartnerInstitution,
-    ScimagojrMetric,
-)
+from ..models import HarvestRun, HarvestState, Limitation
 from ..schemas import DegradedSource, FreshnessEntry, FreshnessResponse, LimitationOut
 from ..services import source_health
+from ..services.freshness import data_updated_at, source_freshness
 
 router = APIRouter(prefix="/meta", tags=["meta"])
 
@@ -68,21 +59,7 @@ async def freshness(session: SessionDep, institution: InstitutionDep) -> Freshne
         ).all()
     )
 
-    async def table_ts(stmt) -> datetime | None:
-        return await session.scalar(stmt)
-
-    tables = {
-        "journals": await table_ts(select(func.max(Journal.harvested_at))),
-        # DOAJ columns are written by their own harvester run.
-        "doaj": await table_ts(select(func.max(Journal.doaj_harvested_at))),
-        "deals": await table_ts(select(func.max(Deal.updated_at))),
-        "institution_works_stats": await table_ts(
-            select(func.max(InstitutionWorksStats.updated_at))
-        ),
-        "scimagojr_metrics": await table_ts(select(func.max(ScimagojrMetric.year))),
-        "apc_evidence": await table_ts(select(func.max(ApcEvidence.period))),
-        "partner_institutions": await table_ts(select(func.max(PartnerInstitution.updated_at))),
-    }
+    sources = await source_freshness(session, [institution], public_only=True)
     return FreshnessResponse(
         institution=institution.name,
         institution_short=institution.short_name,
@@ -105,7 +82,8 @@ async def freshness(session: SessionDep, institution: InstitutionDep) -> Freshne
             )
             for state, finished_at in harvests
         ],
-        tables=dict(tables.items()),
+        sources=sources,
+        data_updated_at=data_updated_at(sources),
         degraded=[
             DegradedSource(
                 source=entry["source"],

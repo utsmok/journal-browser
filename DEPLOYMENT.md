@@ -584,6 +584,46 @@ The `scheduler` service runs the wave Sunday 22:00 UTC (override with
 `JB_SOURCE_WAVE_CRON`), ahead of the Monday 01:30 nightly wave so both fit
 in one weekend night. A rerun of the wave is harmless any day.
 
+### Data freshness
+
+`GET /api/v1/{inst}/meta/freshness` reports, for one institution, when
+each data source last refreshed successfully and whether that is still on
+schedule. Three places show it:
+
+- The About page (`/{inst}/about#data-freshness`) has one row per source:
+  what it provides, the last successful refresh with its age, the schedule
+  it is expected on, and a status (up to date, overdue, or refresh failed).
+  From the `md` breakpoint up it is a table; on phones each source is a card.
+- The footer of every institution page says "Data updated {date}". That is
+  the older of the two core sources, Pure and the OpenAlex publication
+  counts, and it links to the table.
+- The admin Operations card lists the failed and overdue sources first,
+  then the full table for every active institution.
+
+The rules are in `backend/src/journal_browser/services/freshness.py`, and
+the two wave scripts point back to it:
+
+- `SOURCES` lists each source with its schedule and the `harvest_runs` rows
+  (source and entity type) or table column that record a refresh. When a
+  stage moves between the waves, move its `SOURCES` entry with it.
+- `EXPECTED` gives each schedule its interval and slack. A source is
+  **overdue** when its last success is older than 1 day plus 12 hours
+  (nightly) or 7 days plus 1 day (weekly). A job that is in neither wave
+  runs by hand and is never overdue. One source overrides the default: ROR
+  records no run and refreshes only records older than 30 days, so its
+  newest `updated_at` stands in for a success and a week is expected.
+- A source is **failed** when the newest run of any of its parts failed.
+  A run still marked `running` 24 hours after it started (`ORPHAN_AFTER`)
+  counts as failed, because a killed process cannot close its row. Failed
+  outranks overdue.
+- A source with several parts is as old as its oldest part. It counts as
+  loaded only once every part has succeeded.
+- The nightly wave runs some stages for the home institution only. For the
+  other institutions those sources follow the schedule in `elsewhere`.
+- `public=False` keeps a source out of the public table. The admin card
+  still lists it. This covers the Jisc Open Policy Finder landing, whose
+  normalisation step is in neither wave.
+
 ## Nightly scheduler
 
 The `scheduler` service runs the same backend image as the API, with

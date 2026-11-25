@@ -686,7 +686,9 @@ async def test_ops_status_sections(ops_api):
     assert backup["size_bytes"] > 0
     assert backup["modified_at"] is not None
 
-    assert any(t["source"] == "harvest_stats" for t in body["freshness"])
+    # None of the registered sources ran in this fixture; the rows
+    # themselves are covered by test_freshness.py.
+    assert body["sources"] == []
     assert "journals" in body["tables"]
 
 
