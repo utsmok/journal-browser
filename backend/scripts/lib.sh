@@ -218,9 +218,9 @@ reap_orphans() {
     [ -n "$out" ] || return 0
     echo "reaper: marked failed as orphaned:"
     echo "$out"
-    echo "$out" | tr '\n' ';' | {
-        read -r runs
-        alert_post "[$host] harvest runs left 'running' by a killed process are now marked failed: $runs" || :
-    }
+    # No `read` here: the joined line has no trailing newline, so `read`
+    # returns 1, and under the waves' `set -e` that ended the whole wave.
+    runs="$(printf '%s\n' "$out" | tr '\n' ';')"
+    alert_post "[$host] harvest runs left 'running' by a killed process are now marked failed: $runs" || :
     return 0
 }

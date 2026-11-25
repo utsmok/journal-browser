@@ -283,6 +283,23 @@ def test_orphaned_harvest_runs_are_alerted(sandbox):
     ]
 
 
+def test_wave_runs_on_after_reporting_orphaned_runs(sandbox):
+    # The waves run under `set -euo pipefail`; reporting an orphan must not
+    # end the wave (2026-11-25: it did, right after a database crash).
+    sandbox.env["REAPED"] = (
+        "run 423 openalex/works_stats institution=1 started 2026-11-25T13:09:42Z"
+    )
+
+    r = sandbox.run("refresh_wave.sh")
+
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "jobs/embed_journals.py" in sandbox.jobs
+    assert sandbox.alerts() == [
+        f"[{HOST}] harvest runs left 'running' by a killed process are now marked failed: "
+        "run 423 openalex/works_stats institution=1 started 2026-11-25T13:09:42Z;"
+    ]
+
+
 def test_backup_dumps_with_zstd_checks_the_archive_and_pings(sandbox):
     r = sandbox.run("backup.sh")
 
