@@ -63,7 +63,7 @@ export function GuideStepper({
                   if (clickable && !isCurrent) onSelectStep(step);
                 }}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-[var(--radius)] border px-2.5 py-2 text-left text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 sm:px-3 sm:text-sm",
+                  "flex min-h-11 w-full items-center gap-2 rounded-[var(--radius)] border px-2.5 py-2 text-left text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 sm:px-3 sm:text-sm min-[1024px]:min-h-0",
                   isCurrent
                     ? "border-[var(--brand-tint-border)] bg-[var(--brand-tint-bg)] text-[var(--foreground)]"
                     : isDone

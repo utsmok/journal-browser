@@ -187,13 +187,13 @@ export function CollaborationOverview({
           title={t("overview.trendTitle")}
           defaultOpen={false}
           description={
-            <div className="mt-2 flex overflow-hidden rounded-[var(--radius)] border border-[var(--input)] w-fit">
+            <div className="mt-2 flex w-fit max-w-full flex-wrap overflow-hidden rounded-[var(--radius)] border border-[var(--input)]">
               {TREND_MODES.map((mode) => (
                 <Button
                   key={mode}
                   variant={trendMode === mode ? "secondary" : "ghost"}
                   size="sm"
-                  className="h-7 rounded-none px-2.5 text-xs"
+                  className="rounded-none px-2.5 min-[1024px]:h-7 min-[1024px]:text-xs"
                   aria-pressed={trendMode === mode}
                   onClick={() => setTrendMode(mode)}
                 >

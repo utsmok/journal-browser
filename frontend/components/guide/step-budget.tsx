@@ -133,7 +133,7 @@ export function StepBudget({
                   aria-pressed={active}
                   onClick={() => onChangeMaxApc(preset)}
                   className={cn(
-                    "rounded-[var(--radius)] border px-3 py-1.5 text-xs font-semibold tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2",
+                    "min-h-11 rounded-[var(--radius)] border px-3 py-1.5 text-xs font-semibold tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 min-[1024px]:min-h-0",
                     active
                       ? "border-[var(--brand-tint-border)] bg-[var(--primary)] text-[var(--primary-foreground)]"
                       : "border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] hover:bg-[var(--muted)]",

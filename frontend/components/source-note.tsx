@@ -83,7 +83,7 @@ export function SourceNote({ source, url, codes, howBuilt, className }: SourceNo
                   href={c.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-0.5 inline-flex items-center gap-0.5 text-[var(--primary-text)] underline-offset-2 hover:underline"
+                  className="mt-0.5 inline-flex min-h-11 items-center gap-0.5 text-[var(--primary-text)] underline-offset-2 hover:underline min-[1024px]:min-h-0"
                 >
                   {t("sourceNote.moreInfo")} <ExternalLink aria-hidden className="size-3" />
                 </a>
@@ -95,7 +95,7 @@ export function SourceNote({ source, url, codes, howBuilt, className }: SourceNo
               href={url}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-2 flex items-center gap-0.5 border-t border-[var(--border)] pt-2 text-[var(--primary-text)] underline-offset-2 hover:underline"
+              className="mt-2 flex min-h-11 items-center gap-0.5 border-t border-[var(--border)] pt-2 text-[var(--primary-text)] underline-offset-2 hover:underline min-[1024px]:min-h-0"
             >
               {url.replace(/^https?:\/\//, "")} <ExternalLink aria-hidden className="size-3" />
             </a>

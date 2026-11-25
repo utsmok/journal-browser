@@ -101,7 +101,7 @@ export function SectionNav({
       <div className="mx-auto flex max-w-screen-2xl items-center gap-3 overflow-x-auto px-4 py-2">
         <Link
           href={backHref}
-          className="inline-flex shrink-0 items-center gap-1 text-sm text-white/80 hover:text-white"
+          className="inline-flex min-h-11 shrink-0 items-center gap-1 text-sm text-white/80 hover:text-white min-[1024px]:min-h-0"
         >
           <ArrowLeft aria-hidden className="size-4" /> {resolvedBackLabel}
         </Link>

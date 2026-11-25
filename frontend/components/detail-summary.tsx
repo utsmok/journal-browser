@@ -120,7 +120,7 @@ export function DetailSummaryPanel({
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="inline-flex shrink-0 items-center gap-1 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-2 py-0.5 text-[11px] font-medium text-[var(--muted-foreground)] hover:border-[var(--primary)] hover:text-[var(--primary-text)]"
+            className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-2 py-0.5 text-xs font-medium text-[var(--muted-foreground)] hover:border-[var(--primary)] hover:text-[var(--primary-text)] min-[1024px]:min-h-0 min-[1024px]:text-[11px]"
             aria-expanded={expanded}
           >
             {expanded ? (

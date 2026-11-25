@@ -276,7 +276,7 @@ export function GuideResults({
           <div className="flex flex-wrap items-center gap-3">
             <Link
               href={browseHref}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] hover:border-[var(--primary)] hover:text-[var(--primary-text)]"
+              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] hover:border-[var(--primary)] hover:text-[var(--primary-text)] min-[1024px]:min-h-0"
             >
               {t("results.browseWithFilters")}
             </Link>

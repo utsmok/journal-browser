@@ -78,7 +78,7 @@ export function OnboardingBanner({
           onClick={onDismiss}
           aria-label={t("onboarding.dismiss")}
           title={t("onboarding.dismiss")}
-          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-md px-2 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] sm:min-h-0 sm:min-w-0 sm:py-1"
         >
           <span className="hidden sm:inline">{t("onboarding.dismissShort")}</span>
           <X aria-hidden className="size-3.5" />
