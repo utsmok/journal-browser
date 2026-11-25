@@ -106,7 +106,7 @@ Status values: `open` (not reported upstream), `reported` (link to the report), 
 
 ### Two titles joined in one
 - Status: open.
-- What happens: source S2737215817 (ISSN-L 1682-1750, Copernicus Publications) has two titles joined by "/". It appears as the top guided finder match for some papers.
+- What happens: some sources carry two titles joined by "/". Source S2737215817 (ISSN-L 1682-1750, Copernicus Publications) has two different titles; S4210238307 (ISSN-L 2470-0010) reads "Physical review. D/Physical review. D." (58 RUG works). It appears as the top guided finder match for some papers.
 - Handling: shown as is.
 
 ## Jisc Open Policy Finder: embargoes
