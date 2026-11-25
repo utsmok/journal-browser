@@ -2,15 +2,22 @@
 
 import { usePathname } from "next/navigation";
 
-import { useInstitution, useInstitutionWindowStart } from "./use-institution";
+import {
+  useInstitution,
+  useInstitutionDirectoryRow,
+  useInstitutionWindowStart,
+} from "./use-institution";
 import { useFreshness, useInstitutionsDirectory } from "./use-api";
 import { useSiteFallback } from "./site-fallback";
 import { instFromSegment } from "@/lib/global-segments";
 
 /**
  * Institution display values: the scoped /meta/freshness is authoritative
- * once loaded; the institutions directory covers the pre-hydration render
- * for non-default institutions, and the stack's JB_* env seeds the default.
+ * once loaded; the directory row the [inst] layout fetched server-side
+ * covers the first render (server and hydrating client read the same
+ * value, so no hydration mismatch), the institutions directory query
+ * covers surfaces outside the provider, and the stack's JB_* env seeds
+ * the default institution.
  */
 export function useSiteMeta() {
   // The footer renders in the root layout, outside the [inst] provider, so
@@ -19,7 +26,9 @@ export function useSiteMeta() {
   const seg = (usePathname() ?? "/").split("/")[1] ?? "";
   const inst = ctxInst || instFromSegment(seg);
   const { data } = useFreshness(inst);
-  const dir = useInstitutionsDirectory().data?.find((i) => i.code === inst);
+  const layoutDir = useInstitutionDirectoryRow();
+  const dirQuery = useInstitutionsDirectory();
+  const dir = layoutDir ?? dirQuery.data?.find((i) => i.code === inst);
   const seed = useSiteFallback();
   const layoutWindowStart = useInstitutionWindowStart();
   // Resolution order: freshness (authoritative) → directory row (per-inst,
