@@ -5,14 +5,19 @@ import { GLOBAL_SEGMENTS } from "@/lib/global-segments";
 
 const API = process.env.API_PROXY_URL || "http://localhost:8000";
 
-/** Valid institution codes, cached briefly; null when the API is
- * unreachable so an outage never 404s the whole institution tree. */
-async function institutionCodes(): Promise<Set<string> | null> {
+/** Valid institution codes with their first statistics year, cached
+ * briefly; null when the API is unreachable so an outage never 404s the
+ * whole institution tree. */
+async function institutionWindows(): Promise<Map<string, number | undefined> | null> {
   try {
     const res = await fetch(`${API}/api/v1/institutions`, { next: { revalidate: 300 } });
     if (!res.ok) return null;
-    const rows = (await res.json()) as { code?: string }[];
-    return new Set(rows.map((r) => r.code).filter((c): c is string => Boolean(c)));
+    const rows = (await res.json()) as { code?: string; data_window_start?: number }[];
+    return new Map(
+      rows
+        .filter((r): r is { code: string; data_window_start?: number } => Boolean(r.code))
+        .map((r) => [r.code, r.data_window_start ?? undefined]),
+    );
   } catch {
     return null;
   }
@@ -30,7 +35,11 @@ export default async function InstLayout({
   // only if their static routes were removed; unknown codes are a real 404
   // instead of a shell that fires phantom API calls.
   if (GLOBAL_SEGMENTS[inst]) notFound();
-  const codes = await institutionCodes();
-  if (codes && !codes.has(inst)) notFound();
-  return <InstitutionProvider code={inst}>{children}</InstitutionProvider>;
+  const windows = await institutionWindows();
+  if (windows && !windows.has(inst)) notFound();
+  return (
+    <InstitutionProvider code={inst} windowStart={windows?.get(inst)}>
+      {children}
+    </InstitutionProvider>
+  );
 }

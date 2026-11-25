@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 
-import { useInstitution } from "./use-institution";
+import { useInstitution, useInstitutionWindowStart } from "./use-institution";
 import { useFreshness, useInstitutionsDirectory } from "./use-api";
 import { useSiteFallback } from "./site-fallback";
 import { instFromSegment } from "@/lib/global-segments";
@@ -21,6 +21,7 @@ export function useSiteMeta() {
   const { data } = useFreshness(inst);
   const dir = useInstitutionsDirectory().data?.find((i) => i.code === inst);
   const seed = useSiteFallback();
+  const layoutWindowStart = useInstitutionWindowStart();
   // Resolution order: freshness (authoritative) → directory row (per-inst,
   // fast) → this stack's JB_* env seed (default institution only).
   return {
@@ -38,9 +39,10 @@ export function useSiteMeta() {
     researchPortalUrl:
       data?.research_portal_url ?? dir?.research_portal_url ?? seed?.researchPortalUrl ?? "",
     /** First publication year this institution's statistics cover. The
-     * directory row is required per the API contract; undefined only in
-     * the transient no-directory-yet render (no literal year guess here —
-     * the old `?? 2020` was wrong for every real institution). */
-    windowStart: data?.data_window_start ?? dir?.data_window_start,
+     * directory row is required per the API contract; the [inst] layout
+     * passes it from its server fetch so the first server render and the
+     * hydrating client agree (no literal year guess: the old `?? 2020` was
+     * wrong for every real institution). */
+    windowStart: data?.data_window_start ?? dir?.data_window_start ?? layoutWindowStart,
   };
 }
