@@ -31,7 +31,10 @@
     "faculties": "Faculties",
     "about": "About",
     "allUniversities": "All universities",
-    "switchInstitution": "Switch university"
+    "switchInstitution": "Switch university",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "menuLabel": "Menu"
   },
 
   "footer": {
