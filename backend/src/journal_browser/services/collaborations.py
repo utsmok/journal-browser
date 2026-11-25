@@ -92,7 +92,7 @@ from .collaborations_detail import (
     top_partners_for_orgunit,
 )
 from .concurrency import together
-from .csv_export import csv_response, csv_safe, safe_filename
+from .csv_export import csv_cells, csv_response, csv_stream, safe_filename
 from .works_query import (
     YEAR_BUCKETS,
     unit_key,
@@ -1299,17 +1299,22 @@ async def _credit_lists(
     session: AsyncSession,
     institution: Institution,
     selected: Any,
-    rors: Sequence[str],
+    rors: Sequence[str] | None,
     cap: int,
     jisc_map: dict[str, int],
 ) -> dict[str, _Credits]:
-    out: dict[str, _Credits] = {ror: _Credits([], []) for ror in rors}
-    if not rors:
+    """Top `cap` funders and projects per partner. `rors` names the
+    partners to fill. None fills every partner in `selected` that has a
+    credit: the CSV export streams its partners later and looks each one
+    up."""
+    out: dict[str, _Credits] = {ror: _Credits([], []) for ror in rors or ()}
+    if rors is not None and not rors:
         return out
     rows: dict[tuple[str, str], list[Any]] = defaultdict(list)
 
     def dimension_rows(dimension: str) -> Callable[[AsyncSession], Awaitable[Sequence[Any]]]:
         credits = _credits(institution, dimension)
+        partners = [selected.c.ror.in_(list(rors))] if rors is not None else []
         stmt = (
             select(
                 selected.c.ror.label("ror"),
@@ -1322,7 +1327,7 @@ async def _credit_lists(
             )
             .select_from(selected)
             .join(credits, credits.c.work == selected.c.work)
-            .where(selected.c.ror.in_(list(rors)), credits.c.key.is_not(None))
+            .where(*partners, credits.c.key.is_not(None))
             .group_by(selected.c.ror, credits.c.key)
         )
 
@@ -1339,10 +1344,11 @@ async def _credit_lists(
         for row in found:
             rows[(row.ror, dimension)].append(row)
     for (ror, dimension), entries in rows.items():
+        lists = out.setdefault(ror, _Credits([], []))
         entries.sort(key=lambda r: (-int(r.count), r.name or "", r.key))
         top = entries[:cap]
         if dimension == "funder":
-            out[ror].funders = [
+            lists.funders = [
                 CollaborationFunder(
                     key=e.key,
                     name=e.name or e.key,
@@ -1353,7 +1359,7 @@ async def _credit_lists(
                 for e in top
             ]
         else:
-            out[ror].projects = [
+            lists.projects = [
                 CollaborationProject(
                     key=e.key,
                     code=e.code,
@@ -1482,7 +1488,7 @@ def _file_stem(institution: Institution, *parts: str) -> str:
 
 async def _csv_lines(rows: Sequence[Sequence[Any]]) -> AsyncIterator[list[str]]:
     for row in rows:
-        yield ["" if v is None else csv_safe(str(v)) for v in row]
+        yield csv_cells(row)
 
 
 async def _linked(session: AsyncSession, institution: Institution, ror: str) -> bool:
@@ -1842,46 +1848,44 @@ async def collaborations_csv(
     total_works = await session.scalar(
         select(func.count()).select_from(Work).where(*_work_conditions(institution, filters))
     )
-    rows = (
-        await session.execute(
-            _ordered(_per_partner(institution, selected), "works", None, filters.q)
-        )
-    ).all()
-    credits = await _credit_lists(
-        session, institution, selected, [r.ror for r in rows], ITEM_LIST_CAP, jisc_map
+    # Credits come from their own aggregate queries: once for every
+    # partner, not once per streamed partition.
+    credits = await _credit_lists(session, institution, selected, None, ITEM_LIST_CAP, jisc_map)
+    no_credits = _Credits([], [])
+    lines = await csv_stream(
+        session,
+        _ordered(_per_partner(institution, selected), "works", None, filters.q),
+        lambda row: _partner_csv_row(row, credits.get(row.ror, no_credits), deal_rors, total_works),
     )
-    table: list[list[Any]] = []
-    for row in rows:
-        works = int(row.works)
-        oa_works = int(row.oa_works or 0)
-        table.append(
-            [
-                row.ror,
-                row.name,
-                row.org_type,
-                row.country_code,
-                row.city,
-                works,
-                int(row.home_corresponding_works or 0),
-                int(row.corresponding_works),
-                int(row.authorships or 0),
-                oa_works,
-                int(row.closed_works or 0),
-                round(oa_works / works, 4) if works else None,
-                "yes" if row.ror in deal_rors else "no",
-                round(works / total_works, 4) if total_works else None,
-                " ".join(sorted(row.sources or [])),
-                "; ".join(f.name for f in credits[row.ror].funders),
-                "; ".join(
-                    p.acronym or p.code or p.funder or p.key for p in credits[row.ror].projects
-                ),
-            ]
-        )
     return csv_response(
-        f"{_file_stem(institution, 'collaborations-partners')}.csv",
-        _csv_lines(table),
-        _PARTNER_CSV,
+        f"{_file_stem(institution, 'collaborations-partners')}.csv", lines, _PARTNER_CSV
     )
+
+
+def _partner_csv_row(
+    row: Any, credits: _Credits, deal_rors: frozenset[str], total_works: int | None
+) -> list[Any]:
+    works = int(row.works)
+    oa_works = int(row.oa_works or 0)
+    return [
+        row.ror,
+        row.name,
+        row.org_type,
+        row.country_code,
+        row.city,
+        works,
+        int(row.home_corresponding_works or 0),
+        int(row.corresponding_works),
+        int(row.authorships or 0),
+        oa_works,
+        int(row.closed_works or 0),
+        round(oa_works / works, 4) if works else None,
+        "yes" if row.ror in deal_rors else "no",
+        round(works / total_works, 4) if total_works else None,
+        " ".join(sorted(row.sources or [])),
+        "; ".join(f.name for f in credits.funders),
+        "; ".join(p.acronym or p.code or p.funder or p.key for p in credits.projects),
+    ]
 
 
 async def collaborations_trend_csv(
@@ -1937,26 +1941,24 @@ async def partner_works_csv(
         return None
     deal_rors = await _shared_deal_rors(session, institution)
     joint = _joint_works(institution, filters, ror, deal_rors=deal_rors)
-    rows = (await session.execute(_works_stmt(institution, joint))).all()
-    table = [
-        [
-            r.pure_uuid,
-            r.title,
-            r.year,
-            r.doi_normalized,
-            r.work_type,
-            r.journal_title,
-            r.oa_status,
-            "yes" if r.deal_covered else "no",
-            "yes" if r.home_corresponding else "no",
-            "yes" if r.corresponding else "no",
-            r.source,
-            r.authors,
-        ]
-        for r in rows
-    ]
+    lines = await csv_stream(session, _works_stmt(institution, joint), _work_csv_row)
     return csv_response(
-        f"{_file_stem(institution, 'collaborations', ror, 'works')}.csv",
-        _csv_lines(table),
-        _WORK_CSV,
+        f"{_file_stem(institution, 'collaborations', ror, 'works')}.csv", lines, _WORK_CSV
     )
+
+
+def _work_csv_row(r: Any) -> list[Any]:
+    return [
+        r.pure_uuid,
+        r.title,
+        r.year,
+        r.doi_normalized,
+        r.work_type,
+        r.journal_title,
+        r.oa_status,
+        "yes" if r.deal_covered else "no",
+        "yes" if r.home_corresponding else "no",
+        "yes" if r.corresponding else "no",
+        r.source,
+        r.authors,
+    ]

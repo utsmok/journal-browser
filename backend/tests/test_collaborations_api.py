@@ -19,7 +19,7 @@ from journal_browser.models import (
     WorkPartner,
     WorkPureAuthor,
 )
-from journal_browser.services import collaborations
+from journal_browser.services import collaborations, csv_export
 
 P1, P2, P3 = "01a2b3c04", "02b3c4d05", "03c4d5e06"
 
@@ -493,6 +493,23 @@ async def test_partner_works_and_the_csv_exports(client, collab_api):
     assert lines[1] == "w4,Work 4,2023,10.0/w4,article,,,no,no,no,openalex,"
     assert lines[-1] == "w1,Work 1,2020,10.0/w1,article,,,no,no,yes,openalex,Test Author"
     assert len(lines) == 4
+
+
+@requires_db
+async def test_csv_streams_in_partitions_without_changing_the_output(
+    client, collab_api, monkeypatch
+):
+    """Both CSV exports read their rows from a server-side cursor in
+    partitions. One partition per row gives the same bytes as one
+    partition for the whole file."""
+    urls = [
+        "/api/v1/ut/collaborations/partners.csv",
+        f"/api/v1/ut/collaborations/{P1}/works.csv",
+    ]
+    whole = [(await client.get(url)).text for url in urls]
+    assert all(len(text.strip().splitlines()) == 4 for text in whole)
+    monkeypatch.setattr(csv_export, "FLUSH_EVERY", 1)
+    assert [(await client.get(url)).text for url in urls] == whole
 
 
 @requires_db
