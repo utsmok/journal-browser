@@ -109,7 +109,7 @@ async def harvest_work_funders(session: AsyncSession, *, ttl_days: int = 30) -> 
     after their (empty) upsert/prune — so works OpenAlex reports without
     awards leave the nightly sweep too. Works whose fetch errored stay
     unstamped and retry next run. Idempotent; stats name the sweep's
-    shape. Fetched work payloads land verbatim in source_records via
+    shape. Fetched work payloads land in source_records via
     IngestSession (deduped by content hash, merged W-ids included)."""
     stats: dict[str, Any] = {
         "works_with_doi": 0,

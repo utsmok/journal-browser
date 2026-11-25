@@ -194,7 +194,7 @@ async def stored_external_author(
 ) -> dict[str, Any]:
     """The harvest's stored OpenAlex author profile + recent works.
 
-    The review drawer reads the verbatim source_records payload (the listing
+    The review drawer reads the stored source_records payload (the listing
     sweep lands every institutional author profile there) plus a recent-works
     sample from the openalex_works projection — no live API call. 404 when
     this id was never swept; the UI falls back to an OpenAlex link.

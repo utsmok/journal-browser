@@ -1,7 +1,8 @@
 """OpenAlex works store: the normalized projection over the institution's
 harvested OpenAlex works.
 
-The raw payloads already land verbatim in source_records — the bootstrap
+The raw payloads already land in source_records, minus the keys listed in
+ingest.PAYLOAD_DROP_KEYS — the bootstrap
 `stats` sweep (harvest/institution_stats.py, entity_type works_stats,
 institutions.id filter, publication-windowed) stores every work with its
 authorships — plus the budget-capped per-author enrichment sweep

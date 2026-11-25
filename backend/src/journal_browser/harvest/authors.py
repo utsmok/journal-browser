@@ -379,7 +379,7 @@ async def fetch_local_source(session: AsyncSession, institution: Institution) ->
     }
 
     # Crossref ORCID corroboration: the stored Crossref work payloads
-    # (enrichment ladder rung 2, landed verbatim by enrich_crossref) list
+    # (enrichment ladder rung 2, landed by enrich_crossref) list
     # authors with ORCIDs. For roster authors whose Pure person has none,
     # a name match against those lists fills crossref_orcid with zero
     # extra API calls; run enrich_works first so the payloads exist.

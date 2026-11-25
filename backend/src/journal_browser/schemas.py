@@ -1240,7 +1240,7 @@ class AdminExternalWorkOut(BaseModel):
 class AdminExternalAuthorOut(BaseModel):
     """Stored OpenAlex author profile (source_records) + recent works.
 
-    Serves the identity review drawer from the harvest's verbatim payloads
+    Serves the identity review drawer from the harvest's stored payloads
     instead of the live API.
     """
 
