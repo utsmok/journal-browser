@@ -15,6 +15,11 @@ export type JournalDetailResponse = Schemas["JournalDetailResponse"];
 
 export type JournalSearchResponse = Schemas["JournalSearchResponse"];
 
+/** List row plus the covering deals' names and the best green OA route. */
+export type JournalBatchItem = Schemas["JournalBatchItem"];
+
+export type JournalBatchResponse = Schemas["JournalBatchResponse"];
+
 /** Three similar-journal cuts: institution-publishing venues, deal-covered venues, and the general list. */
 export type SimilarJournalsBundle = Schemas["SimilarJournalsBundle"];
 
@@ -702,4 +707,34 @@ export async function fetchJournalCrisGaps(
     year_to: years?.year_to,
     parts,
   });
+}
+
+/** ISSN-Ls per batch request: the endpoint's cap. */
+export const JOURNAL_BATCH_SIZE = 100;
+
+/** Saved-journal lookup (shortlist). A longer list goes out in slices of
+ * JOURNAL_BATCH_SIZE; the merged answer keeps the request order, and
+ * `missing` names the ISSN-Ls outside the institution's browsable corpus. */
+export async function fetchJournalBatch(
+  inst: string,
+  issnLs: string[],
+  years?: YearParams,
+): Promise<JournalBatchResponse> {
+  const slices: string[][] = [];
+  for (let i = 0; i < issnLs.length; i += JOURNAL_BATCH_SIZE) {
+    slices.push(issnLs.slice(i, i + JOURNAL_BATCH_SIZE));
+  }
+  const parts = await Promise.all(
+    slices.map((slice) =>
+      apiGet<JournalBatchResponse>(`/${inst}/journals/batch`, {
+        issn_l: slice.join(","),
+        year_from: years?.year_from,
+        year_to: years?.year_to,
+      }),
+    ),
+  );
+  return {
+    items: parts.flatMap((part) => part.items),
+    missing: parts.flatMap((part) => part.missing),
+  };
 }

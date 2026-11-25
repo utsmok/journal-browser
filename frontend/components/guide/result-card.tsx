@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import { DealBadge, FunderFitBadge, OaTypeBadge, QuartileBadge } from "@/components/badges";
+import { ShortlistToggle } from "@/components/shortlist/shortlist-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -114,6 +115,11 @@ export function PodiumJournalCard({
                   {t("results.rankBadge", { rank: journal.rank })}
                 </Badge>
               )}
+              <ShortlistToggle
+                inst={inst}
+                issnL={journal.issn_l}
+                title={journal.title ?? journal.issn_l}
+              />
               <Link
                 href={journalHref}
                 className="text-lg font-bold tracking-tight text-[var(--foreground)] underline-offset-4 hover:text-[var(--primary-text)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
@@ -247,6 +253,11 @@ export function RunnerUpJournalRow({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="muted">{t("results.rankBadge", { rank: journal.rank })}</Badge>
+            <ShortlistToggle
+              inst={inst}
+              issnL={journal.issn_l}
+              title={journal.title ?? journal.issn_l}
+            />
             <Link
               href={journalHref}
               className="font-semibold text-[var(--foreground)] underline-offset-4 hover:text-[var(--primary-text)] hover:underline"

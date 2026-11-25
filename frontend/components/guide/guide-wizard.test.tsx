@@ -10,6 +10,8 @@ import * as api from "@/lib/api";
 import type { RecommendResponse } from "@/lib/api";
 import common from "@/messages/en/common.json";
 import guide from "@/messages/en/guide.json";
+import shortlist from "@/messages/en/shortlist.json";
+import { installMemoryStorage } from "@/tests/helpers/local-storage";
 
 vi.mock("@/hooks/use-site-meta", () => ({
   useSiteMeta: () => ({
@@ -141,7 +143,7 @@ function renderWizard() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <NextIntlClientProvider locale="en" messages={{ common, guide }}>
+      <NextIntlClientProvider locale="en" messages={{ common, guide, shortlist }}>
         <InstitutionProvider code="ut">
           <GuideWizard />
         </InstitutionProvider>
@@ -150,30 +152,8 @@ function renderWizard() {
   );
 }
 
-function makeMemoryStorage(): Storage {
-  const store = new Map<string, string>();
-  return {
-    get length() {
-      return store.size;
-    },
-    clear: () => store.clear(),
-    getItem: (key: string) => store.get(key) ?? null,
-    key: (index: number) => Array.from(store.keys())[index] ?? null,
-    removeItem: (key: string) => {
-      store.delete(key);
-    },
-    setItem: (key: string, value: string) => {
-      store.set(key, String(value));
-    },
-  };
-}
-
 beforeEach(() => {
-  Object.defineProperty(window, "localStorage", {
-    value: makeMemoryStorage(),
-    configurable: true,
-    writable: true,
-  });
+  installMemoryStorage();
   vi.restoreAllMocks();
 });
 

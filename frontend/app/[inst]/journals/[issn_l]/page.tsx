@@ -33,6 +33,7 @@ import { OpenaireCard } from "@/components/journal/openaire-card";
 import { PublicationsCard } from "@/components/journal/publications-card";
 import { SectionNav, useLastSearchHref } from "@/components/journal/section-nav";
 import { UtAuthorshipCard } from "@/components/journal/ut-authorship-card";
+import { ShortlistToggle } from "@/components/shortlist/shortlist-toggle";
 import { SourceNote } from "@/components/source-note";
 import { ErrorPanel, JournalDetailSkeleton } from "@/components/states";
 import { InsetPanel } from "@/components/sub-panel";
@@ -359,16 +360,24 @@ function JournalPageInner() {
                 <CopyButton text={journal.issn_l} label={`ISSN-L ${journal.issn_l}`} />
               </span>
             </div>
-            <Button
-              variant={citeOpen ? "secondary" : "outline"}
-              size="sm"
-              aria-expanded={citeOpen}
-              onClick={() => setCiteOpen((v) => !v)}
-              className="shrink-0 gap-1.5"
-            >
-              <Quote aria-hidden className="size-3.5" />
-              {t("header.cite")}
-            </Button>
+            <div className="flex shrink-0 items-center gap-1">
+              <ShortlistToggle
+                inst={inst}
+                issnL={journal.issn_l}
+                title={journal.title ?? journal.issn_l}
+                className="size-8 before:hidden"
+              />
+              <Button
+                variant={citeOpen ? "secondary" : "outline"}
+                size="sm"
+                aria-expanded={citeOpen}
+                onClick={() => setCiteOpen((v) => !v)}
+                className="gap-1.5"
+              >
+                <Quote aria-hidden className="size-3.5" />
+                {t("header.cite")}
+              </Button>
+            </div>
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted-foreground)]">
             <span>

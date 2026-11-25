@@ -6,6 +6,7 @@ import "./globals.css";
 
 import { SiteFooter } from "@/components/site-footer";
 import { AboutUtilityLink, BrandLink, SiteNav } from "@/components/site-nav";
+import { ShortlistLink } from "@/components/shortlist/shortlist-link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { YearFilterControl } from "@/components/year-filter";
 import { FeedbackWidget } from "@/components/feedback/feedback-widget";
@@ -66,6 +67,7 @@ function SiteHeader() {
         <SiteNav />
         <div className="flex items-center gap-2 sm:gap-3">
           <YearFilterControl />
+          <ShortlistLink />
           <AboutUtilityLink />
           <ThemeToggle />
         </div>
@@ -96,6 +98,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     "docs",
     "about",
     "admin",
+    "shortlist",
   ] as const;
   const messages = Object.fromEntries(clientNamespaces.map((ns) => [ns, all[ns]]));
   return (

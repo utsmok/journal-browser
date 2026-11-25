@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import get_settings
 from ..db import get_session
 from ..deps import InstitutionDep
+from ..identifiers import normalize_issn_l
 from ..models import (
     ApcEvidence,
     Deal,
@@ -36,6 +37,8 @@ from ..schemas import (
     GreenOaPolicy,
     GreenOaRoute,
     InstitutionMetrics,
+    JournalBatchItem,
+    JournalBatchResponse,
     JournalDetailResponse,
     JournalListItem,
     JournalSearchResponse,
@@ -85,6 +88,27 @@ OaTypeFilter = Annotated[list[OaType] | None, BeforeValidator(_split_csv), Query
 def _is_ignored(issn_l: str) -> bool:
     """Admin ignore-list: an ignored journal is treated as nonexistent."""
     return issn_l.upper() in set(get_settings().ignored_issns)
+
+
+#: ISSN-Ls one batch lookup accepts; the shortlist page requests longer
+#: saved lists in slices of this size.
+BATCH_MAX = 100
+
+
+def _batch_issn_ls(raw: str) -> list[str]:
+    """Parse the issn_l query of the batch lookup into canonical ISSN-Ls,
+    first occurrence order kept. 422 on a malformed value or on more than
+    BATCH_MAX ISSN-Ls."""
+    requested: list[str] = []
+    for part in raw.split(","):
+        issn_l = normalize_issn_l(part) if part.strip() else None
+        if issn_l is None:
+            raise HTTPException(status_code=422, detail=f"invalid ISSN-L: {part.strip()!r}")
+        if issn_l not in requested:
+            requested.append(issn_l)
+    if len(requested) > BATCH_MAX:
+        raise HTTPException(status_code=422, detail=f"at most {BATCH_MAX} ISSN-Ls per request")
+    return requested
 
 
 async def _funder_policy(session: AsyncSession, funder_id: int | None) -> dict | None:
@@ -297,6 +321,55 @@ async def semantic_search_journals(
         items=[_to_list_item(item) for item in result["items"]],
         total=result["total"],
         next_cursor=result["next_cursor"],
+    )
+
+
+@router.get("/batch", response_model=JournalBatchResponse)
+async def journals_batch(
+    session: SessionDep,
+    institution: InstitutionDep,
+    issn_l: Annotated[
+        str,
+        Query(
+            max_length=1200,
+            description="Comma-separated ISSN-Ls, hyphenated or bare; at most 100 values",
+        ),
+    ],
+    year_from: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range start (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+    year_to: Annotated[
+        int | None,
+        Query(
+            ge=1900,
+            le=2100,
+            description="Publication-year range end (clamped to the "
+            "institution's data window; default: the full window)",
+        ),
+    ] = None,
+) -> JournalBatchResponse:
+    """Saved-journal lookup: list rows for an explicit ISSN-L set, in request
+    order. ISSN-Ls outside the institution's browsable corpus come back in
+    ``missing``."""
+    requested = _batch_issn_ls(issn_l)
+    year_range = clamped_year_range(institution, year_from, year_to)
+    items = await search_service.journals_by_issn(
+        session,
+        institution_id=institution.id,
+        issn_ls=requested,
+        year_from=year_range[0] if year_range else None,
+        year_to=year_range[1] if year_range else None,
+    )
+    served = {item["issn_l"] for item in items}
+    return JournalBatchResponse(
+        items=[JournalBatchItem(**item) for item in items],
+        missing=[i for i in requested if i not in served],
     )
 
 
