@@ -5,8 +5,7 @@
   },
   "page": {
     "heading": "Open access deals",
-    "intro": "Transformative and read-and-publish agreements that cover {institution} authors. Each entry shows the caps, the conditions, and the workflow.",
-    "summaryInline": "{current} active agreements · {covered, number} covered journal entries · {capped} with article caps."
+    "intro": "Transformative and read-and-publish agreements that cover {institution} authors. Each entry shows the caps, the conditions, and the workflow."
   },
   "tabs": {
     "ariaLabel": "Deal status",
@@ -28,6 +27,7 @@
   },
   "filter": {
     "searchPlaceholder": "Search deals, publishers, or conditions…",
+    "searchButton": "Search",
     "searchAria": "Search deals",
     "groupEligibility": "Eligibility",
     "groupCaps": "Article caps",

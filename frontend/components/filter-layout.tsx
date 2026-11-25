@@ -127,7 +127,7 @@ export function FilterLayout({
               !sheetOpen && "hidden",
             )}
           >
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-1 min-[960px]:mb-3 min-[960px]:px-0 min-[960px]:pb-2.5 min-[960px]:pt-0">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-1 min-[960px]:border-b-0 min-[960px]:px-4 min-[960px]:pb-0 min-[960px]:pt-4">
               <span className="flex min-h-11 items-center gap-2 text-base font-semibold min-[960px]:min-h-0 min-[960px]:text-xs min-[960px]:uppercase min-[960px]:tracking-wide min-[960px]:text-[var(--muted-foreground)]">
                 <span id={labelId}>{t("facets.sidebarHeading")}</span>
                 {activeCount > 0 && <span className={countBadge}>{activeCount}</span>}
@@ -151,7 +151,7 @@ export function FilterLayout({
                 <X aria-hidden className="size-5" />
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4 min-[960px]:overflow-visible">
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 min-[960px]:overflow-visible min-[960px]:pt-3">
               {headerSlot && (
                 <div className="mb-3 border-b border-[var(--border)] pb-3">{headerSlot}</div>
               )}

@@ -240,8 +240,9 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
   const toggleFilter = (key: string, value: string) =>
     update({ [key]: sp.get(key) === value ? undefined : value });
 
+  // Both default on: the URL carries "false" only while a toggle is off.
   const toggleQuality = (key: "active" | "vouched") =>
-    update({ [key]: (key === "active" ? active : vouched) ? undefined : "false" });
+    update({ [key]: (key === "active" ? active : vouched) ? "false" : undefined });
 
   const toggleOaType = (value: string) => {
     const next = oaTypes.includes(value) ? oaTypes.filter((v) => v !== value) : [...oaTypes, value];
@@ -762,7 +763,7 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
 
         {view === "browse" && (
           <form
-            className="flex max-w-3xl flex-wrap gap-2"
+            className="flex max-w-5xl flex-wrap gap-2 min-[960px]:flex-nowrap"
             onSubmit={(event) => {
               event.preventDefault();
               update({ q: input || undefined });

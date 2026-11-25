@@ -541,24 +541,13 @@ export default function DealsPage() {
   ];
 
   const hasFilter = chips.length > 0;
-  const coveredCount = currentList.reduce((sum, d) => sum + (d.journal_count ?? 0), 0);
-  const cappedCount = currentList.filter(dealHasCaps).length;
 
   return (
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
       <header className="mb-6">
         <h1 className="mb-2 text-3xl font-bold text-balance">{t("page.heading")}</h1>
         <p className="mb-4 max-w-2xl text-sm text-[var(--muted-foreground)]">
-          {t("page.intro", { institution: site.short })}{" "}
-          {current.data && (
-            <span className="font-medium text-[var(--foreground)]">
-              {t("page.summaryInline", {
-                current: currentList.length,
-                covered: coveredCount,
-                capped: cappedCount,
-              })}
-            </span>
-          )}
+          {t("page.intro", { institution: site.short })}
         </p>
 
         <PageTabs
@@ -583,7 +572,10 @@ export default function DealsPage() {
         <form
           className="flex max-w-2xl gap-2"
           onSubmit={(event) => {
+            // The list already filters as you type; submitting closes the
+            // on-screen keyboard on phones.
             event.preventDefault();
+            (document.getElementById("deals-search") as HTMLInputElement | null)?.blur();
           }}
         >
           <div className="relative flex-1">
@@ -608,6 +600,7 @@ export default function DealsPage() {
               </kbd>
             )}
           </div>
+          <Button type="submit">{t("filter.searchButton")}</Button>
         </form>
       </header>
 
