@@ -252,11 +252,33 @@ time) with system fallbacks. Headings use `tracking-tight` (-0.025em).
   content column; navy footer band. Content containers are `max-w-screen-2xl`
   with 16px side padding; the landing chooser and docs column narrow to
   `max-w-2xl`.
-- Nav wraps below `sm`: the link row becomes full-width and horizontally
-  scrollable with the scrollbar hidden. The brand wordmark is
+- Header and nav: below `lg` the nav, year selector, About link and theme
+  toggle sit in a drawer behind a "Menu" button; from `lg` they sit inline
+  (see "Header and nav" under Components). The brand wordmark is
   `whitespace-nowrap` and never wraps.
-- Inputs render at 1rem below 560px and 0.875rem above, because iOS Safari
-  zooms any focused input smaller than 16px.
+- Directory pages (journals, publishers, faculties, authors, funders, deals,
+  collaboration partners) lay out filters and results with
+  `components/filter-layout.tsx`: a sticky 15rem sidebar next to the results
+  from 960px (18rem from 1280px), and below that a "Filters (n)" button that
+  opens a modal bottom sheet, so the results start at the top of the page.
+  The filters are mounted once.
+- Phones and tablets: controls are at least 44px tall, and native inputs and
+  selects render at 1rem up to 1023px (0.875rem from `lg`), because iOS
+  Safari zooms any focused input smaller than 16px.
+- Directory results and the two About tables show a stacked list below `md`
+  (one block per row) and a table from `md`. A table wider than its column
+  scrolls sideways inside its wrapper instead of squeezing its columns.
+- Where only the table header offered sorting, the stacked list shows the
+  same sort buttons as a chip row above the rows (partner list).
+- A section that would push a list below the fold on phones goes inside
+  `components/mobile-disclosure.tsx`: always open from 960px, and below
+  that behind a full-width button (collaboration partners: overview cards,
+  trend chart and map). CSS alone sets the open state from 960px, so the
+  server markup is right on both viewports.
+- Floating controls: the feedback button and the docs toolbar sit
+  bottom-right from `lg`. Below `lg` they sit in the page flow (end of
+  `main`, or under the docs page header) so they never cover text or
+  controls.
 - Spacing rhythm uses Tailwind steps: 8px inside controls, 16px gaps and
   padding, 24px card padding.
 - Print (docs pages): an A4 stylesheet forces the paper palette by
@@ -321,9 +343,14 @@ color, focus is a 2px orange ring with offset.
   bar, link carries `aria-label`) and the landing chooser hero (h-36,
   centered above the tagline); the monogram is the favicon
   (`app/icon.svg`, ink letters). Sizing keeps each mark's aspect ratio.
-- **Header and nav**: brand link in Montserrat 700 tracking-tight, scoped to
-  the institution prefix; nav links text-sm that wrap to a second row on
-  phones instead of scrolling in a hidden-scrollbar row.
+- **Header and nav**: one bar at every width, 56px below `lg` and 64px from
+  `lg`: the brand link in Montserrat 700 tracking-tight, scoped to the
+  institution prefix, beside the institution switcher. From `lg` the nav
+  links (text-sm), year selector, About link and theme toggle sit inline.
+  Below `lg` they live in a drawer behind a "Menu" button
+  (`components/site-menu.tsx`): rows of text-sm at 44px, in a modal dialog
+  that traps focus, closes on Escape and returns focus to the button. When a
+  year range is active, a year chip also sits in the bar.
 - **Footer band**: contract navy, white text; institution links plus the
   GitHub source link, and a 0.75rem white/70 attribution line naming every
   upstream data source (OpenAlex, cOAlition S JCT, openaccess.nl, OpenAPC,
@@ -344,8 +371,8 @@ color, focus is a 2px orange ring with offset.
   lockups.
 - **Do** keep every badge animation survivable as a static pose and fully
   disabled under `prefers-reduced-motion`.
-- **Do** keep focus-visible rings on all interactive elements and the 16px
-  minimum input font on phones.
+- **Do** keep focus-visible rings on all interactive elements, the 16px
+  input font below `lg`, and 44px targets below `lg`.
 - **Don't** stack shadows or add zero-offset glows; depth is one card
   shadow plus surface color steps.
 - **Do** keep the docs print stylesheet overriding token values (not
