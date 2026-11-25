@@ -94,3 +94,24 @@ Status values: `open` (not reported upstream), `reported` (link to the report), 
 - Status: open.
 - What happens: "Nicole Renate Loorbach" (9 works, research-group lead profile) is stored with `confirmed=false`. Author search hides unconfirmed people, and the usage logs show visitors searching for her by name.
 - Handling: when a query exactly matches an unconfirmed name, author search shows that person with the existing "not verified" hint. The Pure record should be confirmed upstream.
+
+## Scimago
+
+### Hyphen instead of a quartile
+- Status: open.
+- What happens: 1,597 journals carry the quartile "-" (1,297 journals, 214 conference proceedings, 85 book series), for example 2731-6203, 3005-0758 and 1994-1625.
+- Handling: the quartile badge prints a literal "-". It should read "Not in Scimago"; the compare-journals plan does so.
+
+## OpenAlex: titles
+
+### Two titles joined in one
+- Status: open.
+- What happens: source S2737215817 (ISSN-L 1682-1750, Copernicus Publications) has two titles joined by "/". It appears as the top guided finder match for some papers.
+- Handling: shown as is.
+
+## Jisc Open Policy Finder: embargoes
+
+### Embargo only in free text
+- Status: open.
+- What happens: policy 15486 (Remote Sensing of Environment, 0034-4257) has `embargo_months` null on every route, while its note says "Hybrid with 24m acc/ sub except UK Funder 12 months".
+- Handling: the journal page prints no embargo line. The page must never say "No embargo" when the field is empty.
