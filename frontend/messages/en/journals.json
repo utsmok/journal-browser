@@ -1,4 +1,7 @@
 {
+  "meta": {
+    "description": "Open access profile of {title} at {inst}: shares by year, applicable deals, APC prices and funder policies."
+  },
   "nav": {
     "overview": "Overview",
     "sections": "Page sections",

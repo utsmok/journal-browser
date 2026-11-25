@@ -52,6 +52,7 @@ import { useSiteMeta } from "@/hooks/use-site-meta";
 import { useYearRange } from "@/hooks/use-year-filter";
 import { encodeNamePath, errorMessage, type OpenalexTopic } from "@/lib/api";
 import { useFunderPrefs } from "@/lib/funder-prefs";
+import { SITE_URL } from "@/lib/site-url";
 
 const SIMILAR_PREVIEW = 5;
 const ALT_NAMES_PREVIEW = 6;
@@ -69,7 +70,7 @@ function JournalPageInner() {
   const [openSimilar, setOpenSimilar] = React.useState<Record<string, boolean>>({});
   const [citeOpen, setCiteOpen] = React.useState(false);
   const [altNamesExpanded, setAltNamesExpanded] = React.useState(false);
-  const { data, isPending, isError, error } = useJournal(issnL, funder?.id, {
+  const { data, isPending, isError, error, isPlaceholderData } = useJournal(issnL, funder?.id, {
     year_from,
     year_to,
   });
@@ -227,7 +228,7 @@ function JournalPageInner() {
     title: journal.title ?? journal.issn_l,
     publisher: journal.publisher_name ?? t("header.unknownPublisher"),
     issnL: journal.issn_l,
-    url: `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://journalbrowser.samuelmok.cc"}/${inst}/journals/${journal.issn_l}`,
+    url: `${SITE_URL}/${inst}/journals/${journal.issn_l}`,
     date: today,
   });
   const visibleAltNames = altNamesExpanded
@@ -551,7 +552,9 @@ function JournalPageInner() {
             {greenOa && <GreenOaPanel greenOa={greenOa} attribution={attribution.green_oa ?? {}} />}
           </div>
 
-          {funder && <FunderFitCard fit={data.funder_fit ?? null} funder={funder} inst={inst} />}
+          {funder && !isPlaceholderData && (
+            <FunderFitCard fit={data.funder_fit ?? null} funder={funder} inst={inst} />
+          )}
 
           {hasApc && (
             <CollapsibleCard

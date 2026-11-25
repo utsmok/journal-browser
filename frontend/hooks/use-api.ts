@@ -1,6 +1,6 @@
 "use client";
 
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, type Query } from "@tanstack/react-query";
 import * as React from "react";
 
 import { useInstitution } from "./use-institution";
@@ -8,6 +8,7 @@ import { trackSearch } from "@/lib/usage/tracker";
 import {
   apiGet,
   COLLAB_MULTI_KEYS,
+  fetchAuthor,
   fetchCollaboration,
   fetchCollaborationMap,
   fetchCollaborations,
@@ -39,39 +40,8 @@ import {
   type WorksPage,
   type YearParams,
 } from "@/lib/api";
+import { qk } from "@/lib/query-keys";
 import type { InstitutionDirectoryEntry } from "@/lib/admin";
-
-/** TanStack Query key factory: one place owns every cache key shape.
- * Every key leads with the institution code — two hosted universities
- * must never share cache entries. */
-const qk = {
-  journals: (i: string, params: JournalSearchParams) => ["journals", i, params] as const,
-  facets: (i: string, filters: JournalSearchParams) => ["facets", i, filters] as const,
-  journal: (i: string, issnL: string) => ["journal", i, issnL] as const,
-  journalGaps: (i: string, issnL: string) => ["journal-gaps", i, issnL] as const,
-  similar: (i: string, issnL: string) => ["similar", i, issnL] as const,
-  works: (i: string, issnL: string, page: number) => ["works", i, issnL, page] as const,
-  deals: (i: string, status: "current" | "archive" | "all") => ["deals", i, status] as const,
-  limitations: (i: string) => ["limitations", i] as const,
-  freshness: (i: string) => ["freshness", i] as const,
-  publishers: (i: string, params: PublisherSearchParams) => ["publishers", i, params] as const,
-  publisher: (i: string, name: string) => ["publisher", i, name] as const,
-  publisherGaps: (i: string, name: string) => ["publisher-gaps", i, name] as const,
-  orgunits: (i: string, params: OrgUnitSearchParams) => ["orgunits", i, params] as const,
-  orgunit: (i: string, level: OrgUnitLevel, name: string) => ["orgunit", i, level, name] as const,
-  orgunitGaps: (i: string, level: OrgUnitLevel, name: string) =>
-    ["orgunit-gaps", i, level, name] as const,
-  funders: (i: string, q: string) => ["funders", i, q] as const,
-  funder: (i: string, id: number) => ["funder", i, id] as const,
-  collaborations: (i: string, p: CollaborationSearchParams, offset: number) =>
-    ["collaborations", i, p, offset] as const,
-  collaborationMap: (i: string, p: CollaborationSearchParams) =>
-    ["collaboration-map", i, p] as const,
-  collaboration: (i: string, ror: string, p: CollaborationSearchParams) =>
-    ["collaboration", i, ror, p] as const,
-  collaborationWorks: (i: string, ror: string, p: CollaborationSearchParams, offset: number) =>
-    ["collaboration-works", i, ror, p, offset] as const,
-};
 
 /**
  * Fetch-epoch guard: bumps a ref whenever the serialized params change, so an
@@ -89,6 +59,20 @@ function useFetchEpoch(params: JournalSearchParams) {
     setState({ key, epoch: state.epoch + 1 });
   }
   return state.epoch;
+}
+
+/**
+ * Placeholder for detail queries. A stored funder or year lens keys a scoped
+ * variant of the query the server rendered; while that variant loads, the
+ * unscoped data stays on screen instead of the skeleton. The entity must be
+ * the same (the key without its scope): opening another journal still shows
+ * the skeleton.
+ */
+function keepDataForSameEntity<T>(entityKey: readonly unknown[]) {
+  return (previousData: T | undefined, previousQuery: Query<T> | undefined): T | undefined =>
+    previousQuery && entityKey.every((part, index) => previousQuery.queryKey[index] === part)
+      ? previousData
+      : undefined;
 }
 
 /** Filter keys stored on a usage search event; paging/sort keys dropped. */
@@ -155,6 +139,7 @@ export function useJournals(params: JournalSearchParams, semantic?: boolean) {
       return data;
     },
     placeholderData: keepPreviousData,
+    staleTime: 60_000,
   });
 }
 
@@ -187,12 +172,13 @@ export function useFacets(
 export function useJournal(issnL: string | undefined, funderId?: number, years?: YearParams) {
   const inst = useInstitution();
   return useQuery({
-    queryKey: [
-      ...qk.journal(inst, issnL ?? ""),
+    queryKey: qk.journal(
+      inst,
+      issnL ?? "",
       funderId ?? null,
       years?.year_from ?? null,
       years?.year_to ?? null,
-    ] as const,
+    ),
     queryFn: () =>
       apiGet<JournalDetailResponse>(`/${inst}/journals/${issnL}`, {
         funder: funderId,
@@ -201,6 +187,19 @@ export function useJournal(issnL: string | undefined, funderId?: number, years?:
         include_gaps: "false",
       }),
     enabled: Boolean(issnL),
+    placeholderData: keepDataForSameEntity(qk.journal(inst, issnL ?? "")),
+    staleTime: 60_000,
+  });
+}
+
+/** Author profile bundle (OA trend, journals, works); authorId is a Pure UUID. */
+export function useAuthor(authorId: string | undefined, years?: YearParams) {
+  const inst = useInstitution();
+  return useQuery({
+    queryKey: qk.author(inst, authorId ?? "", years?.year_from ?? null, years?.year_to ?? null),
+    queryFn: () => fetchAuthor(inst, authorId ?? "", years),
+    enabled: Boolean(authorId),
+    placeholderData: keepDataForSameEntity(qk.author(inst, authorId ?? "")),
   });
 }
 
@@ -278,6 +277,7 @@ export function useDeals(
     queryFn: () => apiGet<DealOut[]>(`/${inst}/deals`, { status }),
     enabled: enabled && inst !== "",
     placeholderData: keepPreviousData,
+    staleTime: 60_000,
   });
 }
 
@@ -293,7 +293,7 @@ export function useLimitations() {
 /** Global directory of hosted institutions (unscoped endpoint). */
 export function useInstitutionsDirectory() {
   return useQuery({
-    queryKey: ["institutions"] as const,
+    queryKey: qk.institutions(),
     queryFn: () => apiGet<InstitutionDirectoryEntry[]>("/institutions"),
     staleTime: 10 * 60_000,
   });
@@ -332,13 +332,10 @@ export function usePublisher(
 ) {
   const inst = useInstitution();
   return useQuery({
-    queryKey: [
-      ...qk.publisher(inst, name ?? ""),
-      years?.year_from ?? null,
-      years?.year_to ?? null,
-    ] as const,
+    queryKey: qk.publisher(inst, name ?? "", years?.year_from ?? null, years?.year_to ?? null),
     queryFn: () => fetchPublisher(inst, name ?? "", years, undefined, false),
     enabled: Boolean(name),
+    placeholderData: keepDataForSameEntity(qk.publisher(inst, name ?? "")),
   });
 }
 
@@ -381,12 +378,14 @@ export function useOrgUnit(
 ) {
   const inst = useInstitution();
   return useQuery({
-    queryKey: [
-      ...qk.orgunit(inst, level ?? "faculty", name ?? ""),
+    queryKey: qk.orgunit(
+      inst,
+      level ?? "faculty",
+      name ?? "",
       years?.year_from ?? null,
       years?.year_to ?? null,
       sort ?? "share",
-    ] as const,
+    ),
     queryFn: () => fetchOrgUnit(inst, level ?? "faculty", name ?? "", years, sort, false),
     enabled: Boolean(level && name),
     placeholderData: keepPreviousData,
@@ -464,17 +463,14 @@ export function useFunderDirectory(params: FunderSearchParams) {
 export function useFunder(id: number | undefined, years?: YearParams) {
   const inst = useInstitution();
   return useQuery({
-    queryKey: [
-      ...qk.funder(inst, id ?? 0),
-      years?.year_from ?? null,
-      years?.year_to ?? null,
-    ] as const,
+    queryKey: qk.funder(inst, id ?? 0, years?.year_from ?? null, years?.year_to ?? null),
     queryFn: () =>
       apiGet<FunderDetailResponse>(`/${inst}/funders/${id}`, {
         year_from: years?.year_from,
         year_to: years?.year_to,
       }),
     enabled: Boolean(id) && inst !== "",
+    placeholderData: keepDataForSameEntity(qk.funder(inst, id ?? 0)),
   });
 }
 
