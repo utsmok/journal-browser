@@ -175,7 +175,9 @@ services:
   scheduler:
     image: journal-browser-backend:latest
     restart: unless-stopped
-    mem_limit: 2g
+    # Wave stages embed models and pull multi-GB source tables; the 2g cap
+    # OOM-killed the authors ingest mid-wave (2026-11-25).
+    mem_limit: 3g
     logging: *default-logging
     environment: *backend-env
     volumes:

@@ -241,29 +241,33 @@ async def _crossref_orcid_lists(
     Payloads land in source_records keyed 'doi:<doi>' (source crossref,
     entity work) via harvest.enrich.enrich_crossref; each payload's
     author list contributes its ORCIDs with the name key for matching."""
-    rows = await session.execute(
-        text(
-            "SELECT w.pure_uuid AS uuid, sr.payload->'author' AS authors "
-            "FROM works w "
-            "JOIN source_records sr ON sr.source = 'crossref' "
-            " AND sr.entity_type = 'work' "
-            " AND sr.source_pk = 'doi:' || w.doi_normalized "
-            "WHERE w.institution_id = :iid AND w.doi_normalized IS NOT NULL"
-        ),
-        {"iid": institution_id},
-    )
+    rows = (
+        await session.stream(
+            text(
+                "SELECT w.pure_uuid AS uuid, sr.payload->'author' AS authors "
+                "FROM works w "
+                "JOIN source_records sr ON sr.source = 'crossref' "
+                " AND sr.entity_type = 'work' "
+                " AND sr.source_pk = 'doi:' || w.doi_normalized "
+                "WHERE w.institution_id = :iid AND w.doi_normalized IS NOT NULL"
+            ),
+            {"iid": institution_id},
+            execution_options={"stream_results": True, "max_row_buffer": 500},
+        )
+    ).mappings()
     out: dict[str, dict[str, tuple[str, str]]] = {}
-    for row in rows.mappings():
-        for entry in row["authors"] or []:
-            if not isinstance(entry, dict):
-                continue
-            orcid = bare_orcid(entry.get("ORCID"))
-            if not orcid:
-                continue
-            listed = _name_key(
-                " ".join(part for part in (entry.get("given"), entry.get("family")) if part)
-            )
-            out.setdefault(row["uuid"], {})[orcid] = listed
+    async for partition in rows.partitions(500):
+        for row in partition:
+            for entry in row["authors"] or []:
+                if not isinstance(entry, dict):
+                    continue
+                orcid = bare_orcid(entry.get("ORCID"))
+                if not orcid:
+                    continue
+                listed = _name_key(
+                    " ".join(part for part in (entry.get("given"), entry.get("family")) if part)
+                )
+                out.setdefault(row["uuid"], {})[orcid] = listed
     return out
 
 
@@ -294,28 +298,50 @@ async def fetch_local_source(session: AsyncSession, institution: Institution) ->
     if tree.root is not None and institution.ror:
         data.org_rors = {tree.root: bare_ror(institution.ror)}
 
-    # Pure persons: payloads + orcid index + profile-affiliation arm.
+    # Pure persons: stream (uuid, orcid, payload) and keep only the fields
+    # the ingest reads — cerif affiliations and display names. Parsed full
+    # payloads cost ~10x their JSON size; 73k ut persons alone pushed this
+    # pass to 2.4 GB RSS and OOM-killed the 2 GB scheduler (2026-11-25).
+    # The ut-metadata path keeps full payloads — its payload schema differs.
     orcid_by_person: dict[str, str] = {}
-    for row in (
-        await session.execute(select(PurePerson).where(PurePerson.institution_id == institution.id))
-    ).scalars():
-        data.persons[row.uuid] = row.payload
-        if row.orcid:
-            data.person_orcids[row.orcid] = row.uuid
-            orcid_by_person[row.uuid] = row.orcid
-        data.person_by_pure[row.uuid.lower()] = row.uuid
+    person_rows = await session.stream(
+        select(PurePerson.uuid, PurePerson.orcid, PurePerson.payload).where(
+            PurePerson.institution_id == institution.id
+        )
+    )
+    async for partition in person_rows.partitions(500):
+        for uuid_, orcid, payload in partition:
+            cerif = (payload or {}).get("cerif") or {}
+            data.persons[uuid_] = {
+                "cerif": {
+                    "first_names": cerif.get("first_names"),
+                    "family_names": cerif.get("family_names"),
+                    "affiliations": [
+                        {"affiliation_id": aff["affiliation_id"]}
+                        for aff in cerif.get("affiliations") or []
+                        if isinstance(aff, dict) and aff.get("affiliation_id") is not None
+                    ],
+                }
+            }
+            if orcid:
+                data.person_orcids[orcid] = uuid_
+                orcid_by_person[uuid_] = orcid
+            data.person_by_pure[uuid_.lower()] = uuid_
 
-    # Pure's own authorship edges + the work-level affiliation arm.
+    # Pure's own authorship edges + the work-level affiliation arm,
+    # streamed column-scoped the same way.
     work_orgs: dict[str, list[str]] = {}
-    for row in (
-        await session.execute(
-            select(WorkPureAuthor).where(WorkPureAuthor.institution_id == institution.id)
-        )
-    ).scalars():
-        data.pure_edges.append((row.person_uuid, row.work_pure_uuid))
-        work_orgs.setdefault(row.person_uuid, []).extend(
-            ref for ref in (row.affiliations or []) if ref
-        )
+    edge_rows = await session.stream(
+        select(
+            WorkPureAuthor.person_uuid,
+            WorkPureAuthor.work_pure_uuid,
+            WorkPureAuthor.affiliations,
+        ).where(WorkPureAuthor.institution_id == institution.id)
+    )
+    async for partition in edge_rows.partitions(2000):
+        for person_uuid, work_pure_uuid, affiliations in partition:
+            data.pure_edges.append((person_uuid, work_pure_uuid))
+            work_orgs.setdefault(person_uuid, []).extend(ref for ref in (affiliations or []) if ref)
 
     # person_org: merged profile + work-level arms (known orgs only).
     for person_key, payload in data.persons.items():
@@ -327,6 +353,7 @@ async def fetch_local_source(session: AsyncSession, institution: Institution) ->
         known.extend(ref for ref in work_orgs.get(person_key, []) if ref in data.orgs)
         if known:
             data.person_orgs[person_key] = known
+    del work_orgs  # merged into person_orgs; free it before the heavy arms
 
     # Portal bindings arm (pure_person_orgs, relay-harvested listings):
     # separate from person_orgs so the native arms, the roster, and
@@ -351,22 +378,31 @@ async def fetch_local_source(session: AsyncSession, institution: Institution) ->
         if row.org_uuid in data.orgs:
             data.people_person_orgs.setdefault(row.person_uuid, []).append(row.org_uuid)
 
-    # OpenAlex ids from the resolved identity rows (confirmed only).
+    # OpenAlex ids from the resolved identity rows (confirmed only),
+    # streamed as bare tuples: full ORM objects for 40k+ rows are
+    # throwaway weight once the min()/set() below have run.
     rank_of = METHOD_RANK
-    ids_by_author: dict[str, list[AuthorIdentity]] = {}
-    for row in (
-        await session.execute(
-            select(AuthorIdentity).where(
-                AuthorIdentity.institution_id == institution.id,
-                AuthorIdentity.status == "confirmed",
-                # OpenAlex A-ids only: the openaire cascade arm stores
-                # OpenAIRE person keys in the same table — a different
-                # namespace that must never feed authors.openalex_ids.
-                AuthorIdentity.source == "openalex",
-            )
+    ids_by_author: dict[str, list[tuple[str, str, int]]] = {}
+    identity_rows = await session.stream(
+        select(
+            AuthorIdentity.author_pure_uuid,
+            AuthorIdentity.external_id,
+            AuthorIdentity.method,
+            AuthorIdentity.n_works,
+        ).where(
+            AuthorIdentity.institution_id == institution.id,
+            AuthorIdentity.status == "confirmed",
+            # OpenAlex A-ids only: the openaire cascade arm stores
+            # OpenAIRE person keys in the same table — a different
+            # namespace that must never feed authors.openalex_ids.
+            AuthorIdentity.source == "openalex",
         )
-    ).scalars():
-        ids_by_author.setdefault(row.author_pure_uuid, []).append(row)
+    )
+    async for partition in identity_rows.partitions(1000):
+        for row in partition:
+            ids_by_author.setdefault(row.author_pure_uuid, []).append(
+                (row.external_id, row.method, row.n_works)
+            )
 
     # Roster: profile arm OR work-level arm closes on the root — or the
     # person holds a confirmed OpenAlex identity row (the weak-affiliation
@@ -392,12 +428,12 @@ async def fetch_local_source(session: AsyncSession, institution: Institution) ->
         primary = (
             min(
                 rows,
-                key=lambda r: (-rank_of.get(r.method, 0), -r.n_works, r.external_id),
+                key=lambda r: (-rank_of.get(r[1], 0), -r[2], r[0]),
             )
             if rows
             else None
         )
-        alts = sorted({r.external_id for r in rows} - {primary.external_id}) if primary else []
+        alts = sorted({r[0] for r in rows} - {primary[0]}) if primary else []
         xr = None
         if not orcid_by_person.get(uuid):
             author_key = _name_key(
@@ -419,7 +455,7 @@ async def fetch_local_source(session: AsyncSession, institution: Institution) ->
                 "name": " ".join(
                     part for part in (cerif.get("first_names"), cerif.get("family_names")) if part
                 ),
-                "openalex_author_id": primary.external_id if primary else None,
+                "openalex_author_id": primary[0] if primary else None,
                 "openalex_alt_ids": alts,
                 "openaire_person_id": None,
                 "crossref_orcid": xr,
@@ -438,18 +474,24 @@ async def fetch_local_source(session: AsyncSession, institution: Institution) ->
     ).all():
         if doi:
             works_dois[doi] = uuid
-    for row in (
-        await session.execute(
-            select(OpenalexWork).where(OpenalexWork.institution_id == institution.id)
+    # Column-scoped + streamed: selecting full OpenalexWork entities
+    # materializes every authorships payload at once and was the single
+    # largest transient in this pass (2026-11-25 OOM). Edges stay complete
+    # (ut-metadata parity; build_edge_map filters by roster index later).
+    openalex_rows = await session.stream(
+        select(OpenalexWork.doi_normalized, OpenalexWork.authorships).where(
+            OpenalexWork.institution_id == institution.id
         )
-    ).scalars():
-        work_uuid = works_dois.get(row.doi_normalized or "")
-        if work_uuid is None:
-            continue
-        for sh in row.authorships or []:
-            aid = sh.get("a") if isinstance(sh, dict) else None
-            if aid:
-                data.edges.append((aid.lower(), work_uuid))
+    )
+    async for partition in openalex_rows.partitions(500):
+        for doi, authorships in partition:
+            work_uuid = works_dois.get(doi or "")
+            if work_uuid is None:
+                continue
+            for sh in authorships or []:
+                aid = sh.get("a") if isinstance(sh, dict) else None
+                if aid:
+                    data.edges.append((aid.lower(), work_uuid))
     return data
 
 
