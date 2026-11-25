@@ -920,8 +920,15 @@ the whole rewrite, so API requests that read payloads wait (estimate 10 to
 20 minutes for the live table), and it needs free disk space of about the
 table's final size.
 
-The weekly source wave adds new versions, so rerun the prune after it when
-the superseded share grows again.
+The weekly source wave adds new versions and ends with a
+`prune-source-records` stage (`prune_source_records.py --apply`), so the
+table no longer grows back; autovacuum makes the freed space reusable.
+
+First run on live, 2026-11-25: the prune deleted 1,942,848 rows (11.1 GB
+of payload) in 16 minutes, the strip took about 30 minutes, and `VACUUM
+FULL` took 11 minutes. `source_records` went from 26 GB to 12 GB on disk
+and the database from 30 GB to 17 GB. API requests kept answering during
+the rewrite.
 
 ## Migrations
 

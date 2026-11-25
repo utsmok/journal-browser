@@ -122,6 +122,11 @@ for code in $codes; do
     "stats:$code||harvest_stats.py --institution $code||enrich:$code,openaire:$code,openaire-facts:$code,openapc,flags"
   )
 done
+# Last: drop the payload versions this wave superseded (keeps the newest
+# version per record and every version another table points at), so
+# source_records does not grow back. Plain deletes; autovacuum reuses the
+# space. See DEPLOYMENT.md "source_records retention".
+STAGES+=("prune-source-records||prune_source_records.py --apply")
 
 start=0
 if [[ -n "$from" ]]; then
