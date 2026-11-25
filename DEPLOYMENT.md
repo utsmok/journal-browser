@@ -207,6 +207,8 @@ Not in bootstrap or the daily wave. All run from `backend/` as
 | `jobs/backfill_parts.py` | Also safe standalone: re-runs until no works lack a part-of check |
 | `jobs/harvest_portal_persons.py` | research.utwente.nl portal persons + the ORCID disambiguation file |
 | `jobs/harvest_pure_portal.py` | research.utwente.nl organisation tree scrape |
+| `prune_source_records.py` | Deletes superseded `source_records` payload versions. Dry run by default, `--apply` deletes. See [source_records retention](#source-records-retention) |
+| `strip_source_records.py` | Removes the payload keys that the ingest projection no longer stores from rows written before it existed. Dry run by default, `--apply` rewrites. See [source_records retention](#source-records-retention) |
 
 ### The deal register
 
@@ -617,6 +619,59 @@ archive off-machine; an off-host target is a known open decision.
   databases). Check this file's
   changelog-worthy notes before major version bumps; new settings always
   default to the Twente values, so existing deployments keep working.
+
+### source_records retention
+
+`source_records` stores one row per payload version (unique on source,
+entity_type, source_pk, content_hash). A re-harvest that sees a changed
+payload adds a version, and nothing removed the older one, so the live
+table reached 28.5 GB in November 2026 with 39% of its rows superseded.
+
+Readers use the newest version of each key. Pure entities, OpenAlex works
+and the author listings look inside one institution's harvest runs. JISC,
+OpenAIRE facts, work partners, OpenAPC evidence and journal info look
+across all runs. The only other dependency is
+`apc_evidence.source_record_id`, which points at 297 payload rows. Two
+jobs shrink the table:
+
+1. `jobs/prune_source_records.py` deletes superseded versions. It keeps the
+   newest `--keep` versions per key and institution (default 1) and never
+   deletes a version that `apc_evidence` points at.
+2. `jobs/strip_source_records.py` removes the keys that the ingest
+   projection no longer stores (`ingest.PAYLOAD_DROP_KEYS`) from rows
+   written before the projection existed.
+
+Both jobs default to a dry run that prints rows and compressed payload
+bytes per source and entity type. Run them inside the backend image, in
+this order:
+
+```bash
+docker compose run --rm bootstrap uv run python jobs/prune_source_records.py  # dry run
+docker compose run --rm bootstrap uv run python jobs/prune_source_records.py --apply
+docker exec journal-browser-db-1 psql -U journal -d journalbrowser \
+  -c "VACUUM (ANALYZE) source_records"
+docker compose run --rm bootstrap uv run python jobs/strip_source_records.py  # dry run
+docker compose run --rm bootstrap uv run python jobs/strip_source_records.py --apply
+docker exec journal-browser-db-1 psql -U journal -d journalbrowser \
+  -c "VACUUM (ANALYZE) source_records"
+```
+
+Run the prune before the strip job, because a superseded version gets
+deleted instead of rewritten. `--apply` in both jobs holds row locks for
+one id range (10,000 ids) at a time and never blocks readers. The space a
+run frees, and the space the strip job needs for its new row versions, only
+settles with the `VACUUM` that follows. Plain `VACUUM` blocks neither reads
+nor writes. After these steps the table files keep their size on disk, and
+about half of each file is free space that new versions reuse.
+
+To return that space to the operating system, run `VACUUM FULL
+source_records` in a quiet window. It holds an ACCESS EXCLUSIVE lock for
+the whole rewrite, so API requests that read payloads wait (estimate 10 to
+20 minutes for the live table), and it needs free disk space of about the
+table's final size.
+
+The weekly source wave adds new versions, so rerun the prune after it when
+the superseded share grows again.
 
 ## Migrations
 
