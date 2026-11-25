@@ -371,7 +371,7 @@ async def fetch_local_source(session: AsyncSession, institution: Institution) ->
     # Roster: profile arm OR work-level arm closes on the root — or the
     # person holds a confirmed OpenAlex identity row (the weak-affiliation
     # rung: identity evidence substitutes for org closure when Pure's OAI
-    # orgunits carry no parent edges; see author_ids._weak_affiliation_rung).
+    # orgunits carry no parent edges; see author_ids._weak_rows).
     roster = {
         key
         for key in data.persons

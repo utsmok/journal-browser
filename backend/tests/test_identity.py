@@ -15,10 +15,11 @@ import io
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from conftest import journal_factory, pair_rows, requires_db
 from journal_browser.config import reset_settings_cache
+from journal_browser.harvest import author_ids
 from journal_browser.harvest.author_ids import openaire_author_orcid, resolve_author_ids
 from journal_browser.harvest.authors import SourceData, fetch_local_source, ingest_authors
 from journal_browser.harvest.people_utwente import (
@@ -661,6 +662,57 @@ async def test_cascade_rung_decisions_as_stored_rows(db, institution_factory):
     # CJK homonyms (family/fuzzy evidence must stay silent) and two
     # same-family same-initial entries (ambiguous) store no row at all.
     assert "p-wang" not in by_uuid and "p-ambig" not in by_uuid
+
+
+@requires_db
+async def test_resolve_pass_result_does_not_depend_on_slice_sizes(
+    db, institution_factory, monkeypatch
+):
+    """The pass reads the stores per DOI slice and per streamed partition,
+    and upserts the rows per chunk. A person's works come back over several
+    slices and a namesake contest is settled across all of them; rows and
+    stats are the same at any slice size."""
+    inst = await _identity_fixture(db, institution_factory)
+    wide = await _resolve_snapshot(db, inst)
+    for name, value in {
+        "DOI_SLICE": 1,
+        "LOOKUP_CHUNK": 1,
+        "STREAM_PARTITION": 1,
+        "UPSERT_CHUNK": 2,
+    }.items():
+        monkeypatch.setattr(author_ids, name, value)
+    narrow = await _resolve_snapshot(db, inst)
+
+    assert narrow == wide
+    assert narrow[1]["weak_affiliation"]["skipped_namesake_contested"] == 2
+    assert narrow[1]["identity_rows"] > 2  # more than one upsert chunk
+
+
+async def _resolve_snapshot(db, inst):
+    """Identity rows and stats of one resolve pass from an empty table."""
+    await db.execute(delete(AuthorIdentity))
+    stats = await resolve_author_ids(db, inst, run_sweeps=False)
+    await db.commit()
+    rows = (
+        await db.execute(
+            select(
+                AuthorIdentity.author_pure_uuid,
+                AuthorIdentity.source,
+                AuthorIdentity.external_id,
+                AuthorIdentity.status,
+                AuthorIdentity.method,
+                AuthorIdentity.confidence,
+                AuthorIdentity.n_works,
+                AuthorIdentity.orcid_corroborated,
+                AuthorIdentity.evidence,
+            ).order_by(
+                AuthorIdentity.author_pure_uuid,
+                AuthorIdentity.source,
+                AuthorIdentity.external_id,
+            )
+        )
+    ).all()
+    return [tuple(row) for row in rows], {k: v for k, v in stats.items() if k != "seconds"}
 
 
 @pytest.mark.parametrize(

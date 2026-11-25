@@ -459,6 +459,10 @@ The stages, in order:
    `openalex_work_authors` and `work_pure_authors`, which the store
    rebuild and the pure-authors backfill rewrite — running resolution
    after them follows the bootstrap DAG instead of lagging one wave.
+   The resolver reads its stores in DOI slices and holds about 0.7 GB on
+   the University of Twente's 156k works, inside the scheduler's 2 GB
+   limit. Loading the same stores whole took 2.4 GB, and the scheduler
+   killed the job before it resolved anyone.
    `resolve_author_ids` also gates on the budget reserve like
    `harvest_stats`. `ingest_authors` is a local projection right after
    identity resolution: it publishes confirmed author identities to the
