@@ -7,12 +7,8 @@ import * as React from "react";
 
 import { ActiveFiltersBar, type ActiveFilterChip } from "@/components/active-filters-bar";
 import { DirectoryPager } from "@/components/directory-pager";
-import {
-  FacetGroupList,
-  FilterSidebarCard,
-  type FacetGroupDef,
-  type FacetValue,
-} from "@/components/filter-panel";
+import { FilterLayout } from "@/components/filter-layout";
+import { FacetGroupList, type FacetGroupDef, type FacetValue } from "@/components/filter-panel";
 import { rememberDirectoryUrl } from "@/components/journal/section-nav";
 import { OaCompositionBar } from "@/components/oa-composition";
 import { SortHead } from "@/components/search/sort-head";
@@ -72,7 +68,7 @@ function normalizeDeal(value: string): "covered" | "not_covered" | null {
 
 /** Matches the journal page's sort-select styling. */
 const SELECT_CLASS =
-  "h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2";
+  "h-9 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 min-[768px]:w-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2";
 
 /** Pipe-joined multi-select param → list of values. */
 function paramValues(sp: { get(key: string): string | null }, key: string): string[] {
@@ -516,286 +512,268 @@ function PublishersView() {
         </form>
       </header>
 
-      {/* Stacked filter card: the only filter UI below 960px. */}
-      {data != null && (
-        <section className="mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
-          <FacetGroupList groups={groups} onToggle={toggleFacet} variant="chips" />
-        </section>
-      )}
+      <FilterLayout
+        filters={<FacetGroupList groups={groups} onToggle={toggleFacet} />}
+        activeCount={filterChips.length}
+        onReset={clearFilters}
+        resetTitle={t("search.resetHint")}
+        disabled={data == null}
+      >
+        <ActiveFiltersBar
+          chips={filterChips}
+          onClearAll={clearFilters}
+          ariaLabel={tc("activeFilters.label")}
+          clearLabel={tc("activeFilters.clearAll")}
+          removeAriaPrefix={tc("activeFilters.remove")}
+        />
 
-      <div className="flex flex-col gap-6 min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
-        {/* Wide-screen sidebar: sticky, scrolls on its own when long. */}
-        {data != null ? (
-          <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto min-[960px]:block">
-            <FilterSidebarCard
-              activeCount={filterChips.length}
-              onReset={clearFilters}
-              resetTitle={t("search.resetHint")}
-            >
-              <FacetGroupList groups={groups} onToggle={toggleFacet} variant="rows" />
-            </FilterSidebarCard>
-          </aside>
-        ) : (
-          <div className="hidden min-[960px]:block" />
-        )}
-
-        <div className="min-w-0">
-          <ActiveFiltersBar
-            chips={filterChips}
-            onClearAll={clearFilters}
-            ariaLabel={tc("activeFilters.label")}
-            clearLabel={tc("activeFilters.clearAll")}
-            removeAriaPrefix={tc("activeFilters.remove")}
-          />
-
-          <Card>
-            <CardContent className="pt-5">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
-                <p className="text-sm text-[var(--muted-foreground)]">
-                  {/* Announce only settled counts: while a fetch runs the live
+        <Card>
+          <CardContent className="pt-5">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
+              <p className="text-sm text-[var(--muted-foreground)]">
+                {/* Announce only settled counts: while a fetch runs the live
                     region keeps its previous text, so typing never chatters. */}
-                  <span aria-live="polite">
-                    {data
-                      ? q
-                        ? t("results.countMatching", { count: data.total, q })
-                        : t("results.count", { count: data.total })
-                      : ""}
-                  </span>
-                  {isFetching && data ? t("results.updating") : ""}
-                </p>
-                <div className="flex items-center gap-2 text-sm">
-                  <label
-                    htmlFor="publisher-sort"
-                    className="whitespace-nowrap text-xs text-[var(--muted-foreground)]"
-                  >
-                    {t("search.sortBy")}
-                  </label>
-                  <select
-                    id="publisher-sort"
-                    title={t("search.sortHint")}
-                    value={sort ?? "default"}
-                    onChange={(event) =>
-                      setParams({
-                        sort: event.target.value === "default" ? undefined : event.target.value,
-                        // A sort change invalidates the old direction: keeping
-                        // `dir` would flip the freshly chosen label.
-                        dir: undefined,
-                      })
-                    }
-                    className={SELECT_CLASS}
-                  >
-                    {/* The backend default is relevance with a query, works count
+                <span aria-live="polite">
+                  {data
+                    ? q
+                      ? t("results.countMatching", { count: data.total, q })
+                      : t("results.count", { count: data.total })
+                    : ""}
+                </span>
+                {isFetching && data ? t("results.updating") : ""}
+              </p>
+              <div className="flex min-w-0 flex-col items-start gap-1 text-sm min-[768px]:flex-row min-[768px]:items-center min-[768px]:gap-2">
+                <label
+                  htmlFor="publisher-sort"
+                  className="whitespace-nowrap text-xs text-[var(--muted-foreground)]"
+                >
+                  {t("search.sortBy")}
+                </label>
+                <select
+                  id="publisher-sort"
+                  title={t("search.sortHint")}
+                  value={sort ?? "default"}
+                  onChange={(event) =>
+                    setParams({
+                      sort: event.target.value === "default" ? undefined : event.target.value,
+                      // A sort change invalidates the old direction: keeping
+                      // `dir` would flip the freshly chosen label.
+                      dir: undefined,
+                    })
+                  }
+                  className={SELECT_CLASS}
+                >
+                  {/* The backend default is relevance with a query, works count
                       without; say so instead of guessing one label. */}
-                    <option value="default">{q ? t("sort.relevance") : t("sort.works")}</option>
-                    {(
-                      [
-                        ["name", t("sort.name")],
-                        ["journals", t("sort.journals")],
-                        ["works", t("sort.works")],
-                        ["deals", t("sort.deals")],
-                        ["apc", t("sort.apc")],
-                      ] as [PublisherSearchSort, string][]
-                    ).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                  <option value="default">{q ? t("sort.relevance") : t("sort.works")}</option>
+                  {(
+                    [
+                      ["name", t("sort.name")],
+                      ["journals", t("sort.journals")],
+                      ["works", t("sort.works")],
+                      ["deals", t("sort.deals")],
+                      ["apc", t("sort.apc")],
+                    ] as [PublisherSearchSort, string][]
+                  ).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
               </div>
+            </div>
 
-              {isError ? (
-                <div className="py-10 text-center">
-                  <p className="text-[var(--destructive)]">{errorMessage(tc, error)}</p>
-                  <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
-                    {t("results.retry")}
-                  </Button>
-                </div>
-              ) : isPending ? (
-                <ListSkeletonRows rows={8} />
-              ) : rows.length === 0 ? (
-                <div className="py-10 text-center text-[var(--muted-foreground)]">
-                  {q && !anyFilter ? (
-                    <>{t("results.emptyQuery", { q })}</>
-                  ) : (
-                    <>
-                      {anyFilter ? t("results.emptyFilters") : t("results.empty")}
-                      {anyFilter && (
-                        <div className="mt-3">
-                          <Button variant="outline" size="sm" onClick={clearFilters}>
-                            {t("results.clearFilters")}
-                          </Button>
+            {isError ? (
+              <div className="py-10 text-center">
+                <p className="text-[var(--destructive)]">{errorMessage(tc, error)}</p>
+                <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
+                  {t("results.retry")}
+                </Button>
+              </div>
+            ) : isPending ? (
+              <ListSkeletonRows rows={8} />
+            ) : rows.length === 0 ? (
+              <div className="py-10 text-center text-[var(--muted-foreground)]">
+                {q && !anyFilter ? (
+                  <>{t("results.emptyQuery", { q })}</>
+                ) : (
+                  <>
+                    {anyFilter ? t("results.emptyFilters") : t("results.empty")}
+                    {anyFilter && (
+                      <div className="mt-3">
+                        <Button variant="outline" size="sm" onClick={clearFilters}>
+                          {t("results.clearFilters")}
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            ) : (
+              <>
+                {/* Stacked cards on narrow viewports: eight columns would
+                    push the counts off-screen behind horizontal scrolling. */}
+                <ul
+                  className={isFetching ? "opacity-60 md:hidden" : "md:hidden"}
+                  aria-label={t("results.listAria")}
+                >
+                  {rows.map((p) => (
+                    <li
+                      key={p.name}
+                      className="border-b border-[var(--border)] py-3 first:pt-0 last:border-0 last:pb-0"
+                    >
+                      <Link
+                        href={`/${inst}/publisher/${encodeNamePath(p.name)}`}
+                        className="font-medium text-[var(--foreground)] underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                      >
+                        {displayPublisherName(p.name)}
+                      </Link>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs tabular-nums text-[var(--muted-foreground)]">
+                        <span>{t("units.journals", { count: p.n_journals })}</span>
+                        <span>{t("units.works", { count: p.n_works })}</span>
+                        {p.deal_journals > 0 && (
+                          <span>{t("units.dealCoveredShort", { count: p.deal_journals })}</span>
+                        )}
+                      </div>
+                      <div className="mt-1.5 max-w-48">
+                        <OaCompositionBar counts={p.oa_types} total={p.n_journals} />
+                      </div>
+                      {p.topics.length > 0 && (
+                        <div className="mt-1 text-xs text-[var(--muted-foreground)]">
+                          {p.topics
+                            .slice(0, 2)
+                            .map((topic) => topic.name)
+                            .join(" · ")}
                         </div>
                       )}
-                    </>
-                  )}
-                </div>
-              ) : (
-                <>
-                  {/* Stacked cards on narrow viewports: eight columns would
-                    push the counts off-screen behind horizontal scrolling. */}
-                  <ul
-                    className={isFetching ? "opacity-60 md:hidden" : "md:hidden"}
-                    aria-label={t("results.listAria")}
-                  >
-                    {rows.map((p) => (
-                      <li
-                        key={p.name}
-                        className="border-b border-[var(--border)] py-3 first:pt-0 last:border-0 last:pb-0"
-                      >
-                        <Link
-                          href={`/${inst}/publisher/${encodeNamePath(p.name)}`}
-                          className="font-medium text-[var(--foreground)] underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-                        >
-                          {displayPublisherName(p.name)}
-                        </Link>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs tabular-nums text-[var(--muted-foreground)]">
-                          <span>{t("units.journals", { count: p.n_journals })}</span>
-                          <span>{t("units.works", { count: p.n_works })}</span>
-                          {p.deal_journals > 0 && (
-                            <span>{t("units.dealCoveredShort", { count: p.deal_journals })}</span>
-                          )}
-                        </div>
-                        <div className="mt-1.5 max-w-48">
-                          <OaCompositionBar counts={p.oa_types} total={p.n_journals} />
-                        </div>
-                        {p.topics.length > 0 && (
-                          <div className="mt-1 text-xs text-[var(--muted-foreground)]">
-                            {p.topics
-                              .slice(0, 2)
-                              .map((topic) => topic.name)
-                              .join(" · ")}
-                          </div>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                  <div className={isFetching ? "hidden opacity-60 md:block" : "hidden md:block"}>
-                    <Table>
-                      <caption className="sr-only">{t("results.tableCaption")}</caption>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead aria-sort={ariaSortFor("name")}>
-                            <SortHead
-                              columnId="name"
-                              label={t("table.publisher")}
-                              state={sortHeadState}
-                            />
-                          </TableHead>
-                          <TableHead className="text-right" aria-sort={ariaSortFor("journals")}>
-                            <SortHead
-                              columnId="journals"
-                              label={t("table.journals")}
-                              state={sortHeadState}
-                            />
-                          </TableHead>
-                          <TableHead className="text-right" aria-sort={ariaSortFor("works")}>
-                            <SortHead
-                              columnId="works"
-                              label={t("table.works")}
-                              state={sortHeadState}
-                            />
-                          </TableHead>
-                          <TableHead>{t("table.oaComposition")}</TableHead>
-                          <TableHead className="text-right" aria-sort={ariaSortFor("deals")}>
-                            <SortHead
-                              columnId="deals"
-                              label={t("table.deals")}
-                              state={sortHeadState}
-                            />
-                          </TableHead>
-                          <TableHead>{t("table.quartiles")}</TableHead>
-                          <TableHead aria-sort={ariaSortFor("apc")}>
-                            <SortHead columnId="apc" label={t("table.apc")} state={sortHeadState} />
-                          </TableHead>
-                          <TableHead>{t("table.topics")}</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {rows.map((p) => (
-                          <TableRow key={p.name}>
-                            <TableCell className="font-medium">
-                              <Link
-                                href={`/${inst}/publisher/${encodeNamePath(p.name)}`}
-                                className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                    </li>
+                  ))}
+                </ul>
+                <div className={isFetching ? "hidden opacity-60 md:block" : "hidden md:block"}>
+                  <Table>
+                    <caption className="sr-only">{t("results.tableCaption")}</caption>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead aria-sort={ariaSortFor("name")}>
+                          <SortHead
+                            columnId="name"
+                            label={t("table.publisher")}
+                            state={sortHeadState}
+                          />
+                        </TableHead>
+                        <TableHead className="text-right" aria-sort={ariaSortFor("journals")}>
+                          <SortHead
+                            columnId="journals"
+                            label={t("table.journals")}
+                            state={sortHeadState}
+                          />
+                        </TableHead>
+                        <TableHead className="text-right" aria-sort={ariaSortFor("works")}>
+                          <SortHead
+                            columnId="works"
+                            label={t("table.works")}
+                            state={sortHeadState}
+                          />
+                        </TableHead>
+                        <TableHead>{t("table.oaComposition")}</TableHead>
+                        <TableHead className="text-right" aria-sort={ariaSortFor("deals")}>
+                          <SortHead
+                            columnId="deals"
+                            label={t("table.deals")}
+                            state={sortHeadState}
+                          />
+                        </TableHead>
+                        <TableHead>{t("table.quartiles")}</TableHead>
+                        <TableHead aria-sort={ariaSortFor("apc")}>
+                          <SortHead columnId="apc" label={t("table.apc")} state={sortHeadState} />
+                        </TableHead>
+                        <TableHead>{t("table.topics")}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {rows.map((p) => (
+                        <TableRow key={p.name}>
+                          <TableCell className="font-medium">
+                            <Link
+                              href={`/${inst}/publisher/${encodeNamePath(p.name)}`}
+                              className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                            >
+                              <span
+                                className="block max-w-56 truncate"
+                                title={displayPublisherName(p.name)}
                               >
-                                <span
-                                  className="block max-w-56 truncate"
-                                  title={displayPublisherName(p.name)}
-                                >
-                                  {displayPublisherName(p.name)}
-                                </span>
-                              </Link>
-                            </TableCell>
-                            <TableCell className="text-right tabular-nums">
-                              {p.n_journals.toLocaleString("en")}
-                            </TableCell>
-                            <TableCell className="text-right tabular-nums">
-                              {p.n_works.toLocaleString("en")}
-                            </TableCell>
-                            <TableCell>
-                              <div className="w-28">
-                                <OaCompositionBar counts={p.oa_types} total={p.n_journals} />
-                              </div>
-                            </TableCell>
-                            <TableCell className="whitespace-nowrap text-right tabular-nums">
-                              {p.deal_journals.toLocaleString("en")}
-                              <span className="text-[var(--muted-foreground)]">
-                                {" "}
-                                of {p.n_journals.toLocaleString("en")}
+                                {displayPublisherName(p.name)}
                               </span>
-                            </TableCell>
-                            <TableCell>
-                              <QuartileChips item={p} />
-                            </TableCell>
-                            <TableCell>
-                              <ApcCell item={p} />
-                            </TableCell>
-                            <TableCell>
-                              {p.topics.length > 0 ? (
-                                <span
-                                  className="block max-w-40 truncate"
-                                  title={p.topics
-                                    .slice(0, 2)
-                                    .map((topic) => `${topic.name} (${Math.round(topic.n)})`)
-                                    .join(" · ")}
-                                >
-                                  {p.topics
-                                    .slice(0, 2)
-                                    .map((topic) => topic.name)
-                                    .join(" · ")}
-                                </span>
-                              ) : (
-                                <span className="text-[var(--muted-foreground)]">—</span>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  <DirectoryPager
-                    offset={offset}
-                    shown={rows.length}
-                    total={total}
-                    limit={pageSize}
-                    onOffset={(nextOffset) =>
-                      setParams({ offset: nextOffset > 0 ? String(nextOffset) : undefined })
-                    }
-                    onLimit={(nextLimit) =>
-                      setParams({ limit: nextLimit === 50 ? undefined : String(nextLimit) })
-                    }
-                    perPageLabel={t("search.perPage")}
-                    prevLabel={t("results.prev")}
-                    nextLabel={t("results.next")}
-                    isFetching={isFetching}
-                  />
-                </>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {p.n_journals.toLocaleString("en")}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {p.n_works.toLocaleString("en")}
+                          </TableCell>
+                          <TableCell>
+                            <div className="w-28">
+                              <OaCompositionBar counts={p.oa_types} total={p.n_journals} />
+                            </div>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-right tabular-nums">
+                            {p.deal_journals.toLocaleString("en")}
+                            <span className="text-[var(--muted-foreground)]">
+                              {" "}
+                              of {p.n_journals.toLocaleString("en")}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <QuartileChips item={p} />
+                          </TableCell>
+                          <TableCell>
+                            <ApcCell item={p} />
+                          </TableCell>
+                          <TableCell>
+                            {p.topics.length > 0 ? (
+                              <span
+                                className="block max-w-40 truncate"
+                                title={p.topics
+                                  .slice(0, 2)
+                                  .map((topic) => `${topic.name} (${Math.round(topic.n)})`)
+                                  .join(" · ")}
+                              >
+                                {p.topics
+                                  .slice(0, 2)
+                                  .map((topic) => topic.name)
+                                  .join(" · ")}
+                              </span>
+                            ) : (
+                              <span className="text-[var(--muted-foreground)]">—</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <DirectoryPager
+                  offset={offset}
+                  shown={rows.length}
+                  total={total}
+                  limit={pageSize}
+                  onOffset={(nextOffset) =>
+                    setParams({ offset: nextOffset > 0 ? String(nextOffset) : undefined })
+                  }
+                  onLimit={(nextLimit) =>
+                    setParams({ limit: nextLimit === 50 ? undefined : String(nextLimit) })
+                  }
+                  perPageLabel={t("search.perPage")}
+                  prevLabel={t("results.prev")}
+                  nextLabel={t("results.next")}
+                  isFetching={isFetching}
+                />
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </FilterLayout>
     </div>
   );
 }

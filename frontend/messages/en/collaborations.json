@@ -35,6 +35,7 @@
     "sharesDeals": "Shares OA deals"
   },
   "overview": {
+    "toggle": "Overview and map",
     "partners": "Partners",
     "partnersSub": "distinct organisations",
     "collabWorks": "Collaborative works",
@@ -126,6 +127,7 @@
     "corresponding": "Partner corr.",
     "authorships": "Partner authors",
     "sort": "Sort by {column}",
+    "sortGroup": "Sort the partners",
     "partOf": "Part of {name}",
     "mergedSubunits": "Includes {count, plural, one {# sub-unit} other {# sub-units}}",
     "sharesDeals": "Shared OA deals",

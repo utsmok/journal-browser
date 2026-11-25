@@ -101,6 +101,8 @@
   "facets": {
     "sidebarHeading": "Filters",
     "sidebarReset": "Reset",
+    "closeFilters": "Close filters",
+    "showResults": "Show results",
     "groupYourFunder": "Your funder",
     "filterBy": "Filter by {label}",
 

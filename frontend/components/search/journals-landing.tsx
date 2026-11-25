@@ -9,7 +9,8 @@ import * as React from "react";
 
 import { ActiveFiltersBar, type ActiveFilterChip } from "@/components/active-filters-bar";
 import { DealBadge, FunderFitBadge, OaTypeBadge, QuartileBadge } from "@/components/badges";
-import { FilterPanel, FilterSidebarCard, QualityToggles } from "@/components/filter-panel";
+import { FilterLayout } from "@/components/filter-layout";
+import { FilterPanel, QualityToggles } from "@/components/filter-panel";
 import { GuideWizard } from "@/components/guide/guide-wizard";
 import { rememberDirectoryUrl } from "@/components/journal/section-nav";
 import { OnboardingBanner, useOnboardingState } from "@/components/onboarding-banner";
@@ -829,7 +830,7 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
               </select>
             )}
             <label
-              className="flex h-10 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2.5 text-sm select-none"
+              className="flex min-h-11 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2.5 text-sm select-none min-[1024px]:h-10 min-[1024px]:min-h-0"
               title={t("search.semanticTitle")}
             >
               <input
@@ -871,367 +872,323 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
         <GuideWizard embedded />
       ) : (
         <>
-          {/* Stacked filter card: the only filter UI below 960px. */}
-          {!semanticMode && (
-            <section className="mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
-              <div className="mb-3 border-b border-[var(--border)] pb-3">
+          <FilterLayout
+            filters={
+              <>
+                <div className="mb-3 border-b border-[var(--border)] pb-3">
+                  <QualityToggles active={active} vouched={vouched} onToggle={toggleQuality} />
+                </div>
+                <FilterPanel
+                  facets={facets}
+                  selection={filterSelection}
+                  onToggle={handleFacetToggle}
+                  error={facetsError}
+                  onRetry={() => facetsQuery.refetch()}
+                />
+              </>
+            }
+            activeCount={filterChips.length}
+            onReset={hasFilters ? clearFilters : undefined}
+            resetTitle={t("toolbar.resetTitle")}
+            headerSlot={
+              <div>
                 <p className="mb-1.5 text-xs font-semibold text-[var(--foreground)]">
                   {tc("facets.groupYourFunder")}
                 </p>
                 <FunderPicker fullWidth />
               </div>
-              <div className="mb-3 border-b border-[var(--border)] pb-3">
-                <QualityToggles active={active} vouched={vouched} onToggle={toggleQuality} />
-              </div>
-              <FilterPanel
-                facets={facets}
-                selection={filterSelection}
-                onToggle={handleFacetToggle}
-                variant="chips"
-                error={facetsError}
-                onRetry={() => facetsQuery.refetch()}
-              />
-            </section>
-          )}
+            }
+            disabled={semanticMode}
+          >
+            <ActiveFiltersBar
+              chips={filterChips}
+              onClearAll={clearFilters}
+              ariaLabel={tc("activeFilters.label")}
+              clearLabel={tc("activeFilters.clearAll")}
+              removeAriaPrefix={tc("activeFilters.remove")}
+            />
 
-          <div className="flex flex-col gap-6 min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
-            {/* Wide-screen sidebar: sticky, scrolls on its own when long. */}
-            {!semanticMode && (
-              <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto min-[960px]:block">
-                <FilterSidebarCard
-                  activeCount={filterChips.length}
-                  onReset={hasFilters ? clearFilters : undefined}
-                  resetTitle={t("toolbar.resetTitle")}
-                  headerSlot={
-                    <div>
-                      <p className="mb-1.5 text-xs font-semibold text-[var(--foreground)]">
-                        {tc("facets.groupYourFunder")}
+            <Card>
+              <CardContent className="pt-5">
+                <Pagination
+                  data={data}
+                  isFetching={isFetching}
+                  stack={stack}
+                  moveTo={moveTo}
+                  toolbarSlot={
+                    semanticMode ? (
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        {semantic
+                          ? t("toolbar.semanticStatusActive")
+                          : t("toolbar.semanticStatusPending")}
                       </p>
-                      <FunderPicker fullWidth />
-                    </div>
+                    ) : (
+                      <div className="flex min-w-0 flex-col items-start gap-1 text-sm min-[768px]:flex-row min-[768px]:items-center min-[768px]:gap-2">
+                        <label
+                          htmlFor="sort"
+                          className="whitespace-nowrap text-xs text-[var(--muted-foreground)]"
+                        >
+                          {t("toolbar.sortBy")}
+                        </label>
+                        <select
+                          id="sort"
+                          title={t("toolbar.sortTitle")}
+                          value={sort}
+                          onChange={(event) => update({ sort: event.target.value, dir: undefined })}
+                          className="h-9 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 text-sm min-[768px]:w-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
+                        >
+                          {SORTS.map((s) => (
+                            <option key={s.value} value={s.value}>
+                              {s.value === "institution_works"
+                                ? t("toolbar.sortInstitutionWorks", { inst: instShort })
+                                : ts(s.labelKey)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )
                   }
-                >
-                  <div className="mb-3 border-b border-[var(--border)] pb-3">
-                    <QualityToggles active={active} vouched={vouched} onToggle={toggleQuality} />
-                  </div>
-                  <FilterPanel
-                    facets={facets}
-                    selection={filterSelection}
-                    onToggle={handleFacetToggle}
-                    variant="rows"
-                    error={facetsError}
-                    onRetry={() => facetsQuery.refetch()}
-                  />
-                </FilterSidebarCard>
-              </aside>
-            )}
+                />
 
-            <div className={semanticMode ? "min-w-0 min-[960px]:col-span-2" : "min-w-0"}>
-              <ActiveFiltersBar
-                chips={filterChips}
-                onClearAll={clearFilters}
-                ariaLabel={tc("activeFilters.label")}
-                clearLabel={tc("activeFilters.clearAll")}
-                removeAriaPrefix={tc("activeFilters.remove")}
-              />
-
-              <Card>
-                <CardContent className="pt-5">
-                  <Pagination
-                    data={data}
-                    isFetching={isFetching}
-                    stack={stack}
-                    moveTo={moveTo}
-                    toolbarSlot={
-                      semanticMode ? (
-                        <p className="text-xs text-[var(--muted-foreground)]">
-                          {semantic
-                            ? t("toolbar.semanticStatusActive")
-                            : t("toolbar.semanticStatusPending")}
-                        </p>
-                      ) : (
-                        <div className="flex items-center gap-2 text-sm">
-                          <label
-                            htmlFor="sort"
-                            className="whitespace-nowrap text-xs text-[var(--muted-foreground)]"
-                          >
-                            {t("toolbar.sortBy")}
-                          </label>
-                          <select
-                            id="sort"
-                            title={t("toolbar.sortTitle")}
-                            value={sort}
-                            onChange={(event) =>
-                              update({ sort: event.target.value, dir: undefined })
-                            }
-                            className="h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
-                          >
-                            {SORTS.map((s) => (
-                              <option key={s.value} value={s.value}>
-                                {s.value === "institution_works"
-                                  ? t("toolbar.sortInstitutionWorks", { inst: instShort })
-                                  : ts(s.labelKey)}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )
-                    }
-                  />
-
-                  {isError ? (
-                    <div className="py-10 text-center">
-                      <p className="text-[var(--destructive)]">{errorMessage(tc, error)}</p>
+                {isError ? (
+                  <div className="py-10 text-center">
+                    <p className="text-[var(--destructive)]">{errorMessage(tc, error)}</p>
+                    <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
+                      {t("error.retry")}
+                    </Button>
+                    {(cursor || sp.get("p")) && (
                       <Button
                         variant="outline"
                         size="sm"
-                        className="mt-3"
-                        onClick={() => refetch()}
+                        className="mt-3 ml-2"
+                        onClick={() => update({})}
                       >
-                        {t("error.retry")}
+                        {t("error.backToPage1")}
                       </Button>
-                      {(cursor || sp.get("p")) && (
+                    )}
+                  </div>
+                ) : isPending ? (
+                  <ListSkeletonRows rows={8} />
+                ) : rows.length === 0 ? (
+                  <div className="py-10 text-center text-[var(--muted-foreground)]">
+                    {spQ && !hasNonQueryFilters ? (
+                      <>{t("empty.query", { query: spQ })}</>
+                    ) : (
+                      <>{hasNonQueryFilters ? t("empty.filters") : t("empty.plain")}</>
+                    )}
+                    {spQ && !semanticMode && (
+                      <div className="mt-3">
                         <Button
                           variant="outline"
                           size="sm"
-                          className="mt-3 ml-2"
-                          onClick={() => update({})}
+                          onClick={() => update({ mode: "semantic" })}
                         >
-                          {t("error.backToPage1")}
+                          {t("empty.trySemantic")}
                         </Button>
-                      )}
-                    </div>
-                  ) : isPending ? (
-                    <ListSkeletonRows rows={8} />
-                  ) : rows.length === 0 ? (
-                    <div className="py-10 text-center text-[var(--muted-foreground)]">
-                      {spQ && !hasNonQueryFilters ? (
-                        <>{t("empty.query", { query: spQ })}</>
-                      ) : (
-                        <>{hasNonQueryFilters ? t("empty.filters") : t("empty.plain")}</>
-                      )}
-                      {spQ && !semanticMode && (
-                        <div className="mt-3">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => update({ mode: "semantic" })}
+                      </div>
+                    )}
+                    {spQ && !hasNonQueryFilters && (
+                      <p className="mt-4 text-sm">
+                        {t("empty.crossHintLead")}{" "}
+                        <Link
+                          href={`/${inst}/author?q=${encodeURIComponent(spQ)}`}
+                          className="underline underline-offset-2 hover:text-[var(--foreground)]"
+                        >
+                          {t("empty.crossAuthors", { query: spQ })}
+                        </Link>
+                        {" · "}
+                        <Link
+                          href={`/${inst}/funders?q=${encodeURIComponent(spQ)}`}
+                          className="underline underline-offset-2 hover:text-[var(--foreground)]"
+                        >
+                          {t("empty.crossFunders", { query: spQ })}
+                        </Link>
+                      </p>
+                    )}
+                    {hasNonQueryFilters && (
+                      <div className="mt-3">
+                        <Button variant="outline" size="sm" onClick={clearFilters}>
+                          {t("empty.clearFilters")}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    {data.fuzzy && spQ && (
+                      <p className="mb-3 text-sm text-[var(--muted-foreground)]" role="status">
+                        {t("table.fuzzy", { query: spQ })}
+                      </p>
+                    )}
+                    <ul
+                      className={isFetching ? "opacity-60 md:hidden" : "md:hidden"}
+                      aria-label={t("table.listAria")}
+                    >
+                      {rows.map((row) => {
+                        const pub = row.publisher_canonical ?? row.publisher_name;
+                        const topicVal = row.primary_topic;
+                        return (
+                          <li
+                            key={row.issn_l}
+                            className="relative border-b border-[var(--border)] py-3 first:pt-0 last:border-0 last:pb-0"
                           >
-                            {t("empty.trySemantic")}
-                          </Button>
-                        </div>
-                      )}
-                      {spQ && !hasNonQueryFilters && (
-                        <p className="mt-4 text-sm">
-                          {t("empty.crossHintLead")}{" "}
-                          <Link
-                            href={`/${inst}/author?q=${encodeURIComponent(spQ)}`}
-                            className="underline underline-offset-2 hover:text-[var(--foreground)]"
-                          >
-                            {t("empty.crossAuthors", { query: spQ })}
-                          </Link>
-                          {" · "}
-                          <Link
-                            href={`/${inst}/funders?q=${encodeURIComponent(spQ)}`}
-                            className="underline underline-offset-2 hover:text-[var(--foreground)]"
-                          >
-                            {t("empty.crossFunders", { query: spQ })}
-                          </Link>
-                        </p>
-                      )}
-                      {hasNonQueryFilters && (
-                        <div className="mt-3">
-                          <Button variant="outline" size="sm" onClick={clearFilters}>
-                            {t("empty.clearFilters")}
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <>
-                      {data.fuzzy && spQ && (
-                        <p className="mb-3 text-sm text-[var(--muted-foreground)]" role="status">
-                          {t("table.fuzzy", { query: spQ })}
-                        </p>
-                      )}
-                      <ul
-                        className={isFetching ? "opacity-60 md:hidden" : "md:hidden"}
-                        aria-label={t("table.listAria")}
-                      >
-                        {rows.map((row) => {
-                          const pub = row.publisher_canonical ?? row.publisher_name;
-                          const topicVal = row.primary_topic;
-                          return (
-                            <li
-                              key={row.issn_l}
-                              className="relative border-b border-[var(--border)] py-3 first:pt-0 last:border-0 last:pb-0"
+                            <Link
+                              href={`/${inst}/journals/${row.issn_l}`}
+                              className="font-medium text-[var(--foreground)] underline-offset-2 after:absolute after:inset-0 after:content-[''] hover:text-[var(--primary-text)] hover:underline"
                             >
-                              <Link
-                                href={`/${inst}/journals/${row.issn_l}`}
-                                className="font-medium text-[var(--foreground)] underline-offset-2 after:absolute after:inset-0 after:content-[''] hover:text-[var(--primary-text)] hover:underline"
+                              {row.title ?? row.issn_l}
+                            </Link>
+                            <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                              {pub ? (
+                                <Link
+                                  href={`/${inst}/publisher/${encodeNamePath(pub)}`}
+                                  className="relative z-10 underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                                >
+                                  {pub}
+                                </Link>
+                              ) : (
+                                t("table.unknownPublisher")
+                              )}
+                              {row.pub_type && row.pub_type !== "journal" && (
+                                <>
+                                  {" · "}
+                                  {pubTypeLabel(row.pub_type)}
+                                </>
+                              )}
+                              {topicVal && (
+                                <>
+                                  {" · "}
+                                  <button
+                                    type="button"
+                                    className="relative z-10 text-left underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                                    title={t("table.topicFilterTitle", { topic: topicVal })}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      update({ topic: topicVal });
+                                    }}
+                                  >
+                                    {topicVal}
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                              <DealBadge covered={row.deal_covered} capped={row.deal_cap_reached} />
+                              <FunderFitBadge
+                                status={row.funder_fit?.status ?? null}
+                                reasons={row.funder_fit?.reasons ?? []}
+                              />
+                              <OaTypeBadge oaType={row.oa_type} isOa={row.is_oa} />
+                              <QuartileBadge quartile={row.quartile ?? null} />
+                            </div>
+                            <div className="mt-1 text-xs tabular-nums text-[var(--muted-foreground)]">
+                              {t("table.listWorks", {
+                                count: row.works.toLocaleString("en"),
+                                inst: site.short,
+                              })}
+                              {row.apc_source === "openalex" && row.apc_price != null && (
+                                <>
+                                  {" · "}
+                                  {t("table.listApcOpenalex", {
+                                    amount: apcAmount(row.apc_currency, row.apc_price),
+                                  })}
+                                </>
+                              )}
+                              {row.apc_source === "openapc" && row.apc_low != null && (
+                                <>
+                                  {" · "}
+                                  {t("table.listApcOpenapc", {
+                                    range:
+                                      row.apc_low !== row.apc_high
+                                        ? `${formatApc(row.apc_low)} to ${formatApc(
+                                            row.apc_high ?? row.apc_low,
+                                          )}`
+                                        : formatApc(row.apc_low),
+                                  })}
+                                </>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    <div className={isFetching ? "hidden opacity-60 md:block" : "hidden md:block"}>
+                      <Table>
+                        <caption className="sr-only">{t("table.resultsCaption")}</caption>
+                        <TableHeader>
+                          {table.getHeaderGroups().map((group) => (
+                            <TableRow key={group.id}>
+                              {group.headers.map((header) => (
+                                <TableHead
+                                  key={header.id}
+                                  aria-sort={ariaSortFor(header.column.columnDef.meta)}
+                                >
+                                  {flexRender(header.column.columnDef.header, header.getContext())}
+                                </TableHead>
+                              ))}
+                            </TableRow>
+                          ))}
+                        </TableHeader>
+                        <TableBody>
+                          {table.getRowModel().rows.map((row) => {
+                            const href = `/${inst}/journals/${row.original.issn_l}`;
+                            return (
+                              <TableRow
+                                key={row.id}
+                                className={[
+                                  "cursor-pointer",
+                                  row.original.deal_covered
+                                    ? "bg-emerald-50/80 hover:bg-emerald-100 dark:bg-emerald-400/[0.08] dark:hover:bg-emerald-400/[0.12]"
+                                    : "",
+                                ].join(" ")}
+                                onClick={(event) => {
+                                  if (event.metaKey || event.ctrlKey)
+                                    window.open(href, "_blank", "noopener");
+                                  else router.push(href);
+                                }}
                               >
-                                {row.title ?? row.issn_l}
-                              </Link>
-                              <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-                                {pub ? (
-                                  <Link
-                                    href={`/${inst}/publisher/${encodeNamePath(pub)}`}
-                                    className="relative z-10 underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-                                  >
-                                    {pub}
-                                  </Link>
-                                ) : (
-                                  t("table.unknownPublisher")
-                                )}
-                                {row.pub_type && row.pub_type !== "journal" && (
-                                  <>
-                                    {" · "}
-                                    {pubTypeLabel(row.pub_type)}
-                                  </>
-                                )}
-                                {topicVal && (
-                                  <>
-                                    {" · "}
-                                    <button
-                                      type="button"
-                                      className="relative z-10 text-left underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-                                      title={t("table.topicFilterTitle", { topic: topicVal })}
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        update({ topic: topicVal });
-                                      }}
-                                    >
-                                      {topicVal}
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                                <DealBadge
-                                  covered={row.deal_covered}
-                                  capped={row.deal_cap_reached}
-                                />
-                                <FunderFitBadge
-                                  status={row.funder_fit?.status ?? null}
-                                  reasons={row.funder_fit?.reasons ?? []}
-                                />
-                                <OaTypeBadge oaType={row.oa_type} isOa={row.is_oa} />
-                                <QuartileBadge quartile={row.quartile ?? null} />
-                              </div>
-                              <div className="mt-1 text-xs tabular-nums text-[var(--muted-foreground)]">
-                                {t("table.listWorks", {
-                                  count: row.works.toLocaleString("en"),
-                                  inst: site.short,
-                                })}
-                                {row.apc_source === "openalex" && row.apc_price != null && (
-                                  <>
-                                    {" · "}
-                                    {t("table.listApcOpenalex", {
-                                      amount: apcAmount(row.apc_currency, row.apc_price),
-                                    })}
-                                  </>
-                                )}
-                                {row.apc_source === "openapc" && row.apc_low != null && (
-                                  <>
-                                    {" · "}
-                                    {t("table.listApcOpenapc", {
-                                      range:
-                                        row.apc_low !== row.apc_high
-                                          ? `${formatApc(row.apc_low)} to ${formatApc(
-                                              row.apc_high ?? row.apc_low,
-                                            )}`
-                                          : formatApc(row.apc_low),
-                                    })}
-                                  </>
-                                )}
-                              </div>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                      <div
-                        className={isFetching ? "hidden opacity-60 md:block" : "hidden md:block"}
-                      >
-                        <Table>
-                          <caption className="sr-only">{t("table.resultsCaption")}</caption>
-                          <TableHeader>
-                            {table.getHeaderGroups().map((group) => (
-                              <TableRow key={group.id}>
-                                {group.headers.map((header) => (
-                                  <TableHead
-                                    key={header.id}
-                                    aria-sort={ariaSortFor(header.column.columnDef.meta)}
-                                  >
-                                    {flexRender(
-                                      header.column.columnDef.header,
-                                      header.getContext(),
-                                    )}
-                                  </TableHead>
+                                {row.getVisibleCells().map((cell) => (
+                                  <TableCell key={cell.id}>
+                                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                  </TableCell>
                                 ))}
                               </TableRow>
-                            ))}
-                          </TableHeader>
-                          <TableBody>
-                            {table.getRowModel().rows.map((row) => {
-                              const href = `/${inst}/journals/${row.original.issn_l}`;
-                              return (
-                                <TableRow
-                                  key={row.id}
-                                  className={[
-                                    "cursor-pointer",
-                                    row.original.deal_covered
-                                      ? "bg-emerald-50/80 hover:bg-emerald-100 dark:bg-emerald-400/[0.08] dark:hover:bg-emerald-400/[0.12]"
-                                      : "",
-                                  ].join(" ")}
-                                  onClick={(event) => {
-                                    if (event.metaKey || event.ctrlKey)
-                                      window.open(href, "_blank", "noopener");
-                                    else router.push(href);
-                                  }}
-                                >
-                                  {row.getVisibleCells().map((cell) => (
-                                    <TableCell key={cell.id}>
-                                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                    </TableCell>
-                                  ))}
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </>
-                  )}
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
+                )}
 
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--muted-foreground)]">
-                    <span>
-                      {data && rows.length > 0
-                        ? t("footer.showing", {
-                            start: String(pageStart),
-                            end: String(pageStart + rows.length - 1),
-                            total: data.total.toLocaleString("en"),
-                          })
-                        : ""}
-                    </span>
-                    <SourceNote
-                      source={t("footer.sources")}
-                      url="https://doaj.org"
-                      howBuilt={tc("sourceNote.explain.journals")}
-                      codes={[
-                        "stats-window",
-                        "openalex-coverage",
-                        "institution-affiliation",
-                        "doaj-canon",
-                        "jct-coverage",
-                        "issn-mapping",
-                        ...(funder ? ["jisc-policy-currency"] : []),
-                      ]}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--muted-foreground)]">
+                  <span>
+                    {data && rows.length > 0
+                      ? t("footer.showing", {
+                          start: String(pageStart),
+                          end: String(pageStart + rows.length - 1),
+                          total: data.total.toLocaleString("en"),
+                        })
+                      : ""}
+                  </span>
+                  <SourceNote
+                    source={t("footer.sources")}
+                    url="https://doaj.org"
+                    howBuilt={tc("sourceNote.explain.journals")}
+                    codes={[
+                      "stats-window",
+                      "openalex-coverage",
+                      "institution-affiliation",
+                      "doaj-canon",
+                      "jct-coverage",
+                      "issn-mapping",
+                      ...(funder ? ["jisc-policy-currency"] : []),
+                    ]}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </FilterLayout>
         </>
       )}
     </div>

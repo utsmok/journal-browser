@@ -14,7 +14,6 @@ import {
   QuartileGlyph,
   WorksGlyph,
 } from "@/components/data-icons";
-import { Card } from "@/components/ui/card";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { PUB_TYPE_LABELS } from "@/lib/search-config";
 
@@ -247,12 +246,10 @@ function facetTitle(
 function FacetGroup({
   group,
   onToggle,
-  variant,
   loading,
 }: {
   group: FacetGroupDef;
   onToggle: (key: string, value: string) => void;
-  variant: "chips" | "rows";
   /** Facets request in flight or failed: every option renders inert. */
   loading?: boolean;
 }) {
@@ -261,7 +258,6 @@ function FacetGroup({
   const { key, label, values, activeValues, defaultOpen, searchable, initialVisible } = group;
   const [filter, setFilter] = React.useState("");
   const [expanded, setExpanded] = React.useState(false);
-  const chips = variant === "chips";
   const initialLimit = initialVisible ?? 8;
   const needle = filter.trim().toLowerCase();
   const filteredValues = needle
@@ -283,12 +279,11 @@ function FacetGroup({
   const hiddenCount = filteredValues.length - visibleValues.length;
   const focus =
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2";
-  // One look for both variants: a squared control (not the old pill) that
-  // turns into the value's own hue when selected. Chips lay out inline,
-  // rows span the sidebar with the count on the right.
-  const layout = chips
-    ? "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs"
-    : "flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-1.5 text-xs";
+  // A squared control (not the old pill) that turns into the value's own hue
+  // when selected: a full-width row with the count on the right. Rows are
+  // 44px targets in the phone sheet and compact in the sidebar.
+  const layout =
+    "flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-sm min-[960px]:min-h-0 min-[960px]:py-1.5 min-[960px]:text-xs";
   const idleClasses = `${layout} border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:border-[var(--primary)] hover:text-[var(--foreground)] ${focus}`;
   const zeroClasses = `${layout} cursor-not-allowed border border-transparent opacity-60`;
 
@@ -310,7 +305,7 @@ function FacetGroup({
     >
       <summary
         title={summaryTitle}
-        className={`${focus} flex cursor-pointer select-none list-none items-center justify-between gap-2 rounded py-1 text-xs font-semibold text-[var(--foreground)] hover:text-[var(--primary-text)] [&::-webkit-details-marker]:hidden`}
+        className={`${focus} flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded py-2 text-sm font-semibold text-[var(--foreground)] hover:text-[var(--primary-text)] [&::-webkit-details-marker]:hidden min-[960px]:min-h-0 min-[960px]:py-1 min-[960px]:text-xs`}
       >
         <span>{label}</span>
         <span className="flex items-center gap-1.5">
@@ -335,7 +330,7 @@ function FacetGroup({
             className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-xs text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
           />
         )}
-        <div className={chips ? "flex flex-wrap items-center gap-1.5" : "flex flex-col gap-1"}>
+        <div className="flex flex-col gap-1">
           {visibleValues.map((f) => {
             const active = activeValues.includes(f.value);
             // Facets with zero results must not invite a click that empties the
@@ -361,7 +356,7 @@ function FacetGroup({
               >
                 {look.icon}
               </svg>
-            ) : !chips ? (
+            ) : (
               <span
                 aria-hidden
                 className={`inline-flex size-3.5 shrink-0 items-center justify-center rounded-[3px] border ${
@@ -372,7 +367,7 @@ function FacetGroup({
               >
                 {active && <Check className="size-2.5 stroke-[2.5]" />}
               </span>
-            ) : null;
+            );
             const labelText = f.label ?? f.value;
             // An unknown count is never a zero: render the em dash so a slow
             // facets request or an uncounted active value cannot read as
@@ -383,17 +378,9 @@ function FacetGroup({
                   —
                 </span>
               ) : (
-                <span className={`shrink-0 tabular-nums ${chips ? "ml-0.5 opacity-80" : ""}`}>
-                  {f.count.toLocaleString("en")}
-                </span>
+                <span className="shrink-0 tabular-nums">{f.count.toLocaleString("en")}</span>
               );
-            const inner = chips ? (
-              <>
-                {iconNode}
-                <span className="max-w-[14rem] truncate">{labelText}</span>
-                {countNode}
-              </>
-            ) : (
+            const inner = (
               <>
                 <span className="flex min-w-0 items-center gap-1.5">
                   {iconNode}
@@ -429,7 +416,7 @@ function FacetGroup({
           <button
             type="button"
             onClick={() => setExpanded((prev) => !prev)}
-            className="text-xs font-medium text-[var(--primary-text)] underline-offset-2 hover:underline"
+            className="inline-flex min-h-11 items-center rounded-[var(--radius)] px-2 text-sm font-medium text-[var(--primary-text)] underline-offset-2 hover:underline min-[960px]:min-h-0 min-[960px]:px-0 min-[960px]:text-xs"
           >
             {expanded ? t("facets.showLess") : t("facets.showMore", { count: hiddenCount })}
           </button>
@@ -443,31 +430,19 @@ function FacetGroup({
 export function FacetGroupList({
   groups,
   onToggle,
-  variant,
   loading,
 }: {
   groups: FacetGroupDef[];
   onToggle: (key: string, value: string) => void;
-  variant: "chips" | "rows";
   loading?: boolean;
 }) {
   return (
     <div
-      className={
-        variant === "rows"
-          ? "divide-y divide-[var(--border)] [&>*:not(:first-child)]:pt-3 [&>*:not(:last-child)]:pb-3"
-          : "space-y-3"
-      }
+      className="divide-y divide-[var(--border)] [&>*:not(:first-child)]:pt-3 [&>*:not(:last-child)]:pb-3"
       aria-busy={loading || undefined}
     >
       {groups.map((group) => (
-        <FacetGroup
-          key={group.key}
-          group={group}
-          onToggle={onToggle}
-          variant={variant}
-          loading={loading}
-        />
+        <FacetGroup key={group.key} group={group} onToggle={onToggle} loading={loading} />
       ))}
     </div>
   );
@@ -531,61 +506,14 @@ export function QualityToggles({
   );
 }
 
-/** Shared sticky filter sidebar container with unified header + Reset affordance. */
-export function FilterSidebarCard({
-  activeCount = 0,
-  onReset,
-  resetTitle,
-  headerSlot,
-  children,
-}: {
-  activeCount?: number;
-  onReset?: () => void;
-  resetTitle?: string;
-  /** Optional extra control placed between the header and facet groups (e.g. FunderPicker). */
-  headerSlot?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  const t = useTranslations("common");
-  return (
-    <Card className="p-4">
-      <div className="mb-3 flex items-center justify-between gap-2 border-b border-[var(--border)] pb-2.5">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-            {t("facets.sidebarHeading")}
-          </span>
-          {activeCount > 0 && (
-            <span className="rounded-full bg-[var(--brand-tint-bg)] px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--primary-text)]">
-              {activeCount}
-            </span>
-          )}
-        </div>
-        {onReset && activeCount > 0 && (
-          <button
-            type="button"
-            onClick={onReset}
-            title={resetTitle}
-            className="text-xs font-medium text-[var(--primary-text)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-          >
-            {t("facets.sidebarReset")}
-          </button>
-        )}
-      </div>
-      {headerSlot && <div className="mb-3 border-b border-[var(--border)] pb-3">{headerSlot}</div>}
-      {children}
-    </Card>
-  );
-}
-
 /**
- * Facet groups shared by the stacked filter card (chips) and the wide-screen
- * sidebar (rows). Single-select per group: the caller clears on re-click.
+ * The journal browse facets, as full-width rows. Single-select per group: the
+ * caller clears on re-click.
  */
 export function FilterPanel({
   facets,
   selection,
   onToggle,
-  variant,
   error,
   onRetry,
 }: {
@@ -594,7 +522,6 @@ export function FilterPanel({
   facets: FacetsData | undefined;
   selection: FilterSelection;
   onToggle: (key: string, value: string) => void;
-  variant: "chips" | "rows";
   /** The facets request failed; a retry note renders above the groups. */
   error?: boolean;
   onRetry?: () => void;
@@ -797,7 +724,7 @@ export function FilterPanel({
         ]
       : []),
     // Quartile sits last: it is the least decision-relevant facet and the
-    // list reads better with it at the bottom of both panel variants.
+    // list reads better with it at the bottom of the panel.
     {
       key: "quartile",
       label: t("facets.groupQuartile"),
@@ -829,7 +756,7 @@ export function FilterPanel({
           )}
         </div>
       )}
-      <FacetGroupList groups={groups} onToggle={onToggle} variant={variant} loading={loading} />
+      <FacetGroupList groups={groups} onToggle={onToggle} loading={loading} />
     </div>
   );
 }
