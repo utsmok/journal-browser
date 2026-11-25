@@ -79,7 +79,10 @@ services:
     build: ./db
     restart: unless-stopped
     # Headroom for HNSW builds and large sorts; the page cache counts too.
-    mem_limit: 4g
+    # 5 GB since 2026-11-25: at 4 GB a publishers-directory query and the
+    # nightly author resolver overlapped and the kernel killed a backend,
+    # which sent Postgres into crash recovery for two minutes.
+    mem_limit: 5g
     logging: *default-logging
     environment:
       POSTGRES_USER: journal
@@ -99,6 +102,11 @@ services:
       - effective_cache_size=3GB
       - -c
       - work_mem=64MB
+      # Hash nodes stay within work_mem (the default multiplier of 2 doubles
+      # it): parallel hash joins and aggregates in the directory queries
+      # otherwise reach several hundred MB per query.
+      - -c
+      - hash_mem_multiplier=1
       - -c
       - maintenance_work_mem=512MB
       - -c
