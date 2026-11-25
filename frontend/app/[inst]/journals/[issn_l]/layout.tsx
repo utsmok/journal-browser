@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { Seed } from "@/components/seed";
+import { SectionMessages } from "@/i18n/section-messages";
 import type { JournalDetailResponse } from "@/lib/api";
 import { docPage, pageContext } from "@/lib/page-meta";
 import { qk } from "@/lib/query-keys";
@@ -38,8 +39,10 @@ export default async function JournalLayout({
   const { inst, issn_l } = await params;
   const issnL = decodeURIComponent(issn_l);
   return (
-    <Seed queryKey={qk.journal(inst, issnL)} data={await loadJournal(inst, issnL)}>
-      {children}
-    </Seed>
+    <SectionMessages namespaces={["journals", "authors", "orgunits", "publishers"]}>
+      <Seed queryKey={qk.journal(inst, issnL)} data={await loadJournal(inst, issnL)}>
+        {children}
+      </Seed>
+    </SectionMessages>
   );
 }

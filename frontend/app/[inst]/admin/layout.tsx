@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 
 import { AdminGate } from "@/components/admin/admin-gate";
+import { SectionMessages } from "@/i18n/section-messages";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("admin");
@@ -17,8 +18,10 @@ export default async function InstAdminLayout({
 }) {
   const [{ inst }, t] = await Promise.all([params, getTranslations("admin")]);
   return (
-    <AdminGate basePath={`/${inst}/admin`} brand={t("brandInst", { inst })}>
-      {children}
-    </AdminGate>
+    <SectionMessages namespaces={["admin"]}>
+      <AdminGate basePath={`/${inst}/admin`} brand={t("brandInst", { inst })}>
+        {children}
+      </AdminGate>
+    </SectionMessages>
   );
 }

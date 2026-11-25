@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Montserrat } from "next/font/google";
-import { NextIntlClientProvider } from "next-intl";
-import { getMessages, getTranslations } from "next-intl/server";
+import { getTranslations } from "next-intl/server";
 import "./globals.css";
 
 import { SiteFooter } from "@/components/site-footer";
@@ -9,6 +8,7 @@ import { AboutUtilityLink, BrandLink, SiteNav } from "@/components/site-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { YearFilterControl } from "@/components/year-filter";
 import { FeedbackWidget } from "@/components/feedback/feedback-widget";
+import { SectionMessages } from "@/i18n/section-messages";
 import { SITE_URL } from "@/lib/site-url";
 import { Providers } from "./providers";
 
@@ -85,28 +85,6 @@ function SiteHeader() {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const t = await getTranslations("common");
-  const all = await getMessages();
-  // Only the namespaces client components read via useTranslations ship to
-  // the browser; server pages keep reading every namespace through
-  // getTranslations, so the data-pipeline prose (the largest file) never
-  // reaches the client bundle.
-  const clientNamespaces = [
-    "common",
-    "home",
-    "guide",
-    "search",
-    "journals",
-    "authors",
-    "orgunits",
-    "publishers",
-    "collaborations",
-    "funders",
-    "deals",
-    "docs",
-    "about",
-    "admin",
-  ] as const;
-  const messages = Object.fromEntries(clientNamespaces.map((ns) => [ns, all[ns]]));
   return (
     <html lang="en" className={`${inter.variable} ${montserrat.variable}`} suppressHydrationWarning>
       <head>
@@ -120,14 +98,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           {t("skipToContent")}
         </a>
         <Providers siteFallback={SITE_FALLBACK}>
-          <NextIntlClientProvider messages={messages}>
+          {/* The shell (header, footer, shared widgets) reads only "common";
+              each section layout adds its own namespaces around its pages. */}
+          <SectionMessages>
             <SiteHeader />
             <main id="main" className="flex-1">
               {children}
             </main>
             <SiteFooter />
             <FeedbackWidget />
-          </NextIntlClientProvider>
+          </SectionMessages>
         </Providers>
       </body>
     </html>
