@@ -5,7 +5,6 @@
   },
   "landing": {
     "siteName": "Open Journal Browser",
-    "loadingLabel": "Loading institutions",
     "loadError": "The institution list is unavailable. Check that the backend is running.",
     "retry": "Retry",
     "intro": "Choose your institution to browse its journal deals and publication data.",
