@@ -24,7 +24,7 @@ Commits per institution, so an interrupted run resumes as a rerun.
 import logging
 from typing import Any, cast
 
-from sqlalchemy import TEXT, and_, any_, bindparam, delete, func, select, text
+from sqlalchemy import TEXT, and_, any_, bindparam, case, delete, func, or_, select, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -224,8 +224,12 @@ async def _insert_partners(session: AsyncSession, rows: list[dict[str, Any]]) ->
 
 async def _upsert_stubs(session: AsyncSession, stubs: dict[str, dict[str, Any]]) -> None:
     """Stub rows for every partner the payloads named. A column that
-    already holds a value (from ROR or an earlier run) keeps it."""
+    already holds a value (from ROR or an earlier run) keeps it, and only
+    a row that gains a value is stamped. harvest_ror reads updated_at as
+    the age of the ROR record and fetches it again after 30 days; stamping
+    every row on each run kept that refresh from ever selecting one."""
     table = cast("Any", PartnerInstitution.__table__)
+    columns = (*_STUB_COLS, "search_text", "acronyms")
     rows = []
     for ror, partner in sorted(stubs.items()):
         search_text, acronyms = build_search_fields(ror=ror, name=partner.get("name"))
@@ -240,15 +244,15 @@ async def _upsert_stubs(session: AsyncSession, stubs: dict[str, dict[str, Any]])
     for at in range(0, len(rows), INSERT_CHUNK):
         chunk = rows[at : at + INSERT_CHUNK]
         stmt = pg_insert(table).values(chunk)
+        gained = or_(
+            *(and_(table.c[col].is_(None), stmt.excluded[col].is_not(None)) for col in columns)
+        )
         await session.execute(
             stmt.on_conflict_do_update(
                 index_elements=["ror"],
                 set_={
-                    **{
-                        col: func.coalesce(table.c[col], stmt.excluded[col])
-                        for col in (*_STUB_COLS, "search_text", "acronyms")
-                    },
-                    "updated_at": text("now()"),
+                    **{col: func.coalesce(table.c[col], stmt.excluded[col]) for col in columns},
+                    "updated_at": case((gained, text("now()")), else_=table.c.updated_at),
                 },
             )
         )

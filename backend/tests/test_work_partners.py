@@ -4,7 +4,7 @@ the per-institution rebuild (jobs/derive_work_partners.py)."""
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 
 from conftest import requires_db
 from journal_browser.harvest import work_partners
@@ -271,3 +271,43 @@ async def test_derive_rebuilds_rows_and_stubs_idempotently(db, institution_facto
     assert again["openalex_works_with_partner"] == 1
     assert (await _rows(db))[0] == ("w1", "01x000001", "openalex", False, 1, "I1")
     assert len(await _rows(db)) == 3
+
+
+@requires_db
+async def test_stub_rerun_leaves_the_ror_record_age_alone(db, institution_factory):
+    """harvest_ror fetches a stored ROR record again once it is 30 days
+    old. A derive run stamps a partner only when the stub gives it a value
+    it lacked; a rerun that changes nothing leaves the stamp, so the
+    monthly refresh still finds the record."""
+    ut = await institution_factory(
+        code="ut",
+        openalex_id=f"https://openalex.org/{HOME}",
+        ror=f"https://ror.org/{HOME_ROR}",
+    )
+    await _seed(db, ut)
+    fetched_in_october = datetime.now(UTC) - timedelta(days=40)
+    db.add(
+        PartnerInstitution(
+            ror="01x000002",
+            name="ROR name",
+            payload={"id": "https://ror.org/01x000002"},
+            updated_at=fetched_in_october,
+        )
+    )
+    await db.flush()
+    stale = select(PartnerInstitution.ror).where(
+        PartnerInstitution.updated_at < func.now() - timedelta(days=30)
+    )
+
+    await derive_work_partners(db)  # the stub adds the OpenAlex id: stamped
+    assert "01x000002" not in (await db.execute(stale)).scalars()
+
+    # Forty days later nothing is left to gain.
+    await db.execute(
+        update(PartnerInstitution)
+        .where(PartnerInstitution.ror == "01x000002")
+        .values(updated_at=fetched_in_october)
+    )
+    await db.commit()
+    await derive_work_partners(db)
+    assert (await db.execute(stale)).scalars().all() == ["01x000002"]

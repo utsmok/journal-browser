@@ -499,6 +499,9 @@ The stages, in order:
    `backend/state/ror/` and run `jobs/harvest_ror.py --dump
    /app/state/ror/<file>.zip`. The API pass then asks only about the
    partners the dump lacks; later nightly runs fetch the new and stale ones.
+   `derive_work_partners` advances a partner's `updated_at` only when the
+   stub gives the row a value it lacked, so the 30-day clock counts from
+   the last real change and not from last night's derive.
 6. `harvest_publishers`. It resolves journal host organizations in
    credit-priced 50-id pipe-filter batches ($0.0001 per page), gated by
    the budget reserve. Results cache in
