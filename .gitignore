@@ -57,3 +57,4 @@ compose.override.yml
 
 # Local audit reports (not tracked)
 /.audit/
+frontend/AGENTS.md

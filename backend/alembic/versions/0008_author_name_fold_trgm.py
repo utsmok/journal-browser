@@ -3,16 +3,16 @@ q search stays index-accelerated now that the predicate is substring OR
 trigram word similarity (services/authors.py _q_cond: the folded
 expression serves both the LIKE arm and the %> similarity arm).
 
-Revision ID: 0005_author_name_fold_trgm
-Revises: 0004_journal_listed_in
+Revision ID: 0008_author_name_fold_trgm
+Revises: 0007_pg_stat_statements
 """
 
 from collections.abc import Sequence
 
 from alembic import op
 
-revision: str = "0005_author_name_fold_trgm"
-down_revision: str | None = "0004_journal_listed_in"
+revision: str = "0008_author_name_fold_trgm"
+down_revision: str | None = "0007_pg_stat_statements"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
