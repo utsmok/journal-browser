@@ -28,6 +28,8 @@ SOURCE = "scimagojr"
 ENTITY_TYPE = "export"
 
 # The export is semicolon-separated, latin-1 encoded, with a 2-line preamble.
+QUARTILES = frozenset({"Q1", "Q2", "Q3", "Q4"})
+
 COLUMNS = {
     "Rank": "rank",
     "Sourceid": "sourceid",
@@ -91,7 +93,10 @@ async def ingest_year(session: AsyncSession, year: int, landing_dir: Path) -> di
         try:
             sjr = float(row.get("SJR", "").replace(",", ".")) if row.get("SJR") else None
             h_index = int(row["H index"]) if row.get("H index", "").isdigit() else None
+            # Scimago writes "-" for a listed title without a quartile.
             quartile = row.get("SJR Best Quartile") or None
+            if quartile not in QUARTILES:
+                quartile = None
             resolved = False
             for issn in issn_candidates(row.get("Issn", "")):
                 issn_l = await lookup_issn_l(session, issn)

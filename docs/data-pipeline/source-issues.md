@@ -100,7 +100,7 @@ Status values: `open` (not reported upstream), `reported` (link to the report), 
 ### Hyphen instead of a quartile
 - Status: open.
 - What happens: 1,597 journals carry the quartile "-" (1,297 journals, 214 conference proceedings, 85 book series), for example 2731-6203, 3005-0758 and 1994-1625.
-- Handling: the quartile badge prints a literal "-". It should read "Not in Scimago"; the compare-journals plan does so.
+- Handling: the ingest and the quartile denormalisation treat "-" as no quartile, so the journal shows its newest real quartile or none.
 
 ## OpenAlex: titles
 

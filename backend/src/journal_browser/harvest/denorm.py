@@ -113,7 +113,8 @@ QUARTILES_SQL = text(
     FROM (
         SELECT DISTINCT ON (issn_l) issn_l, best_quartile AS best
         FROM scimagojr_metrics
-        WHERE best_quartile IS NOT NULL
+        -- Scimago marks a listed title without a quartile with "-".
+        WHERE best_quartile IN ('Q1', 'Q2', 'Q3', 'Q4')
         ORDER BY issn_l, year DESC
     ) q
     RIGHT JOIN journals jj ON jj.issn_l = q.issn_l
