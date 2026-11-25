@@ -3,8 +3,9 @@
 GET /admin/ops/status answers the questions that used to need shell
 access: did last night's wave finish (from harvest_runs), when do the
 scheduled jobs fire next (parsed from the JB_*_CRON environment), how old
-is the newest backup archive (stat on JB_BACKUP_DIR), and how fresh is
-the served data per source (the same max() queries /meta/freshness uses).
+is the newest backup archive (stat on JB_BACKUP_DIR), how fresh the data
+is per source and institution (services/freshness.py, which /meta/freshness
+uses as well), and how old the newest row of each served table is.
 Read-only by design: there is deliberately no "run now" trigger — the
 harvests stay shell-only to protect the OpenAlex credit budget.
 """
@@ -22,12 +23,13 @@ from ...models import (
     ApcEvidence,
     Deal,
     HarvestRun,
-    HarvestState,
     InstitutionWorksStats,
     Journal,
     ScimagojrMetric,
 )
+from ...queries import get_active_institutions
 from ...schemas import AdminOpsStatusOut
+from ...services.freshness import source_freshness
 from .auth import AdminDep, SessionDep
 from .cron_next import next_fire
 
@@ -153,44 +155,13 @@ def _backup_status() -> dict[str, Any]:
     return backup
 
 
-async def _freshness(session: AsyncSession) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Per-source harvest freshness plus concrete table timestamps.
-
-    One entry per (source, entity_type): the HarvestState with the newest
-    finished_at across institutions — the same population /meta/freshness
-    serves, collapsed to instance-global rows for the ops card.
-    """
-    rows = (
-        await session.execute(
-            select(
-                HarvestState.source,
-                HarvestState.entity_type,
-                HarvestState.status,
-                HarvestRun.finished_at,
-            )
-            .outerjoin(HarvestRun, HarvestRun.id == HarvestState.last_run_id)
-            .order_by(HarvestState.source, HarvestState.entity_type)
-        )
-    ).all()
-    epoch = datetime(1970, 1, 1, tzinfo=UTC)
-    best: dict[tuple[str, str], dict[str, Any]] = {}
-    for source, entity_type, status, finished_at in rows:
-        key = (source, entity_type)
-        rank = (finished_at is not None, finished_at or epoch)
-        if key not in best or rank > best[key]["_rank"]:
-            best[key] = {
-                "_rank": rank,
-                "source": source,
-                "entity_type": entity_type,
-                "status": status,
-                "finished_at": finished_at,
-            }
-    freshness = [{k: v for k, v in entry.items() if k != "_rank"} for entry in best.values()]
+async def _tables(session: AsyncSession) -> dict[str, Any]:
+    """Newest row of each served table (a year for the yearly ones)."""
 
     async def _max_ts(stmt):
         return await session.scalar(stmt)
 
-    tables = {
+    return {
         "journals": await _max_ts(select(func.max(Journal.harvested_at))),
         "doaj": await _max_ts(select(func.max(Journal.doaj_harvested_at))),
         "deals": await _max_ts(select(func.max(Deal.updated_at))),
@@ -200,18 +171,17 @@ async def _freshness(session: AsyncSession) -> tuple[list[dict[str, Any]], dict[
         "scimagojr_metrics": await _max_ts(select(func.max(ScimagojrMetric.year))),
         "apc_evidence": await _max_ts(select(func.max(ApcEvidence.period))),
     }
-    return freshness, tables
 
 
 @router.get("/ops/status", response_model=AdminOpsStatusOut)
 async def ops_status(session: SessionDep, _: AdminDep) -> dict[str, Any]:
     now = datetime.now(UTC)
-    freshness, tables = await _freshness(session)
+    sources = await source_freshness(session, await get_active_institutions(session))
     return {
         "generated_at": now,
         "last_wave": await _last_wave_cluster(session, now),
         "schedules": _schedules(now),
         "backup": _backup_status(),
-        "freshness": freshness,
-        "tables": tables,
+        "sources": sources,
+        "tables": await _tables(session),
     }

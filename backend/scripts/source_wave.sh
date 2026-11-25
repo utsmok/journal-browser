@@ -73,6 +73,9 @@ stage_parts() {
 # others still run. Every stage comes after the stages it reads.
 # Global deal + reference sources first, in bootstrap GLOBAL_STEPS order
 # (reconcile needs both deal sources; ISSN-L backfill needs reconcile).
+# backend/src/journal_browser/services/freshness.py names these stages as
+# weekly sources for the data-freshness table; move a stage's entry there
+# when the stage moves to or from this wave.
 STAGES=(
   "deals-openaccess-nl||scrape_openaccess_nl.py"
   "deals-jct||ingest_jct.py"

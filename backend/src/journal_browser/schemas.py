@@ -12,6 +12,8 @@ from .vocab import (
     FeedbackCategory,
     FeedbackPriority,
     FeedbackStatus,
+    FreshnessSchedule,
+    FreshnessStatus,
     HarvestStatus,
     IdentityStatus,
     OaType,
@@ -796,6 +798,28 @@ class DegradedSource(BaseModel):
     since: datetime
 
 
+class SourceFreshness(BaseModel):
+    """How fresh one data source is, for one institution or for all of them.
+    services/freshness.py defines the sources, their schedules and the
+    statuses."""
+
+    source: str
+    # The institution whose own harvest this row describes; None for a
+    # source shared by all institutions.
+    institution_code: str | None = None
+    schedule: FreshnessSchedule
+    # Hours between the successful runs the schedule promises; None for a
+    # job that runs by hand.
+    expected_interval_hours: int | None = None
+    status: FreshnessStatus
+    last_success_at: datetime | None = None
+    # The newest run, so that a failure can be told from a missing refresh.
+    last_run_at: datetime | None = None
+    last_run_status: HarvestStatus | None = None
+    # Entity types whose newest run failed.
+    failed_parts: list[str] = []
+
+
 class FreshnessResponse(BaseModel):
     """Config comes from the institution row; unset optional fields are
     None rather than global defaults."""
@@ -811,8 +835,10 @@ class FreshnessResponse(BaseModel):
     data_window_start: int = 2020
     data_window_end: int | None = None
     harvests: list[FreshnessEntry]
-    # max timestamps (or year/period maxima for yearly tables)
-    tables: dict[str, Any] = {}
+    # This institution's own sources, then those shared by all institutions.
+    sources: list[SourceFreshness]
+    # The oldest last success among the core sources; the footer's date.
+    data_updated_at: datetime | None = None
     degraded: list[DegradedSource] = []
 
 
@@ -1430,15 +1456,6 @@ class OpsBackupOut(BaseModel):
     modified_at: datetime | None = None
 
 
-class OpsFreshnessEntryOut(BaseModel):
-    """Latest harvest state per (source, entity_type)."""
-
-    source: str
-    entity_type: str
-    status: str
-    finished_at: datetime | None
-
-
 class AdminOpsStatusOut(BaseModel):
     """Ops dashboard payload (GET /admin/ops/status)."""
 
@@ -1446,7 +1463,7 @@ class AdminOpsStatusOut(BaseModel):
     last_wave: OpsLastWaveOut | None
     schedules: list[OpsScheduleOut]
     backup: OpsBackupOut
-    freshness: list[OpsFreshnessEntryOut]
+    sources: list[SourceFreshness]
     tables: dict[str, datetime | None]
 
 

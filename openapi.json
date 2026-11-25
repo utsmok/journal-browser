@@ -9004,12 +9004,12 @@
           "backup": {
             "$ref": "#/components/schemas/OpsBackupOut"
           },
-          "freshness": {
+          "sources": {
             "items": {
-              "$ref": "#/components/schemas/OpsFreshnessEntryOut"
+              "$ref": "#/components/schemas/SourceFreshness"
             },
             "type": "array",
-            "title": "Freshness"
+            "title": "Sources"
           },
           "tables": {
             "additionalProperties": {
@@ -9033,7 +9033,7 @@
           "last_wave",
           "schedules",
           "backup",
-          "freshness",
+          "sources",
           "tables"
         ],
         "title": "AdminOpsStatusOut",
@@ -13857,11 +13857,24 @@
             "type": "array",
             "title": "Harvests"
           },
-          "tables": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Tables",
-            "default": {}
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceFreshness"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "data_updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Updated At"
           },
           "degraded": {
             "items": {
@@ -13875,10 +13888,31 @@
         "type": "object",
         "required": [
           "institution",
-          "harvests"
+          "harvests",
+          "sources"
         ],
         "title": "FreshnessResponse",
         "description": "Config comes from the institution row; unset optional fields are\nNone rather than global defaults."
+      },
+      "FreshnessSchedule": {
+        "type": "string",
+        "enum": [
+          "nightly",
+          "weekly",
+          "manual"
+        ],
+        "title": "FreshnessSchedule",
+        "description": "Which wave runs a data source (services/freshness.py): the nightly\nrefresh wave, the weekly source wave, or none (the job runs by hand)."
+      },
+      "FreshnessStatus": {
+        "type": "string",
+        "enum": [
+          "ok",
+          "overdue",
+          "failed"
+        ],
+        "title": "FreshnessStatus",
+        "description": "How fresh a data source is, judged from harvest_runs. ok: a run\nsucceeded within the expected interval. overdue: none did. failed: the\nnewest run failed."
       },
       "FunderDetailResponse": {
         "properties": {
@@ -16635,43 +16669,6 @@
         "title": "OpsBackupOut",
         "description": "The newest backup archive, or why none is visible to the backend."
       },
-      "OpsFreshnessEntryOut": {
-        "properties": {
-          "source": {
-            "type": "string",
-            "title": "Source"
-          },
-          "entity_type": {
-            "type": "string",
-            "title": "Entity Type"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
-          "finished_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Finished At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "source",
-          "entity_type",
-          "status",
-          "finished_at"
-        ],
-        "title": "OpsFreshnessEntryOut",
-        "description": "Latest harvest state per (source, entity_type)."
-      },
       "OpsLastWaveOut": {
         "properties": {
           "window_start": {
@@ -18319,6 +18316,92 @@
         ],
         "title": "SimilarJournalsBundle",
         "description": "Similar-journal lists: UT-publishing venues and deal-covered venues as\nteaser cuts, plus the general list."
+      },
+      "SourceFreshness": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "institution_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institution Code"
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/FreshnessSchedule"
+          },
+          "expected_interval_hours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Interval Hours"
+          },
+          "status": {
+            "$ref": "#/components/schemas/FreshnessStatus"
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
+          },
+          "last_run_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run At"
+          },
+          "last_run_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HarvestStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failed_parts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Failed Parts",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "schedule",
+          "status"
+        ],
+        "title": "SourceFreshness",
+        "description": "How fresh one data source is, for one institution or for all of them.\nservices/freshness.py defines the sources, their schedules and the\nstatuses."
       },
       "StatsYear": {
         "properties": {

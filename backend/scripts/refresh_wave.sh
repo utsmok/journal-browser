@@ -29,6 +29,9 @@ cd "$(dirname "$0")/.."
 # takes a job name. requires lists the stages whose output this one reads:
 # a failed stage skips its dependents and nothing else. Every stage comes
 # after the stages it reads.
+# backend/src/journal_browser/services/freshness.py names these stages as
+# nightly sources for the data-freshness table; move a stage's entry there
+# when the stage moves to or from this wave.
 STAGES=(
   # Credit-priced sweep, while the daily budget is fresh (see header).
   harvest_stats
