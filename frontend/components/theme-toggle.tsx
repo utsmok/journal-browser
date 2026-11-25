@@ -28,7 +28,9 @@ const ICONS = { light: Sun, dark: Moon, system: Monitor } as const;
 /**
  * Cycles light -> dark -> system, persists to localStorage["jb-theme"], and
  * applies the class immediately. The pre-paint inline script in layout.tsx
- * owns the initial state; this only changes it.
+ * owns the initial state; this only changes it. Below the `lg` breakpoint it
+ * is a labelled row of the menu drawer; from `lg` it is an icon button in
+ * the header bar.
  */
 export function ThemeToggle() {
   const t = useTranslations("common");
@@ -62,9 +64,10 @@ export function ThemeToggle() {
       onClick={cycle}
       aria-label={t(LABEL_KEYS[mode])}
       title={t("theme.label", { mode })}
-      className="inline-flex size-8 items-center justify-center rounded-[var(--radius)] text-white/90 hover:bg-white/10 hover:text-white"
+      className="inline-flex min-h-11 w-full items-center justify-start gap-2 rounded-[var(--radius)] px-3 text-base font-medium text-white/90 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 lg:size-8 lg:min-h-0 lg:justify-center lg:px-0"
     >
       <Icon aria-hidden className="size-4" />
+      <span className="lg:hidden">{t("theme.label", { mode })}</span>
     </button>
   );
 }

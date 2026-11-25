@@ -7,9 +7,9 @@ import * as React from "react";
 
 import { ActiveFiltersBar, type ActiveFilterChip } from "@/components/active-filters-bar";
 import { DirectoryPager } from "@/components/directory-pager";
+import { FilterLayout } from "@/components/filter-layout";
 import {
   FacetGroupList,
-  FilterSidebarCard,
   hasVisibleGroups,
   type FacetGroupDef,
   type FacetValue,
@@ -43,7 +43,7 @@ const SEARCH_INPUT_ID = "funder-search";
 const PAGE_SIZES = [25, 50, 100];
 
 const SELECT_CLASS =
-  "h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2";
+  "h-9 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 text-sm min-[768px]:w-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2";
 
 const REQ_ORDER = ["requires", "encourages", "no_policy_for", "does_not_mention", "none"] as const;
 
@@ -449,194 +449,178 @@ function FundersPageInner() {
         </form>
       </header>
 
-      {/* Stacked filters (<960px) */}
-      {data != null && hasVisibleGroups(groups) && (
-        <section className="mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
-          <FacetGroupList groups={groups} onToggle={toggleFacet} variant="chips" />
-        </section>
-      )}
+      <FilterLayout
+        filters={<FacetGroupList groups={groups} onToggle={toggleFacet} />}
+        activeCount={chips.length}
+        onReset={clearAll}
+        disabled={data == null || !hasVisibleGroups(groups)}
+      >
+        <ActiveFiltersBar
+          chips={chips}
+          onClearAll={clearAll}
+          ariaLabel={tc("activeFilters.label")}
+          clearLabel={tc("activeFilters.clearAll")}
+          removeAriaPrefix={tc("activeFilters.remove")}
+        />
 
-      <div className="flex flex-col gap-6 min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
-        {/* Sticky sidebar (>=960px) */}
-        {data != null && hasVisibleGroups(groups) ? (
-          <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto min-[960px]:block">
-            <FilterSidebarCard activeCount={chips.length} onReset={clearAll}>
-              <FacetGroupList groups={groups} onToggle={toggleFacet} variant="rows" />
-            </FilterSidebarCard>
-          </aside>
-        ) : (
-          <div className="hidden min-[960px]:block" />
-        )}
-
-        <div className="min-w-0">
-          <ActiveFiltersBar
-            chips={chips}
-            onClearAll={clearAll}
-            ariaLabel={tc("activeFilters.label")}
-            clearLabel={tc("activeFilters.clearAll")}
-            removeAriaPrefix={tc("activeFilters.remove")}
-          />
-
-          <Card>
-            <CardContent className="pt-5">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
-                <p className="text-sm text-[var(--muted-foreground)]">
-                  <span aria-live="polite">
-                    {data ? (total > 0 ? t("search.range", { from, to, total }) : "0") : ""}
-                  </span>
-                </p>
-                <div className="flex items-center gap-2 text-sm">
-                  <label
-                    htmlFor="funder-sort"
-                    className="whitespace-nowrap text-xs text-[var(--muted-foreground)]"
-                  >
-                    {t("search.sortBy")}
-                  </label>
-                  <select
-                    id="funder-sort"
-                    title={t("search.sortHint")}
-                    value={sort ?? "works"}
-                    onChange={(event) => {
-                      const nextSort = event.target.value as FunderSearchSort;
-                      setParams({
-                        sort: nextSort === "works" ? undefined : nextSort,
-                        dir: undefined,
-                      });
-                    }}
-                    className={SELECT_CLASS}
-                  >
-                    <option value="works">{t("search.sortWorks", { inst: site.short })}</option>
-                    <option value="name">{t("search.sortName")}</option>
-                  </select>
-                </div>
+        <Card>
+          <CardContent className="pt-5">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
+              <p className="text-sm text-[var(--muted-foreground)]">
+                <span aria-live="polite">
+                  {data ? (total > 0 ? t("search.range", { from, to, total }) : "0") : ""}
+                </span>
+              </p>
+              <div className="flex min-w-0 flex-col items-start gap-1 text-sm min-[768px]:flex-row min-[768px]:items-center min-[768px]:gap-2">
+                <label
+                  htmlFor="funder-sort"
+                  className="whitespace-nowrap text-xs text-[var(--muted-foreground)]"
+                >
+                  {t("search.sortBy")}
+                </label>
+                <select
+                  id="funder-sort"
+                  title={t("search.sortHint")}
+                  value={sort ?? "works"}
+                  onChange={(event) => {
+                    const nextSort = event.target.value as FunderSearchSort;
+                    setParams({
+                      sort: nextSort === "works" ? undefined : nextSort,
+                      dir: undefined,
+                    });
+                  }}
+                  className={SELECT_CLASS}
+                >
+                  <option value="works">{t("search.sortWorks", { inst: site.short })}</option>
+                  <option value="name">{t("search.sortName")}</option>
+                </select>
               </div>
+            </div>
 
-              {isError ? (
-                <div className="py-10 text-center">
-                  <p className="text-[var(--destructive)]">{errorMessage(tc, error)}</p>
-                  <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
-                    {t("search.retry")}
-                  </Button>
-                </div>
-              ) : isPending ? (
-                <ListSkeletonRows rows={8} />
-              ) : rows.length === 0 ? (
-                <div className="py-10 text-center text-[var(--muted-foreground)]">
-                  <p>{anyFilter ? t("search.emptyFilters") : t("search.empty", { q })}</p>
-                  {(anyFilter || q) && (
-                    <div className="mt-3">
-                      <Button variant="outline" size="sm" onClick={clearAll}>
-                        {tc("activeFilters.clearAll")}
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <>
-                  {/* Stacked mobile cards */}
-                  <ul className={isFetching ? "opacity-60 md:hidden" : "md:hidden"}>
-                    {rows.map((f) => (
-                      <li
-                        key={f.id}
-                        className="border-b border-[var(--border)] py-3 first:pt-0 last:border-0 last:pb-0"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <Link
-                            href={`/${inst}/funders/${f.id}`}
-                            className="font-medium text-[var(--foreground)] underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-                          >
-                            {f.name ?? t("unnamedFunder", { id: f.id })}
-                          </Link>
-                          <span className="shrink-0 text-xs tabular-nums text-[var(--muted-foreground)]">
-                            {f.n_ut_works.toLocaleString("en")}{" "}
-                            {t("instWorks", { inst: site.short })}
-                          </span>
-                        </div>
-                        <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-                          {countryName(f.country)}
-                        </p>
-                        <div className="mt-2">{policySummary(f)}</div>
-                      </li>
-                    ))}
-                  </ul>
-
-                  {/* Desktop table */}
-                  <div className={isFetching ? "hidden opacity-60 md:block" : "hidden md:block"}>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead aria-sort={ariaSortFor("name")}>
-                            <SortHead
-                              columnId="name"
-                              label={t("search.funder")}
-                              state={sortHeadState}
-                            />
-                          </TableHead>
-                          <TableHead>{t("search.country")}</TableHead>
-                          <TableHead>{t("search.facets.policies")}</TableHead>
-                          <TableHead className="text-right" aria-sort={ariaSortFor("works")}>
-                            <SortHead
-                              columnId="works"
-                              label={t("instWorks", { inst: site.short })}
-                              state={sortHeadState}
-                            />
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {rows.map((f) => (
-                          <TableRow key={f.id}>
-                            <TableCell className="font-medium">
-                              <Link
-                                href={`/${inst}/funders/${f.id}`}
-                                className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-                              >
-                                {f.name ?? t("unnamedFunder", { id: f.id })}
-                              </Link>
-                            </TableCell>
-                            <TableCell className="text-[var(--muted-foreground)]">
-                              {countryName(f.country)}
-                            </TableCell>
-                            <TableCell>{policySummary(f)}</TableCell>
-                            <TableCell className="text-right tabular-nums">
-                              {f.n_ut_works.toLocaleString("en")}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+            {isError ? (
+              <div className="py-10 text-center">
+                <p className="text-[var(--destructive)]">{errorMessage(tc, error)}</p>
+                <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
+                  {t("search.retry")}
+                </Button>
+              </div>
+            ) : isPending ? (
+              <ListSkeletonRows rows={8} />
+            ) : rows.length === 0 ? (
+              <div className="py-10 text-center text-[var(--muted-foreground)]">
+                <p>{anyFilter ? t("search.emptyFilters") : t("search.empty", { q })}</p>
+                {(anyFilter || q) && (
+                  <div className="mt-3">
+                    <Button variant="outline" size="sm" onClick={clearAll}>
+                      {tc("activeFilters.clearAll")}
+                    </Button>
                   </div>
-
-                  <DirectoryPager
-                    offset={offset}
-                    shown={rows.length}
-                    total={total}
-                    limit={pageSize}
-                    onOffset={(nextOffset) =>
-                      setParams({ offset: nextOffset > 0 ? String(nextOffset) : undefined })
-                    }
-                    onLimit={(nextLimit) =>
-                      setParams({ limit: nextLimit === 50 ? undefined : String(nextLimit) })
-                    }
-                    perPageLabel={tc("pagination.perPage")}
-                    prevLabel={t("search.prev")}
-                    nextLabel={t("search.next")}
-                    isFetching={isFetching}
-                  />
-                </>
-              )}
-              <div className="mt-3">
-                <SourceNote
-                  source={t("sourceJisc")}
-                  url={OPF_URL}
-                  codes={["jisc-policy-currency"]}
-                  howBuilt={tc("sourceNote.explain.greenOa")}
-                />
+                )}
               </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+            ) : (
+              <>
+                {/* Stacked mobile cards */}
+                <ul className={isFetching ? "opacity-60 md:hidden" : "md:hidden"}>
+                  {rows.map((f) => (
+                    <li
+                      key={f.id}
+                      className="border-b border-[var(--border)] py-3 first:pt-0 last:border-0 last:pb-0"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <Link
+                          href={`/${inst}/funders/${f.id}`}
+                          className="inline-flex min-h-11 items-center font-medium text-[var(--foreground)] underline-offset-2 hover:text-[var(--primary-text)] hover:underline min-[1024px]:min-h-0"
+                        >
+                          {f.name ?? t("unnamedFunder", { id: f.id })}
+                        </Link>
+                        <span className="shrink-0 text-xs tabular-nums text-[var(--muted-foreground)]">
+                          {f.n_ut_works.toLocaleString("en")} {t("instWorks", { inst: site.short })}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                        {countryName(f.country)}
+                      </p>
+                      <div className="mt-2">{policySummary(f)}</div>
+                    </li>
+                  ))}
+                </ul>
+
+                {/* Desktop table */}
+                <div className={isFetching ? "hidden opacity-60 md:block" : "hidden md:block"}>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead aria-sort={ariaSortFor("name")}>
+                          <SortHead
+                            columnId="name"
+                            label={t("search.funder")}
+                            state={sortHeadState}
+                          />
+                        </TableHead>
+                        <TableHead>{t("search.country")}</TableHead>
+                        <TableHead>{t("search.facets.policies")}</TableHead>
+                        <TableHead className="text-right" aria-sort={ariaSortFor("works")}>
+                          <SortHead
+                            columnId="works"
+                            label={t("instWorks", { inst: site.short })}
+                            state={sortHeadState}
+                          />
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {rows.map((f) => (
+                        <TableRow key={f.id}>
+                          <TableCell className="font-medium">
+                            <Link
+                              href={`/${inst}/funders/${f.id}`}
+                              className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                            >
+                              {f.name ?? t("unnamedFunder", { id: f.id })}
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-[var(--muted-foreground)]">
+                            {countryName(f.country)}
+                          </TableCell>
+                          <TableCell>{policySummary(f)}</TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {f.n_ut_works.toLocaleString("en")}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <DirectoryPager
+                  offset={offset}
+                  shown={rows.length}
+                  total={total}
+                  limit={pageSize}
+                  onOffset={(nextOffset) =>
+                    setParams({ offset: nextOffset > 0 ? String(nextOffset) : undefined })
+                  }
+                  onLimit={(nextLimit) =>
+                    setParams({ limit: nextLimit === 50 ? undefined : String(nextLimit) })
+                  }
+                  perPageLabel={tc("pagination.perPage")}
+                  prevLabel={t("search.prev")}
+                  nextLabel={t("search.next")}
+                  isFetching={isFetching}
+                />
+              </>
+            )}
+            <div className="mt-3">
+              <SourceNote
+                source={t("sourceJisc")}
+                url={OPF_URL}
+                codes={["jisc-policy-currency"]}
+                howBuilt={tc("sourceNote.explain.greenOa")}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </FilterLayout>
     </div>
   );
 }

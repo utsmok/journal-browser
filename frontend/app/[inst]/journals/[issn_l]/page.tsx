@@ -25,6 +25,7 @@ import { GreenOaPanel } from "@/components/journal/green-oa-panel";
 import {
   CopyButton,
   External,
+  IconBoxButton,
   MoreToggle,
   NamedTopic,
   TOPICS_LIMIT,
@@ -419,14 +420,13 @@ function JournalPageInner() {
                 {citation}
               </p>
               <CopyButton text={citation} label={t("citation.copyLabel")} />
-              <button
+              <IconBoxButton
                 type="button"
                 onClick={() => setCiteOpen(false)}
                 aria-label={tc("feedback.close")}
-                className="inline-flex size-6 shrink-0 items-center justify-center rounded border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
               >
                 <X aria-hidden className="size-3.5" />
-              </button>
+              </IconBoxButton>
             </div>
           )}
         </header>
@@ -595,9 +595,15 @@ function JournalPageInner() {
               >
                 {t.rich("deal.noDeal", {
                   name: site.name,
-                  oaNl: (chunks) => <External href="https://www.openaccess.nl">{chunks}</External>,
+                  oaNl: (chunks) => (
+                    <External href="https://www.openaccess.nl" className="min-h-0">
+                      {chunks}
+                    </External>
+                  ),
                   jct: (chunks) => (
-                    <External href="https://journalcheckertool.org">{chunks}</External>
+                    <External href="https://journalcheckertool.org" className="min-h-0">
+                      {chunks}
+                    </External>
                   ),
                 })}
                 <div className="mt-2">
@@ -791,7 +797,7 @@ function JournalPageInner() {
                             >
                               <Link
                                 href={`/${inst}/journals/${s.issn_l}`}
-                                className="font-medium underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                                className="inline-flex min-h-11 items-center font-medium underline-offset-2 hover:text-[var(--primary-text)] hover:underline min-[1024px]:min-h-0"
                               >
                                 {s.title ?? s.issn_l}
                               </Link>

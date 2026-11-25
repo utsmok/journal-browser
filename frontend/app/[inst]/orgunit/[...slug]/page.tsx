@@ -238,7 +238,7 @@ function OrgUnitDetail({
             {unit.faculty && (
               <Link
                 href={`/${inst}/orgunit/faculty/${encodeNamePath(unit.faculty)}`}
-                className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--muted)] px-2.5 py-0.5 text-xs text-[var(--foreground)] underline-offset-2 hover:border-[var(--primary)] hover:text-[var(--primary-text)] hover:underline"
+                className="inline-flex min-h-11 items-center rounded-md border border-[var(--border)] bg-[var(--muted)] px-2.5 py-0.5 text-xs text-[var(--foreground)] underline-offset-2 hover:border-[var(--primary)] hover:text-[var(--primary-text)] hover:underline min-[1024px]:min-h-0"
               >
                 {unit.faculty}
               </Link>
@@ -290,7 +290,7 @@ function OrgUnitDetail({
                         <TableCell className="font-medium">
                           <Link
                             href={`/${inst}/orgunit/group/${encodeNamePath(g.name)}`}
-                            className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                            className="inline-flex min-h-11 items-center underline-offset-2 hover:text-[var(--primary-text)] hover:underline min-[1024px]:min-h-0"
                           >
                             {g.name}
                           </Link>
@@ -352,10 +352,10 @@ function OrgUnitDetail({
                       <TableCell className="font-medium">
                         <Link
                           href={`/${inst}/deals`}
-                          className="block max-w-72 truncate underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                          className="flex min-h-11 max-w-72 items-center underline-offset-2 hover:text-[var(--primary-text)] hover:underline min-[1024px]:min-h-0"
                           title={d.label}
                         >
-                          {d.label}
+                          <span className="truncate">{d.label}</span>
                         </Link>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
@@ -406,7 +406,7 @@ function OrgUnitDetail({
                       <TableCell className="font-medium">
                         <Link
                           href={`/${inst}/journals/${j.issn_l}`}
-                          className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                          className="inline-flex min-h-11 items-center underline-offset-2 hover:text-[var(--primary-text)] hover:underline min-[1024px]:min-h-0"
                         >
                           {j.title || j.issn_l}
                         </Link>
@@ -455,7 +455,7 @@ function OrgUnitDetail({
                     <Button
                       variant={authorSort === "share" ? "secondary" : "ghost"}
                       size="sm"
-                      className="h-7 rounded-none px-2.5 text-xs"
+                      className="h-11 rounded-none px-2.5 text-xs min-[1024px]:h-7"
                       aria-pressed={authorSort === "share"}
                       title={t("detail.authors.shareSortTitle")}
                       onClick={() => onAuthorSortChange("share")}
@@ -465,7 +465,7 @@ function OrgUnitDetail({
                     <Button
                       variant={authorSort === "works" ? "secondary" : "ghost"}
                       size="sm"
-                      className="h-7 rounded-none px-2.5 text-xs"
+                      className="h-11 rounded-none px-2.5 text-xs min-[1024px]:h-7"
                       aria-pressed={authorSort === "works"}
                       onClick={() => onAuthorSortChange("works")}
                     >
@@ -500,7 +500,7 @@ function OrgUnitDetail({
                       <TableCell className="font-medium">
                         <Link
                           href={`/${inst}/author/${a.pure_uuid}`}
-                          className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                          className="inline-flex min-h-11 items-center underline-offset-2 hover:text-[var(--primary-text)] hover:underline min-[1024px]:min-h-0"
                         >
                           {a.name}
                         </Link>
@@ -560,7 +560,7 @@ function OrgUnitDetail({
                   </p>
                   <Link
                     href={`/${inst}/collaborations?${partnersQuery}`}
-                    className="inline-flex items-center gap-1 text-xs font-medium text-[var(--primary-text)] underline-offset-2 hover:underline"
+                    className="inline-flex min-h-11 items-center gap-1 text-xs font-medium text-[var(--primary-text)] underline-offset-2 hover:underline min-[1024px]:min-h-0"
                   >
                     {t("detail.partners.exploreAll")}
                     <ArrowRight aria-hidden className="size-3.5" />
@@ -591,7 +591,7 @@ function OrgUnitDetail({
                           />
                           <Link
                             href={`/${inst}/collaborations/${encodeURIComponent(p.ror)}?${partnersQuery}`}
-                            className="underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+                            className="inline-flex min-h-11 items-center underline-offset-2 hover:text-[var(--primary-text)] hover:underline min-[1024px]:min-h-0"
                           >
                             {p.name}
                           </Link>

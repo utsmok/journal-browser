@@ -16,7 +16,9 @@ import {
   useCollabParams,
   writeCollabParams,
 } from "@/components/collaborations/use-collab-params";
+import { FilterLayout } from "@/components/filter-layout";
 import { GapCsvButton } from "@/components/gap-csv-button";
+import { MobileDisclosure } from "@/components/mobile-disclosure";
 import { ListSkeletonRows } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,7 +26,6 @@ import { Input } from "@/components/ui/input";
 import { useCollaborationMap, useCollaborations } from "@/hooks/use-api";
 import { useDebounced } from "@/hooks/use-debounced";
 import { useInstitution } from "@/hooks/use-institution";
-import { useMediaQuery } from "@/hooks/use-media-query";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { useYearRange } from "@/hooks/use-year-filter";
 import {
@@ -32,6 +33,7 @@ import {
   collaborationCsvHref,
   collaborationTrendCsvHref,
   errorMessage,
+  type CollabMultiKey,
   type CollaborationLead,
   type CollaborationSize,
 } from "@/lib/api";
@@ -46,6 +48,18 @@ const PartnerMap = dynamic(
 
 const selectClass =
   "h-8 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 text-xs text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]";
+
+/** Multi-valued params that the facet sheet and sidebar set. */
+const FACET_KEYS: CollabMultiKey[] = [
+  "type",
+  "country",
+  "faculty",
+  "oa_status",
+  "topic",
+  "funder",
+  "project",
+  "source",
+];
 
 function PartnersPageInner() {
   const t = useTranslations("collaborations");
@@ -124,12 +138,8 @@ function PartnersPageInner() {
       aria-label={t("search.aria")}
     />
   );
-
-  // Mount only the filter layout for the current viewport: the chips card
-  // below 960px, the sidebar above. While the media query is still unknown
-  // (server render and first client frame) both mount and CSS hides one,
-  // which keeps the markup identical to the server's and avoids a flash.
-  const wide = useMediaQuery("(min-width: 960px)");
+  // Selections made in the facet sheet; the mode bar has its own controls.
+  const facetCount = FACET_KEYS.reduce((n, key) => n + (filters[key]?.length ?? 0), 0);
 
   return (
     <div className="mx-auto max-w-screen-2xl px-4 py-10">
@@ -172,7 +182,7 @@ function PartnersPageInner() {
                 aria-pressed={size === opt.value}
                 title={opt.title}
                 onClick={() => update({ size: opt.value === "standard" ? undefined : opt.value })}
-                className={`px-2.5 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${
+                className={`min-h-11 px-2.5 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] min-[1024px]:min-h-0 min-[1024px]:py-1 min-[1024px]:text-xs ${
                   size === opt.value
                     ? "bg-[var(--secondary)] font-medium text-[var(--secondary-foreground)]"
                     : "bg-[var(--card)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
@@ -185,7 +195,7 @@ function PartnersPageInner() {
         </div>
 
         <label
-          className="inline-flex cursor-pointer items-center gap-1.5 select-none"
+          className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 select-none min-[1024px]:min-h-0"
           title={t("modes.rollupHint")}
         >
           <input
@@ -236,7 +246,7 @@ function PartnersPageInner() {
           </select>
         </div>
 
-        <label className="inline-flex cursor-pointer items-center gap-1.5 select-none">
+        <label className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 select-none min-[1024px]:min-h-0">
           <input
             type="checkbox"
             checked={Boolean(filters.shares_deals)}
@@ -247,49 +257,35 @@ function PartnersPageInner() {
         </label>
       </div>
 
-      {/* Stacked filters on smaller viewports */}
-      {wide === false && (
-        <section className="mt-5 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
-          {searchBox}
-          <div className="mt-4">
-            <CollaborationFacets
-              params={filters}
-              facets={list.data?.facets}
-              onChange={update}
-              variant="chips"
-              loading={list.isPending}
-            />
-          </div>
-        </section>
-      )}
-
-      <div className="mt-6 flex flex-col gap-6 min-[960px]:flex-row min-[960px]:items-start">
-        {wide !== false && (
-          <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] w-72 shrink-0 overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:block">
-            {searchBox}
-            <div className="mt-4">
-              <CollaborationFacets
-                params={filters}
-                facets={list.data?.facets}
-                onChange={update}
-                variant="rows"
-                loading={list.isPending}
-              />
-            </div>
-          </aside>
-        )}
-
-        <div className="min-w-0 flex-1 space-y-6">
-          <ActiveFiltersBar
+      <FilterLayout
+        className="mt-5"
+        filters={
+          <CollaborationFacets
             params={filters}
             facets={list.data?.facets}
             onChange={update}
-            onResetAll={() => {
-              setInput("");
-              update(EMPTY_COLLAB_FILTERS);
-            }}
+            variant="rows"
+            loading={list.isPending}
           />
+        }
+        aboveFilters={searchBox}
+        activeCount={facetCount}
+        onReset={() => {
+          setInput("");
+          update(EMPTY_COLLAB_FILTERS);
+        }}
+      >
+        <ActiveFiltersBar
+          params={filters}
+          facets={list.data?.facets}
+          onChange={update}
+          onResetAll={() => {
+            setInput("");
+            update(EMPTY_COLLAB_FILTERS);
+          }}
+        />
 
+        <MobileDisclosure label={t("overview.toggle")} className="mb-6">
           {list.data && (
             <CollaborationOverview
               data={list.data}
@@ -297,7 +293,7 @@ function PartnersPageInner() {
             />
           )}
 
-          <section aria-labelledby="partners-map-title">
+          <section aria-labelledby="partners-map-title" className="mt-6">
             <h2 id="partners-map-title" className="text-base font-semibold">
               {t("map.title")}
             </h2>
@@ -330,67 +326,64 @@ function PartnersPageInner() {
                 t("map.unmapped", { count: map.data?.unmapped ?? 0 })}
             </p>
           </section>
+        </MobileDisclosure>
 
-          <section aria-labelledby="partners-table-title">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 id="partners-table-title" className="text-base font-semibold">
-                {t("table.title")}
-              </h2>
-              {list.data && (
-                <p className="text-xs text-[var(--muted-foreground)]">
-                  {t("summary.bySource", {
-                    openalex: list.data.works_by_source.openalex ?? 0,
-                    openaire: list.data.works_by_source.openaire ?? 0,
-                  })}
+        <section aria-labelledby="partners-table-title">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 id="partners-table-title" className="text-base font-semibold">
+              {t("table.title")}
+            </h2>
+            {list.data && (
+              <p className="text-xs text-[var(--muted-foreground)]">
+                {t("summary.bySource", {
+                  openalex: list.data.works_by_source.openalex ?? 0,
+                  openaire: list.data.works_by_source.openaire ?? 0,
+                })}
+              </p>
+            )}
+          </div>
+          <div className="mt-3">
+            {list.isPending && <ListSkeletonRows rows={8} />}
+            {list.isError && (
+              <div>
+                <p role="alert" className="text-[var(--destructive)]">
+                  {errorMessage(tc, list.error)}
                 </p>
-              )}
-            </div>
-            <div className="mt-3">
-              {list.isPending && <ListSkeletonRows rows={8} />}
-              {list.isError && (
-                <div>
-                  <p role="alert" className="text-[var(--destructive)]">
-                    {errorMessage(tc, list.error)}
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-2"
-                    onClick={() => list.refetch()}
-                  >
-                    {t("search.retry")}
-                  </Button>
-                </div>
-              )}
-              {list.data && (
-                <Card>
-                  <CardContent className="pt-6">
-                    <PartnerTable
-                      items={list.data.items}
-                      sorting={sorting}
-                      onSort={(next) => update({ sort: next.sort, dir: next.dir })}
-                      inst={inst}
-                      query={query}
-                      pending={list.isPlaceholderData}
+                <Button variant="outline" size="sm" className="mt-2" onClick={() => list.refetch()}>
+                  {t("search.retry")}
+                </Button>
+              </div>
+            )}
+            {list.data && (
+              <Card>
+                <CardContent className="pt-6">
+                  <PartnerTable
+                    items={list.data.items}
+                    sorting={sorting}
+                    onSort={(next) => update({ sort: next.sort, dir: next.dir })}
+                    inst={inst}
+                    query={query}
+                    pending={list.isPlaceholderData}
+                  />
+                  {total > COLLAB_PAGE_SIZE && (
+                    <Pager
+                      offset={offset}
+                      shown={shown}
+                      total={total}
+                      pageSize={COLLAB_PAGE_SIZE}
+                      onOffset={setOffset}
                     />
-                    {total > COLLAB_PAGE_SIZE && (
-                      <Pager
-                        offset={offset}
-                        shown={shown}
-                        total={total}
-                        pageSize={COLLAB_PAGE_SIZE}
-                        onOffset={setOffset}
-                      />
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </section>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </section>
 
+        <div className="mt-6">
           <CollaborationSources />
         </div>
-      </div>
+      </FilterLayout>
     </div>
   );
 }

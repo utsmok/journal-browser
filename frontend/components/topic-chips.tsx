@@ -27,7 +27,7 @@ export function TopicChipList({
   if (items.length === 0) return null;
   const shown = expanded ? items : items.slice(0, limit);
   const chipClass =
-    "inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--muted)] px-2 py-0.5 text-xs text-[var(--foreground)]";
+    "inline-flex min-h-11 items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--muted)] px-2 py-0.5 text-xs text-[var(--foreground)] min-[1024px]:min-h-0";
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
@@ -62,7 +62,7 @@ export function TopicChipList({
           type="button"
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
-          className="px-1.5 py-1 text-xs text-[var(--muted-foreground)] underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+          className="inline-flex min-h-11 items-center px-1.5 py-1 text-xs text-[var(--muted-foreground)] underline-offset-2 hover:text-[var(--primary-text)] hover:underline min-[1024px]:min-h-0"
         >
           {expanded ? t("list.showLess") : t("list.showMore", { count: items.length - limit })}
         </button>

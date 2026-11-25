@@ -8,6 +8,7 @@ import * as React from "react";
 import { OaStatusChip, PartChip, PureMatchBadge, PureRegisteredBadge } from "@/components/badges";
 import { UtAuthorLine } from "@/components/ut-author-line";
 import { Badge } from "@/components/ui/badge";
+import { External } from "@/components/journal/shared";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { encodeNamePath } from "@/lib/api";
 import type { GapEntry, GapGroup, GapWorkRow } from "@/lib/gap-entries";
@@ -21,33 +22,9 @@ import { workTypeLabel } from "@/lib/work-type";
  * parent with a Pure-status badge and an "N parts" foldout; parts lose
  * the PartChip because the group hierarchy already says "part of".
  *
- * The work-row cells below (External, doiHref, WorkLinks, WorkTypeCell)
- * are shared with the author page's other tables.
+ * The work-row cells below (doiHref, WorkLinks, WorkTypeCell) are shared
+ * with the author page's other tables.
  */
-
-export function External({
-  href,
-  children,
-  className,
-}: {
-  href: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={cn(
-        "inline-flex items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline",
-        className,
-      )}
-    >
-      {children} <ExternalLink aria-hidden className="size-3.5 shrink-0" />
-    </a>
-  );
-}
 
 export function doiHref(doi: string | null): string | null {
   if (!doi) return null;

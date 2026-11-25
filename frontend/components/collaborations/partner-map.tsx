@@ -647,7 +647,7 @@ export function PartnerMap({
   }, [failed, attempt, updateInView]);
 
   const presetBtn =
-    "rounded border border-[var(--border)] bg-[var(--card)]/95 px-2 py-1 text-xs font-medium text-[var(--foreground)] shadow-sm backdrop-blur-sm hover:border-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]";
+    "min-h-11 rounded border border-[var(--border)] bg-[var(--card)]/95 px-2 py-1 text-xs font-medium text-[var(--foreground)] shadow-sm backdrop-blur-sm hover:border-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] min-[1024px]:min-h-0";
 
   return (
     <>
@@ -705,7 +705,7 @@ export function PartnerMap({
                       aria-pressed={active}
                       title={t("map.legendHint")}
                       onClick={() => onToggleType?.(type)}
-                      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${
+                      className={`inline-flex min-h-11 items-center gap-1.5 rounded-full border px-2 py-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] min-[1024px]:min-h-0 ${
                         active
                           ? "border-[var(--brand-tint-border)] bg-[var(--brand-tint-bg)] font-medium text-[var(--primary-text)]"
                           : "border-transparent text-[var(--muted-foreground)] hover:border-[var(--border)] hover:text-[var(--foreground)]"

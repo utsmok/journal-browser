@@ -61,7 +61,7 @@ export function SiteFooter() {
                 {...(l.href.startsWith("mailto:")
                   ? {}
                   : { target: "_blank", rel: "noopener noreferrer" })}
-                className="inline-flex items-center gap-1 underline-offset-2 hover:underline"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 underline-offset-2 hover:underline min-[1024px]:min-h-0 min-[1024px]:min-w-0"
               >
                 {l.icon === "github" && <GithubIcon className="size-4" />}
                 <span className={l.icon ? "sr-only" : undefined}>{l.label}</span>

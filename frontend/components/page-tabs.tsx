@@ -47,7 +47,7 @@ export function PageTabs<T extends string>({
             aria-selected={active}
             onClick={() => onChange(item.value)}
             className={cn(
-              "-mb-px inline-flex items-center gap-2 border-b-2 pb-2.5 pt-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2",
+              "-mb-px inline-flex min-h-11 items-center gap-2 border-b-2 pb-2.5 pt-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 min-[1024px]:min-h-0",
               active
                 ? "border-[var(--primary)] font-semibold text-[var(--foreground)]"
                 : "border-transparent font-medium text-[var(--muted-foreground)] hover:border-[var(--border)] hover:text-[var(--foreground)]",

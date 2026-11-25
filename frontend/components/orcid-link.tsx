@@ -11,7 +11,7 @@ export function OrcidLink({ orcid }: { orcid: string }) {
       href={`https://orcid.org/${orcid}`}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline"
+      className="inline-flex min-h-11 min-w-11 items-center gap-1 text-[var(--primary-text)] underline-offset-2 hover:underline min-[1024px]:min-h-0 min-[1024px]:min-w-0"
       title={orcid}
       aria-label={t("orcid.profileLabel", { orcid })}
     >

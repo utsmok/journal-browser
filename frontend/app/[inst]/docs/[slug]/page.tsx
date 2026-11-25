@@ -107,19 +107,11 @@ export default function DocPage() {
 
   return (
     <div className="docs-page">
-      <EditToolbar
-        token={token}
-        onToken={setToken}
-        editing={editing}
-        setEditing={setEditing}
-        authError={authError}
-      />
-
       <div className="border-b border-[var(--border)] bg-[var(--muted)]">
         <div className="docs-page-column mx-auto max-w-4xl px-4 py-8">
           <Link
             href={`/${inst}/docs`}
-            className="text-sm text-[var(--primary-text)] underline-offset-2 hover:underline"
+            className="inline-flex min-h-11 items-center text-sm text-[var(--primary-text)] underline-offset-2 hover:underline min-[1024px]:min-h-0"
           >
             {t("doc.allDocs")}
           </Link>
@@ -140,6 +132,13 @@ export default function DocPage() {
       </div>
 
       <div className="docs-page-column mx-auto max-w-4xl space-y-6 px-4 py-10 text-[15px] leading-relaxed">
+        <EditToolbar
+          token={token}
+          onToken={setToken}
+          editing={editing}
+          setEditing={setEditing}
+          authError={authError}
+        />
         {doc.isPending && <p className="text-[var(--muted-foreground)]">{t("doc.loading")}</p>}
         {doc.isError && (
           <p className="text-destructive">
@@ -180,7 +179,7 @@ export default function DocPage() {
             {prev ? (
               <Link
                 href={`/${inst}/docs/${prev.slug}`}
-                className="text-[var(--primary-text)] underline-offset-2 hover:underline"
+                className="inline-flex min-h-11 items-center text-[var(--primary-text)] underline-offset-2 hover:underline min-[1024px]:min-h-0"
               >
                 {t("doc.prevPage", { title: prev.title })}
               </Link>
@@ -190,7 +189,7 @@ export default function DocPage() {
             {next && (
               <Link
                 href={`/${inst}/docs/${next.slug}`}
-                className="text-right text-[var(--primary-text)] underline-offset-2 hover:underline"
+                className="inline-flex min-h-11 items-center text-right text-[var(--primary-text)] underline-offset-2 hover:underline min-[1024px]:min-h-0"
               >
                 {t("doc.nextPage", { title: next.title })}
               </Link>

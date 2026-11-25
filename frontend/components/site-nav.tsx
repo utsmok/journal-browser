@@ -13,8 +13,13 @@ import { useSiteMeta } from "@/hooks/use-site-meta";
 import { instFromSegment } from "@/lib/global-segments";
 import { cn } from "@/lib/utils";
 
+const menuItem =
+  "block rounded-[calc(var(--radius)-2px)] px-3 text-left transition-colors hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]";
+
 /** Dropdown menu for broad bibliometric / research-intelligence views
- * (currently Collaboration partners, with room for future explorer modules). */
+ * (currently Collaboration partners, with room for future explorer modules).
+ * Below the `lg` breakpoint it collapses into a plain drawer row: the menu has
+ * one destination, so a second tap adds nothing. */
 function DataExplorerMenu({ prefix }: { prefix: string }) {
   const t = useTranslations("common");
   const pathname = usePathname() ?? "/";
@@ -46,13 +51,14 @@ function DataExplorerMenu({ prefix }: { prefix: string }) {
 
   return (
     <div ref={containerRef} className="relative">
+      <NavLink href={partnersHref} label={t("nav.dataExplorerPartners")} className="lg:hidden" />
       <button
         type="button"
         aria-expanded={open}
         aria-haspopup="menu"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "relative inline-flex items-center gap-1 rounded-sm py-2 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
+          "relative hidden items-center gap-1 rounded-sm py-2 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 lg:inline-flex",
           active
             ? "font-semibold text-white after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:bg-[var(--primary)]"
             : "text-white/80",
@@ -73,10 +79,7 @@ function DataExplorerMenu({ prefix }: { prefix: string }) {
             role="menuitem"
             href={partnersHref}
             onClick={() => setOpen(false)}
-            className={cn(
-              "block rounded-[calc(var(--radius)-2px)] px-3 py-2 text-left transition-colors hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
-              active && "bg-[var(--muted)]",
-            )}
+            className={cn(menuItem, "py-2", active && "bg-[var(--muted)]")}
           >
             <span className="block text-sm font-medium text-[var(--foreground)]">
               {t("nav.dataExplorerPartners")}
@@ -91,11 +94,10 @@ function DataExplorerMenu({ prefix }: { prefix: string }) {
   );
 }
 
-/** Nav links scoped to the current institution segment; the "All
- * universities" link reaches the global landing chooser from any uni page.
- * Without an institution segment (chooser, /data-pipeline) the nav stays
- * minimal instead of disappearing: links wrap on phones rather than
- * truncating in a scrollbar-hidden row. */
+/** Nav links scoped to the current institution segment. From the `lg`
+ * breakpoint they sit in the header bar; below it they are rows of the menu
+ * drawer. Without an institution segment (chooser, /data-pipeline) the nav
+ * stays minimal instead of disappearing. */
 export function SiteNav() {
   const t = useTranslations("common");
   const pathname = usePathname() ?? "/";
@@ -105,22 +107,16 @@ export function SiteNav() {
   if (!prefix) {
     if (pathname === "/") return null;
     return (
-      <nav
-        aria-label={t("nav.mainLabel")}
-        className="order-last w-full text-sm sm:order-none sm:w-auto"
-      >
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 sm:gap-x-6">
+      <nav aria-label={t("nav.mainLabel")} className="w-full text-sm lg:w-auto">
+        <div className="flex flex-col lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-6">
           <NavLink href="/" label={t("nav.allUniversities")} />
         </div>
       </nav>
     );
   }
   return (
-    <nav
-      aria-label={t("nav.mainLabel")}
-      className="order-last w-full whitespace-nowrap text-sm sm:order-none sm:w-auto"
-    >
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 lg:gap-x-5">
+    <nav aria-label={t("nav.mainLabel")} className="w-full whitespace-nowrap text-sm lg:w-auto">
+      <div className="flex flex-col lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-5">
         <NavLink
           href={`${prefix}/`}
           label={t("nav.search")}
@@ -138,14 +134,14 @@ export function SiteNav() {
   );
 }
 
-/** Right-side utility link to About for the active institution. */
+/** Utility link to About for the active institution. */
 export function AboutUtilityLink() {
   const t = useTranslations("common");
   const pathname = usePathname() ?? "/";
   const seg = pathname.split("/")[1] ?? "";
   const inst = instFromSegment(seg);
   if (!inst) return null;
-  return <NavLink href={`/${inst}/about`} label={t("nav.about")} className="text-xs sm:text-sm" />;
+  return <NavLink href={`/${inst}/about`} label={t("nav.about")} />;
 }
 
 /** Compact university switcher pill next to the logo; replaces the top-nav
@@ -188,7 +184,7 @@ function InstitutionSwitcher({ inst }: { inst: string }) {
         aria-haspopup="menu"
         aria-label={`${t("nav.switchInstitution")} (${label})`}
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1 rounded-full border border-white/25 bg-white/10 px-2.5 py-0.5 text-xs font-semibold text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+        className="inline-flex min-h-11 items-center gap-1 rounded-full border border-white/25 bg-white/10 px-2.5 text-xs font-semibold text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 lg:min-h-0 lg:py-0.5"
       >
         <span>{label}</span>
         <ChevronDown
@@ -208,7 +204,8 @@ function InstitutionSwitcher({ inst }: { inst: string }) {
               href={`/${entry.code}/`}
               onClick={() => setOpen(false)}
               className={cn(
-                "flex items-center justify-between gap-2 rounded-[calc(var(--radius)-2px)] px-3 py-1.5 text-xs transition-colors hover:bg-[var(--muted)]",
+                menuItem,
+                "flex min-h-11 items-center justify-between gap-2 text-xs lg:min-h-0 lg:py-1.5",
                 entry.code === inst && "bg-[var(--muted)] font-semibold",
               )}
             >
@@ -223,7 +220,10 @@ function InstitutionSwitcher({ inst }: { inst: string }) {
             role="menuitem"
             href="/"
             onClick={() => setOpen(false)}
-            className="block rounded-[calc(var(--radius)-2px)] px-3 py-1.5 text-xs font-medium text-[var(--primary-text)] hover:bg-[var(--muted)]"
+            className={cn(
+              menuItem,
+              "flex min-h-11 items-center text-xs font-medium text-[var(--primary-text)] lg:min-h-0 lg:py-1.5",
+            )}
           >
             {t("nav.allUniversities")}
           </Link>
@@ -245,7 +245,7 @@ export function BrandLink() {
       <Link
         href={`${prefix}/`}
         aria-label={t("appTitle")}
-        className="flex items-center whitespace-nowrap"
+        className="flex min-h-11 items-center whitespace-nowrap lg:min-h-0"
       >
         {/* The header bar is dark in both themes, so its wordmark is a static
             file; only the landing hero needs the theme-aware inline copy. */}

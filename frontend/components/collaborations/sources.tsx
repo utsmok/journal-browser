@@ -41,7 +41,7 @@ export function CollaborationSources() {
       </p>
       <Link
         href={`/${inst}/docs/collaborations`}
-        className={`mt-2 inline-block text-sm ${linkClass}`}
+        className={`mt-2 inline-flex min-h-11 items-center text-sm ${linkClass} min-[1024px]:min-h-0`}
       >
         {t("methodology")}
       </Link>

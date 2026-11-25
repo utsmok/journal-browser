@@ -20,7 +20,7 @@ async function TableDetails({ table }: { table: SchemaTable }) {
   const t = await getTranslations("dataPipeline");
   return (
     <details className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-4 py-1">
-      <summary className="flex cursor-pointer flex-wrap items-center gap-2 py-2 text-sm">
+      <summary className="flex min-h-11 cursor-pointer flex-wrap items-center gap-2 py-2 text-sm min-[1024px]:min-h-0">
         <span className="font-mono font-medium">{table.name}</span>
         <span className="text-[var(--muted-foreground)]">
           {t("database.columnsCount", { count: table.columns.length })}

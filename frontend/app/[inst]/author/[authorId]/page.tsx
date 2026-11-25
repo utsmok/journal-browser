@@ -12,16 +12,10 @@ import { orgTypeCssVar } from "@/components/collaborations/labels";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { ACCESS_TEXT, DataIcon, DealGlyph, LockIcon, WorksGlyph } from "@/components/data-icons";
 import { DetailSummaryPanel } from "@/components/detail-summary";
-import {
-  doiHref,
-  External,
-  GapEntryTableRows,
-  WorkLinks,
-  WorkTypeCell,
-} from "@/components/gap-entries";
+import { doiHref, GapEntryTableRows, WorkLinks, WorkTypeCell } from "@/components/gap-entries";
 import { GapCsvButton } from "@/components/gap-csv-button";
 import { SectionNav, useLastDirectoryHref } from "@/components/journal/section-nav";
-import { MoreToggle } from "@/components/journal/shared";
+import { External, MoreToggle } from "@/components/journal/shared";
 import { SourceNote } from "@/components/source-note";
 import { DetailSkeleton, ErrorPanel } from "@/components/states";
 import { InsetPanel } from "@/components/sub-panel";
@@ -56,7 +50,7 @@ function SimilarRow({ inst, s }: { inst: string; s: AuthorSimilarJournal }) {
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-sm first:pt-0 last:pb-0">
       <Link
         href={`/${inst}/journals/${s.issn_l}`}
-        className="font-medium underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
+        className="inline-flex min-h-11 items-center font-medium underline-offset-2 hover:text-[var(--primary-text)] hover:underline min-[1024px]:min-h-0"
       >
         {s.title || s.issn_l}
       </Link>
@@ -190,7 +184,7 @@ export default function AuthorPage() {
                 {author.faculty && (
                   <Link
                     href={`/${inst}/orgunit/faculty/${encodeNamePath(author.faculty)}`}
-                    className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--muted)] px-2 py-0.5 text-xs text-[var(--foreground)] underline-offset-2 hover:border-[var(--primary)] hover:text-[var(--primary-text)] hover:underline"
+                    className="inline-flex min-h-11 items-center rounded-md border border-[var(--border)] bg-[var(--muted)] px-2 py-0.5 text-xs text-[var(--foreground)] underline-offset-2 hover:border-[var(--primary)] hover:text-[var(--primary-text)] hover:underline min-[1024px]:min-h-0"
                   >
                     {author.faculty}
                   </Link>
@@ -198,7 +192,7 @@ export default function AuthorPage() {
                 {author.research_group && (
                   <Link
                     href={`/${inst}/orgunit/group/${encodeNamePath(author.research_group)}`}
-                    className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--muted)] px-2 py-0.5 text-xs text-[var(--foreground)] underline-offset-2 hover:border-[var(--primary)] hover:text-[var(--primary-text)] hover:underline"
+                    className="inline-flex min-h-11 items-center rounded-md border border-[var(--border)] bg-[var(--muted)] px-2 py-0.5 text-xs text-[var(--foreground)] underline-offset-2 hover:border-[var(--primary)] hover:text-[var(--primary-text)] hover:underline min-[1024px]:min-h-0"
                   >
                     {author.research_group}
                   </Link>
@@ -206,7 +200,7 @@ export default function AuthorPage() {
                 {author.institute && (
                   <Link
                     href={`/${inst}/orgunit/institute/${encodeNamePath(author.institute)}`}
-                    className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--muted)] px-2 py-0.5 text-xs text-[var(--foreground)] underline-offset-2 hover:border-[var(--primary)] hover:text-[var(--primary-text)] hover:underline"
+                    className="inline-flex min-h-11 items-center rounded-md border border-[var(--border)] bg-[var(--muted)] px-2 py-0.5 text-xs text-[var(--foreground)] underline-offset-2 hover:border-[var(--primary)] hover:text-[var(--primary-text)] hover:underline min-[1024px]:min-h-0"
                   >
                     {author.institute}
                   </Link>

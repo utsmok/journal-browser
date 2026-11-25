@@ -76,7 +76,7 @@ export function CollapsibleCard({
             aria-expanded={open}
             aria-controls={`${id}-content`}
             onClick={() => setOpenAndNotify(!open)}
-            className="flex w-full flex-wrap items-center gap-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+            className="flex min-h-11 w-full flex-wrap items-center gap-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] min-[1024px]:min-h-0"
           >
             {title}
             {count !== undefined && (

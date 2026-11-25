@@ -130,7 +130,7 @@ export function StepFunder({
                       aria-pressed={active}
                       onClick={() => onSelectFunder(active ? null : { id: item.id, name })}
                       className={cn(
-                        "inline-flex items-center gap-1.5 rounded-[var(--radius)] border px-2.5 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2",
+                        "inline-flex min-h-11 items-center gap-1.5 rounded-[var(--radius)] border px-2.5 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 min-[1024px]:min-h-0",
                         active
                           ? "border-[var(--brand-tint-border)] bg-[var(--primary)] text-[var(--primary-foreground)]"
                           : "border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] hover:bg-[var(--muted)]",

@@ -161,6 +161,20 @@
 }
 
 /*
+  Touch-width screens: native form controls are 44px tall with 16px text, so
+  iOS does not zoom on focus and thumbs can hit them. Unlayered on purpose:
+  it overrides single-purpose utilities such as h-8 on individual controls.
+*/
+@media (max-width: 1023px) {
+  select,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+  textarea {
+    min-height: 2.75rem;
+    font-size: 1rem;
+  }
+}
+
+/*
   Lock badge kinetics: every so often each shackle slams shut, holds, and
   springs back open with a sparkle burst; hovering a badge or facet row
   replays the cycle immediately. Keyframes animate deltas around the static
@@ -613,6 +627,13 @@
 }
 .jb-map .maplibregl-ctrl-group button + button {
   border-top-color: var(--border);
+}
+/* Touch: the stock 29px zoom buttons are too small on phones and tablets. */
+@media (max-width: 1023px) {
+  .jb-map .maplibregl-ctrl-group button {
+    width: 44px;
+    height: 44px;
+  }
 }
 .jb-map .maplibregl-ctrl-attrib,
 .jb-map .maplibregl-ctrl-attrib-inner {

@@ -80,7 +80,7 @@ function DealRow({ deal }: { deal: DealOut }) {
             href={conditionsUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-[var(--primary-text)] underline-offset-2 hover:underline"
+            className="inline-flex min-h-11 min-w-11 items-center gap-1 text-xs text-[var(--primary-text)] underline-offset-2 hover:underline min-[1024px]:min-h-0 min-[1024px]:min-w-0"
           >
             {deal.links?.length
               ? dealLinkLabel(tc, orderedDealLinks(deal.links)[0])
@@ -381,7 +381,7 @@ export default function PublisherPage() {
             {displayPublisherName(publisher.name)}
           </h1>
           {(publisher.external_ids?.openaccess_nl_slug || publisher.external_ids?.ror) && (
-            <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-[var(--muted-foreground)]">
+            <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-[var(--muted-foreground)] [&>a]:min-h-11 [&>a]:min-w-11 min-[1024px]:[&>a]:min-h-0 min-[1024px]:[&>a]:min-w-0">
               {publisher.external_ids?.openaccess_nl_slug && (
                 <a
                   href={`https://openaccess.nl/en/publisher/${publisher.external_ids.openaccess_nl_slug}`}

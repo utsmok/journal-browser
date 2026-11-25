@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/input";
 import { AdminError, adminLogin } from "@/lib/admin";
 
 /**
- * Floating docs toolbar (hidden in print): admin sign-in, the editing
- * on/off toggle, and "Save as PDF". Sits above the feedback button and
- * shares its sessionStorage token with /admin.
+ * Docs toolbar (hidden in print): admin sign-in, the editing on/off
+ * toggle, and "Save as PDF". Below lg it sits in the page flow so it never
+ * covers the text; from lg up it floats above the feedback button. Shares
+ * its sessionStorage token with /admin.
  */
 export function EditToolbar({
   token,
@@ -53,7 +54,7 @@ export function EditToolbar({
   }
 
   return (
-    <div className="fixed bottom-20 right-4 z-50 flex flex-col items-end gap-2 print:hidden sm:bottom-24 sm:right-6">
+    <div className="flex flex-col items-end gap-2 print:hidden lg:fixed lg:bottom-24 lg:right-6 lg:z-50">
       {authError && (
         <p className="max-w-64 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs text-destructive shadow">
           {authError}

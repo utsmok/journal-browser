@@ -6,6 +6,7 @@ import "./globals.css";
 import { SiteFooter } from "@/components/site-footer";
 import { AboutUtilityLink, BrandLink, SiteNav } from "@/components/site-nav";
 import { ShortlistLink } from "@/components/shortlist/shortlist-link";
+import { SiteMenu } from "@/components/site-menu";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { YearFilterControl } from "@/components/year-filter";
 import { FeedbackWidget } from "@/components/feedback/feedback-widget";
@@ -71,15 +72,19 @@ const THEME_SCRIPT = `(function(){try{var m=localStorage.getItem("jb-theme");if(
 function SiteHeader() {
   return (
     <header className="bg-[var(--secondary)] text-[var(--secondary-foreground)]">
-      <div className="mx-auto flex min-h-16 max-w-screen-2xl flex-wrap items-center justify-between gap-x-4 gap-y-1.5 px-4 py-2 lg:flex-nowrap lg:py-0">
+      {/* One bar at every width: from `lg` the nav and utilities sit inline,
+          below it they live in the SiteMenu drawer. */}
+      <div className="mx-auto flex min-h-14 max-w-screen-2xl items-center justify-between gap-x-3 px-4 py-1 lg:min-h-16 lg:flex-nowrap lg:gap-x-4 lg:py-0">
         <BrandLink />
-        <SiteNav />
-        <div className="flex items-center gap-2 sm:gap-3">
-          <YearFilterControl />
-          <ShortlistLink />
-          <AboutUtilityLink />
-          <ThemeToggle />
-        </div>
+        <SiteMenu>
+          <SiteNav />
+          <div className="flex flex-col gap-3 border-t border-white/15 pt-5 lg:flex-row lg:items-center lg:gap-3 lg:border-0 lg:pt-0">
+            <YearFilterControl />
+            <ShortlistLink />
+            <AboutUtilityLink />
+            <ThemeToggle />
+          </div>
+        </SiteMenu>
       </div>
     </header>
   );
@@ -106,9 +111,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <SiteHeader />
             <main id="main" className="flex-1">
               {children}
+              {/* In the flow on phones and tablets, so it never covers content;
+                  a floating button from lg. */}
+              <FeedbackWidget />
             </main>
             <SiteFooter />
-            <FeedbackWidget />
           </SectionMessages>
         </Providers>
       </body>

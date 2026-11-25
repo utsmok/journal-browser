@@ -9,12 +9,8 @@ import { ActiveFiltersBar, type ActiveFilterChip } from "@/components/active-fil
 import { DealBadge } from "@/components/badges";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { DealCapUsage } from "@/components/deal-cap-usage";
-import {
-  FacetGroupList,
-  FilterSidebarCard,
-  hasVisibleGroups,
-  type FacetGroupDef,
-} from "@/components/filter-panel";
+import { FilterLayout } from "@/components/filter-layout";
+import { FacetGroupList, hasVisibleGroups, type FacetGroupDef } from "@/components/filter-panel";
 import { PageTabs } from "@/components/page-tabs";
 import { SourceNote } from "@/components/source-note";
 import { Badge } from "@/components/ui/badge";
@@ -215,13 +211,13 @@ function DealCard({ deal, archived }: { deal: DealOut; archived?: boolean }) {
       )}
       {hasProse && (
         <details className="text-sm">
-          <summary className="cursor-pointer text-[var(--primary-text)] hover:underline">
+          <summary className="inline-flex min-h-11 cursor-pointer items-center text-[var(--primary-text)] hover:underline min-[1024px]:min-h-0">
             {t("card.detailsSummary")}
           </summary>
           <div className="mt-2 space-y-2">{prose}</div>
         </details>
       )}
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs [&>a]:min-h-11 [&>a]:min-w-11 min-[1024px]:[&>a]:min-h-0 min-[1024px]:[&>a]:min-w-0">
         {!archived && (
           <Link
             href={`/${inst}/?deal_id=${deal.id}`}
@@ -288,7 +284,7 @@ type DealTab = "current" | "archive";
 type DealSort = "journals_desc" | "title_asc" | "oa_desc";
 
 const SELECT_CLASS =
-  "h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2";
+  "h-9 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--card)] px-2 text-sm min-[768px]:w-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2";
 
 function dealHasCaps(deal: DealOut): boolean {
   return Boolean(deal.cap_text || Object.keys(deal.cap_numbers ?? {}).length > 0);
@@ -615,116 +611,101 @@ export default function DealsPage() {
         </form>
       </header>
 
-      {/* Stacked filters (<960px) */}
-      {activeQuery.data != null && hasVisibleGroups(groups) && (
-        <section className="mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 min-[960px]:hidden">
-          <FacetGroupList groups={groups} onToggle={toggleFacet} variant="chips" />
-        </section>
-      )}
+      <FilterLayout
+        filters={<FacetGroupList groups={groups} onToggle={toggleFacet} />}
+        activeCount={chips.length}
+        onReset={clearAll}
+        disabled={activeQuery.data == null || !hasVisibleGroups(groups)}
+      >
+        <ActiveFiltersBar
+          chips={chips}
+          onClearAll={clearAll}
+          ariaLabel={tc("activeFilters.label")}
+          clearLabel={tc("activeFilters.clearAll")}
+          removeAriaPrefix={tc("activeFilters.remove")}
+        />
 
-      <div className="flex flex-col gap-6 min-[960px]:grid min-[960px]:grid-cols-[15rem_minmax(0,1fr)] min-[960px]:items-start min-[1280px]:grid-cols-[18rem_minmax(0,1fr)] min-[1280px]:gap-8">
-        {/* Sticky sidebar (>=960px) */}
-        {activeQuery.data != null && hasVisibleGroups(groups) ? (
-          <aside className="sticky top-20 hidden max-h-[calc(100vh-6rem)] self-start overflow-y-auto min-[960px]:block">
-            <FilterSidebarCard activeCount={chips.length} onReset={clearAll}>
-              <FacetGroupList groups={groups} onToggle={toggleFacet} variant="rows" />
-            </FilterSidebarCard>
-          </aside>
-        ) : (
-          <div className="hidden min-[960px]:block" />
-        )}
-
-        <div className="min-w-0">
-          <ActiveFiltersBar
-            chips={chips}
-            onClearAll={clearAll}
-            ariaLabel={tc("activeFilters.label")}
-            clearLabel={tc("activeFilters.clearAll")}
-            removeAriaPrefix={tc("activeFilters.remove")}
-          />
-
-          <Card>
-            <CardContent className="pt-5">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
-                <p className="text-sm text-[var(--muted-foreground)]">
-                  {activeQuery.data
-                    ? t("section.count", { count: filtered.length, institution: site.short })
-                    : activeQuery.isError
-                      ? t("section.loadFailed")
-                      : t("section.loading")}
-                </p>
-                <div className="flex items-center gap-2 text-sm">
-                  <label
-                    htmlFor="deals-sort"
-                    className="whitespace-nowrap text-xs text-[var(--muted-foreground)]"
-                  >
-                    {t("sort.label")}
-                  </label>
-                  <select
-                    id="deals-sort"
-                    title={t("sort.title")}
-                    value={sort}
-                    onChange={(event) => setSort(event.target.value as DealSort)}
-                    className={SELECT_CLASS}
-                  >
-                    <option value="journals_desc">{t("sort.journalsDesc")}</option>
-                    <option value="title_asc">{t("sort.titleAsc")}</option>
-                    <option value="oa_desc">{t("sort.oaDesc")}</option>
-                  </select>
-                </div>
+        <Card>
+          <CardContent className="pt-5">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
+              <p className="text-sm text-[var(--muted-foreground)]">
+                {activeQuery.data
+                  ? t("section.count", { count: filtered.length, institution: site.short })
+                  : activeQuery.isError
+                    ? t("section.loadFailed")
+                    : t("section.loading")}
+              </p>
+              <div className="flex min-w-0 flex-col items-start gap-1 text-sm min-[768px]:flex-row min-[768px]:items-center min-[768px]:gap-2">
+                <label
+                  htmlFor="deals-sort"
+                  className="whitespace-nowrap text-xs text-[var(--muted-foreground)]"
+                >
+                  {t("sort.label")}
+                </label>
+                <select
+                  id="deals-sort"
+                  title={t("sort.title")}
+                  value={sort}
+                  onChange={(event) => setSort(event.target.value as DealSort)}
+                  className={SELECT_CLASS}
+                >
+                  <option value="journals_desc">{t("sort.journalsDesc")}</option>
+                  <option value="title_asc">{t("sort.titleAsc")}</option>
+                  <option value="oa_desc">{t("sort.oaDesc")}</option>
+                </select>
               </div>
+            </div>
 
-              {isArchivedTab && (
-                <p className="mb-4 text-xs text-[var(--muted-foreground)]">
-                  {t("section.archiveIntro", { institution: site.short })}
-                </p>
-              )}
+            {isArchivedTab && (
+              <p className="mb-4 text-xs text-[var(--muted-foreground)]">
+                {t("section.archiveIntro", { institution: site.short })}
+              </p>
+            )}
 
-              {activeQuery.isError ? (
-                <div className="py-10 text-center">
-                  <p className="text-[var(--destructive)]">{errorMessage(tc, activeQuery.error)}</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-3"
-                    onClick={() => activeQuery.refetch()}
-                  >
-                    {t("section.retry")}
+            {activeQuery.isError ? (
+              <div className="py-10 text-center">
+                <p className="text-[var(--destructive)]">{errorMessage(tc, activeQuery.error)}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => activeQuery.refetch()}
+                >
+                  {t("section.retry")}
+                </Button>
+              </div>
+            ) : !activeQuery.data ? (
+              <p className="py-10 text-center text-sm text-[var(--muted-foreground)]">
+                {t("section.loading")}
+              </p>
+            ) : filtered.length === 0 ? (
+              <div className="py-10 text-center text-sm text-[var(--muted-foreground)]">
+                <p>{hasFilter ? t("filter.empty") : t("section.archiveEmpty")}</p>
+                {hasFilter && (
+                  <Button variant="outline" size="sm" className="mt-3" onClick={clearAll}>
+                    {t("filter.clear")}
                   </Button>
-                </div>
-              ) : !activeQuery.data ? (
-                <p className="py-10 text-center text-sm text-[var(--muted-foreground)]">
-                  {t("section.loading")}
-                </p>
-              ) : filtered.length === 0 ? (
-                <div className="py-10 text-center text-sm text-[var(--muted-foreground)]">
-                  <p>{hasFilter ? t("filter.empty") : t("section.archiveEmpty")}</p>
-                  {hasFilter && (
-                    <Button variant="outline" size="sm" className="mt-3" onClick={clearAll}>
-                      {t("filter.clear")}
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <div className="grid gap-4 lg:grid-cols-2">
-                  {filtered.map((deal) => (
-                    <DealCard key={deal.id} deal={deal} archived={isArchivedTab} />
-                  ))}
-                </div>
-              )}
-
-              <div className="mt-4">
-                <SourceNote
-                  source="JCT · openaccess.nl"
-                  url="https://journalcheckertool.org/transformative-agreements/"
-                  codes={["jct-coverage", "openaccess-nl-prose", "issn-mapping"]}
-                  howBuilt={tc("sourceNote.explain.deals")}
-                />
+                )}
               </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+            ) : (
+              <div className="grid gap-4 lg:grid-cols-2">
+                {filtered.map((deal) => (
+                  <DealCard key={deal.id} deal={deal} archived={isArchivedTab} />
+                ))}
+              </div>
+            )}
+
+            <div className="mt-4">
+              <SourceNote
+                source="JCT · openaccess.nl"
+                url="https://journalcheckertool.org/transformative-agreements/"
+                codes={["jct-coverage", "openaccess-nl-prose", "issn-mapping"]}
+                howBuilt={tc("sourceNote.explain.deals")}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </FilterLayout>
     </div>
   );
 }

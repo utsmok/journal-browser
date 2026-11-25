@@ -128,7 +128,7 @@ export function FunderPicker({ fullWidth = false }: { fullWidth?: boolean } = {}
               </span>
               <Link
                 href={`/${inst}/funders/${f.id}`}
-                className="shrink-0 px-1.5 py-1 text-xs font-medium text-[var(--primary-text)] underline-offset-2 hover:underline"
+                className="inline-flex min-h-11 shrink-0 items-center px-1.5 py-1 text-xs font-medium text-[var(--primary-text)] underline-offset-2 hover:underline min-[1024px]:min-h-0"
                 title={t("funder.openPageTitle", {
                   name: f.name ?? t("funder.fallbackName", { id: f.id }),
                 })}
