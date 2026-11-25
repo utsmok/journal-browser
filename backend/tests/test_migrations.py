@@ -139,7 +139,7 @@ async def test_apc_list_price_vs_paid_migration_round_trip(mig_db):
     await conn.execute("insert into journals (issn_l, latest_apc_euro) values ('0034-4257', 3000)")
     assert await periods() == old
 
-    await _alembic(command.upgrade, "head")
+    await _alembic(command.upgrade, "0005_apc_list_price_vs_paid")
 
     assert await periods() == {
         # €0 next to paid articles: the mean and highest amount stay, the
@@ -187,7 +187,7 @@ async def test_apc_list_price_vs_paid_migration_round_trip(mig_db):
         "update journal_apc_aggregates set paid_count = 2, zero_count = 1,"
         " euro_min = 2000, euro_mean = 2500 where issn_l = '0376-7388' and period = 2024"
     )
-    await _alembic(command.downgrade, "-1")
+    await _alembic(command.downgrade, "0004_journal_listed_in")
     assert await periods() == old
     journals = {
         r["issn_l"]: r["latest_apc_euro"]
