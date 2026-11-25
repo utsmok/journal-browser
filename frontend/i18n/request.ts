@@ -15,6 +15,7 @@ import journals from "../messages/en/journals.json";
 import orgunits from "../messages/en/orgunits.json";
 import publishers from "../messages/en/publishers.json";
 import search from "../messages/en/search.json";
+import shortlist from "../messages/en/shortlist.json";
 
 // Single locale for now; translations plug in by adding messages/<locale>/
 // files and reading the locale from the route here.
@@ -40,5 +41,6 @@ export default getRequestConfig(async () => ({
     dataPipeline,
     admin,
     search,
+    shortlist,
   },
 }));

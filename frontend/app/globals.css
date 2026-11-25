@@ -414,6 +414,18 @@
   li {
     break-inside: avoid;
   }
+  /* Shortlist: a long table may break across pages, a single row may not;
+     the actions and the remove buttons stay off the paper. */
+  .shortlist-table {
+    break-inside: auto !important;
+  }
+  .shortlist-table tr {
+    break-inside: avoid;
+  }
+  .shortlist-actions,
+  .shortlist-screen {
+    display: none !important;
+  }
   h2,
   h3,
   h4 {

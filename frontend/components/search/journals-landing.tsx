@@ -17,6 +17,7 @@ import { PageTabs } from "@/components/page-tabs";
 import { FunderPicker } from "@/components/funder/funder-picker";
 import { Pagination } from "@/components/search/pagination";
 import { SortHead } from "@/components/search/sort-head";
+import { ShortlistToggle } from "@/components/shortlist/shortlist-toggle";
 import { SourceNote } from "@/components/source-note";
 import { ListSkeletonRows } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -274,30 +275,38 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
           <SortHead columnId="title" label={t("table.journal")} state={sortRef.current} />
         ),
         cell: (info) => (
-          <div className="max-w-md">
-            <Link
-              href={`/${inst}/journals/${info.row.original.issn_l}`}
-              onClick={(event) => event.stopPropagation()}
-              className="font-medium text-[var(--foreground)] underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
-            >
-              {info.row.original.title ?? info.row.original.issn_l}
-            </Link>
-            {info.row.original.pub_type && info.row.original.pub_type !== "journal" && (
-              <span
-                className="ml-2 text-xs text-[var(--muted-foreground)]"
-                title={t("table.pubTypeTooltip", { type: info.row.original.pub_type })}
+          <div className="flex max-w-md items-start gap-2">
+            <ShortlistToggle
+              inst={inst}
+              issnL={info.row.original.issn_l}
+              title={info.row.original.title ?? info.row.original.issn_l}
+              className="-my-0.5"
+            />
+            <div className="min-w-0">
+              <Link
+                href={`/${inst}/journals/${info.row.original.issn_l}`}
+                onClick={(event) => event.stopPropagation()}
+                className="font-medium text-[var(--foreground)] underline-offset-2 hover:text-[var(--primary-text)] hover:underline"
               >
-                {pubTypeLabel(info.row.original.pub_type)}
-              </span>
-            )}
-            {info.row.original.is_in_doaj && (
-              <span
-                className="ml-2 cursor-help align-middle text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]"
-                title={t("table.doajTooltip")}
-              >
-                DOAJ
-              </span>
-            )}
+                {info.row.original.title ?? info.row.original.issn_l}
+              </Link>
+              {info.row.original.pub_type && info.row.original.pub_type !== "journal" && (
+                <span
+                  className="ml-2 text-xs text-[var(--muted-foreground)]"
+                  title={t("table.pubTypeTooltip", { type: info.row.original.pub_type })}
+                >
+                  {pubTypeLabel(info.row.original.pub_type)}
+                </span>
+              )}
+              {info.row.original.is_in_doaj && (
+                <span
+                  className="ml-2 cursor-help align-middle text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]"
+                  title={t("table.doajTooltip")}
+                >
+                  DOAJ
+                </span>
+              )}
+            </div>
           </div>
         ),
       },
@@ -1066,12 +1075,20 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
                               key={row.issn_l}
                               className="relative border-b border-[var(--border)] py-3 first:pt-0 last:border-0 last:pb-0"
                             >
-                              <Link
-                                href={`/${inst}/journals/${row.issn_l}`}
-                                className="font-medium text-[var(--foreground)] underline-offset-2 after:absolute after:inset-0 after:content-[''] hover:text-[var(--primary-text)] hover:underline"
-                              >
-                                {row.title ?? row.issn_l}
-                              </Link>
+                              <div className="flex items-start gap-2">
+                                <ShortlistToggle
+                                  inst={inst}
+                                  issnL={row.issn_l}
+                                  title={row.title ?? row.issn_l}
+                                  className="z-10 -ml-1"
+                                />
+                                <Link
+                                  href={`/${inst}/journals/${row.issn_l}`}
+                                  className="font-medium text-[var(--foreground)] underline-offset-2 after:absolute after:inset-0 after:content-[''] hover:text-[var(--primary-text)] hover:underline"
+                                >
+                                  {row.title ?? row.issn_l}
+                                </Link>
+                              </div>
                               <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
                                 {pub ? (
                                   <Link

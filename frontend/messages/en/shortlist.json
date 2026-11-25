@@ -1,0 +1,84 @@
+{
+  "meta": {
+    "title": "Shortlist",
+    "titleShared": "Shared shortlist",
+    "description": "Journals you saved for later, with the deal coverage, open access type, APC and green OA route for your institution."
+  },
+
+  "toggle": {
+    "add": "Add to shortlist: {title}",
+    "addTitle": "Save {title} to the shortlist",
+    "removeTitle": "Remove {title} from the shortlist"
+  },
+
+  "own": {
+    "heading": "Your shortlist",
+    "intro": "These journals are saved in this browser only. Deal coverage, open access type, APC and green OA route are looked up again for {institution} each time you open this page."
+  },
+
+  "shared": {
+    "heading": "Shared shortlist",
+    "intro": "Someone shared this journal list with you. Save it to keep it in this browser.",
+    "save": "Save this shortlist",
+    "add": "Add {count, plural, one {# journal} other {# journals}} to my shortlist",
+    "allSaved": "{count, plural, one {# journal is} other {# journals are}} already on your shortlist.",
+    "savedStatus": "Saved. The journals are now on your shortlist.",
+    "goToMine": "Go to my shortlist",
+    "empty": "This link does not list any journals."
+  },
+
+  "count": "{count, plural, one {# journal} other {# journals}}",
+
+  "columns": {
+    "journal": "Journal",
+    "issnL": "ISSN-L",
+    "remove": "Remove",
+    "publisher": "Publisher",
+    "deal": "Deal coverage",
+    "dealName": "Deal",
+    "oaType": "OA type",
+    "apc": "APC list price",
+    "quartile": "Quartile",
+    "works": "{short} works",
+    "doaj": "DOAJ",
+    "greenOa": "Green OA route",
+    "added": "Added"
+  },
+
+  "cells": {
+    "yes": "Yes",
+    "no": "No",
+    "none": "—",
+    "noDeal": "No deal",
+    "unknownPublisher": "Unknown publisher",
+    "dealFallback": "Deal {id}",
+    "noGreenRouteData": "Not in the Jisc Open Policy Finder",
+    "unavailable": "No longer listed",
+    "unavailableTitle": "This journal is no longer on the browsable list for {institution}."
+  },
+
+  "unavailableNotice": "{count, plural, one {# journal on this list is no longer on the browsable list for {institution} and shows no further details.} other {# journals on this list are no longer on the browsable list for {institution} and show no further details.}}",
+
+  "actions": {
+    "remove": "Remove {title} from the shortlist",
+    "clear": "Clear shortlist",
+    "exportCsv": "Export CSV",
+    "copyLink": "Copy share link",
+    "linkCopied": "Share link copied",
+    "linkCopyFailed": "Copying failed. Select the link below and copy it.",
+    "print": "Print"
+  },
+
+  "confirmClear": "Remove all {count, plural, one {# journal} other {# journals}} from your shortlist?",
+
+  "states": {
+    "loading": "Loading your shortlist…",
+    "retry": "Retry"
+  },
+
+  "empty": {
+    "title": "Your shortlist is empty",
+    "body": "Select the bookmark next to a journal to save it here. The shortlist lives in this browser, so other devices do not see it.",
+    "browse": "Browse journals"
+  }
+}

@@ -12,6 +12,7 @@ import {
   fetchCollaborationMap,
   fetchCollaborations,
   fetchCollaborationWorks,
+  fetchJournalBatch,
   fetchJournalCrisGaps,
   fetchOrgUnit,
   fetchOrgUnitCrisGaps,
@@ -48,6 +49,8 @@ const qk = {
   journals: (i: string, params: JournalSearchParams) => ["journals", i, params] as const,
   facets: (i: string, filters: JournalSearchParams) => ["facets", i, filters] as const,
   journal: (i: string, issnL: string) => ["journal", i, issnL] as const,
+  journalBatch: (i: string, issnLs: string[], years: YearParams) =>
+    ["journal-batch", i, issnLs, years.year_from ?? null, years.year_to ?? null] as const,
   journalGaps: (i: string, issnL: string) => ["journal-gaps", i, issnL] as const,
   similar: (i: string, issnL: string) => ["similar", i, issnL] as const,
   works: (i: string, issnL: string, page: number) => ["works", i, issnL, page] as const,
@@ -201,6 +204,20 @@ export function useJournal(issnL: string | undefined, funderId?: number, years?:
         include_gaps: "false",
       }),
     enabled: Boolean(issnL),
+  });
+}
+
+/** Saved-journal rows (shortlist). The key carries the ordered ISSN-L list,
+ * so a removed journal triggers a refetch; the year lens scopes the works
+ * column. Previous data stays on screen meanwhile, so callers should show
+ * only the rows still on their list. */
+export function useJournalBatch(issnLs: string[], years?: YearParams) {
+  const inst = useInstitution();
+  return useQuery({
+    queryKey: qk.journalBatch(inst, issnLs, years ?? {}),
+    queryFn: () => fetchJournalBatch(inst, issnLs, years),
+    enabled: issnLs.length > 0,
+    placeholderData: keepPreviousData,
   });
 }
 
