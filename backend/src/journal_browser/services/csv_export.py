@@ -1,17 +1,19 @@
 """CSV streaming primitives shared by the export endpoints.
 
 Formula-injection guard, filename sanitizer, and the chunked CSV
-StreamingResponse. The flush cadence (FLUSH_EVERY) matches the
-server-side cursor's yield_per in the callers, so one buffer flush
-serves one cursor partition.
+StreamingResponse. csv_stream reads a statement from a server-side
+cursor in partitions of FLUSH_EVERY, the flush cadence of csv_response,
+so one buffer flush serves one cursor partition.
 """
 
 import csv
 import io
 import re
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
+from typing import Any
 
 from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 #: Rows buffered per streaming chunk (both the server-side cursor's
 #: yield_per and the CSV flush cadence).
@@ -32,6 +34,27 @@ def csv_safe(value: str) -> str:
 
 def safe_filename(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-") or "export"
+
+
+def csv_cells(values: Sequence[Any]) -> list[str]:
+    """One CSV line; every cell goes through the formula guard."""
+    return ["" if v is None else csv_safe(str(v)) for v in values]
+
+
+async def csv_stream(
+    session: AsyncSession, stmt: Any, to_row: Callable[[Any], Sequence[Any]]
+) -> AsyncIterator[list[str]]:
+    """One line per row of `stmt`, read from a server-side cursor.
+    `stmt` is the statement an .all() would run, so the rows and their
+    order stay the same; only the fetch is batched."""
+    result = await session.stream(stmt.execution_options(yield_per=FLUSH_EVERY))
+
+    async def lines() -> AsyncIterator[list[str]]:
+        async for partition in result.partitions(FLUSH_EVERY):
+            for row in partition:
+                yield csv_cells(to_row(row))
+
+    return lines()
 
 
 def csv_response(

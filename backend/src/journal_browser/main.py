@@ -181,9 +181,7 @@ async def _warm_snapshots_task() -> None:
             from datetime import UTC, datetime
 
             from .models import Author, Institution
-            from .routers import deals as deals_router
-            from .services import authors, collaborations, funders, orgunits, publishers
-            from .services.cache import SWR_CACHE, swr_put
+            from .services import authors, collaborations, deals, funders, orgunits, publishers
             from .services.search import search_journals
             from .services.works_query import clamped_year_range
 
@@ -208,10 +206,7 @@ async def _warm_snapshots_task() -> None:
 
                     # Warm deals, funders, collaborations, and Last-5-Years presets.
                     try:
-                        epoch_d, built_d = await deals_router._build_deals_list(
-                            session, inst, "current"
-                        )
-                        swr_put(SWR_CACHE, ("deals_list", inst.id, "current"), epoch_d, built_d)
+                        await deals.deals_list(session, inst, "current")
                     except Exception:
                         logger.exception("warm deals failed for %s", inst.code)
 
@@ -232,6 +227,9 @@ async def _warm_snapshots_task() -> None:
                             offset=0,
                             limit=25,
                             include_facets=True,
+                        )
+                        await collaborations.collaboration_map(
+                            session, inst, collaborations.CollaborationFilters()
                         )
                     except Exception:
                         logger.exception("warm collaborations failed for %s", inst.code)

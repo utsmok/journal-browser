@@ -2279,46 +2279,22 @@ export interface components {
             /** Value */
             value: string;
         };
-        /**
-         * CollaborationMapPoint
-         * @description One partner with coordinates, for the map.
-         */
-        CollaborationMapPoint: {
-            /** Ror */
-            ror: string;
-            /** Name */
-            name: string;
-            /** Country Code */
-            country_code?: string | null;
-            /** City */
-            city?: string | null;
-            /** Org Type */
-            org_type: string;
-            /** Lat */
-            lat: number;
-            /** Lng */
-            lng: number;
-            /** Works */
-            works: number;
-            /** Corresponding Works */
-            corresponding_works: number;
-            /**
-             * Home Corresponding Works
-             * @default 0
-             */
-            home_corresponding_works: number;
-            /** Oa Share */
-            oa_share?: number | null;
-            /**
-             * Merged Count
-             * @default 0
-             */
-            merged_count: number;
-        };
         /** CollaborationMapResponse */
         CollaborationMapResponse: {
             /** Items */
-            items: components["schemas"]["CollaborationMapPoint"][];
+            items: [
+                string,
+                string,
+                string | null,
+                string | null,
+                string,
+                number,
+                number,
+                number,
+                number,
+                number,
+                number | null
+            ][];
             /** Unmapped */
             unmapped: number;
         };

@@ -4,15 +4,31 @@ previous epoch's bundle is served immediately while a background task
 rebuilds on a fresh session (services/cache.py SWR helpers)."""
 
 import asyncio
+import tracemalloc
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from pydantic import BaseModel
+from sqlalchemy import delete, select
 
 from conftest import journal_factory, requires_db
-from journal_browser.models import Author, CacheEpoch, HarvestRun, JournalFlags, OpenalexWork, Work
+from journal_browser.config import reset_settings_cache
+from journal_browser.models import (
+    Author,
+    CacheEpoch,
+    HarvestRun,
+    Journal,
+    JournalFlags,
+    OpenalexWork,
+    Work,
+)
 from journal_browser.services.cache import (
+    FACET_CACHE,
     SNAPSHOT_CACHE,
+    SNAPSHOT_TTL,
     SWR_CACHE,
+    _nbytes,
+    cache_get,
+    cache_put,
     swr_get,
     swr_put,
     swr_schedule,
@@ -43,7 +59,7 @@ async def test_swr_get_put_and_schedule():
         if done:
             break
         await asyncio.sleep(0.01)
-    assert done and store[("k",)] == ("e2", {"b": 2})
+    assert done and store[("k",)][:2] == ("e2", {"b": 2})
     assert swr_get(store, ("k",), "e2") == (True, {"b": 2})
 
 
@@ -100,6 +116,132 @@ async def test_swr_put_evicts_oldest_when_full():
     assert swr_get(store, ("k", 2), "e1") == (True, 2)
     swr_put(store, ("k", 5), "e1", 5, max_entries=3)
     assert ("k", 3) not in store and ("k", 2) in store
+
+
+async def test_none_bundle_is_never_cached():
+    """A rebuild that finds the entity gone answers (epoch, None). None
+    must not become a fresh bundle, and it retires the stale one, so the
+    next request builds inline and answers 404."""
+    store: dict = {}
+    swr_put(store, ("k",), "e2", None)
+    assert store == {}
+    swr_put(store, ("k",), "e1", {"b": 1})
+    swr_put(store, ("k",), "e2", None)
+    assert swr_get(store, ("k",), "e2") == (False, None)
+
+    swr_put(store, ("k",), "e1", {"b": 1})
+
+    async def vanished():
+        return "e2", None
+
+    assert swr_schedule(store, ("k",), vanished) is True
+    for _ in range(100):
+        if not store:
+            break
+        await asyncio.sleep(0.01)
+    assert store == {}
+
+
+async def test_byte_cap_evicts_least_recently_used(monkeypatch, tmp_path):
+    """The store also drops entries by size: past JB_CACHE_MAX_MB the least
+    recently used go first, and an entry larger than the cap stays alone."""
+    monkeypatch.setenv("JB_SETTINGS_YAML", str(tmp_path / "missing.yaml"))
+    monkeypatch.setenv("JB_CACHE_MAX_MB", "1")
+    reset_settings_cache()
+
+    class Bundle(BaseModel):
+        text: str
+
+    try:
+        store: dict = {}
+        cache_put(store, ("a",), Bundle(text="a" * 400_000))
+        cache_put(store, ("b",), Bundle(text="b" * 400_000))
+        cache_get(store, ("a",), SNAPSHOT_TTL)
+        cache_put(store, ("c",), Bundle(text="c" * 400_000))
+        assert list(store) == [("a",), ("c",)]
+        cache_put(store, ("d",), Bundle(text="d" * 2_000_000))
+        assert list(store) == [("d",)]
+        assert cache_get(store, ("d",), SNAPSHOT_TTL) == Bundle(text="d" * 2_000_000)
+    finally:
+        reset_settings_cache()
+
+
+async def test_byte_budget_is_shared_and_follows_reads(monkeypatch, tmp_path):
+    """One budget covers the three stores: a write evicts the least
+    recently used entry wherever it sits, and a read keeps its entry."""
+    monkeypatch.setenv("JB_SETTINGS_YAML", str(tmp_path / "missing.yaml"))
+    monkeypatch.setenv("JB_CACHE_MAX_MB", "1")
+    reset_settings_cache()
+    try:
+        for store in (FACET_CACHE, SNAPSHOT_CACHE, SWR_CACHE):
+            store.clear()
+        swr_put(SWR_CACHE, ("old",), "e1", {"t": "o" * 400_000})
+        cache_put(SNAPSHOT_CACHE, ("snap",), {"t": "s" * 400_000})
+        cache_put(FACET_CACHE, ("facet",), {"t": "f" * 400_000})
+        assert list(SWR_CACHE) == [] and list(SNAPSHOT_CACHE) == [("snap",)]
+        # Reading the snapshot makes the facet entry the oldest.
+        cache_get(SNAPSHOT_CACHE, ("snap",), SNAPSHOT_TTL)
+        cache_put(FACET_CACHE, ("facet2",), {"t": "g" * 400_000})
+        assert list(FACET_CACHE) == [("facet2",)]
+        assert list(SNAPSHOT_CACHE) == [("snap",)]
+    finally:
+        for store in (FACET_CACHE, SNAPSHOT_CACHE, SWR_CACHE):
+            store.clear()
+        reset_settings_cache()
+
+
+def test_nbytes_scales_a_sampled_container():
+    """A container past the sample size is sized from a sample of its
+    items, scaled to the full count: the estimate stays close to sizing
+    every item."""
+
+    def row(i: int) -> dict:
+        return {"name": f"institute number {i}", "n": i, "tags": ["a", "b"]}
+
+    many = [row(i) for i in range(5000)]
+    every_item = sum(_nbytes(many[i : i + 100]) for i in range(0, 5000, 100))
+    assert abs(_nbytes(many) - every_item) < 0.1 * every_item
+
+
+def test_nbytes_matches_allocated_memory_for_models():
+    """The estimate tracks what Python allocated for a list of pydantic
+    models, including the set of assigned fields that pydantic keeps
+    outside the instance dict."""
+
+    class Row(BaseModel):
+        value: str
+        count: int
+
+    tracemalloc.start()
+    try:
+        rows = [Row(value="x", count=1) for _ in range(2000)]
+        allocated, _ = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert abs(_nbytes(rows) - allocated) < 0.3 * allocated
+
+
+@requires_db
+async def test_deleted_journal_404s_once_the_stale_rebuild_ran(client, db, institution_factory):
+    """End to end: a harvest deletes a cached journal and bumps the epoch.
+    The stale bundle is served once, and the request after the background
+    rebuild finds nothing answers 404, not a cached None."""
+    await _seed(db, institution_factory)
+    db.add(journal_factory("1234-5678"))
+    await db.commit()
+    url = "/api/v1/ut/journals/1234-5678?include_gaps=false"
+    assert (await client.get(url)).status_code == 200
+
+    await db.execute(delete(Journal).where(Journal.issn_l == "1234-5678"))
+    row = (await db.scalars(select(CacheEpoch))).one()
+    row.bumped_at = datetime.now(UTC) + timedelta(seconds=1)
+    await db.commit()
+    assert (await client.get(url)).status_code == 200
+    for _ in range(200):
+        await asyncio.sleep(0.01)
+        if not any(k[0] == "journal_detail" for k in SWR_CACHE):
+            break
+    assert (await client.get(url)).status_code == 404
 
 
 @requires_db

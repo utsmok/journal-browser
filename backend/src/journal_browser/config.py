@@ -84,6 +84,22 @@ class Settings(BaseSettings):
     # Default sits above the measured cold publisher-snapshot build
     # (~59 s under harvest load); lower via env for stricter cuts.
     statement_timeout_ms: int = 60_000
+    # RAM the three in-process caches (search facets, list snapshots and
+    # stale detail bundles) may hold together, estimated from the cached
+    # objects. Above it the least recently used entry goes first. The
+    # entry caps alone let a few hundred multi-megabyte snapshots add up
+    # to gigabytes; one orgunit snapshot holds about 100 MB.
+    cache_max_mb: int = 256
+    # API engine pool. One request can hold five connections (its own plus
+    # four from services/concurrency.py `together()`), and stale-while-
+    # revalidate rebuilds each take one more, so the driver defaults
+    # (5 + 10) queue requests under load. Postgres allows 97 ordinary
+    # connections (max_connections 100); the scheduler's job engines and
+    # an admin-triggered job in this process draw from the same number.
+    db_pool_size: int = 10
+    db_max_overflow: int = 20
+    # Seconds a request waits for a connection before it fails.
+    db_pool_timeout: int = 30
 
     # ut-metadata Postgres (canonical Twente publications). Empty = the
     # feature is off: every endpoint keeps its works_stats-only behavior.

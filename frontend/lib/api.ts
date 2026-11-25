@@ -47,8 +47,31 @@ export type Attribution = Schemas["Attribution"];
 export type CollaborationPartner = Schemas["CollaborationPartner"];
 export type CollaborationSearchResponse = Schemas["CollaborationSearchResponse"];
 export type CollaborationFacets = Schemas["CollaborationFacets"];
-export type CollaborationMapPoint = Schemas["CollaborationMapPoint"];
-export type CollaborationMapResponse = Schemas["CollaborationMapResponse"];
+/** The row the API sends for one partner on the map, in field order. */
+type CollaborationMapRow = Schemas["CollaborationMapResponse"]["items"][number];
+
+/**
+ * One partner with coordinates. The API sends a row per partner to keep
+ * the map payload small; fetchCollaborationMap turns each row into this.
+ */
+export type CollaborationMapPoint = {
+  ror: string;
+  name: string;
+  country_code: string | null;
+  city: string | null;
+  org_type: string;
+  lat: number;
+  lng: number;
+  works: number;
+  corresponding_works: number;
+  home_corresponding_works: number;
+  oa_share: number | null;
+};
+
+export type CollaborationMapResponse = {
+  items: CollaborationMapPoint[];
+  unmapped: number;
+};
 export type CollaborationDetailResponse = Schemas["CollaborationDetailResponse"];
 export type CollaborationWork = Schemas["CollaborationWork"];
 export type CollaborationWorksResponse = Schemas["CollaborationWorksResponse"];
@@ -129,7 +152,35 @@ export function fetchCollaborations(inst: string, p: CollaborationSearchParams, 
 }
 
 export function fetchCollaborationMap(inst: string, p: CollaborationSearchParams) {
-  return apiGet<CollaborationMapResponse>(`/${inst}/collaborations/map`, collabParams(p));
+  const toPoint = ([
+    ror,
+    name,
+    country_code,
+    city,
+    org_type,
+    lat,
+    lng,
+    works,
+    corresponding_works,
+    home_corresponding_works,
+    oa_share,
+  ]: CollaborationMapRow) => ({
+    ror,
+    name,
+    country_code,
+    city,
+    org_type,
+    lat,
+    lng,
+    works,
+    corresponding_works,
+    home_corresponding_works,
+    oa_share,
+  });
+  return apiGet<Schemas["CollaborationMapResponse"]>(
+    `/${inst}/collaborations/map`,
+    collabParams(p),
+  ).then((data) => ({ items: data.items.map(toPoint), unmapped: data.unmapped }));
 }
 
 export function fetchCollaboration(inst: string, ror: string, p: CollaborationSearchParams) {

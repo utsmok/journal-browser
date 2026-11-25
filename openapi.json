@@ -11492,98 +11492,70 @@
         "title": "CollaborationLink",
         "description": "An identifier or URL the ROR record lists for the partner."
       },
-      "CollaborationMapPoint": {
-        "properties": {
-          "ror": {
-            "type": "string",
-            "title": "Ror"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "country_code": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Country Code"
-          },
-          "city": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "City"
-          },
-          "org_type": {
-            "type": "string",
-            "title": "Org Type"
-          },
-          "lat": {
-            "type": "number",
-            "title": "Lat"
-          },
-          "lng": {
-            "type": "number",
-            "title": "Lng"
-          },
-          "works": {
-            "type": "integer",
-            "title": "Works"
-          },
-          "corresponding_works": {
-            "type": "integer",
-            "title": "Corresponding Works"
-          },
-          "home_corresponding_works": {
-            "type": "integer",
-            "title": "Home Corresponding Works",
-            "default": 0
-          },
-          "oa_share": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Oa Share"
-          },
-          "merged_count": {
-            "type": "integer",
-            "title": "Merged Count",
-            "default": 0
-          }
-        },
-        "type": "object",
-        "required": [
-          "ror",
-          "name",
-          "org_type",
-          "lat",
-          "lng",
-          "works",
-          "corresponding_works"
-        ],
-        "title": "CollaborationMapPoint",
-        "description": "One partner with coordinates, for the map."
-      },
       "CollaborationMapResponse": {
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/CollaborationMapPoint"
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              ],
+              "type": "array",
+              "maxItems": 11,
+              "minItems": 11,
+              "description": "(ror, name, country_code, city, org_type, lat, lng, works, corresponding_works, home_corresponding_works, oa_share)"
             },
             "type": "array",
             "title": "Items"
