@@ -1,6 +1,7 @@
 """Journal search: Postgres FTS + facets + keyset pagination."""
 
 from ...config import get_settings as get_settings
+from .batch import journals_by_issn
 from .classify import OA_TYPES, oa_type_case, oa_type_value
 from .core import search_journals
 from .currency import year_rate
@@ -26,6 +27,7 @@ __all__ = [
     "encode_cursor",
     "escape_like",
     "facet_counts",
+    "journals_by_issn",
     "normalize_issn",
     "oa_type_case",
     "oa_type_value",

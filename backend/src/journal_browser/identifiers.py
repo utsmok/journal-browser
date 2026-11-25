@@ -45,3 +45,13 @@ def norm_title(title: str) -> str:
     """Case/punctuation-folded title for fuzzy matching."""
     folded = title.casefold()
     return re.sub(r"[^0-9a-z]+", " ", folded).strip()
+
+
+_ISSN_RE = re.compile(r"^(\d{4})-?(\d{3}[\dX])$")
+
+
+def normalize_issn_l(value: str) -> str | None:
+    """Canonical ISSN form ``XXXX-XXXX`` from a bare or hyphenated ISSN, else
+    None. Case, hyphens and surrounding spaces never matter."""
+    m = _ISSN_RE.match(value.strip().replace(" ", "").upper())
+    return f"{m.group(1)}-{m.group(2)}" if m else None

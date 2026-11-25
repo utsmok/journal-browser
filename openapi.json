@@ -2199,6 +2199,101 @@
         }
       }
     },
+    "/api/v1/{institution_code}/journals/batch": {
+      "get": {
+        "tags": [
+          "journals"
+        ],
+        "summary": "Journals Batch",
+        "description": "Saved-journal lookup: list rows for an explicit ISSN-L set, in request\norder. ISSN-Ls outside the institution's browsable corpus come back in\n``missing``.",
+        "operationId": "journals_batch_api_v1__institution_code__journals_batch_get",
+        "parameters": [
+          {
+            "name": "institution_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Institution Code"
+            }
+          },
+          {
+            "name": "issn_l",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 1200,
+              "description": "Comma-separated ISSN-Ls, hyphenated or bare; at most 100 values",
+              "title": "Issn L"
+            },
+            "description": "Comma-separated ISSN-Ls, hyphenated or bare; at most 100 values"
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range start (clamped to the institution's data window; default: the full window)",
+              "title": "Year From"
+            },
+            "description": "Publication-year range start (clamped to the institution's data window; default: the full window)"
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 1900
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Publication-year range end (clamped to the institution's data window; default: the full window)",
+              "title": "Year To"
+            },
+            "description": "Publication-year range end (clamped to the institution's data window; default: the full window)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JournalBatchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/{institution_code}/journals/recommend": {
       "post": {
         "tags": [
@@ -15018,6 +15113,320 @@
         "type": "object",
         "title": "InstitutionUpdate",
         "description": "PATCH-shaped PUT body: absent fields are untouched, explicit null\nclears nullable columns, and the three non-nullable fields reject null."
+      },
+      "JournalBatchDeal": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "publisher_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Name"
+          },
+          "duration_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "JournalBatchDeal",
+        "description": "A current deal that covers the journal for the requesting institution."
+      },
+      "JournalBatchItem": {
+        "properties": {
+          "issn_l": {
+            "type": "string",
+            "title": "Issn L"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "publisher_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Name"
+          },
+          "publisher_canonical": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Canonical"
+          },
+          "is_oa": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Oa"
+          },
+          "is_in_doaj": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is In Doaj"
+          },
+          "in_scimago": {
+            "type": "boolean",
+            "title": "In Scimago",
+            "default": false
+          },
+          "last_active_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Active Year"
+          },
+          "deal_covered": {
+            "type": "boolean",
+            "title": "Deal Covered",
+            "default": false
+          },
+          "deal_cap_reached": {
+            "type": "boolean",
+            "title": "Deal Cap Reached",
+            "default": false
+          },
+          "works": {
+            "type": "integer",
+            "title": "Works",
+            "default": 0
+          },
+          "quartile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quartile"
+          },
+          "twoyr_mean_citedness": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Twoyr Mean Citedness"
+          },
+          "oa_type": {
+            "$ref": "#/components/schemas/OaType",
+            "default": "subscription"
+          },
+          "pub_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pub Type"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "primary_topic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Topic"
+          },
+          "apc_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apc Source"
+          },
+          "apc_currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apc Currency"
+          },
+          "apc_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apc Price"
+          },
+          "apc_low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apc Low"
+          },
+          "apc_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apc High"
+          },
+          "apc_stats": {
+            "items": {
+              "$ref": "#/components/schemas/ApcAggregateOut"
+            },
+            "type": "array",
+            "title": "Apc Stats",
+            "default": []
+          },
+          "funder_fit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FunderFitOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deals": {
+            "items": {
+              "$ref": "#/components/schemas/JournalBatchDeal"
+            },
+            "type": "array",
+            "title": "Deals",
+            "default": []
+          },
+          "green_oa": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GreenOa"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "issn_l",
+          "title",
+          "publisher_name",
+          "is_oa",
+          "is_in_doaj"
+        ],
+        "title": "JournalBatchItem",
+        "description": "List row plus what a saved-journal table needs: the names of the\ncovering deals and the best green OA route."
+      },
+      "JournalBatchResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/JournalBatchItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "missing"
+        ],
+        "title": "JournalBatchResponse"
       },
       "JournalDetailResponse": {
         "properties": {

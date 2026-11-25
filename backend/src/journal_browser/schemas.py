@@ -11,6 +11,7 @@ from .vocab import (
     FeedbackCategory,
     FeedbackPriority,
     FeedbackStatus,
+    GreenOa,
     HarvestStatus,
     IdentityStatus,
     OaType,
@@ -83,6 +84,28 @@ class JournalSearchResponse(BaseModel):
     next_cursor: str | None = None
     fuzzy: bool = False
     facets: dict[str, dict[str, int]] = {}
+
+
+class JournalBatchDeal(BaseModel):
+    """A current deal that covers the journal for the requesting institution."""
+
+    id: int
+    publisher_name: str | None = None
+    duration_text: str | None = None
+
+
+class JournalBatchItem(JournalListItem):
+    """List row plus what a saved-journal table needs: the names of the
+    covering deals and the best green OA route."""
+
+    deals: list[JournalBatchDeal] = []
+    green_oa: GreenOa | None = None
+
+
+class JournalBatchResponse(BaseModel):
+    items: list[JournalBatchItem]
+    #: Requested ISSN-Ls with no row in this institution's browsable corpus.
+    missing: list[str]
 
 
 # ── Guided Journal Finder recommendations ──────────────────────────────────

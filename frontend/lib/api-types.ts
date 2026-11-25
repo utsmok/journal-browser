@@ -562,6 +562,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/{institution_code}/journals/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Journals Batch
+         * @description Saved-journal lookup: list rows for an explicit ISSN-L set, in request
+         *     order. ISSN-Ls outside the institution's browsable corpus come back in
+         *     ``missing``.
+         */
+        get: operations["journals_batch_api_v1__institution_code__journals_batch_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/{institution_code}/journals/recommend": {
         parameters: {
             query?: never;
@@ -3541,6 +3563,100 @@ export interface components {
             /** Require Confirmed Affiliation */
             require_confirmed_affiliation?: boolean | null;
         };
+        /**
+         * JournalBatchDeal
+         * @description A current deal that covers the journal for the requesting institution.
+         */
+        JournalBatchDeal: {
+            /** Id */
+            id: number;
+            /** Publisher Name */
+            publisher_name?: string | null;
+            /** Duration Text */
+            duration_text?: string | null;
+        };
+        /**
+         * JournalBatchItem
+         * @description List row plus what a saved-journal table needs: the names of the
+         *     covering deals and the best green OA route.
+         */
+        JournalBatchItem: {
+            /** Issn L */
+            issn_l: string;
+            /** Title */
+            title: string | null;
+            /** Publisher Name */
+            publisher_name: string | null;
+            /** Publisher Canonical */
+            publisher_canonical?: string | null;
+            /** Is Oa */
+            is_oa: boolean | null;
+            /** Is In Doaj */
+            is_in_doaj: boolean | null;
+            /**
+             * In Scimago
+             * @default false
+             */
+            in_scimago: boolean;
+            /** Last Active Year */
+            last_active_year?: number | null;
+            /**
+             * Deal Covered
+             * @default false
+             */
+            deal_covered: boolean;
+            /**
+             * Deal Cap Reached
+             * @default false
+             */
+            deal_cap_reached: boolean;
+            /**
+             * Works
+             * @default 0
+             */
+            works: number;
+            /** Quartile */
+            quartile?: string | null;
+            /** Twoyr Mean Citedness */
+            twoyr_mean_citedness?: number | null;
+            /** @default subscription */
+            oa_type: components["schemas"]["OaType"];
+            /** Pub Type */
+            pub_type?: string | null;
+            /** Language */
+            language?: string | null;
+            /** Primary Topic */
+            primary_topic?: string | null;
+            /** Apc Source */
+            apc_source?: string | null;
+            /** Apc Currency */
+            apc_currency?: string | null;
+            /** Apc Price */
+            apc_price?: number | null;
+            /** Apc Low */
+            apc_low?: number | null;
+            /** Apc High */
+            apc_high?: number | null;
+            /**
+             * Apc Stats
+             * @default []
+             */
+            apc_stats: components["schemas"]["ApcAggregateOut"][];
+            funder_fit?: components["schemas"]["FunderFitOut"] | null;
+            /**
+             * Deals
+             * @default []
+             */
+            deals: components["schemas"]["JournalBatchDeal"][];
+            green_oa?: components["schemas"]["GreenOa"] | null;
+        };
+        /** JournalBatchResponse */
+        JournalBatchResponse: {
+            /** Items */
+            items: components["schemas"]["JournalBatchItem"][];
+            /** Missing */
+            missing: string[];
+        };
         /** JournalDetailResponse */
         JournalDetailResponse: {
             journal: components["schemas"]["JournalListItem"];
@@ -6399,6 +6515,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JournalSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journals_batch_api_v1__institution_code__journals_batch_get: {
+        parameters: {
+            query: {
+                /** @description Comma-separated ISSN-Ls, hyphenated or bare; at most 100 values */
+                issn_l: string;
+                /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
+                year_from?: number | null;
+                /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */
+                year_to?: number | null;
+            };
+            header?: never;
+            path: {
+                institution_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalBatchResponse"];
                 };
             };
             /** @description Validation Error */
