@@ -21,7 +21,13 @@ from journal_browser.harvest.common import (
 from journal_browser.harvest.openalex_journals import journal_values
 from journal_browser.harvest.reconcile import derive_nl_deal_coverage, reconcile_deals
 from journal_browser.harvest.scimagojr import issn_candidates
-from journal_browser.ingest import IngestSession, _strip_nuls, apply_overrides, content_hash
+from journal_browser.ingest import (
+    IngestSession,
+    _strip_nuls,
+    _without_dropped_keys,
+    apply_overrides,
+    content_hash,
+)
 from journal_browser.logging_setup import configure_logging
 from journal_browser.models import (
     Deal,
@@ -98,6 +104,64 @@ async def test_ingest_record_dedupes_versions_and_races(db):
         .where(SourceRecord.source == "testsrc", SourceRecord.source_pk == "pk9")
     )
     assert stored == 1
+
+
+def test_only_listed_top_level_keys_are_dropped():
+    work = {"id": "W1", "title": "T", "abstract_inverted_index": {"T": [0]}, "authorships": []}
+
+    # An unlisted (source, entity_type) keeps every key.
+    assert _without_dropped_keys("openaire", "work", work) is work
+    assert _without_dropped_keys("pure", "persons", work) is work
+    # A listed one drops its keys and keeps the rest.
+    assert _without_dropped_keys("openalex", "works_stats", work) == {
+        "id": "W1",
+        "title": "T",
+        "authorships": [],
+    }
+    # Nested keys with a dropped name stay.
+    nested = {"assertion": [{"name": "reference", "value": 1}]}
+    assert _without_dropped_keys("crossref", "work", dict(nested, reference=[])) == nested
+
+
+@requires_db
+async def test_ingest_stores_the_projection_and_hashes_the_full_payload(db):
+    ingest = IngestSession(db)
+    await ingest.start_run("openalex", "works_stats", "test", {})
+    work = {
+        "id": "https://openalex.org/W1",
+        "title": "T",
+        "publication_year": 2024,
+        "abstract_inverted_index": {"T": [0]},
+        "referenced_works": ["W2"],
+    }
+    projection = {"id": "https://openalex.org/W1", "title": "T", "publication_year": 2024}
+
+    kind, digest = await ingest.ingest_record("W1", work)
+    # A change confined to a dropped key is still a new version.
+    changed = dict(work, referenced_works=["W3"])
+    other = dict(work, id="https://openalex.org/W2")
+    bulk_new = await ingest.ingest_records([("W1", changed), ("W2", other)])
+    await ingest.commit()
+    rows = (
+        (await db.execute(select(SourceRecord).order_by(SourceRecord.source_pk, SourceRecord.id)))
+        .scalars()
+        .all()
+    )
+
+    assert kind == "new" and bulk_new == 2
+    assert [row.source_pk for row in rows] == ["W1", "W1", "W2"]
+    assert [row.content_hash for row in rows] == [
+        digest,
+        content_hash(changed),
+        content_hash(other),
+    ]
+    assert digest == content_hash(work)
+    assert [row.payload for row in rows] == [
+        projection,
+        projection,
+        dict(projection, id="https://openalex.org/W2"),
+    ]
+    assert [row.publication_year for row in rows] == [2024, 2024, 2024]
 
 
 @requires_db

@@ -2,9 +2,11 @@
 
 Append-only source_records versions (same payload re-harvested inserts
 nothing), harvest_runs/harvest_state bookkeeping, per-page commits, and
-per-record error isolation. `store_raw_file` keeps file-level artifacts
-(CSVs, HTML) in the landing dir; `apply_overrides` re-applies curated
-values after normalization so re-ingestion never overwrites them.
+per-record error isolation. A stored payload omits the top-level keys listed
+in PAYLOAD_DROP_KEYS; content_hash still covers the full payload.
+`store_raw_file` keeps file-level artifacts (CSVs, HTML) in the landing dir;
+`apply_overrides` re-applies curated values after normalization so
+re-ingestion never overwrites them.
 """
 
 import hashlib
@@ -68,6 +70,38 @@ def _strip_nuls(value: Any) -> Any:
     if isinstance(value, list):
         return [_strip_nuls(v) for v in value]
     return value
+
+
+# Top-level payload keys that are not stored. Audited 2026-11 against every
+# reader of SourceRecord.payload in backend and frontend: none reads these
+# keys, and each is derived data the source recomputes (OpenAlex topic
+# shares, concepts, keywords, citation lists, author name lists; Crossref
+# reference lists). content_hash is computed before they are removed, so
+# rows written before and after this list agree on what a new version is.
+_OPENALEX_WORK_DROP_KEYS = frozenset(
+    {
+        "abstract_inverted_index",
+        "concepts",
+        "keywords",
+        "referenced_works",
+        "related_works",
+        "mesh",
+    }
+)
+PAYLOAD_DROP_KEYS: dict[tuple[str, str], frozenset[str]] = {
+    ("openalex", "sources"): frozenset({"topic_share"}),
+    ("openalex", "works_stats"): _OPENALEX_WORK_DROP_KEYS,
+    ("openalex", "work"): _OPENALEX_WORK_DROP_KEYS,
+    ("openalex", "authors"): frozenset({"topic_share", "x_concepts", "raw_author_names"}),
+    ("crossref", "work"): frozenset({"reference"}),
+}
+
+
+def _without_dropped_keys(source: str, entity_type: str, payload: dict[str, Any]) -> dict[str, Any]:
+    drop = PAYLOAD_DROP_KEYS.get((source, entity_type))
+    if not drop:
+        return payload
+    return {k: v for k, v in payload.items() if k not in drop}
 
 
 def _publication_year(payload: dict[str, Any]) -> int | None:
@@ -181,8 +215,8 @@ class IngestSession:
             "call start_run() first"
         )
         self.records_seen += 1
-        payload = _strip_nuls(payload)
-        h = content_hash(payload)
+        full = _strip_nuls(payload)
+        h = content_hash(full)
         key = (self.source, self.entity_type, source_pk, h)
         if key in self._seen_keys:
             return "duplicate", h
@@ -203,8 +237,8 @@ class IngestSession:
                 "source": self.source,
                 "entity_type": self.entity_type,
                 "source_pk": source_pk,
-                "payload": payload,
-                "publication_year": _publication_year(payload),
+                "payload": _without_dropped_keys(self.source, self.entity_type, full),
+                "publication_year": _publication_year(full),
                 "content_hash": h,
                 "harvest_run_id": self.run_id,
             }
@@ -223,16 +257,16 @@ class IngestSession:
         self.records_seen += len(records)
         dedup: dict[tuple[str, str], dict[str, Any]] = {}
         for source_pk, payload in records:
-            stripped = _strip_nuls(payload)
-            key = (source_pk, content_hash(stripped))
+            full = _strip_nuls(payload)
+            key = (source_pk, content_hash(full))
             if key in self._seen_keys:
                 continue
             dedup[key] = {
                 "source": self.source,
                 "entity_type": self.entity_type,
                 "source_pk": source_pk,
-                "payload": stripped,
-                "publication_year": _publication_year(stripped),
+                "payload": _without_dropped_keys(self.source, self.entity_type, full),
+                "publication_year": _publication_year(full),
                 "content_hash": key[1],
                 "harvest_run_id": self.run_id,
             }

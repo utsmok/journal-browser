@@ -87,7 +87,10 @@ class HarvestState(Base):
 
 
 class SourceRecord(Base):
-    """Verbatim payload version for one (source, entity, key)."""
+    """Payload version for one (source, entity, key).
+
+    A stored payload omits the keys listed in ingest.PAYLOAD_DROP_KEYS.
+    """
 
     __tablename__ = "source_records"
 

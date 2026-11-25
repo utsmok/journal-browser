@@ -3,7 +3,8 @@
 Two routes (ut-metadata practice): seed lookups for deal-covered ISSNs
 (keyless batch calls), then a full cursor-paged sweep for the browsable
 corpus (keyed when OPENALEX_API_KEY/ALETHECA_OPENALEX_API_KEY is set).
-Every payload lands verbatim in source_records before normalization;
+Every payload lands in source_records before normalization (topic_share is
+dropped, see ingest.PAYLOAD_DROP_KEYS);
 the normalization step also feeds issn_map and the publishers table.
 """
 

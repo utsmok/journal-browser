@@ -1,6 +1,6 @@
 """Database schema: harvest bookkeeping, landing store, and domain tables.
 
-Landing store (ut-metadata pattern): verbatim payloads in `source_records`
+Landing store (ut-metadata pattern): payload versions in `source_records`
 (content-hash versioned, append-only) plus file-level raw copies in
 `raw_files`. Normalized domain tables are rebuildable from the landing
 store; `manual_overrides` survives every re-ingestion.

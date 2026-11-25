@@ -1,7 +1,7 @@
 """Institution publication statistics (2020+ window, collect only).
 
 One cursor-paged works harvest for the home institution with a minimal
-select; payloads land verbatim in source_records, then per-journal x
+select; payloads land in source_records, then per-journal x
 year x OA-status counts and yearly trend totals are aggregated locally
 (never per-request JSONB aggregation). Corresponding-author counts come
 from native group_by-style count queries per year (keyless, kept as the
@@ -88,9 +88,9 @@ async def harvest_institution_stats(
         current_year = datetime.now(UTC).year
 
         # aletheca's iterate does not support field selection; the full
-        # work payload lands verbatim in source_records (shared verbatim
-        # store: an identical payload re-harvested for another institution
-        # dedupes here).
+        # work payload lands in source_records (shared store: an identical
+        # payload re-harvested for another institution dedupes here; the
+        # keys in ingest.PAYLOAD_DROP_KEYS are not kept).
         parse_failures: list[tuple[dict[str, Any], Exception]] = []
         stats_stopped = False
         async for item in client.works.iterate(
@@ -117,7 +117,7 @@ async def harvest_institution_stats(
             await ingest.ingest_record(openalex_id_to_pk(payload.get("id")), payload)
 
             # Preprints/books are not journal output: out of every stat and
-            # trend (the verbatim source record stays for provenance).
+            # trend (the source record stays for provenance).
             if work_type_excluded(payload.get("type")):
                 continue
 
