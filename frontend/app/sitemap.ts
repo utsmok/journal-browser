@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const institutions = (await fetchInstitutions()) ?? [];
-  const docs = (await fetchForRender<{ slug: string }[]>({ path: "/api/v1/docs" }, 3600)) ?? [];
+  const docs = (await fetchForRender<{ slug: string }[]>({ path: "/docs" }, 3600)) ?? [];
   return [
     { url: `${SITE_URL}/` },
     { url: `${SITE_URL}/data-pipeline` },

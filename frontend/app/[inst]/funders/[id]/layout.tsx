@@ -11,7 +11,7 @@ type FunderRoute = { params: Promise<{ inst: string; id: string }> };
 
 /** The funder document the page reads before a year lens is set. */
 function loadFunder(inst: string, id: number) {
-  return fetchOrNotFound<FunderDetailResponse>({ path: `/api/v1/${inst}/funders/${id}` });
+  return fetchOrNotFound<FunderDetailResponse>({ path: `/${inst}/funders/${id}` });
 }
 
 /** Funder ids are positive integers; anything else names no funder. */

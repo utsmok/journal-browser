@@ -10,7 +10,12 @@ import { SiteMenu } from "@/components/site-menu";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { YearFilterControl } from "@/components/year-filter";
 import { FeedbackWidget } from "@/components/feedback/feedback-widget";
+import { Seeds } from "@/components/seed";
 import { SectionMessages } from "@/i18n/section-messages";
+import { type FreshnessResponse, freshnessRequest } from "@/lib/api";
+import { qk } from "@/lib/query-keys";
+import { requestInst } from "@/lib/request-path";
+import { fetchForRender, fetchInstitutions } from "@/lib/server-fetch";
 import { SITE_URL } from "@/lib/site-url";
 import { Providers } from "./providers";
 
@@ -91,7 +96,12 @@ function SiteHeader() {
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const t = await getTranslations("common");
+  const inst = await requestInst();
+  const [t, institutions, freshness] = await Promise.all([
+    getTranslations("common"),
+    fetchInstitutions(),
+    inst ? fetchForRender<FreshnessResponse>(freshnessRequest(inst)) : null,
+  ]);
   return (
     <html lang="en" className={`${inter.variable} ${montserrat.variable}`} suppressHydrationWarning>
       <head>
@@ -105,18 +115,29 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           {t("skipToContent")}
         </a>
         <Providers siteFallback={SITE_FALLBACK}>
-          {/* The shell (header, footer, shared widgets) reads only "common";
+          {/* Seeded above the header: the shell reads the institution
+              directory and the institution's freshness (site meta, footer
+              update notice), and a boundary below it would hydrate after
+              the header had already started its own fetches. */}
+          <Seeds
+            entries={[
+              { queryKey: qk.institutions(), data: institutions },
+              { queryKey: qk.freshness(inst), data: freshness },
+            ]}
+          >
+            {/* The shell (header, footer, shared widgets) reads only "common";
               each section layout adds its own namespaces around its pages. */}
-          <SectionMessages>
-            <SiteHeader />
-            <main id="main" className="flex-1">
-              {children}
-              {/* In the flow on phones and tablets, so it never covers content;
+            <SectionMessages>
+              <SiteHeader />
+              <main id="main" className="flex-1">
+                {children}
+                {/* In the flow on phones and tablets, so it never covers content;
                   a floating button from lg. */}
-              <FeedbackWidget />
-            </main>
-            <SiteFooter />
-          </SectionMessages>
+                <FeedbackWidget />
+              </main>
+              <SiteFooter />
+            </SectionMessages>
+          </Seeds>
         </Providers>
       </body>
     </html>

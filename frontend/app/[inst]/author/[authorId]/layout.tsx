@@ -11,7 +11,7 @@ type AuthorRoute = { params: Promise<{ inst: string; authorId: string }> };
 /** The author document the page reads before a year lens is set. */
 function loadAuthor(inst: string, authorId: string) {
   return fetchOrNotFound<AuthorProfile>({
-    path: `/api/v1/${inst}/authors/${encodeURIComponent(authorId)}`,
+    path: `/${inst}/authors/${encodeURIComponent(authorId)}`,
   });
 }
 

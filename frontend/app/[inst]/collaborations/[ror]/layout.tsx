@@ -13,7 +13,7 @@ export async function generateMetadata({ params }: PartnerRoute): Promise<Metada
   const [{ t, short }, doc] = await Promise.all([
     pageContext(inst, "collaborations"),
     fetchOrNotFound<CollaborationDetailResponse>({
-      path: `/api/v1/${inst}${path}`,
+      path: `/${inst}${path}`,
       query: { include_works: "false" },
     }),
   ]);

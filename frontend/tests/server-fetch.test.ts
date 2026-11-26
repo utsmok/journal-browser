@@ -10,15 +10,13 @@ describe("fetchForRender", () => {
   it("resolves to null instead of throwing when the API call fails", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("network down")));
 
-    await expect(fetchForRender<{ name?: string }>({ path: "/api/v1/journals/jb" })).resolves.toBe(
-      null,
-    );
+    await expect(fetchForRender<{ name?: string }>({ path: "/journals/jb" })).resolves.toBe(null);
   });
 
   it("resolves to null when the API answers with an error status", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("nope", { status: 404 })));
 
-    await expect(fetchForRender({ path: "/api/v1/journals/jb" })).resolves.toBeNull();
+    await expect(fetchForRender({ path: "/journals/jb" })).resolves.toBeNull();
   });
 
   it("sends the query values the browser fetch would send, and drops empty ones", async () => {
@@ -28,7 +26,7 @@ describe("fetchForRender", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const doc = await fetchForRender<{ journal: { title: string } }>({
-      path: "/api/v1/ut/journals/0034-4257",
+      path: "/ut/journals/0034-4257",
       query: { include_gaps: "false", year_from: undefined, funder: null, parts: "" },
     });
 

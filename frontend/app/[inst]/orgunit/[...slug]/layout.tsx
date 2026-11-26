@@ -22,7 +22,7 @@ function splitSlug(slug: string[]): { level: OrgUnitLevel | undefined; name: str
 /** The unit document the page reads before a year lens or author sort is set. */
 function loadOrgUnit(inst: string, level: OrgUnitLevel, name: string) {
   return fetchOrNotFound<OrgUnitDetailResponse>({
-    path: `/api/v1/${inst}/orgunits/${level}/${encodeNamePath(name)}`,
+    path: `/${inst}/orgunits/${level}/${encodeNamePath(name)}`,
     query: { include_gaps: "false", sort: "share" },
   });
 }

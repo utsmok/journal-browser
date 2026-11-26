@@ -17,6 +17,7 @@ import { OnboardingBanner, useOnboardingState } from "@/components/onboarding-ba
 import { PageTabs } from "@/components/page-tabs";
 import { FunderPicker } from "@/components/funder/funder-picker";
 import { Pagination } from "@/components/search/pagination";
+import { journalsLandingParams } from "@/components/search/params";
 import { SortHead } from "@/components/search/sort-head";
 import { ShortlistToggle } from "@/components/shortlist/shortlist-toggle";
 import { SourceNote } from "@/components/source-note";
@@ -37,13 +38,7 @@ import { useInstitution } from "@/hooks/use-institution";
 import { useSearchShortcut } from "@/hooks/use-search-shortcut";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { useYearRange } from "@/hooks/use-year-filter";
-import {
-  encodeNamePath,
-  errorMessage,
-  type JournalListItem,
-  type JournalsSearchIn,
-  type SortKey,
-} from "@/lib/api";
+import { encodeNamePath, errorMessage, type JournalListItem } from "@/lib/api";
 import { displayPublisherName } from "@/lib/deal-links";
 import { formatInt } from "@/lib/format";
 import { ApcText } from "@/components/apc-text";
@@ -66,10 +61,6 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
   const institutions = useInstitutionsDirectory();
   const instShort = site.short || site.name;
 
-  const spView = sp.get("view");
-  const view: "browse" | "guide" =
-    spView === "guide" || (initialView === "guide" && spView !== "browse") ? "guide" : "browse";
-
   const pubTypeLabel = React.useCallback(
     (code: string) => {
       const labelKey = PUB_TYPE_LABELS[code];
@@ -78,39 +69,40 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
     [ts],
   );
 
-  const spQ = sp.get("q") ?? "";
-  const sort = (sp.get("sort") ?? (spQ ? "relevance" : "institution_works")) as SortKey;
-  const dirParam = sp.get("dir");
-  const dir: "asc" | "desc" | null = dirParam === "asc" || dirParam === "desc" ? dirParam : null;
-  const deal = sp.get("deal") ?? "";
-  const dealIdRaw = sp.get("deal_id");
-  const dealId = dealIdRaw && /^\d+$/.test(dealIdRaw) ? Number(dealIdRaw) : undefined;
-  const oa = sp.get("oa");
-  const doaj = sp.get("doaj");
-  const quartile = sp.get("quartile") ?? "";
-  const topic = sp.get("topic") ?? "";
-  const publisher = sp.get("publisher") ?? "";
-  const hasApc = sp.get("has_apc");
-  const hasWorks = sp.get("has_works");
-  const greenOa = sp.get("green_oa");
-  // Eligibility toggles: both on by default, URL param only when off so
-  // default URLs stay clean.
-  const active = sp.get("active") !== "false";
-  const vouched = sp.get("vouched") !== "false";
-  const searchIn = (sp.get("search_in") ?? "all") as JournalsSearchIn;
-  const oaTypes = (sp.get("oa_type") ?? "").split(",").filter(Boolean);
-  const pubType = sp.get("pub_type") ?? "";
-  const language = sp.get("language") ?? "";
-  const semanticMode = sp.get("mode") === "semantic";
-  const semantic = view === "browse" && semanticMode && spQ.trim().length >= 2;
   const [funder, setFunder] = useFunderPrefs();
   const onboarding = useOnboardingState();
-  const funderFit = sp.get("funder_fit") ?? "";
   const { year_from, year_to } = useYearRange();
+
+  const {
+    view,
+    q: spQ,
+    sort,
+    dir,
+    deal,
+    dealId,
+    oa,
+    doaj,
+    quartile,
+    topic,
+    publisher,
+    hasApc,
+    hasWorks,
+    greenOa,
+    active,
+    vouched,
+    searchIn,
+    oaTypes,
+    pubType,
+    language,
+    semanticMode,
+    semantic,
+    funderFit,
+    cursor,
+    query,
+  } = journalsLandingParams(sp, initialView, { funder, yearFrom: year_from, yearTo: year_to });
 
   const [input, setInput] = React.useState(spQ);
   const [stack, setStack] = React.useState<string[]>([]);
-  const cursor = sp.get("cursor") ?? undefined;
 
   useSearchShortcut(SEARCH_INPUT_ID);
 
@@ -185,35 +177,6 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
     return () => clearTimeout(timer);
   }, [input, spQ, update, view]);
 
-  const query = {
-    q: spQ || undefined,
-    search_in: searchIn === "all" ? undefined : searchIn,
-    deal: (deal || undefined) as "covered" | "not_covered" | undefined,
-    deal_id: dealId,
-    oa: oa === null ? undefined : oa === "true",
-    doaj: doaj === null ? undefined : doaj === "true",
-    quartile: quartile || undefined,
-    publisher: publisher || undefined,
-    has_apc: hasApc === null ? undefined : hasApc === "true",
-    has_works: hasWorks === null ? undefined : hasWorks === "true",
-    green_oa: greenOa ?? undefined,
-    funder: funder && !semanticMode ? funder.id : undefined,
-    funder_fit: funderFit || undefined,
-    topic: topic || undefined,
-    oa_type: oaTypes.join(",") || undefined,
-    pub_type: pubType || undefined,
-    language: language || undefined,
-    year_from,
-    year_to,
-    // Off travels to the API; on stays out (server defaults to on).
-    active: active ? undefined : false,
-    vouched: vouched ? undefined : false,
-    sort,
-    dir: dir ?? undefined,
-    cursor,
-    limit: 40,
-    include_facets: false,
-  };
   const { data, isPending, isFetching, isError, error, refetch } = useJournals(query, semantic);
   const facetsQuery = useFacets(query, { enabled: view === "browse" && !semantic });
   const dealsQuery = useDeals("all", { enabled: dealId !== undefined });
@@ -814,7 +777,7 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
               <input
                 type="checkbox"
                 className="size-4 accent-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
-                checked={sp.get("mode") === "semantic"}
+                checked={semanticMode}
                 onChange={(event) =>
                   update({ mode: event.target.checked ? "semantic" : undefined })
                 }

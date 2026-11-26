@@ -11,7 +11,7 @@ type PublisherRoute = { params: Promise<{ inst: string; slug: string[] }> };
 /** The publisher document the page reads before a year lens is set. */
 function loadPublisher(inst: string, name: string) {
   return fetchOrNotFound<PublisherDetailResponse>({
-    path: `/api/v1/${inst}/publishers/${encodeNamePath(name)}`,
+    path: `/${inst}/publishers/${encodeNamePath(name)}`,
     query: { include_gaps: "false" },
   });
 }

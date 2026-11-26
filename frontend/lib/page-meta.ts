@@ -6,6 +6,23 @@ import { institutionShortName } from "@/lib/server-fetch";
 /** Route props of a page nested under one institution segment. */
 export type InstRoute = { params: Promise<{ inst: string }> };
 
+/** Next's searchParams prop of a page route. */
+export type RouteSearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+/**
+ * A page's searchParams as the URLSearchParams its client component reads
+ * through useSearchParams(), so one pure URL parser serves the server seed
+ * and the browser render alike.
+ */
+export async function urlSearchParams(searchParams: RouteSearchParams): Promise<URLSearchParams> {
+  const out = new URLSearchParams();
+  for (const [key, value] of Object.entries(await searchParams)) {
+    if (value === undefined) continue;
+    for (const item of Array.isArray(value) ? value : [value]) out.append(key, item);
+  }
+  return out;
+}
+
 /**
  * Messages of a page section and the short name of its institution, loaded
  * together for the page's title and description.

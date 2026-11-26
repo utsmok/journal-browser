@@ -4,7 +4,7 @@ import {
   hasActiveCollabFilters,
   readCollabParams,
   writeCollabParams,
-} from "@/components/collaborations/use-collab-params";
+} from "@/components/collaborations/collab-params";
 
 describe("collaboration URL params", () => {
   it("round-trips search, multi-select facets, and analytical modes cleanly", () => {

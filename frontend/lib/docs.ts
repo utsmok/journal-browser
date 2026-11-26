@@ -1,5 +1,5 @@
 import type { components } from "./api-types";
-import { apiGet } from "./api";
+import { getRequest, type ApiRequest } from "./api";
 
 type Schemas = components["schemas"];
 
@@ -25,12 +25,22 @@ export type DocBlock = Schemas["DocBlock"];
 
 export type DocDetail = Schemas["DocDetailOut"];
 
+/** The request builders behind fetchDocs and fetchDoc; the server render
+ * sends the same requests to seed the React Query cache. */
+export function docsRequest(): ApiRequest {
+  return { path: "/docs" };
+}
+
+export function docRequest(slug: string): ApiRequest {
+  return { path: `/docs/${encodeURIComponent(slug)}` };
+}
+
 export function fetchDocs(): Promise<DocsListItem[]> {
-  return apiGet<DocsListItem[]>("/docs");
+  return getRequest<DocsListItem[]>(docsRequest());
 }
 
 export function fetchDoc(slug: string): Promise<DocDetail> {
-  return apiGet<DocDetail>(`/docs/${encodeURIComponent(slug)}`);
+  return getRequest<DocDetail>(docRequest(slug));
 }
 
 /** Sort into group order (overview, pitch, sources), then doc order. */

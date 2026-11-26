@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import { orgTypeCssVar, useCollabLabels } from "@/components/collaborations/labels";
-import { type UpdateParams } from "@/components/collaborations/use-collab-params";
+import { type UpdateParams } from "@/components/collaborations/collab-params";
 import {
   type CollabMultiKey,
   type CollaborationFacets,

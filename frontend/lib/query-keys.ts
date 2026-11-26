@@ -90,4 +90,8 @@ export const qk = {
     ["collaboration", i, ror, p] as const,
   collaborationWorks: (i: string, ror: string, p: CollaborationSearchParams, offset: number) =>
     ["collaboration-works", i, ror, p, offset] as const,
+  /** Docs reference (markdown served by the backend; the documents are
+   * global, the institution code only scopes the cache slot). */
+  docs: (i: string) => ["docs", i] as const,
+  doc: (i: string, slug: string) => ["docs", i, slug] as const,
 };

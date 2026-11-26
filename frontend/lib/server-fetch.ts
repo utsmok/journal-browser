@@ -2,27 +2,22 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 
 import type { InstitutionDirectoryEntry } from "@/lib/admin";
-import type { ApiRequest } from "@/lib/api";
+import { type ApiRequest, institutionsRequest } from "@/lib/api";
 
 const API = process.env.API_PROXY_URL || "http://localhost:8000";
-
-/** Query-string values, as the client fetchers pass them: null, undefined and "" are dropped. */
-export type RenderQuery = Record<string, string | number | boolean | null | undefined>;
-
-/** Address of a backend document as the browser would request it. */
-export type DocumentAddress = { path: string; query?: RenderQuery };
 
 /** Seconds a fetched document stays in Next's data cache. */
 const DOCUMENT_REVALIDATE = 300;
 
-function withQuery({ path, query = {} }: DocumentAddress): string {
+/** The backend URL path of a request: the same one the browser's apiGet builds. */
+function urlOf({ path, query = {} }: ApiRequest): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
     if (value === undefined || value === null || value === "") continue;
     search.set(key, String(value));
   }
   const qs = search.toString();
-  return qs ? `${path}?${qs}` : path;
+  return `/api/v1${path}${qs ? `?${qs}` : ""}`;
 }
 
 type LoadedDocument = { status: number; body: unknown };
@@ -40,16 +35,18 @@ const loadDocument = cache(async (url: string, revalidate: number): Promise<Load
 });
 
 /**
- * GET one backend document for a server render. The document stays in Next's
- * data cache for `revalidate` seconds. Returns null when the backend is
- * unreachable or answers with an error status: the render goes on without the
- * document, and the browser fetches it instead.
+ * GET one backend document for a server render. `request` is the one the
+ * page's browser hook sends (a lib/api `*Request` builder, path after
+ * /api/v1), so a seeded cache entry matches what the browser would fetch.
+ * The document stays in Next's data cache for `revalidate` seconds. Returns
+ * null when the backend is unreachable or answers with an error status: the
+ * render goes on without the document, and the browser fetches it instead.
  */
 export async function fetchForRender<T>(
-  address: DocumentAddress,
+  request: ApiRequest,
   revalidate: number = DOCUMENT_REVALIDATE,
 ): Promise<T | null> {
-  return (await loadDocument(withQuery(address), revalidate)).body as T | null;
+  return (await loadDocument(urlOf(request), revalidate)).body as T | null;
 }
 
 /**
@@ -59,21 +56,12 @@ export async function fetchForRender<T>(
  * Other failures still return null and leave the fetch to the browser.
  */
 export async function fetchOrNotFound<T>(
-  address: DocumentAddress,
-  revalidate: number = DOCUMENT_REVALIDATE,
-): Promise<T | null> {
-  const doc = await loadDocument(withQuery(address), revalidate);
-  if (doc.status === 404) notFound();
-  return doc.body as T | null;
-}
-
-/** fetchForRender for a request built by a lib/api `*Request` builder, the
- * same request the page's browser hook sends. */
-export function fetchRequest<T>(
   request: ApiRequest,
   revalidate: number = DOCUMENT_REVALIDATE,
 ): Promise<T | null> {
-  return fetchForRender<T>({ path: `/api/v1${request.path}`, query: request.query }, revalidate);
+  const doc = await loadDocument(urlOf(request), revalidate);
+  if (doc.status === 404) notFound();
+  return doc.body as T | null;
 }
 
 /** A directory row with the fields pages render. The backend always sends them. */
@@ -84,7 +72,7 @@ export type DirectoryInstitution = InstitutionDirectoryEntry & {
 
 /** Hosted institutions, or null when the API is unreachable. */
 export function fetchInstitutions(): Promise<DirectoryInstitution[] | null> {
-  return fetchForRender<DirectoryInstitution[]>({ path: "/api/v1/institutions" });
+  return fetchForRender<DirectoryInstitution[]>(institutionsRequest());
 }
 
 /**

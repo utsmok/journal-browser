@@ -10,7 +10,7 @@ type DocRoute = { params: Promise<{ inst: string; slug: string }> };
 export async function generateMetadata({ params }: DocRoute): Promise<Metadata> {
   const { inst, slug } = await params;
   const doc = await fetchForRender<DocDetail>({
-    path: `/api/v1/docs/${encodeURIComponent(slug)}`,
+    path: `/docs/${encodeURIComponent(slug)}`,
   });
   return docPage(inst, `/docs/${encodeURIComponent(slug)}`, { title: doc?.title });
 }

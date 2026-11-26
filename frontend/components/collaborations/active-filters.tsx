@@ -8,7 +8,7 @@ import {
   EMPTY_COLLAB_FILTERS,
   hasActiveCollabFilters,
   type UpdateParams,
-} from "@/components/collaborations/use-collab-params";
+} from "@/components/collaborations/collab-params";
 import { Button } from "@/components/ui/button";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import type { CollabMultiKey, CollaborationFacets, CollaborationSearchParams } from "@/lib/api";

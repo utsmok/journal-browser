@@ -162,12 +162,12 @@ export function fetchCollaborations(inst: string, p: CollaborationSearchParams, 
   return getRequest<CollaborationSearchResponse>(collaborationsRequest(inst, p, offset));
 }
 
-export function collaborationMapRequest(inst: string, p: CollaborationSearchParams): ApiRequest {
+function collaborationMapRequest(inst: string, p: CollaborationSearchParams): ApiRequest {
   return { path: `/${inst}/collaborations/map`, query: collabParams(p) };
 }
 
 /** The map endpoint sends compact rows; the page reads named points. */
-export function toCollaborationMap(data: Schemas["CollaborationMapResponse"]) {
+function toCollaborationMap(data: Schemas["CollaborationMapResponse"]) {
   const toPoint = ([
     ror,
     name,
@@ -441,7 +441,7 @@ export type ApiQuery = Record<string, string | number | boolean | null | undefin
 /**
  * One backend GET as plain data: the path after /api/v1 and its query. The
  * browser hooks send it with getRequest; a server render sends the same
- * request with fetchRequest (lib/server-fetch) and seeds the cache under the
+ * request with fetchForRender (lib/server-fetch) and seeds the cache under the
  * hook's key, so the server-rendered and browser-fetched documents match.
  */
 export type ApiRequest = { path: string; query?: ApiQuery };

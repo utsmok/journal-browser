@@ -1,8 +1,11 @@
 import { notFound } from "next/navigation";
 
+import { Seed } from "@/components/seed";
 import { InstitutionProvider } from "@/hooks/use-institution";
+import { type LimitationOut, limitationsRequest } from "@/lib/api";
 import { GLOBAL_SEGMENTS } from "@/lib/global-segments";
-import { fetchInstitutions } from "@/lib/server-fetch";
+import { qk } from "@/lib/query-keys";
+import { fetchInstitutions, fetchForRender } from "@/lib/server-fetch";
 
 export default async function InstLayout({
   children,
@@ -17,13 +20,21 @@ export default async function InstLayout({
   // instead of a shell that fires phantom API calls. An API outage never
   // 404s the whole institution tree.
   if (GLOBAL_SEGMENTS[inst]) notFound();
-  const institutions = await fetchInstitutions();
+  // The source-note limitations every institution page can show. The
+  // directory and freshness the site chrome reads are seeded by the root
+  // layout, above the header.
+  const [institutions, limitations] = await Promise.all([
+    fetchInstitutions(),
+    fetchForRender<LimitationOut[]>(limitationsRequest(inst)),
+  ]);
   const row = institutions?.find((candidate) => candidate.code === inst);
   if (institutions && !row) notFound();
 
   return (
     <InstitutionProvider code={inst} row={row ?? null}>
-      {children}
+      <Seed queryKey={qk.limitations(inst)} data={limitations}>
+        {children}
+      </Seed>
     </InstitutionProvider>
   );
 }
