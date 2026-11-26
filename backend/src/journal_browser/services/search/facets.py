@@ -1,5 +1,6 @@
 import json
 import warnings
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from sqlalchemy import exc as sa_exc
@@ -11,6 +12,7 @@ from ...queries import cache_epoch
 from ...vocab import GreenOa
 from .. import funder_fit as funder_fit_mod
 from ..cache import FACET_CACHE, cache_get, cache_put
+from ..concurrency import together
 from .classify import OA_TYPES
 from .query import base_query
 
@@ -149,9 +151,9 @@ async def facet_counts(
         restore: dict[str, Any] = {"deal": "any"}
         return base_sub(**{k: restore.get(k) for k in drop})
 
-    async def _flag_counts(sub: Any, *conds: Any) -> tuple[int, list[int]]:
+    async def _flag_counts(own: AsyncSession, sub: Any, *conds: Any) -> tuple[int, list[int]]:
         row = (
-            await session.execute(
+            await own.execute(
                 select(
                     func.count(),
                     *[func.count().filter(c).label(f"c{i}") for i, c in enumerate(conds)],
@@ -184,12 +186,12 @@ async def facet_counts(
             func.jsonb_agg(func.jsonb_build_array(inner.c.k, inner.c.n))
         ).scalar_subquery()
 
-    async def _topic_facet(sub: Any) -> dict[str, int]:
+    async def _topic_facet(own: AsyncSession, sub: Any) -> dict[str, int]:
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 "ignore", message=".*cartesian product.*", category=sa_exc.SAWarning
             )
-            topics = (await session.execute(select(_topic_counts(sub)))).scalar_one()
+            topics = (await own.execute(select(_topic_counts(sub)))).scalar_one()
         return {k: int(n) for k, n in (topics or [])}
 
     base = base_sub()
@@ -210,40 +212,220 @@ async def facet_counts(
         .select_from(base)
         .subquery()
     )
-    row = (
-        await session.execute(
-            select(
-                func.count().label("total"),
-                func.count().filter(counted.c.deal_covered.is_(True)).label("covered"),
-                func.count().filter(counted.c.is_oa.is_(True)).label("oa_true"),
-                func.count().filter(counted.c.is_in_doaj.is_(True)).label("doaj_true"),
-                func.count().filter(counted.c.quartile == "Q1").label("q1"),
-                func.count().filter(counted.c.quartile == "Q2").label("q2"),
-                func.count().filter(counted.c.quartile == "Q3").label("q3"),
-                func.count().filter(counted.c.quartile == "Q4").label("q4"),
-                func.count().filter(counted.c.apc_any).label("apc_true"),
-                func.count().filter(counted.c.works > 0).label("works_true"),
-                func.jsonb_object_agg(counted.c.oa_type, counted.c.oa_n).label("oa_type_counts"),
-                func.jsonb_object_agg(counted.c.pub_type, counted.c.pt_n)
-                .filter(counted.c.pub_type.is_not(None))
-                .label("pub_type_counts"),
-                func.jsonb_object_agg(counted.c.language, counted.c.lang_n)
-                .filter(counted.c.language.is_not(None))
-                .label("language_counts"),
-                func.jsonb_object_agg(counted.c.publisher_name, counted.c.pub_n)
-                .filter(counted.c.publisher_name.is_not(None))
-                .label("publisher_counts"),
-                func.count()
-                .filter(counted.c.green_oa == GreenOa.SUBMITTED)
-                .label("green_submitted"),
-                func.count().filter(counted.c.green_oa == GreenOa.ACCEPTED).label("green_accepted"),
-                func.count()
-                .filter(counted.c.green_oa == GreenOa.PUBLISHED)
-                .label("green_published"),
-                func.count().filter(counted.c.green_oa == GreenOa.NONE).label("green_none"),
-            ).select_from(counted)
-        )
-    ).one()
+    main_stmt = select(
+        func.count().label("total"),
+        func.count().filter(counted.c.deal_covered.is_(True)).label("covered"),
+        func.count().filter(counted.c.is_oa.is_(True)).label("oa_true"),
+        func.count().filter(counted.c.is_in_doaj.is_(True)).label("doaj_true"),
+        func.count().filter(counted.c.quartile == "Q1").label("q1"),
+        func.count().filter(counted.c.quartile == "Q2").label("q2"),
+        func.count().filter(counted.c.quartile == "Q3").label("q3"),
+        func.count().filter(counted.c.quartile == "Q4").label("q4"),
+        func.count().filter(counted.c.apc_any).label("apc_true"),
+        func.count().filter(counted.c.works > 0).label("works_true"),
+        func.jsonb_object_agg(counted.c.oa_type, counted.c.oa_n).label("oa_type_counts"),
+        func.jsonb_object_agg(counted.c.pub_type, counted.c.pt_n)
+        .filter(counted.c.pub_type.is_not(None))
+        .label("pub_type_counts"),
+        func.jsonb_object_agg(counted.c.language, counted.c.lang_n)
+        .filter(counted.c.language.is_not(None))
+        .label("language_counts"),
+        func.jsonb_object_agg(counted.c.publisher_name, counted.c.pub_n)
+        .filter(counted.c.publisher_name.is_not(None))
+        .label("publisher_counts"),
+        func.count().filter(counted.c.green_oa == GreenOa.SUBMITTED).label("green_submitted"),
+        func.count().filter(counted.c.green_oa == GreenOa.ACCEPTED).label("green_accepted"),
+        func.count().filter(counted.c.green_oa == GreenOa.PUBLISHED).label("green_published"),
+        func.count().filter(counted.c.green_oa == GreenOa.NONE).label("green_none"),
+    ).select_from(counted)
+
+    async def _run_main(own: AsyncSession) -> Any:
+        return (await own.execute(main_stmt)).one()
+
+    tasks: list[tuple[str, Callable[[AsyncSession], Awaitable[Any]]]] = [
+        ("main", _run_main),
+        ("topic", lambda own: _topic_facet(own, variant_sub("topic") if topic else base)),
+    ]
+
+    # Active own filters need a variant pass (chip shows what selecting it
+    # would yield under the remaining filters); inactive facets keep the
+    # base counts computed above.
+    if deal != "any":
+
+        async def _run_deal(own: AsyncSession) -> dict[str, int]:
+            d = variant_sub("deal")
+            d_total, (d_covered,) = await _flag_counts(own, d, d.c.deal_covered.is_(True))
+            return {"covered": d_covered, "not_covered": d_total - d_covered}
+
+        tasks.append(("deal_coverage", _run_deal))
+    if oa is not None:
+
+        async def _run_oa(own: AsyncSession) -> dict[str, int]:
+            o = variant_sub("oa")
+            o_total, (o_true,) = await _flag_counts(own, o, o.c.is_oa.is_(True))
+            return {"true": o_true, "false": o_total - o_true}
+
+        tasks.append(("oa", _run_oa))
+    if doaj is not None:
+
+        async def _run_doaj(own: AsyncSession) -> dict[str, int]:
+            dj = variant_sub("doaj")
+            dj_total, (dj_true,) = await _flag_counts(own, dj, dj.c.is_in_doaj.is_(True))
+            return {"true": dj_true, "false": dj_total - dj_true}
+
+        tasks.append(("doaj", _run_doaj))
+    if quartile in {"Q1", "Q2", "Q3", "Q4"}:
+
+        async def _run_quartile(own: AsyncSession) -> dict[str, int]:
+            qt = variant_sub("quartile")
+            _qt_total, (w1, w2, w3, w4) = await _flag_counts(
+                own,
+                qt,
+                qt.c.quartile == "Q1",
+                qt.c.quartile == "Q2",
+                qt.c.quartile == "Q3",
+                qt.c.quartile == "Q4",
+            )
+            return {"Q1": w1, "Q2": w2, "Q3": w3, "Q4": w4}
+
+        tasks.append(("quartile", _run_quartile))
+    if oa_types:
+
+        async def _run_oa_type(own: AsyncSession) -> dict[str, int]:
+            ot = base_sub(oa_types=None)
+            counted_ot = (
+                select(ot, func.count().over(partition_by=ot.c.oa_type).label("n"))
+                .select_from(ot)
+                .subquery()
+            )
+            counts = (
+                await own.execute(
+                    select(func.jsonb_object_agg(counted_ot.c.oa_type, counted_ot.c.n))
+                )
+            ).scalar_one()
+            return oa_facet(counts)
+
+        tasks.append(("oa_type", _run_oa_type))
+    if pub_type:
+
+        async def _run_pub_type(own: AsyncSession) -> dict[str, int]:
+            pt = base_sub(pub_type=None)
+            counted_pt = (
+                select(pt, func.count().over(partition_by=pt.c.pub_type).label("n"))
+                .select_from(pt)
+                .subquery()
+            )
+            counts = (
+                await own.execute(
+                    select(
+                        func.jsonb_object_agg(counted_pt.c.pub_type, counted_pt.c.n).filter(
+                            counted_pt.c.pub_type.is_not(None)
+                        )
+                    )
+                )
+            ).scalar_one()
+            return dict(sorted((counts or {}).items(), key=lambda kv: (-kv[1], kv[0])))
+
+        tasks.append(("pub_type", _run_pub_type))
+    if languages:
+
+        async def _run_language(own: AsyncSession) -> dict[str, int]:
+            lt = base_sub(languages=None)
+            counted_lt = (
+                select(lt, func.count().over(partition_by=lt.c.language).label("n"))
+                .select_from(lt)
+                .subquery()
+            )
+            counts = (
+                await own.execute(
+                    select(
+                        func.jsonb_object_agg(counted_lt.c.language, counted_lt.c.n).filter(
+                            counted_lt.c.language.is_not(None)
+                        )
+                    )
+                )
+            ).scalar_one()
+            return dict(sorted((counts or {}).items(), key=lambda kv: (-kv[1], kv[0])))
+
+        tasks.append(("language", _run_language))
+    if publisher:
+
+        async def _run_publisher(own: AsyncSession) -> dict[str, int]:
+            pb = base_sub(publisher=None)
+            counted_pb = (
+                select(pb, func.count().over(partition_by=pb.c.publisher_name).label("n"))
+                .select_from(pb)
+                .subquery()
+            )
+            counts = (
+                await own.execute(
+                    select(
+                        func.jsonb_object_agg(counted_pb.c.publisher_name, counted_pb.c.n).filter(
+                            counted_pb.c.publisher_name.is_not(None)
+                        )
+                    )
+                )
+            ).scalar_one()
+            # Payload bound: the UI shows the top 15 sorted by count, then name.
+            return dict(sorted((counts or {}).items(), key=lambda kv: (-kv[1], kv[0]))[:15])
+
+        tasks.append(("publisher", _run_publisher))
+    if has_apc is not None:
+
+        async def _run_apc(own: AsyncSession) -> dict[str, int]:
+            apc = base_sub(has_apc=None)
+            apc_total, (apc_true,) = await _flag_counts(own, apc, apc.c.apc_any)
+            return {"true": apc_true, "false": apc_total - apc_true}
+
+        tasks.append(("apc", _run_apc))
+    if has_works is not None:
+
+        async def _run_works(own: AsyncSession) -> dict[str, int]:
+            wk = variant_sub("has_works")
+            wk_total, (wk_true,) = await _flag_counts(own, wk, wk.c.works > 0)
+            return {"true": wk_true, "false": wk_total - wk_true}
+
+        tasks.append(("works", _run_works))
+    if green_oa:
+
+        async def _run_green_oa(own: AsyncSession) -> dict[str, int]:
+            g = variant_sub("green_oa")
+            _g_total, (g_s, g_a, g_p, g_n) = await _flag_counts(
+                own,
+                g,
+                g.c.green_oa == GreenOa.SUBMITTED,
+                g.c.green_oa == GreenOa.ACCEPTED,
+                g.c.green_oa == GreenOa.PUBLISHED,
+                g.c.green_oa == GreenOa.NONE,
+            )
+            return {"submitted": g_s, "accepted": g_a, "published": g_p, "none": g_n}
+
+        tasks.append(("green_oa", _run_green_oa))
+    if defaults["funder_fit"]:
+        # Funder_fit has an own filter like any facet: chip counts must
+        # reflect what selecting a tier would yield, so an active tier
+        # recomputes on a variant without it; otherwise the base counts
+        # are final. Either way one dedicated pass keeps the shared
+        # aggregate untouched.
+        async def _run_funder_fit(own: AsyncSession) -> dict[str, int]:
+            ff = base_sub(**({"funder_fit_value": None} if funder_fit_value else {}))
+            counted_ff = (
+                select(ff, func.count().over(partition_by=ff.c.funder_fit).label("n"))
+                .select_from(ff)
+                .subquery()
+            )
+            counts = (
+                await own.execute(
+                    select(func.jsonb_object_agg(counted_ff.c.funder_fit, counted_ff.c.n))
+                )
+            ).scalar_one()
+            return dict(counts or {})
+
+        tasks.append(("funder_fit", _run_funder_fit))
+
+    raw_results = await together(session, [fn for _, fn in tasks])
+    results = dict(zip([name for name, _ in tasks], raw_results, strict=True))
+    row = results["main"]
     total = int(row.total or 0)
 
     def split(n: Any) -> tuple[int, int]:
@@ -256,169 +438,50 @@ async def facet_counts(
     apc_true, apc_false = split(row.apc_true)
     works_true, works_false = split(row.works_true)
     facets: dict[str, dict[str, int]] = {
-        "deal_coverage": {"covered": covered, "not_covered": not_covered},
-        "oa": {"true": oa_true, "false": oa_false},
-        "doaj": {"true": doaj_true, "false": doaj_false},
-        "quartile": {
-            "Q1": int(row.q1 or 0),
-            "Q2": int(row.q2 or 0),
-            "Q3": int(row.q3 or 0),
-            "Q4": int(row.q4 or 0),
-        },
-        "apc": {"true": apc_true, "false": apc_false},
-        "works": {"true": works_true, "false": works_false},
-        "oa_type": oa_facet(row.oa_type_counts),
+        "deal_coverage": results.get(
+            "deal_coverage", {"covered": covered, "not_covered": not_covered}
+        ),
+        "oa": results.get("oa", {"true": oa_true, "false": oa_false}),
+        "doaj": results.get("doaj", {"true": doaj_true, "false": doaj_false}),
+        "quartile": results.get(
+            "quartile",
+            {
+                "Q1": int(row.q1 or 0),
+                "Q2": int(row.q2 or 0),
+                "Q3": int(row.q3 or 0),
+                "Q4": int(row.q4 or 0),
+            },
+        ),
+        "apc": results.get("apc", {"true": apc_true, "false": apc_false}),
+        "works": results.get("works", {"true": works_true, "false": works_false}),
+        "oa_type": results.get("oa_type", oa_facet(row.oa_type_counts)),
         # Venue type distribution, sorted by count then name like publisher.
-        "pub_type": dict(
-            sorted((row.pub_type_counts or {}).items(), key=lambda kv: (-kv[1], kv[0]))
+        "pub_type": results.get(
+            "pub_type",
+            dict(sorted((row.pub_type_counts or {}).items(), key=lambda kv: (-kv[1], kv[0]))),
         ),
         # Language distribution, sorted by count then code like pub_type.
-        "language": dict(
-            sorted((row.language_counts or {}).items(), key=lambda kv: (-kv[1], kv[0]))
+        "language": results.get(
+            "language",
+            dict(sorted((row.language_counts or {}).items(), key=lambda kv: (-kv[1], kv[0]))),
         ),
-        "green_oa": {
-            "submitted": int(row.green_submitted or 0),
-            "accepted": int(row.green_accepted or 0),
-            "published": int(row.green_published or 0),
-            "none": int(row.green_none or 0),
-        },
+        "green_oa": results.get(
+            "green_oa",
+            {
+                "submitted": int(row.green_submitted or 0),
+                "accepted": int(row.green_accepted or 0),
+                "published": int(row.green_published or 0),
+                "none": int(row.green_none or 0),
+            },
+        ),
         # Payload bound: top 15 by count, then name (matches the old SQL LIMIT).
-        "publisher": dict(
-            sorted((row.publisher_counts or {}).items(), key=lambda kv: (-kv[1], kv[0]))[:15]
+        "publisher": results.get(
+            "publisher",
+            dict(sorted((row.publisher_counts or {}).items(), key=lambda kv: (-kv[1], kv[0]))[:15]),
         ),
+        "topic": results["topic"],
     }
-    facets["topic"] = await _topic_facet(base)
-
-    # Active own filters need a variant pass (chip shows what selecting it
-    # would yield under the remaining filters); inactive facets keep the
-    # base counts computed above.
-    if deal != "any":
-        d = variant_sub("deal")
-        d_total, (d_covered,) = await _flag_counts(d, d.c.deal_covered.is_(True))
-        facets["deal_coverage"] = {"covered": d_covered, "not_covered": d_total - d_covered}
-    if oa is not None:
-        o = variant_sub("oa")
-        o_total, (o_true,) = await _flag_counts(o, o.c.is_oa.is_(True))
-        facets["oa"] = {"true": o_true, "false": o_total - o_true}
-    if doaj is not None:
-        dj = variant_sub("doaj")
-        dj_total, (dj_true,) = await _flag_counts(dj, dj.c.is_in_doaj.is_(True))
-        facets["doaj"] = {"true": dj_true, "false": dj_total - dj_true}
-    if quartile in {"Q1", "Q2", "Q3", "Q4"}:
-        qt = variant_sub("quartile")
-        _qt_total, (w1, w2, w3, w4) = await _flag_counts(
-            qt,
-            qt.c.quartile == "Q1",
-            qt.c.quartile == "Q2",
-            qt.c.quartile == "Q3",
-            qt.c.quartile == "Q4",
-        )
-        facets["quartile"] = {"Q1": w1, "Q2": w2, "Q3": w3, "Q4": w4}
-    if oa_types:
-        ot = base_sub(oa_types=None)
-        counted_ot = (
-            select(ot, func.count().over(partition_by=ot.c.oa_type).label("n"))
-            .select_from(ot)
-            .subquery()
-        )
-        counts = (
-            await session.execute(
-                select(func.jsonb_object_agg(counted_ot.c.oa_type, counted_ot.c.n))
-            )
-        ).scalar_one()
-        facets["oa_type"] = oa_facet(counts)
-    if pub_type:
-        pt = base_sub(pub_type=None)
-        counted_pt = (
-            select(pt, func.count().over(partition_by=pt.c.pub_type).label("n"))
-            .select_from(pt)
-            .subquery()
-        )
-        counts = (
-            await session.execute(
-                select(
-                    func.jsonb_object_agg(counted_pt.c.pub_type, counted_pt.c.n).filter(
-                        counted_pt.c.pub_type.is_not(None)
-                    )
-                )
-            )
-        ).scalar_one()
-        facets["pub_type"] = dict(sorted((counts or {}).items(), key=lambda kv: (-kv[1], kv[0])))
-    if languages:
-        lt = base_sub(languages=None)
-        counted_lt = (
-            select(lt, func.count().over(partition_by=lt.c.language).label("n"))
-            .select_from(lt)
-            .subquery()
-        )
-        counts = (
-            await session.execute(
-                select(
-                    func.jsonb_object_agg(counted_lt.c.language, counted_lt.c.n).filter(
-                        counted_lt.c.language.is_not(None)
-                    )
-                )
-            )
-        ).scalar_one()
-        facets["language"] = dict(sorted((counts or {}).items(), key=lambda kv: (-kv[1], kv[0])))
-    if topic:
-        tp = variant_sub("topic")
-        facets["topic"] = await _topic_facet(tp)
-    if publisher:
-        pb = base_sub(publisher=None)
-        counted_pb = (
-            select(pb, func.count().over(partition_by=pb.c.publisher_name).label("n"))
-            .select_from(pb)
-            .subquery()
-        )
-        counts = (
-            await session.execute(
-                select(
-                    func.jsonb_object_agg(counted_pb.c.publisher_name, counted_pb.c.n).filter(
-                        counted_pb.c.publisher_name.is_not(None)
-                    )
-                )
-            )
-        ).scalar_one()
-        # Payload bound: the UI shows the top 15 sorted by count, then name.
-        facets["publisher"] = dict(
-            sorted((counts or {}).items(), key=lambda kv: (-kv[1], kv[0]))[:15]
-        )
-    if has_apc is not None:
-        apc = base_sub(has_apc=None)
-        apc_total, (apc_true,) = await _flag_counts(apc, apc.c.apc_any)
-        facets["apc"] = {"true": apc_true, "false": apc_total - apc_true}
-    if has_works is not None:
-        wk = variant_sub("has_works")
-        wk_total, (wk_true,) = await _flag_counts(wk, wk.c.works > 0)
-        facets["works"] = {"true": wk_true, "false": wk_total - wk_true}
-    if green_oa:
-        g = variant_sub("green_oa")
-        _g_total, (g_s, g_a, g_p, g_n) = await _flag_counts(
-            g,
-            g.c.green_oa == GreenOa.SUBMITTED,
-            g.c.green_oa == GreenOa.ACCEPTED,
-            g.c.green_oa == GreenOa.PUBLISHED,
-            g.c.green_oa == GreenOa.NONE,
-        )
-        facets["green_oa"] = {"submitted": g_s, "accepted": g_a, "published": g_p, "none": g_n}
-    if defaults["funder_fit"]:
-        # Funder_fit has an own filter like any facet: chip counts must
-        # reflect what selecting a tier would yield, so an active tier
-        # recomputes on a variant without it; otherwise the base counts
-        # are final. Either way one dedicated pass keeps the shared
-        # aggregate untouched.
-        ff = base_sub(**({"funder_fit_value": None} if funder_fit_value else {}))
-        counted_ff = (
-            select(ff, func.count().over(partition_by=ff.c.funder_fit).label("n"))
-            .select_from(ff)
-            .subquery()
-        )
-        counts = (
-            await session.execute(
-                select(func.jsonb_object_agg(counted_ff.c.funder_fit, counted_ff.c.n))
-            )
-        ).scalar_one()
-        facets["funder_fit"] = dict(counts or {})
+    if "funder_fit" in results:
+        facets["funder_fit"] = results["funder_fit"]
     cache_put(FACET_CACHE, cache_key, (facets, total))
     return facets, total

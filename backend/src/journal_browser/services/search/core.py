@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...models import Journal
 from ...vocab import GreenOa
+from ..concurrency import together
 from ..funder_fit import JournalFacts, compute_funder_fit
 from .cursors import encode_cursor, parse_cursor
 from .facets import facet_counts
@@ -80,10 +81,6 @@ async def search_journals(
             fuzzy = True
             subq = base_query(**{**filters, "fuzzy": True}).subquery()
             need_total = True
-    total: int | None = None
-    if need_total:
-        total = await session.scalar(select(func.count()).select_from(subq)) or 0
-
     order_col, direction = sort_order(sort, subq, dir)
     if dir in ("asc", "desc"):
         direction = dir
@@ -109,7 +106,19 @@ async def search_journals(
     # Postgres itself computed it, so it matches the sort collation exactly
     # (Python .lower() and SQL lower() diverge on non-ASCII under C locale).
     page_q = page_q.add_columns(order_col.label("cursor_value"))
-    rows = (await session.execute(page_q.limit(limit + 1))).all()
+
+    total: int | None = None
+    if need_total:
+
+        async def _fetch_total(own: AsyncSession) -> int:
+            return (await own.scalar(select(func.count()).select_from(subq))) or 0
+
+        async def _fetch_rows(own: AsyncSession) -> list[Any]:
+            return list((await own.execute(page_q.limit(limit + 1))).all())
+
+        total, rows = await together(session, [_fetch_total, _fetch_rows])
+    else:
+        rows = (await session.execute(page_q.limit(limit + 1))).all()
 
     next_cursor = None
     if len(rows) > limit:
