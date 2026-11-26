@@ -10,7 +10,7 @@ resolution-markers = [
 [[package]]
 name = "aireloom"
 version = "0.8.0"
-source = { git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Faireloom&branch=overhaul-2026-11#84788de28d3fd67527ded7fd60f3a1c6edc252c9" }
+source = { git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Faireloom&tag=aireloom-v0.8.0#876dec46feb8d733f46d0975bc753661031bbc9d" }
 dependencies = [
     { name = "bibliofabric" },
 ]
@@ -32,7 +32,7 @@ wheels = [
 [[package]]
 name = "aletheca"
 version = "0.4.0"
-source = { git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Faletheca&branch=overhaul-2026-11#84788de28d3fd67527ded7fd60f3a1c6edc252c9" }
+source = { git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Faletheca&tag=aletheca-v0.4.0#876dec46feb8d733f46d0975bc753661031bbc9d" }
 dependencies = [
     { name = "bibliofabric" },
 ]
@@ -146,7 +146,7 @@ wheels = [
 [[package]]
 name = "bibliofabric"
 version = "0.6.0"
-source = { git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Fbibliofabric&branch=overhaul-2026-11#84788de28d3fd67527ded7fd60f3a1c6edc252c9" }
+source = { git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Fbibliofabric&tag=aletheca-v0.4.0#876dec46feb8d733f46d0975bc753661031bbc9d" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
@@ -785,12 +785,12 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aireloom", git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Faireloom&branch=overhaul-2026-11" },
+    { name = "aireloom", git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Faireloom&tag=aireloom-v0.8.0" },
     { name = "alembic", specifier = ">=1.20.1" },
-    { name = "aletheca", git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Faletheca&branch=overhaul-2026-11" },
+    { name = "aletheca", git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Faletheca&tag=aletheca-v0.4.0" },
     { name = "asyncpg", specifier = ">=0.30" },
     { name = "beautifulsoup4", specifier = ">=4.15.0" },
-    { name = "bibliofabric", git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Fbibliofabric&branch=overhaul-2026-11" },
+    { name = "bibliofabric", git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Fbibliofabric&tag=bibliofabric-v0.6.0" },
     { name = "currencyconverter", specifier = ">=0.18.22" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "fastembed", specifier = ">=0.9.0" },
@@ -805,7 +805,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
-    { name = "stavrophora", git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Fstavrophora&branch=overhaul-2026-11" },
+    { name = "stavrophora", git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Fstavrophora&tag=stavrophora-v0.3.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
 ]
 
@@ -2151,7 +2151,7 @@ wheels = [
 [[package]]
 name = "stavrophora"
 version = "0.3.0"
-source = { git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Fstavrophora&branch=overhaul-2026-11#84788de28d3fd67527ded7fd60f3a1c6edc252c9" }
+source = { git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Fstavrophora&tag=stavrophora-v0.3.0#876dec46feb8d733f46d0975bc753661031bbc9d" }
 dependencies = [
     { name = "bibliofabric" },
 ]

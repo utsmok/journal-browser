@@ -41,13 +41,13 @@ dev = [
     "ty>=0.0.107",
 ]
 
-# Unreleased 0.6 family: resolved from the monorepo's overhaul branch until
-# the PyPI release; replace with plain version pins afterwards.
+# The 0.6 family is tagged but not yet on PyPI: resolve the release tags from
+# the monorepo, then drop this table for plain version pins once published.
 [tool.uv.sources]
-bibliofabric = { git = "https://github.com/utsmok/bibliofabric", branch = "overhaul-2026-11", subdirectory = "packages/bibliofabric" }
-aireloom = { git = "https://github.com/utsmok/bibliofabric", branch = "overhaul-2026-11", subdirectory = "packages/aireloom" }
-aletheca = { git = "https://github.com/utsmok/bibliofabric", branch = "overhaul-2026-11", subdirectory = "packages/aletheca" }
-stavrophora = { git = "https://github.com/utsmok/bibliofabric", branch = "overhaul-2026-11", subdirectory = "packages/stavrophora" }
+bibliofabric = { git = "https://github.com/utsmok/bibliofabric", tag = "bibliofabric-v0.6.0", subdirectory = "packages/bibliofabric" }
+aireloom = { git = "https://github.com/utsmok/bibliofabric", tag = "aireloom-v0.8.0", subdirectory = "packages/aireloom" }
+aletheca = { git = "https://github.com/utsmok/bibliofabric", tag = "aletheca-v0.4.0", subdirectory = "packages/aletheca" }
+stavrophora = { git = "https://github.com/utsmok/bibliofabric", tag = "stavrophora-v0.3.0", subdirectory = "packages/stavrophora" }
 
 [build-system]
 requires = ["hatchling"]
