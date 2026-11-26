@@ -12,11 +12,14 @@ DEPLOYMENT.md (configuration reference, harvest internals, operations).
   `lib/api-types.ts` is generated from `openapi.json` — never hand-edit.
 - `openapi.json` — committed API schema (repo root); CI verifies it has not
   drifted from the routes.
-- `docs/` — a gitignored content volume; two files are tracked:
-  `docs/multi-institute.md` (the shipped multi-institution design) and
-  `docs/data-pipeline/jisc-opf.md` (JISC Open Policy Finder notes). The
-  harvest architecture is documented in DEPLOYMENT.md ("What the harvests
-  build").
+- `docs/` — Markdown documentation served at `/{inst}/docs` (read-only mount
+  at `/app/docs` in compose; database edits persist independently). Five files
+  are tracked in git: `docs/multi-institute.md` (multi-institution design),
+  `docs/data-pipeline/jisc-opf.md` (JISC Open Policy Finder),
+  `docs/data-pipeline/collaborations.md` (collaborations pipeline & RORs),
+  `docs/data-pipeline/source-issues.md` (upstream source quirks), and
+  `docs/plans/compare-journals.md` (compare-journals design plan). The harvest
+  architecture is documented in DEPLOYMENT.md ("What the harvests build").
 - `db/` — the pgvector Postgres image (`db/Dockerfile`) that compose and
   the `jb-test-pg` test container both build from.
 - `dev/` — pre-commit hook scripts (`dev/hooks/`).
@@ -39,6 +42,7 @@ All commands run from the repo root unless noted.
 | Frontend format (Biome) | `cd frontend && npm run format` |
 | Frontend format check (CI) | `cd frontend && npm run format:check` |
 | Frontend import cycles | `cd frontend && npm run lint:cycles` (madge) |
+| Frontend tests | `cd frontend && npm run test` (Vitest) |
 | Frontend build | `cd frontend && npm run build` |
 | Refresh API types | `cd backend && uv run python scripts/dump_openapi.py && cd ../frontend && npm run generate` |
 | Setup git hooks | `pre-commit install` plus `pre-commit install --hook-type commit-msg` (ruff + format + eslint/biome + import layers/cycles + file-length gate on staged files; commit-msg gate on conventional subjects) |

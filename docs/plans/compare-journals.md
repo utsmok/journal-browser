@@ -2,6 +2,9 @@
 
 Status: this document is a plan and contains no code. It was written on 2026-11-25 against `main` at `1603dc1` and the shortlist branch `fix/shortlist` at `7655d1d`. Figures marked as estimates were not measured.
 
+> [!NOTE]
+> **Updated assumptions (2026-11-26):** Five baseline assumptions in this plan have since been superseded on `main`: (1) the shortlist feature and `/journals/batch` endpoint are now merged; (2) `/api/v1/{inst}/meta/freshness` is shipped and powers the About freshness table; (3) Scimago `"-"` quartiles are normalized to `NULL` (cleaned in DB by migration `0009` and at the API boundary); (4) client i18n uses `<SectionMessages>` (which replaces rather than merges parent namespaces); (5) mobile touch targets across shortlist and browse views use 44 px tap areas.
+
 ## Summary of decisions
 
 | Topic | Decision |

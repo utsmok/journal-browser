@@ -15,20 +15,38 @@ label follows the configured institution.
 
 ## Quick start
 
-1. Install Docker (Compose v2.24+).
+1. Install Docker (Compose v2.24+). For a full-scale instance, allocate at least
+   12–16 GB RAM (`db` 6 GB, `scheduler`/`bootstrap` 3 GB, `backend` 2 GB,
+   `frontend` 512 MB) and see disk notes in [DEPLOYMENT.md](DEPLOYMENT.md).
 2. `cp .env.example .env` and set the institution levers — at minimum:
-   `JB_INSTITUTION_NAME`, `JB_INSTITUTION_ROR`, `JB_PURE_OAI_BASE_URL`,
-   `JB_OPENAIRE_ORG_ID`, and `OPENALEX_API_KEY`. Set `JB_ADMIN_PASSWORD`
-   too; it unlocks the admin panel at `/admin` (empty leaves it disabled).
-3. Build and run the database, then the one-shot first-boot pipeline:
-   `docker compose up -d --build db bootstrap`. Follow it with
-   `docker compose logs -f bootstrap` — the first boot takes 1.5–2 hours
-   and is done when the bootstrap container exits 0.
-4. `docker compose up -d` starts the backend, scheduler, and frontend.
+   `JB_INSTITUTION_CODE`, `JB_INSTITUTION_NAME`, `JB_INSTITUTION_SHORT`,
+   `JB_INSTITUTION_ROR`, `JB_PURE_OAI_BASE_URL`, `JB_OPENAIRE_ORG_ID`,
+   `OPENALEX_API_KEY`, and build-time `NEXT_PUBLIC_SITE_URL`. Set
+   `JB_ADMIN_PASSWORD` too; it unlocks `/admin` (empty leaves it disabled).
+3. Build the backend image (shared by `backend`, `bootstrap`, and
+   `scheduler`), start Postgres, and run the one-shot first-boot pipeline:
+   `docker compose build backend && docker compose up -d db bootstrap`. Follow
+   it with `docker compose logs -f bootstrap` — the first boot takes 1.5–2
+   hours and is done when `bootstrap` exits 0.
+4. `docker compose up -d --build` starts the backend, scheduler, and frontend.
 5. Verify: `curl localhost:8000/api/v1/healthz`, then open
    `http://localhost:3000` — with one institution configured it redirects
    to its site (`/ut`); the deal register lists your institution's current
    NL deals with journal counts.
+
+## Surfaces
+
+- **Journal search & guided finder (`/{inst}`, `/{inst}/guide`)** — hybrid
+  full-text and semantic (`pgvector`) journal search, deal/OA/quartile/APC/funder-fit
+  facets, recommendations, and an interactive guided journal finder.
+- **Shortlist (`/{inst}/shortlist`)** — browser-saved journal shortlists with
+  live lookup (`/journals/batch`), share links (`?j=`), print view, and CSV export.
+- **Entity directories** — Deals (`/{inst}/deals`), Funders (`/{inst}/funders`),
+  Publishers (`/{inst}/publisher`), Organisational units (`/{inst}/orgunit`),
+  Authors (`/{inst}/author`), and Collaborations + partner map (`/{inst}/collaborations`).
+- **Docs, public API & admin** — Markdown guides (`/{inst}/docs`), Swagger UI &
+  public OpenAPI schema (`/api/v1/api-docs`, `/api/v1/openapi.json`), and
+  operations/curation admin panel (`/admin`).
 
 Runtime settings live in `backend/state/settings.yaml`, seeded from
 `backend/settings.yaml.example` on first boot; the admin panel edits it
@@ -47,12 +65,12 @@ one harvest run — see "Adding a second institution" in
 | Layer | Choice |
 |---|---|
 | Backend | Python 3.12, FastAPI, SQLAlchemy 2 (async), `uv` |
-| Database | PostgreSQL 17 |
+| Database | PostgreSQL 17 + `pgvector` |
 | OpenAlex | [`aletheca`](https://github.com/utsmok/aletheca) (bibliofabric-based client) |
 | OpenAIRE | [`aireloom`](https://github.com/utsmok/AIREloom) |
 | Crossref | [`stavrophora`](https://github.com/utsmok/stavrophora) |
 | Frontend | Next.js (App Router), TypeScript |
-| Deployment | Docker Compose (LAN server for the PoC) |
+| Deployment | Docker Compose |
 
 OpenAlex cursor-paged harvests use `OPENALEX_API_KEY`; single-entity lookups
 don't need it.
@@ -60,10 +78,15 @@ don't need it.
 ## Layout
 
 ```
-backend/          FastAPI app, harvest jobs, alembic migrations
-frontend/         Next.js app (App Router)
+backend/          FastAPI app, harvest jobs, alembic migrations, scripts
 backend/data/     Scimago seed CSVs (backend/data/scimagojr)
-backend/landing/  Raw harvest files (gitignored) + curation reports
+backend/landing/  Raw harvest files, wave state/locks, curation reports (gitignored)
+backend/state/    Admin settings.yaml overlay (gitignored; seeded on boot)
+backups/          Nightly zstd pg_dump archives (gitignored)
+db/               PostgreSQL 17 + pgvector image
+docs/             Markdown documentation served at /{inst}/docs
+frontend/         Next.js app (App Router)
+openapi.json      Committed OpenAPI schema (typed into frontend/lib/api-types.ts)
 ```
 
 ## Development
@@ -78,7 +101,7 @@ Prerequisites: `uv`, Node 22+, Docker (for Postgres), or just use compose.
 cd backend && uv run pytest
 
 # frontend
-cd frontend && npm install && npm run build
+cd frontend && npm install && npm run test && npm run build
 ```
 
 The bootstrap pipeline (`backend/jobs/bootstrap.py`) runs the harvest jobs as
@@ -96,7 +119,10 @@ All user-visible text lives in `frontend/messages/en/`, one JSON file per
 namespace (`home.json`, `journals.json`, `admin.json`, ...). The frontend
 uses next-intl: server components read strings with
 `getTranslations("namespace")`, client components with
-`useTranslations("namespace")`. Dynamic values use ICU placeholders:
+`useTranslations("namespace")`. Each route layout wraps its subtree in
+`<SectionMessages namespaces={[...]}>` so client bundles only receive
+`"common"` plus the declared namespaces (nested `<SectionMessages>` replaces
+the parent set rather than merging). Dynamic values use ICU placeholders:
 `"showingOf": "Showing {shown} of {total} journals."` called as
 `t("showingOf", { shown, total })`.
 

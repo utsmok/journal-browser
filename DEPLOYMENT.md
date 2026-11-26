@@ -11,6 +11,9 @@ root unless noted.
 
 - Docker with Compose v2.24+ (the test and per-institute overrides use the
   `!override` merging feature).
+- Memory: 12–16 GB RAM recommended for a multi-institution instance (`db` 6g with
+  `shared_buffers=1GB` and `effective_cache_size=4GB`, `scheduler` 3g,
+  `bootstrap` 3g, `backend` 2g, `frontend` 512m).
 - Disk, measured on the Twente-scale live instance: about 130 GB for the
   database volume, plus the raw landing zone and one `pg_dump -Fc` archive
   per night (an estimated 6.5 GB each with zstd compression; the default
@@ -35,6 +38,7 @@ live (see "Admin panel").
 
 | Variable | What it is | Default | How to find / set it |
 |---|---|---|---|
+| `JB_INSTITUTION_CODE` | URL path segment (`[a-z0-9-]+`) for the default institution | `ut` | short code (e.g. `ut`, `rug`) |
 | `JB_INSTITUTION_NAME` | English name as openaccess.nl deal pages write it; drives deal matching and all long UI labels | `University of Twente` | openaccess.nl deal pages |
 | `JB_INSTITUTION_SHORT` | Short name for compact labels ("Twente works", "Groningen works") | `Twente` | your choice |
 | `JB_INSTITUTION_ROR` | ROR id; resolves the OpenAlex institution filter | `https://ror.org/006hf6230` | <https://ror.org> search |
@@ -83,6 +87,10 @@ in citation links on journal pages. Set it in `.env` before the first
 | `JB_RATE_LIMIT_FEEDBACK_PER_MINUTE` | Separate per-IP limit for feedback submissions | `10` |
 | `JB_STATEMENT_TIMEOUT_MS` | Longest API statement, in ms, before it fails instead of holding a pool connection | `60000` |
 | `JB_CACHE_MAX_MB` | RAM the three in-process caches (search facets, list snapshots, stale detail bundles) may hold together, estimated from the cached objects. Above it the least recently used entry goes first, whichever cache holds it. One orgunit snapshot holds about 100 MB, so leave room for it inside the backend's 2 GB container limit | `256` |
+| `JB_WORK_FUNDERS_TTL_DAYS` | Days before `harvest_work_funders` re-fetches a work's funder records | `30` |
+| `JB_LOG_FORMAT` | `text` (human-readable with `[request-id]`) or `json` (one JSON object per line) | `text` |
+| `JB_SETTINGS_YAML` | Path to admin-editable runtime settings overlay (mounted at `./backend/state/settings.yaml` in compose) | `settings.yaml` |
+| `TZ` | Container timezone for scheduler cron logs | `UTC` |
 | Country lookups | `jobs/enrich_usage_geo.py` resolves visitor IPs locally against DB-IP's free Country Lite database (downloaded monthly into `landing/dbip/`). Country data by DB-IP.com, CC BY 4.0 (https://db-ip.com) | — |
 | `JB_IGNORED_ISSNS` | JSON list of ISSNs the browser treats as nonexistent on every journal surface | empty |
 | `JB_SOURCE_WAVE_CRON` | Cron schedule (UTC) for the weekly source wave, run by the `scheduler` service | `0 22 * * 0` (Sunday 22:00) |
@@ -91,7 +99,8 @@ in citation links on journal pages. Set it in `.env` before the first
 | `JB_BACKUP_KEEP` | Nightly dump archives kept in `./backups` | `7` |
 | `JB_ALERT_WEBHOOK_URL` | Incoming webhook (Slack or Mattermost) that receives one JSON message when a wave or the backup fails, or when a killed wave is found. See [Nightly scheduler](#nightly-scheduler) | unset |
 | `JB_ALERT_HOST` | Name of this deployment in those alerts | container hostname |
-| `JB_HEARTBEAT_URL` | URL that each wave and the backup ping once after ending well (healthchecks.io style) | unset |
+| `JB_HEARTBEAT_URL` | Fallback URL that each wave and the backup ping once after ending well (healthchecks.io style) | unset |
+| `JB_HEARTBEAT_REFRESH_URL` / `_SOURCE_URL` / `_BACKUP_URL` | Optional per-job heartbeat URLs for `refresh_wave.sh`, `source_wave.sh`, and `backup.sh` (each falls back to `JB_HEARTBEAT_URL`) | unset |
 
 ## First boot
 
@@ -701,10 +710,11 @@ that:
   the stage that was running. A wave that still runs holds
   `waves/<wave>.lock`; it is left alone, and a second copy of the same wave
   refuses to start.
-- **Heartbeat.** With `JB_HEARTBEAT_URL` set, each wave and the backup send
-  one GET after ending well, as a healthchecks.io check expects. Nothing
-  pings while the scheduler is down or a job never starts, so the check
-  goes late there.
+- **Heartbeat.** With per-job `JB_HEARTBEAT_REFRESH_URL`,
+  `JB_HEARTBEAT_SOURCE_URL`, `JB_HEARTBEAT_BACKUP_URL`, or the fallback
+  `JB_HEARTBEAT_URL` set, each wave and the backup send one GET after ending
+  well, as a healthchecks.io check expects. Nothing pings while the scheduler
+  is down or a job never starts, so the check goes late there.
 
 The scheduler start and the start of each wave also run
 `jobs/reap_orphaned_runs.py`: harvest runs that a killed process left
@@ -714,8 +724,11 @@ The scheduler start and the start of each wave also run
 
 ## Backups and restore
 
-`backend/scripts/backup.sh` runs nightly: `pg_dump --format=custom
---compress=zstd:9` into `./backups/journalbrowser-<UTC timestamp>.dump`
+`backend/scripts/backup.sh` takes a shared lock (`flock -s -w 7200`,
+overridable via `JB_BACKUP_LOCK_WAIT`) on `refresh_wave.lock` so an
+overlapping nightly wave finishes before `pg_dump` starts, then runs
+`pg_dump --format=custom --compress=zstd:9` into
+`./backups/journalbrowser-<UTC timestamp>.dump`
 (an estimated 6.5 GB on a full instance; with pg_dump's default gzip the
 live archives were about 10 GB), followed by a `pg_restore --list` sanity
 check on the archive and pruning to the newest `JB_BACKUP_KEEP` (default 7)
@@ -944,11 +957,14 @@ the rewrite.
 
 ## Migrations
 
-The history of the original 70-migration chain is squashed into one
-revision, `0001_baseline`, matching the pre-squash schema at head `0069`
-exactly (verified by `pg_dump --schema-only` diff).
+The history of the original 70-migration chain is squashed into
+`0001_baseline`, followed by incremental reversible revisions (`0002` through
+`0009_indexes_and_scimago_clean`, which adds `lz4` TOAST compression on
+`source_records.payload`, operational indexes, rebuilt author-name trigram
+index, and Scimago `"-"` cleanup).
 
-- **Fresh installs:** `alembic upgrade head` applies `0001_baseline`.
+- **Ongoing deploys:** `bootstrap` and `backend` run `uv run --no-dev alembic upgrade head` on start; every revision remains reversible via `alembic downgrade`.
+- **Fresh installs:** `alembic upgrade head` applies `0001_baseline` through head.
 - **Existing databases** (at `0069` from before the squash): do NOT run
   `alembic upgrade head` — the old revisions no longer exist in the repo,
   and alembic refuses to work against a version row it cannot resolve.
