@@ -312,26 +312,16 @@ async def _build_funder_detail(
     item = _to_item(
         funder, ids, counts, union_counts.get(funder_id, 0), canon.whole_ids.get(funder_id)
     )
-    # Top journals across every twin the works may cite.
-    top: list[dict[str, Any]] = []
-    for bare in sorted(ids, key=lambda b: -counts.get(b, 0)):
-        top.extend(
-            await funders_service.top_journals(
-                session, institution, bare, limit=25, year_range=year_range
-            )
-        )
-    seen: set[str] = set()
-    deduped = []
-    for j in top:
-        if j["issn_l"] not in seen:
-            seen.add(j["issn_l"])
-            deduped.append(j)
+    # Top journals across every twin the works may cite (one distinct-work query).
+    top = await funders_service.top_journals(
+        session, institution, ids, limit=25, year_range=year_range
+    )
     yearly = await funders_service.works_by_year(session, institution, ids, year_range)
     return await cache_epoch(session), FunderDetailResponse(
         **item.model_dump(),
         publications_policy=normalize_policy_requirements(funder.publications_policy),
         data_archiving_policy=normalize_policy_requirements(funder.data_archiving_policy),
         openaire=canon.openaire.get(funder_id),
-        top_journals=[FunderTopJournal(**j) for j in deduped[:25]],
+        top_journals=[FunderTopJournal(**j) for j in top],
         works_by_year=yearly,
     )

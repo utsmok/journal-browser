@@ -149,7 +149,7 @@ ATTRIBUTION = {
         caveat_codes=["jct-coverage", "openaccess-nl-prose", "issn-mapping"],
     ),
     "apc_evidence": Attribution(
-        source="openapc (observed) + doaj (declared)",
+        source="openalex + doaj (list) + openapc (paid)",
         url="https://github.com/OpenAPC/openapc-de",
         caveat_codes=["openapc-coverage", "openapc-fallback", "doaj-apc-declared"],
     ),
@@ -789,6 +789,21 @@ async def _build_journal_detail(
         .scalars()
         .all()
     )
+    paid_aggregates = list(
+        (
+            await session.execute(
+                select(JournalApcAggregate)
+                .where(
+                    JournalApcAggregate.issn_l == journal.issn_l,
+                    JournalApcAggregate.euro_max.is_not(None),
+                    JournalApcAggregate.euro_max > 0,
+                )
+                .order_by(JournalApcAggregate.period.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
     evidence = list(
         (
             await session.execute(
@@ -897,7 +912,7 @@ async def _build_journal_detail(
             "latest_apc_period": journal.latest_apc_period,
         }
     )
-    apc.update(search_service.paid_block([a for a in aggregates if a.euro_max and a.euro_max > 0]))
+    apc.update(search_service.paid_block(paid_aggregates))
     return await cache_epoch(session), JournalDetailResponse(
         journal=JournalListItem(
             issn_l=journal.issn_l,
@@ -911,7 +926,7 @@ async def _build_journal_detail(
             deal_covered=bool(deals),
             deal_cap_reached=deal_cap_reached,
             works=sum(s["works_count"] for s in stats),
-            quartile=sjr_rows[-1].best_quartile if sjr_rows else None,
+            quartile=journal.latest_quartile,
             twoyr_mean_citedness=summary_stats.get("two_yr_mean_citedness"),
             oa_type=oa_type_val,
             **apc,
@@ -945,7 +960,12 @@ async def _build_journal_detail(
             for s in stats
         ],
         scimagojr=[
-            ScimagojrOut(year=r.year, sjr=r.sjr, best_quartile=r.best_quartile, h_index=r.h_index)
+            ScimagojrOut(
+                year=r.year,
+                sjr=r.sjr,
+                best_quartile=None if r.best_quartile == "-" else r.best_quartile,
+                h_index=r.h_index,
+            )
             for r in sjr_rows
         ],
         apc_aggregates=[

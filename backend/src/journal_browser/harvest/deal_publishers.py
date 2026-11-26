@@ -267,13 +267,17 @@ class SheetPublishers:
             for deal_id, dominant in self.sheets.items()
         )
 
-    def other_owner(self, family: str, publisher: str) -> str | None:
+    def other_owner(self, family: str, publisher: str, exclude: int | None = None) -> str | None:
         """Name of the family, other than `family`, whose sheets `publisher`
-        dominates most often; None when no other family's sheet has it."""
+        dominates most often; None when no other family's sheet has it.
+        `exclude` omits the deal currently being judged so its own stored
+        sheet never votes against itself."""
         votes: Counter[str] = Counter(
             self.families[deal_id]
             for deal_id, dominant in self.sheets.items()
-            if dominant == publisher and self.families.get(deal_id) not in (None, family)
+            if dominant == publisher
+            and deal_id != exclude
+            and self.families.get(deal_id) not in (None, family)
         )
         if not votes:
             return None
@@ -335,7 +339,7 @@ def judge(
         return Verdict(None, False, None)
     if name_matches(family, dominant.name):
         return Verdict(dominant, True, None)
-    other = sheets.other_owner(family, dominant.name)
+    other = sheets.other_owner(family, dominant.name, exclude=exclude)
     if other is not None:
         return Verdict(dominant, False, other)
     # An imprint name such as Routledge matches no family name, but it

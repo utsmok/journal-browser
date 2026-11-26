@@ -50,9 +50,11 @@ async def _attach_deals(
         )
     ).all()
     by_issn: dict[str, list[dict[str, Any]]] = {}
+    seen: set[tuple[str, int]] = set()
     for issn_l, deal_id, publisher_name, duration_text in rows:
-        if issn_l is None:
-            continue  # a NULL issn_l never matches the ISSN-L list above
+        if issn_l is None or (issn_l, deal_id) in seen:
+            continue  # a NULL issn_l never matches; multi-ISSN deals appear once
+        seen.add((issn_l, deal_id))
         deals = by_issn.setdefault(issn_l, [])
         deals.append(
             {
@@ -83,6 +85,8 @@ async def journals_by_issn(
     )
     found = {row.issn_l: dict(row._mapping) for row in (await session.execute(query)).all()}
     items = [rename_twoyr(found[issn_l]) for issn_l in issn_ls if issn_l in found]
+    if not items:
+        return []
     await attach_apc_display(session, items)
     await _attach_deals(session, institution_id, items)
     return items

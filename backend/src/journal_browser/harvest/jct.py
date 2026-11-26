@@ -262,10 +262,13 @@ async def _store_agreement(
         "url": agreement["data_url"],
         "fetched_at": fetched_at,
     }
+    deal_family = (sheets.families.get(existing.id) if existing is not None else None) or family_of(
+        agreement["esac_id"], code.upper() if code else None
+    )
     withheld_reason = withheld(
         judge(
             await issn_publisher_counts(session, [i for r in journals if (i := row_issn(r))]),
-            family=family_of(agreement["esac_id"], code.upper() if code else None),
+            family=deal_family,
             exclude=existing.id if existing is not None else None,
             sheets=sheets,
         ),

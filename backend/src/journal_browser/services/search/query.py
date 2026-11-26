@@ -417,7 +417,7 @@ def base_query(
     return query
 
 
-def sort_order(sort: SortKey, subq: Any) -> tuple[Any, str]:
+def sort_order(sort: SortKey, subq: Any, direction: str | None = None) -> tuple[Any, str]:
     """Returns (order expression, natural direction)."""
     if sort == "title":
         return func.lower(func.coalesce(subq.c.title, "")), "asc"
@@ -428,7 +428,10 @@ def sort_order(sort: SortKey, subq: Any) -> tuple[Any, str]:
     if sort == "topic":
         return subq.c.primary_topic, "asc"
     if sort == "apc":
-        return func.coalesce(subq.c.apc_price, 0), "desc"
+        # Unpriced and unconvertible-currency journals (NULL apc_price) sort
+        # after every EUR price in both directions.
+        null_sentinel = 1_000_000_000_000.0 if direction == "asc" else 0
+        return func.coalesce(subq.c.apc_price, null_sentinel), "desc"
     if sort == "institution_works":
         return func.coalesce(subq.c.works, 0), "desc"
     if sort == "2yr_mean_citedness":

@@ -7,7 +7,7 @@ canon-link reads predate the WorkFunder ORM model."""
 
 import re
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -102,7 +102,12 @@ def programme_ids(
     names: dict[str, list[int]] = {}
     for bare, twin in twins.items():
         twin_tokens = _tokens(twin)
-        names[bare] = [fid for fid, label in labels.items() if label & twin_tokens]
+        names[bare] = [
+            fid
+            for fid, label in labels.items()
+            if label <= twin_tokens
+            or any(any(ch.isdigit() for ch in tok) for tok in (label & twin_tokens))
+        ]
     split_off = {fid for owners in names.values() for fid in owners}
     unlabelled = [fid for fid in records if fid not in labels]
     whole = unlabelled or [fid for fid in records if fid not in split_off]
@@ -324,7 +329,10 @@ async def ut_work_counts(
         ),
         _gate_params(institution.id, *_window_bounds(institution, year_range)),
     )
-    out = {str(fid).rsplit("/", 1)[-1]: int(n) for fid, n in rows}
+    out: dict[str, int] = {}
+    for fid, n in rows:
+        bare = str(fid).rsplit("/", 1)[-1]
+        out[bare] = out.get(bare, 0) + int(n)
     cache_put(SNAPSHOT_CACHE, cache_key, out)
     return out
 
@@ -376,25 +384,34 @@ async def ut_funder_work_counts(
 async def top_journals(
     session: AsyncSession,
     institution: Institution,
-    openalex_funder_id: str | None,
+    openalex_funder_id: str | Iterable[str] | None,
     limit: int = 5,
     year_range: tuple[int, int] | None = None,
 ) -> list[dict[str, Any]]:
-    """Journals with the most gated UT works crediting this funder (the
-    same works gates as ut_work_counts); an explicit year_range replaces
-    the default window."""
-    if not await _work_funders_ready(session) or openalex_funder_id is None:
+    """Journals with the most gated UT works crediting this funder (or
+    set of twin OpenAlex funder ids), using the same works gates as
+    ut_work_counts; an explicit year_range replaces the default window."""
+    if openalex_funder_id is None:
+        return []
+    bares = (
+        [openalex_funder_id]
+        if isinstance(openalex_funder_id, str)
+        else sorted({str(fid) for fid in openalex_funder_id if fid})
+    )
+    if not bares or not await _work_funders_ready(session):
         return []
     # Admin ignore-list (e.g. arXiv): an ignored journal is treated as
     # nonexistent everywhere else, so it must not top a funder's list.
     ignored = [i.upper() for i in get_settings().ignored_issns]
-    params = {
+    params: dict[str, Any] = {
         **_gate_params(institution.id, *_window_bounds(institution, year_range)),
-        "f": openalex_funder_id,
+        "bares": bares,
         "l": limit,
     }
     ignored_clause = (
-        " and (j.issn_l is null or upper(j.issn_l) != any(:ignored))" if ignored else ""
+        " and (j.issn_l is null or upper(j.issn_l) != all(cast(:ignored as text[])))"
+        if ignored
+        else ""
     )
     if ignored:
         params["ignored"] = ignored
@@ -403,9 +420,9 @@ async def top_journals(
         " from work_funders wf"
         + _WORKS_JOIN_SQL
         + " join journals j on j.issn_l = w.journal_issn_l"
-        " where wf.institution_id = :i and wf.funder_openalex_id = :f"
+        " where wf.institution_id = :i and wf.funder_openalex_id = any(cast(:bares as text[]))"
         + ignored_clause
-        + " group by j.title, j.issn_l order by n desc limit :l"
+        + " group by j.title, j.issn_l order by n desc, j.issn_l asc limit :l"
     )
     rows = await session.execute(text(sql), params)
     return [{"title": r[0], "issn_l": r[1], "n_works": int(r[2])} for r in rows]

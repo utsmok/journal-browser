@@ -36,7 +36,9 @@ class PageViewIn(BaseModel):
     path: str = Field(max_length=512)
     duration_ms: int | None = Field(default=None, ge=0, le=86_400_000)
     referrer: str | None = Field(default=None, max_length=512)
-    ref_type: Literal["journal", "funder", "author", "orgunit", "publisher"] | None = None
+    ref_type: (
+        Literal["journal", "funder", "author", "orgunit", "publisher", "partner", "deal"] | None
+    ) = None
     ref_id: str | None = Field(default=None, max_length=256)
 
     @model_validator(mode="after")

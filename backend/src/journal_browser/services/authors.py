@@ -8,7 +8,7 @@ oa_type case is shared via search.oa_type_case."""
 
 from typing import Any
 
-from sqlalchemy import case, false, func, or_, select, text
+from sqlalchemy import case, false, func, literal_column, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import PEOPLE_BASE_URL, get_settings, work_type_excluded
@@ -68,7 +68,7 @@ OPENALEX_ONLY_CAP = 50
 # European diacritics folded to plain ASCII on both sides of author-name
 # search, so umlaut-free queries match umlauted names ("follmer" -> "Föllmer").
 _FOLD_SRC = "áàâäãåéèêëíìîïóòôöõúùûüýÿñçšž"
-_FOLD_DST = "aaaaaaeeeeiiiioooooouuuuyyncsz"
+_FOLD_DST = "aaaaaaeeeeiiiiooooouuuuyyncsz"
 
 #: Trigram word-similarity thresholds for q matching: names stay strict
 #: (0.5 so a 40k-row roster surfaces plausible near-names without noise),
@@ -83,10 +83,22 @@ _FALLBACK_SIMILARITY_THRESHOLD = 0.3
 _Q_FALLBACK_FIELDS = (("primary_topic", "topic"), ("research_group", "group"))
 
 
+_FOLD_TRANS = str.maketrans(_FOLD_SRC, _FOLD_DST)
+
+
 def _fold(column: Any) -> Any:
-    """Diacritics fold so "Follmer" finds "Föllmer"; translate() keeps
-    this extension-free."""
-    return func.translate(func.lower(column), _FOLD_SRC, _FOLD_DST)
+    """Diacritics fold so "Follmer" finds "Föllmer"; literal_column keeps
+    the SQL expression byte-identical to ix_authors_name_fold_trgm so
+    PostgreSQL generic plans match the index."""
+    return func.translate(
+        func.lower(column),
+        literal_column(f"'{_FOLD_SRC}'"),
+        literal_column(f"'{_FOLD_DST}'"),
+    )
+
+
+def _fold_q(qstr: str) -> str:
+    return qstr.lower().translate(_FOLD_TRANS)
 
 
 def _q_cond(column: Any, qstr: str) -> Any:
@@ -94,12 +106,10 @@ def _q_cond(column: Any, qstr: str) -> Any:
     finds "Vermeer"); the folded expression hits the trigram GIN index
     on both arms."""
     fold = _fold(column)
+    folded_q = _fold_q(qstr)
     return or_(
-        fold.like(
-            func.translate(func.lower(f"%{escape_like(qstr)}%"), _FOLD_SRC, _FOLD_DST),
-            escape="\\",
-        ),
-        fold.op("%>")(qstr),
+        fold.like(f"%{escape_like(folded_q)}%", escape="\\"),
+        fold.op("%>")(folded_q),
     )
 
 
@@ -332,20 +342,18 @@ async def _search_authors(
         # confirmed. An exact-field match is strong evidence a user typed
         # a real name, so the search reruns ungated; fuzzy-only confirmed
         # matches alone never trigger it.
-        like_arm = _fold(target_col).like(
-            func.translate(func.lower(f"%{escape_like(qstr)}%"), _FOLD_SRC, _FOLD_DST),
-            escape="\\",
-        )
-        ungated_sub, gated_sub = (
-            await session.execute(
-                select(
-                    func.count(),
-                    func.count().filter(Author.confirmed.is_(True)),
-                )
-                .select_from(Author)
-                .where(Author.institution_id == institution_id, like_arm)
+        like_arm = _fold(target_col).like(f"%{escape_like(_fold_q(qstr))}%", escape="\\")
+        probe = (
+            select(
+                func.count(),
+                func.count().filter(Author.confirmed.is_(True)),
             )
-        ).one()
+            .select_from(Author)
+            .where(Author.institution_id == institution_id, *conds.values(), like_arm)
+        )
+        if scoped is not None:
+            probe = probe.outerjoin(scoped, scoped.c.author_pure_uuid == Author.pure_uuid)
+        ungated_sub, gated_sub = (await session.execute(probe)).one()
         if total == 0 or (ungated_sub > 0 and gated_sub == 0):
             # Rerun the same query ungated so total, page and facets
             # describe what the caller gets.
@@ -405,6 +413,16 @@ async def _search_authors(
                 )
             ).all()
         ]
+    if total == 0 and q_cond is not None:
+        return {
+            "enabled": True,
+            "total": 0,
+            "offset": offset,
+            "sort": sort,
+            "q_match": q_match,
+            "items": [],
+            "facets": {},
+        }
     facet_base = list(base) + ([q_cond] if q_cond is not None else [])
     facets = await author_facets(
         session, facet_base, conds, scoped=scoped, n_col=n_col, last_col=last_col

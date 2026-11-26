@@ -143,18 +143,6 @@ async def harvest_work_funders(session: AsyncSession, *, ttl_days: int = 30) -> 
     works = result.all()
     stats["skipped_fresh"] = stats["works_with_doi"] - len(works)
     stats["works_attempted"] = len(works)
-    if not works:
-        logger.info(
-            "work_funders harvest: every work with a DOI was checked within %d days",
-            ttl_days,
-        )
-        return stats
-
-    client_kwargs: dict[str, Any] = {}
-    if api_key := get_settings().openalex_api_key:
-        client_kwargs["api_key"] = api_key
-
-    fetch_stats: dict[str, int] = {}
     ingest = IngestSession(session)
     await ingest.start_run(
         "openalex",
@@ -162,6 +150,20 @@ async def harvest_work_funders(session: AsyncSession, *, ttl_days: int = 30) -> 
         "work_funders",
         {"via": "single_get_by_doi"},
     )
+    if not works:
+        logger.info(
+            "work_funders harvest: every work with a DOI was checked within %d days",
+            ttl_days,
+        )
+        await ingest.finish_run("completed", dict(stats))
+        await session.commit()
+        return stats
+
+    client_kwargs: dict[str, Any] = {}
+    if api_key := get_settings().openalex_api_key:
+        client_kwargs["api_key"] = api_key
+
+    fetch_stats: dict[str, int] = {}
     async with AlethecaClient(**client_kwargs) as client:
         for at in range(0, len(works), WORK_CHUNK):
             if not await openalex_budget_ok("work_funders", stats):

@@ -108,6 +108,18 @@ def test_list_price_falls_back_to_doaj_then_to_nothing(rates):
     broken = _list(apc_prices=[{"currency": "EUR"}], doaj_apc_max=2500, doaj_apc_currency="USD")
     assert broken.source is ApcSource.DOAJ
 
+    # Currency strings are normalized, >3-char codes and <=0 amounts are ignored.
+    normalized = _list(
+        apc_prices=[
+            {"price": 0, "currency": "EUR"},
+            {"price": 500, "currency": "EURO"},
+            {"price": 1200, "currency": " usd "},
+        ]
+    )
+    assert (normalized.currency, normalized.amount, normalized.euro) == ("USD", 1200.0, 1080.0)
+    assert select_list_price(apc_prices=[{"price": 0, "currency": "EUR"}]) is None
+    assert select_list_price(doaj_apc_max=0, doaj_apc_currency="EUR") is None
+
 
 def test_eur_conversion_reads_the_bundled_rate_table():
     assert year_rate("EUR") == 1.0
@@ -395,6 +407,22 @@ async def test_apc_sort_and_filter_follow_the_list_price(priced_api):
     # Prices rise by the list price, with the paid-only journal first; the
     # €0-only journal has no price and drops out of the filter.
     assert [i["issn_l"] for i in body["items"]] == [PAID_ONLY, DOAJ_ONLY, REMOTE, MEMBRANES]
+
+    # Without has_apc=true, unpriced journals still sort AFTER every EUR price
+    # on ascending sort ("cheapest first"), not first as €0.
+    all_asc = (
+        await priced_api.get(
+            "/api/v1/ut/journals",
+            params={"sort": "apc", "dir": "asc", "limit": 100},
+        )
+    ).json()
+    assert [i["issn_l"] for i in all_asc["items"]] == [
+        PAID_ONLY,
+        DOAJ_ONLY,
+        REMOTE,
+        MEMBRANES,
+        DEAL_ONLY,
+    ]
 
 
 @requires_db

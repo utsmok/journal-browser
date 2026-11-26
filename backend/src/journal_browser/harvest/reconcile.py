@@ -206,22 +206,23 @@ async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
         ]
         if not participants:
             continue
-        linked = await session.scalar(
-            select(DealInstitution.deal_id).where(
+        was_linked = await session.scalar(
+            select(DealInstitution.deal_id)
+            .where(
                 DealInstitution.deal_id == deal.id,
                 DealInstitution.institution_id.in_([i.id for i in participants]),
             )
+            .limit(1)
         )
         has_journals = await session.scalar(
             select(func.count()).select_from(DealJournal).where(DealJournal.deal_id == deal.id)
         )
-        if linked is None:
-            await session.execute(
-                pg_insert(DealInstitution)
-                .values([{"deal_id": deal.id, "institution_id": inst.id} for inst in participants])
-                .on_conflict_do_nothing(index_elements=["deal_id", "institution_id"])
-            )
-            stats["linked"] += len(participants)
+        res = await session.execute(
+            pg_insert(DealInstitution)
+            .values([{"deal_id": deal.id, "institution_id": inst.id} for inst in participants])
+            .on_conflict_do_nothing(index_elements=["deal_id", "institution_id"])
+        )
+        stats["linked"] += res.rowcount or 0
         pname = (pub_names.get(deal.publisher_id) or "").strip()
         # openaccess.nl names carry parenthetical sigla ("... (ACS)") that
         # OpenAlex publisher names lack; match on the bare name.
@@ -246,7 +247,7 @@ async def derive_nl_deal_coverage(session: AsyncSession) -> dict[str, int]:
         rejected = rejected_sheet(deal.provenance) is not None
         if (
             not rejected
-            and linked is not None
+            and was_linked is not None
             and has_journals
             and deal.id not in protected
             and deal.needs_curation
@@ -384,11 +385,15 @@ async def restore_openaccess_nl_facts(session: AsyncSession) -> dict[str, int]:
             and years != (None, None)
             and years != (deal.start_year, deal.end_year)
         ):
-            if "start_year" not in protected:
+            changed = False
+            if "start_year" not in protected and deal.start_year != years[0]:
                 deal.start_year = years[0]
-            if "end_year" not in protected:
+                changed = True
+            if "end_year" not in protected and deal.end_year != years[1]:
                 deal.end_year = years[1]
-            stats["period_restored"] += 1
+                changed = True
+            if changed:
+                stats["period_restored"] += 1
     await session.flush()
     return stats
 
@@ -855,6 +860,10 @@ async def _merge(
     if withheld_reason is not None:
         merged["url"] = data_url
         merged[SHEET_REJECTED_KEY] = withheld_reason
-        flag(canonical, withheld_reason)
+        owned = await _override_protected(session, [canonical.id])
+        if canonical.id not in owned and not dismissal_applies(
+            canonical.curation_resolved_reason, withheld_reason
+        ):
+            flag(canonical, withheld_reason)
     canonical.provenance = [*list(canonical.provenance or []), merged]
     await session.flush()

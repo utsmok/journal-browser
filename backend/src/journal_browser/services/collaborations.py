@@ -139,7 +139,7 @@ _YEAR_OR_SPAN = (
 #: A programme label, one or more words followed by a programme year
 #: (2000 to 2039): "HORIZON2020", "Horizon 2020", "France2030". The
 #: narrower year keeps grant numbers such as DFG "GRK 2073".
-_PROGRAMME_LABEL = r"^(?:[a-z]+\s?)+20[0-3][0-9]$"
+_PROGRAMME_LABEL = r"^(?:[a-z]+[\s\-/]?)+20[0-3][0-9]$"
 
 _PARTNER_CSV = (
     "ror",

@@ -84,7 +84,7 @@ async def search_journals(
     if need_total:
         total = await session.scalar(select(func.count()).select_from(subq)) or 0
 
-    order_col, direction = sort_order(sort, subq)
+    order_col, direction = sort_order(sort, subq, dir)
     if dir in ("asc", "desc"):
         direction = dir
     tiebreak = subq.c.issn_l

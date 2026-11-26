@@ -153,6 +153,13 @@ SOURCES: tuple[Source, ...] = (
         scoped=True,
         elsewhere=FreshnessSchedule.MANUAL,
     ),
+    Source(
+        "journal-embeddings",
+        FreshnessSchedule.NIGHTLY,
+        harvest="local",
+        entities=("journal_embeddings",),
+        public=False,
+    ),
     # ── Shared by all institutions ─────────────────────────────────────
     # harvest_journals.py is in neither wave.
     Source(
@@ -207,12 +214,14 @@ SOURCES: tuple[Source, ...] = (
         entities=("normalized",),
     ),
     Source("scimago", FreshnessSchedule.MANUAL, harvest="scimagojr", entities=("export",)),
-    # refresh_wave.sh: harvest_ror. It records no run, and refreshes only
-    # records older than 30 days, so a night with nothing due is normal:
-    # the row is overdue once no record was refreshed for a week.
+    # refresh_wave.sh: harvest_ror. Records its run every night (even when 0
+    # partners are due for 30-day refresh); falls back to PartnerInstitution
+    # updated_at if no run row exists yet.
     Source(
         "ror",
         FreshnessSchedule.NIGHTLY,
+        harvest="ror",
+        entities=("partner",),
         stamp=PartnerInstitution.updated_at,
         expected=EXPECTED[FreshnessSchedule.WEEKLY],
     ),

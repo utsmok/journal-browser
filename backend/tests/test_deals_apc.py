@@ -1458,6 +1458,21 @@ def test_funder_programme_split_rules():
         {1: {"A", "B", "C"}, 2: {"A"}, 3: set()},
         {1: {"B", "C"}},
     )
+    # Multi-word programme labels sharing a generic word ("Horizon") do not
+    # cross-match each other: Horizon Europe does not claim Horizon 2020.
+    horizon_twins = {
+        "H2020_FP": "Horizon 2020 Framework Programme",
+        "H2020_ERC": "H2020 European Research Council",
+        "HE_FP": "HORIZON EUROPE Framework Programme",
+    }
+    horizon_split, _ = funders_service.programme_ids(
+        {1: "ERC", 2: "ERC (Horizon 2020)", 3: "ERC (Horizon Europe)"}, horizon_twins
+    )
+    assert horizon_split == {
+        1: {"H2020_FP", "H2020_ERC", "HE_FP"},
+        2: {"H2020_FP", "H2020_ERC"},
+        3: {"HE_FP"},
+    }
 
 
 @requires_db
@@ -1525,6 +1540,79 @@ async def test_journals_filter_by_deal_id(db, client, deals_api):
     assert [i["issn_l"] for i in matching["items"]] == [issn]
     foreign = (await client.get(f"/api/v1/ut/journals?deal_id={foreign_id}")).json()
     assert foreign["items"] == []
+
+
+@requires_db
+async def test_funder_top_journals_ignores_multiple_issns_and_merges_twins(
+    db, client, funders_fixture, monkeypatch
+):
+    """Two+ ignored ISSNs must all be excluded (!= ALL, not != ANY), and works
+    across a funder's twin OpenAlex ids merge into one distinct-work count."""
+    from journal_browser.config import reset_settings_cache
+
+    db.add_all(
+        [
+            journal_factory("9999-0001", title="ArXiv Ignored"),
+            journal_factory("9999-0002", title="Second Ignored"),
+            Work(
+                institution_id=funders_fixture.id,
+                pure_uuid="w-twin-b",
+                title="Twin B work",
+                norm_title="twin b work",
+                year=2023,
+                work_type="article",
+                journal_issn_l="1234-5678",
+                first_seen_run=1,
+                last_seen_run=1,
+            ),
+            Work(
+                institution_id=funders_fixture.id,
+                pure_uuid="w-ign-1",
+                title="Ignored 1",
+                norm_title="ignored 1",
+                year=2023,
+                work_type="article",
+                journal_issn_l="9999-0001",
+                first_seen_run=1,
+                last_seen_run=1,
+            ),
+            Work(
+                institution_id=funders_fixture.id,
+                pure_uuid="w-ign-2",
+                title="Ignored 2",
+                norm_title="ignored 2",
+                year=2023,
+                work_type="article",
+                journal_issn_l="9999-0002",
+                first_seen_run=1,
+                last_seen_run=1,
+            ),
+        ]
+    )
+    await db.flush()
+    db.add_all(
+        [
+            WorkFunder(
+                institution_id=funders_fixture.id, pure_uuid="w-twin-b", funder_openalex_id="F-B"
+            ),
+            WorkFunder(
+                institution_id=funders_fixture.id, pure_uuid="w-ign-1", funder_openalex_id="F-A"
+            ),
+            WorkFunder(
+                institution_id=funders_fixture.id, pure_uuid="w-ign-2", funder_openalex_id="F-B"
+            ),
+        ]
+    )
+    await db.commit()
+
+    monkeypatch.setenv("JB_IGNORED_ISSNS", '["9999-0001", "9999-0002"]')
+    reset_settings_cache()
+    try:
+        body = (await client.get("/api/v1/ut/funders/1")).json()
+    finally:
+        reset_settings_cache()
+
+    assert [(j["issn_l"], j["n_works"]) for j in body["top_journals"]] == [("1234-5678", 2)]
 
 
 # ── Owner-curation provenance restore (scripts/restore_deal_curation.py) ───

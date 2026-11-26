@@ -35,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..identifiers import normalize_ror
+from ..ingest import IngestSession
 from ..models import PartnerInstitution
 from .common import paced_single_gets
 from .partner_rollup import build_search_fields, refresh_partner_rollups
@@ -159,6 +160,13 @@ async def harvest_ror(
     than `ttl_days`, and upsert them. A not_found mark is trusted until it
     is that old, then the id is asked for again."""
     stats = {"selected": 0, "fetched": 0, "not_found": 0, "failed": 0}
+    ingest = IngestSession(session)
+    await ingest.start_run(
+        "ror",
+        "partner",
+        "refresh" if refresh else f"ttl:{ttl_days}",
+        {"refresh": refresh, "limit": limit, "ttl_days": ttl_days},
+    )
     stmt = select(PartnerInstitution.ror).order_by(PartnerInstitution.ror)
     if not refresh:
         stale = PartnerInstitution.updated_at < func.now() - timedelta(days=ttl_days)
@@ -176,6 +184,8 @@ async def harvest_ror(
     todo = [ror for (ror,) in (await session.execute(stmt)).all()]
     stats["selected"] = len(todo)
     if not todo:
+        await ingest.finish_run("completed", dict(stats))
+        await session.commit()
         return stats
     contact = get_settings().contact_email
     # ROR reads the mailto out of the User-Agent for its polite pool.
@@ -224,6 +234,8 @@ async def harvest_ror(
     if stats["fetched"] > 0:
         await refresh_partner_rollups(session)
         await session.commit()
+    await ingest.finish_run("completed", dict(stats))
+    await session.commit()
     logger.info("harvest_ror: %s", stats)
     return stats
 

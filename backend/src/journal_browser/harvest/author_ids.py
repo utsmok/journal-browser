@@ -202,8 +202,6 @@ async def gather_openalex_authors(
         "stubs": 0,
         "failed": 0,
     }
-    if not todo:
-        return stats
     ingest = IngestSession(session)
     await ingest.start_run(
         SOURCE,
@@ -212,6 +210,10 @@ async def gather_openalex_authors(
         {"route": "delta", "institution_openalex_id": inst_id, "page_size": PER_PAGE},
         institution_id=institution.id,
     )
+    if not todo:
+        await ingest.finish_run("completed", dict(stats))
+        await session.commit()
+        return stats
     # One batch of profiles in memory at a time: each batch is stored and
     # committed before the next is fetched.
     for start in range(0, len(todo), GATHER_CHUNK):

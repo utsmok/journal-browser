@@ -583,6 +583,16 @@ def _build_reasons_and_summary(
                 )
             )
             oa_phrase = f"gold open access ({cand.estimated_cost_label})"
+        elif cand.apc_display.price is not None and cand.apc_display.currency:
+            reasons.append(
+                RecommendReason(
+                    kind="cost",
+                    tone="neutral",
+                    label=f"Gold open access ({cand.estimated_cost_label})",
+                    detail="All articles in this journal are published open access immediately.",
+                )
+            )
+            oa_phrase = f"gold open access ({cand.estimated_cost_label})"
         else:
             reasons.append(
                 RecommendReason(

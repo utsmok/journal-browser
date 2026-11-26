@@ -58,11 +58,12 @@ def vouched_clause(deal_covered: Any) -> ColumnElement[bool]:
     J = Journal
     weak = literal(list(WEAK_LISTINGS), type_=JSONB)
     listed = and_(
+        func.jsonb_typeof(J.listed_in) == "array",
         func.jsonb_array_length(J.listed_in) > 0,
         ~J.listed_in.contained_by(weak),
     )
     return or_(
-        J.type != "journal",
+        and_(J.type.is_not(None), J.type != "journal"),
         deal_covered.is_(True),
         J.in_scimago.is_(True),
         J.doaj_in_doaj.is_(True),

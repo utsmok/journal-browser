@@ -245,6 +245,17 @@ def test_source_that_records_no_run_is_dated_by_its_newest_record():
     assert (fresh.status, fresh.last_success_at) == (OK, NOW - 6 * DAY)
     assert stale.status is OVERDUE
 
+    # When harvest_ror writes a completed run (even with 0 updated partners),
+    # freshness follows that run instead of going overdue on unchanged stubs.
+    run_fresh = _row(_rows(_runs("ror", partner=_done(NOW - timedelta(hours=12)))), "ror")
+    assert run_fresh.status is OK
+
+
+def test_journal_embeddings_is_internal_nightly_source():
+    runs = _runs("journal-embeddings", journal_embeddings=_done(NOW - timedelta(hours=6)))
+    assert _row(_rows(runs), "journal-embeddings").status is OK
+    assert [r.source for r in _rows(runs, public_only=True)] == []
+
 
 def test_data_updated_at_is_the_oldest_core_source():
     runs = _runs("pure", work=_done(NOW - 3 * DAY)) | _runs(

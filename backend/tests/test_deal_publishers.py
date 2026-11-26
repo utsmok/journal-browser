@@ -196,6 +196,19 @@ def test_judge_prefers_the_owner_over_a_sibling_vouch():
     verdict = judge({"Routledge": 60}, family="taylor & francis", exclude=1, sheets=imprint)
     assert verdict.own is False and verdict.foreign is None
 
+    # Unaliased ESAC code: the deal's own stored sheet never votes against it
+    # as another owner when exclude=deal_id is passed.
+    unaliased = SheetPublishers(
+        sheets={10: "American Society for Microbiology"},
+        families={10: "american society for microbiology"},
+        names={"american society for microbiology": "American Society for Microbiology"},
+    )
+    assert unaliased.other_owner("asm", "American Society for Microbiology", exclude=10) is None
+    verdict = judge(
+        {"American Society for Microbiology": 60}, family="asm", exclude=10, sheets=unaliased
+    )
+    assert verdict.foreign is None
+
 
 def test_withheld_keeps_an_earlier_rejection():
     unjudged = Verdict(None, False, None)

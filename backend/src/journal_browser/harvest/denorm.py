@@ -194,6 +194,11 @@ def _openalex_entry(entries: list[dict[str, Any]]) -> tuple[str, float]:
     return chosen["currency"], chosen["price"]
 
 
+def _norm_currency(value: Any) -> str | None:
+    code = str(value or "").strip().upper()
+    return code if len(code) == 3 and code.isalpha() else None
+
+
 def select_list_price(
     *,
     apc_prices: Any = None,
@@ -208,16 +213,23 @@ def select_list_price(
     dates its price, so the year is the year that source was last
     harvested for the journal.
     """
-    entries = [
-        {"currency": str(p.get("currency") or ""), "price": float(p["price"])}
-        for p in (apc_prices if isinstance(apc_prices, list) else [])
-        if isinstance(p, dict) and _price_number(p.get("price"))
-    ]
+    entries: list[dict[str, Any]] = []
+    for p in apc_prices if isinstance(apc_prices, list) else []:
+        if not isinstance(p, dict) or not _price_number(p.get("price")):
+            continue
+        amount = float(p["price"])
+        code = _norm_currency(p.get("currency"))
+        if amount > 0 and code is not None:
+            entries.append({"currency": code, "price": amount})
     if entries:
         code, amount = _openalex_entry(entries)
         source, year = ApcSource.OPENALEX, openalex_year
-    elif doaj_apc_max is not None:
-        code, amount = str(doaj_apc_currency or ""), float(doaj_apc_max)
+    elif (
+        doaj_apc_max is not None
+        and float(doaj_apc_max) > 0
+        and (code := _norm_currency(doaj_apc_currency)) is not None
+    ):
+        amount = float(doaj_apc_max)
         source, year = ApcSource.DOAJ, doaj_year
     else:
         return None
