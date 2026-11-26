@@ -30,6 +30,13 @@ fail() {
 }
 
 echo "backup: dumping to $out"
+# Serialize after an overlapping nightly wave: take a shared lock on
+# refresh_wave.lock (waiting up to 2h) so pg_dump waits for active wave DDL /
+# rewrites instead of colliding with them.
+if mkdir -p "$JB_WAVE_DIR" 2> /dev/null && exec 8>> "$JB_WAVE_DIR/refresh_wave.lock" 2> /dev/null; then
+    flock -s -w "${JB_BACKUP_LOCK_WAIT:-7200}" 8 ||
+        echo "backup: refresh_wave still holds lock after timeout; proceeding anyway" >&2
+fi
 # --no-password: fail instead of prompting if the DSN lacks credentials.
 # zstd in place of pg_dump's default gzip: measured on a sample of the
 # live data, a third smaller archive and decompression 4.5 times faster,
@@ -38,12 +45,13 @@ echo "backup: dumping to $out"
 # image has; the file name and pg_restore commands stay the same.
 pg_dump --no-password --format=custom --compress=zstd:9 --file="$out.tmp" "$pgdsn" ||
     fail "pg_dump exited $?"
+exec 8>&- 2> /dev/null || :
 mv "$out.tmp" "$out"
 
 # Fail loudly if the archive cannot be read back.
 pg_restore --list "$out" > /dev/null || fail "pg_restore --list cannot read $out"
 echo "backup: ok ($(du -h "$out" | cut -f1))"
-heartbeat
+heartbeat "${JB_HEARTBEAT_BACKUP_URL:-}"
 
 # Retention: keep the newest JB_BACKUP_KEEP archives.
 ls -1t "$JB_BACKUP_DIR"/journalbrowser-*.dump 2>/dev/null |

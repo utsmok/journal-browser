@@ -41,7 +41,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project --no-dev
 
 COPY . .
-RUN uv sync --frozen --no-dev && chown -R app:app /app
+RUN uv sync --frozen --no-dev
 
 # Pre-fetch the ONNX query-encoding model so the first semantic search needs
 # no network at runtime (services/embeddings.py encode_query loads lazily).

@@ -14,6 +14,7 @@ x-backend-env: &backend-env
   # this at a container-reachable address (e.g. host.docker.internal:5434).
   JB_UT_METADATA_DSN: ${JB_UT_METADATA_DSN:-}
   # Deployment levers (see .env.example); defaults fit a Twente instance.
+  JB_INSTITUTION_CODE: ${JB_INSTITUTION_CODE:-ut}
   JB_INSTITUTION_NAME: ${JB_INSTITUTION_NAME:-University of Twente}
   JB_INSTITUTION_SHORT: ${JB_INSTITUTION_SHORT:-Twente}
   JB_INSTITUTION_ROR: ${JB_INSTITUTION_ROR:-https://ror.org/006hf6230}
@@ -42,6 +43,7 @@ x-backend-env: &backend-env
   JB_RATE_LIMIT_HEAVY_PER_MINUTE: ${JB_RATE_LIMIT_HEAVY_PER_MINUTE:-}
   JB_RATE_LIMIT_FEEDBACK_PER_MINUTE: ${JB_RATE_LIMIT_FEEDBACK_PER_MINUTE:-}
   JB_STATEMENT_TIMEOUT_MS: ${JB_STATEMENT_TIMEOUT_MS:-}
+  JB_CACHE_MAX_MB: ${JB_CACHE_MAX_MB:-}
   JB_OPENALEX_RESERVE_USD: ${JB_OPENALEX_RESERVE_USD:-}
   JB_WORK_FUNDERS_TTL_DAYS: ${JB_WORK_FUNDERS_TTL_DAYS:-}
   # "json" for one JSON object per log line; any other value is text.
@@ -61,6 +63,9 @@ x-backend-env: &backend-env
   JB_ALERT_WEBHOOK_URL: ${JB_ALERT_WEBHOOK_URL:-}
   JB_ALERT_HOST: ${JB_ALERT_HOST:-}
   JB_HEARTBEAT_URL: ${JB_HEARTBEAT_URL:-}
+  JB_HEARTBEAT_REFRESH_URL: ${JB_HEARTBEAT_REFRESH_URL:-}
+  JB_HEARTBEAT_SOURCE_URL: ${JB_HEARTBEAT_SOURCE_URL:-}
+  JB_HEARTBEAT_BACKUP_URL: ${JB_HEARTBEAT_BACKUP_URL:-}
   TZ: ${TZ:-UTC}
   JB_DOCS_DIR: /app/docs
 
@@ -94,15 +99,15 @@ services:
     # HNSW index builds (pgvector) need shared memory beyond the 64 MB
     # container default; the graph for ~134k vectors peaks around 100 MB.
     shm_size: 512mb
-    # Tuned for the 4 GB limit on SSD-backed storage: the HNSW index (~350 MB)
-    # and hot journal rows fit in shared_buffers; JIT only adds planning
-    # time to this workload's short queries.
+    # Tuned for 6 GB mem_limit on SSD-backed storage: the HNSW index (~350 MB)
+    # and hot journal rows fit in shared_buffers, with 4 GB page cache hint;
+    # JIT only adds planning time to this workload's short queries.
     command:
       - postgres
       - -c
       - shared_buffers=1GB
       - -c
-      - effective_cache_size=3GB
+      - effective_cache_size=4GB
       - -c
       - work_mem=64MB
       # Hash nodes stay within work_mem (the default multiplier of 2 doubles
@@ -201,7 +206,7 @@ services:
   bootstrap:
     image: journal-browser-backend:latest
     restart: "no"
-    mem_limit: 2g
+    mem_limit: 3g
     logging: *default-logging
     # Root only for the entrypoint's chown: docker creates the bind-mounted
     # dirs root-owned on fresh hosts; docker-entrypoint.sh hands them to
@@ -213,6 +218,7 @@ services:
       # Author ingest (jobs/ingest_authors.py) reads the same read-only
       # ut-metadata DSN the backend serves from; unset keeps the job skipping.
       JB_UT_METADATA_DSN: ${JB_UT_METADATA_DSN:-}
+      JB_INSTITUTION_CODE: ${JB_INSTITUTION_CODE:-ut}
       JB_INSTITUTION_NAME: ${JB_INSTITUTION_NAME:-University of Twente}
       JB_INSTITUTION_SHORT: ${JB_INSTITUTION_SHORT:-Twente}
       JB_INSTITUTION_ROR: ${JB_INSTITUTION_ROR:-https://ror.org/006hf6230}
@@ -227,9 +233,14 @@ services:
       JB_DATA_WINDOW_START: ${JB_DATA_WINDOW_START:-2020}
       JB_DATA_WINDOW_END: ${JB_DATA_WINDOW_END:-0}
       JB_BOOTSTRAP: ${JB_BOOTSTRAP:-auto}
+      JB_JISC_API_KEY: ${JB_JISC_API_KEY:-}
+      JB_WORK_FUNDERS_TTL_DAYS: ${JB_WORK_FUNDERS_TTL_DAYS:-}
+      JB_LOG_FORMAT: ${JB_LOG_FORMAT:-}
+      JB_SETTINGS_YAML: /app/state/settings.yaml
       OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
       # The first boot's credit-priced stages stop at the same reserve.
       JB_OPENALEX_RESERVE_USD: ${JB_OPENALEX_RESERVE_USD:-}
+      TZ: ${TZ:-UTC}
     volumes:
       - ./backend/landing:/app/landing
       - ./backend/state:/app/state

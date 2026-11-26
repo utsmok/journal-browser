@@ -9,8 +9,9 @@
 # command that resumes it. Without the variable the alert is the log line
 # alone.
 #
-# Success heartbeat. With JB_HEARTBEAT_URL set, a job that ends well sends
-# one GET, as a healthchecks.io check expects.
+# Success heartbeat. With a job-specific JB_HEARTBEAT_*_URL or the fallback
+# JB_HEARTBEAT_URL set, a job that ends well sends one GET, as a
+# healthchecks.io check expects.
 #
 # Wave record. A wave writes the stage it is about to run to
 # landing/waves/<wave>.state and removes the file when it exits. A wave
@@ -40,10 +41,12 @@ alert_post() {
 }
 
 heartbeat() {
+    # $1: optional per-job URL overriding JB_HEARTBEAT_URL.
     # One GET after a job ended well (a healthchecks.io dead-man's switch).
-    if [ -n "${JB_HEARTBEAT_URL:-}" ]; then
-        curl -fsS --max-time 10 --retry 3 "$JB_HEARTBEAT_URL" > /dev/null 2>&1 ||
-            echo "heartbeat: could not reach JB_HEARTBEAT_URL" >&2
+    hb_url="${1:-${JB_HEARTBEAT_URL:-}}"
+    if [ -n "$hb_url" ]; then
+        curl -fsS --max-time 10 --retry 3 "$hb_url" > /dev/null 2>&1 ||
+            echo "heartbeat: could not reach heartbeat URL" >&2
     fi
     return 0
 }
@@ -186,7 +189,13 @@ _wave_exit() {
         alert_post "$message Resume: $(job_command bash "$WAVE.sh" "$stage")" || keep_state=1
     fi
     [ -n "$keep_state" ] || rm -f "$JB_WAVE_DIR/$WAVE.state"
-    if [ "$status" -eq 0 ]; then heartbeat; fi
+    if [ "$status" -eq 0 ]; then
+        case "${WAVE:-}" in
+            refresh_wave) heartbeat "${JB_HEARTBEAT_REFRESH_URL:-}" ;;
+            source_wave) heartbeat "${JB_HEARTBEAT_SOURCE_URL:-}" ;;
+            *) heartbeat ;;
+        esac
+    fi
     exit "$status"
 }
 

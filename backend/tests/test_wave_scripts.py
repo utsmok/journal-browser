@@ -13,6 +13,7 @@ import shutil
 import socket
 import subprocess
 import threading
+import time
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -330,3 +331,38 @@ def test_backup_failure_alerts_with_the_resume_command_and_keeps_no_archive(
     assert alert.endswith("Resume: sh scripts/backup.sh")
     assert list((sandbox.root / "backups").iterdir()) == []
     assert sandbox.gets == []
+
+
+def test_per_job_heartbeat_overrides_generic_url(sandbox):
+    base = sandbox.env["JB_HEARTBEAT_URL"].removesuffix("/ping")
+    sandbox.env["JB_HEARTBEAT_REFRESH_URL"] = f"{base}/refresh-ping"
+    sandbox.env["JB_HEARTBEAT_SOURCE_URL"] = f"{base}/source-ping"
+    sandbox.env["JB_HEARTBEAT_BACKUP_URL"] = f"{base}/backup-ping"
+
+    assert sandbox.run("backup.sh").returncode == 0
+    assert sandbox.run("refresh_wave.sh").returncode == 0
+    assert sandbox.run("source_wave.sh").returncode == 0
+    assert sandbox.gets == ["/backup-ping", "/refresh-ping", "/source-ping"]
+
+
+def test_backup_waits_for_refresh_wave_lock(sandbox):
+    wave_dir = sandbox.root / "landing" / "waves"
+    wave_dir.mkdir(parents=True, exist_ok=True)
+    lock_file = wave_dir / "refresh_wave.lock"
+    # Hold an exclusive lock for 0.4s in a background subshell; backup.sh
+    # acquires a shared lock (flock -s -w) before running pg_dump.
+    holder = subprocess.Popen(
+        [
+            "sh",
+            "-c",
+            f'exec 9>"{lock_file}"; flock -x 9; sleep 0.4',
+        ]
+    )
+    try:
+        started = time.monotonic()
+        r = sandbox.run("backup.sh")
+        elapsed = time.monotonic() - started
+    finally:
+        holder.wait(timeout=5)
+    assert r.returncode == 0, r.stderr
+    assert elapsed >= 0.35
