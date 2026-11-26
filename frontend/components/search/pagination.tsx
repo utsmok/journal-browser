@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type * as React from "react";
 
@@ -23,11 +23,16 @@ export function Pagination({
   const t = useTranslations("common");
   return (
     <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
-      <p className="text-sm text-[var(--muted-foreground)]">
+      <p className="inline-flex items-center gap-1.5 text-sm text-[var(--muted-foreground)]">
         {/* Announce only settled counts: while a fetch runs the live
             region keeps its previous text, so typing never chatters. */}
         <span aria-live="polite">{data ? t("pagination.count", { count: data.total }) : ""}</span>
-        {isFetching && data ? t("pagination.updating") : ""}
+        {isFetching && data ? (
+          <span className="inline-flex items-center gap-1">
+            <Loader2 aria-hidden className="size-3 animate-spin" />
+            {t("pagination.updating")}
+          </span>
+        ) : null}
       </p>
       <div className="flex flex-wrap items-center gap-3">
         {toolbarSlot}

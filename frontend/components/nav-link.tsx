@@ -1,9 +1,20 @@
 "use client";
 
-import Link from "next/link";
+import { Loader2 } from "lucide-react";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
+
+function NavLinkLabel({ label }: { label: string }) {
+  const { pending } = useLinkStatus();
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span>{label}</span>
+      {pending && <Loader2 aria-hidden className="size-3 animate-spin opacity-80" />}
+    </span>
+  );
+}
 
 /** Header nav link with a bottom accent bar for the active section. Below the
  * `lg` breakpoint it is a full-width row of the menu drawer; from `lg` it sits
@@ -45,7 +56,7 @@ export function NavLink({
         className,
       )}
     >
-      {label}
+      <NavLinkLabel label={label} />
     </Link>
   );
 }

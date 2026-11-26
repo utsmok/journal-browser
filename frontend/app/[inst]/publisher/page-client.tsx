@@ -1,8 +1,9 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { ActiveFiltersBar, type ActiveFilterChip } from "@/components/active-filters-bar";
@@ -15,6 +16,7 @@ import {
   type FacetValue,
 } from "@/components/filter-panel";
 import { rememberDirectoryUrl } from "@/components/journal/section-nav";
+import { LoadingBar } from "@/components/loading-bar";
 import { OaCompositionBar } from "@/components/oa-composition";
 import { SortHead } from "@/components/search/sort-head";
 import { ListSkeletonRows } from "@/components/states";
@@ -43,6 +45,7 @@ import {
 import { displayPublisherName } from "@/lib/deal-links";
 import { formatEur } from "@/lib/format";
 import { PUBLISHER_COLUMN_SORTS } from "@/lib/search-config";
+import { patchSearchParams } from "@/lib/url-params";
 
 import { normalizeDeal, publisherDirectoryParams } from "./params";
 
@@ -147,7 +150,6 @@ function PublishersView() {
   const inst = useInstitution();
   const site = useSiteMeta();
   const sp = useSearchParams();
-  const router = useRouter();
   const pathname = usePathname();
   const { year_from, year_to } = useYearRange();
   useSearchShortcut(SEARCH_INPUT_ID);
@@ -168,6 +170,7 @@ function PublishersView() {
     offset,
   } = publisherDirectoryParams(sp, { year_from, year_to });
   const [input, setInput] = React.useState(q);
+  const lastCommittedQ = React.useRef(q);
 
   const anyFilter =
     oaTypes.length > 0 ||
@@ -180,32 +183,32 @@ function PublishersView() {
 
   const setParams = React.useCallback(
     (patch: Record<string, string | undefined>) => {
-      const next = new URLSearchParams(sp.toString());
-      for (const [key, value] of Object.entries(patch)) {
-        if (!value) next.delete(key);
-        else next.set(key, value);
-      }
       // Any query, filter, sort, or page-size change restarts at page 1;
       // only the pager itself touches offset directly.
-      if (!("offset" in patch)) next.delete("offset");
-      router.replace(`${pathname}?${next}`, { scroll: false });
+      patchSearchParams(pathname, patch, { drop: "offset" in patch ? [] : ["offset"] });
     },
-    [pathname, router, sp],
+    [pathname],
   );
 
   const update = React.useCallback(
-    (value: string) => setParams({ q: value || undefined }),
+    (value: string) => {
+      lastCommittedQ.current = value;
+      setParams({ q: value || undefined });
+    },
     [setParams],
   );
 
   // Live search with debounce; keep the input in sync with back/forward nav.
   React.useEffect(() => {
-    setInput(q);
+    if (q !== lastCommittedQ.current) {
+      lastCommittedQ.current = q;
+      setInput(q);
+    }
   }, [q]);
   React.useEffect(() => {
     const t = setTimeout(() => {
       if (input !== q) update(input);
-    }, 300);
+    }, 250);
     return () => clearTimeout(t);
   }, [input, q, update]);
 
@@ -258,6 +261,7 @@ function PublishersView() {
   };
 
   const clearFilters = () => {
+    lastCommittedQ.current = "";
     setInput("");
     setParams({
       q: undefined,
@@ -368,6 +372,7 @@ function PublishersView() {
             id: "q",
             label: `Search: “${q}”`,
             onRemove: () => {
+              lastCommittedQ.current = "";
               setInput("");
               setParams({ q: undefined });
             },
@@ -474,10 +479,17 @@ function PublishersView() {
       </header>
 
       <FilterLayout
-        filters={<FacetGroupList groups={groups} onToggle={toggleFacet} />}
+        filters={
+          <FacetGroupList
+            groups={groups}
+            onToggle={toggleFacet}
+            updating={isFetching && !isPending}
+          />
+        }
         activeCount={filterChips.length}
         onReset={clearFilters}
         resetTitle={t("search.resetHint")}
+        updating={isFetching && !isPending}
         disabled={data == null || !hasVisibleGroups(groups)}
       >
         <ActiveFiltersBar
@@ -488,10 +500,11 @@ function PublishersView() {
           removeAriaPrefix={tc("activeFilters.remove")}
         />
 
-        <Card>
+        <Card className="relative overflow-hidden">
+          <LoadingBar active={isFetching} />
           <CardContent className="pt-5">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
-              <p className="text-sm text-[var(--muted-foreground)]">
+              <p className="inline-flex items-center gap-1.5 text-sm text-[var(--muted-foreground)]">
                 {/* Announce only settled counts: while a fetch runs the live
                     region keeps its previous text, so typing never chatters. */}
                 <span aria-live="polite">
@@ -501,7 +514,12 @@ function PublishersView() {
                       : t("results.count", { count: data.total })
                     : ""}
                 </span>
-                {isFetching && data ? t("results.updating") : ""}
+                {isFetching && data ? (
+                  <span className="inline-flex items-center gap-1">
+                    <Loader2 aria-hidden className="size-3 animate-spin" />
+                    {t("results.updating")}
+                  </span>
+                ) : null}
               </p>
               <div className="flex min-w-0 flex-col items-start gap-1 text-sm min-[768px]:flex-row min-[768px]:items-center min-[768px]:gap-2">
                 <label
@@ -575,7 +593,11 @@ function PublishersView() {
                 {/* Stacked cards on narrow viewports: eight columns would
                     push the counts off-screen behind horizontal scrolling. */}
                 <ul
-                  className={isFetching ? "opacity-60 md:hidden" : "md:hidden"}
+                  className={
+                    isFetching
+                      ? "opacity-60 transition-opacity duration-150 md:hidden"
+                      : "transition-opacity duration-150 md:hidden"
+                  }
                   aria-label={t("results.listAria")}
                 >
                   {rows.map((p) => (
@@ -610,7 +632,13 @@ function PublishersView() {
                     </li>
                   ))}
                 </ul>
-                <div className={isFetching ? "hidden opacity-60 md:block" : "hidden md:block"}>
+                <div
+                  className={
+                    isFetching
+                      ? "hidden opacity-60 transition-opacity duration-150 md:block"
+                      : "hidden transition-opacity duration-150 md:block"
+                  }
+                >
                   <Table>
                     <caption className="sr-only">{t("results.tableCaption")}</caption>
                     <TableHeader>

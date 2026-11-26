@@ -34,17 +34,22 @@ export function useAdminResource<T>(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const unauthorizedRef = useRef(onUnauthorized);
+  const reqIdRef = useRef(0);
   useEffect(() => {
     unauthorizedRef.current = onUnauthorized;
   });
 
   const refresh = useCallback(async () => {
     if (!token) return;
+    const reqId = ++reqIdRef.current;
     setLoading(true);
     try {
-      setData(await adminGet<T>(path, token));
+      const next = await adminGet<T>(path, token);
+      if (reqId !== reqIdRef.current) return;
+      setData(next);
       setError(null);
     } catch (err) {
+      if (reqId !== reqIdRef.current) return;
       if (err instanceof AdminError && err.status === 401) {
         unauthorizedRef.current();
         return;
@@ -56,7 +61,7 @@ export function useAdminResource<T>(
         }),
       );
     } finally {
-      setLoading(false);
+      if (reqId === reqIdRef.current) setLoading(false);
     }
   }, [path, token, label, t]);
 

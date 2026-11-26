@@ -16,6 +16,7 @@ import { doiHref, GapEntryTableRows, WorkLinks, WorkTypeCell } from "@/component
 import { GapCsvButton } from "@/components/gap-csv-button";
 import { SectionNav, useLastDirectoryHref } from "@/components/journal/section-nav";
 import { External, MoreToggle } from "@/components/journal/shared";
+import { LoadingBar } from "@/components/loading-bar";
 import { SourceNote } from "@/components/source-note";
 import { DetailSkeleton, ErrorPanel } from "@/components/states";
 import { InsetPanel } from "@/components/sub-panel";
@@ -90,7 +91,10 @@ export default function AuthorPage() {
   const authorId = params?.authorId ? decodeURIComponent(params.authorId) : undefined;
   const backHref = useLastDirectoryHref("jb-last-authors", `/${inst}/author`);
   const { year_from, year_to } = useYearRange();
-  const { data, isPending, isError, error } = useAuthor(authorId, { year_from, year_to });
+  const { data, isPending, isFetching, isPlaceholderData, isError, error } = useAuthor(authorId, {
+    year_from,
+    year_to,
+  });
 
   const [journalPage, setJournalPage] = React.useState(1);
   const [workPage, setWorkPage] = React.useState(1);
@@ -157,7 +161,12 @@ export default function AuthorPage() {
         backStorageKey="jb-last-authors"
         backLabel={t("detail.backToSearch")}
       />
-      <div className="mx-auto max-w-screen-2xl px-4 py-6">
+      <div
+        className={`relative mx-auto max-w-screen-2xl px-4 py-6 transition-opacity duration-150 ${
+          isPlaceholderData ? "opacity-75" : ""
+        }`}
+      >
+        <LoadingBar active={isFetching && !isPending} />
         <header className="mb-4">
           <div className="flex items-center gap-3.5">
             {author.people?.has_photo && (

@@ -10,6 +10,7 @@ import { SiteMenu } from "@/components/site-menu";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { YearFilterControl } from "@/components/year-filter";
 import { FeedbackWidget } from "@/components/feedback/feedback-widget";
+import { NavigationProgress } from "@/components/navigation-progress";
 import { Seeds } from "@/components/seed";
 import { SectionMessages } from "@/i18n/section-messages";
 import { type FreshnessResponse, freshnessRequest } from "@/lib/api";
@@ -128,6 +129,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             {/* The shell (header, footer, shared widgets) reads only "common";
               each section layout adds its own namespaces around its pages. */}
             <SectionMessages>
+              <NavigationProgress />
               <SiteHeader />
               <main id="main" className="flex-1">
                 {children}

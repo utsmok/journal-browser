@@ -247,11 +247,14 @@ function FacetGroup({
   group,
   onToggle,
   loading,
+  updating,
 }: {
   group: FacetGroupDef;
   onToggle: (key: string, value: string) => void;
   /** Facets request in flight or failed: every option renders inert. */
   loading?: boolean;
+  /** Recomputing facet counts in the background: keep buttons interactive, dim counts. */
+  updating?: boolean;
 }) {
   const site = useSiteMeta();
   const t = useTranslations("common");
@@ -283,7 +286,7 @@ function FacetGroup({
   // when selected: a full-width row with the count on the right. Rows are
   // 44px targets in the phone sheet and compact in the sidebar.
   const layout =
-    "flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-sm min-[960px]:min-h-0 min-[960px]:py-1.5 min-[960px]:text-xs";
+    "flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-sm transition-[colors,transform] duration-100 active:scale-[0.99] min-[960px]:min-h-0 min-[960px]:py-1.5 min-[960px]:text-xs";
   const idleClasses = `${layout} border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:border-[var(--primary)] hover:text-[var(--foreground)] ${focus}`;
   const zeroClasses = `${layout} cursor-not-allowed border border-transparent opacity-60`;
 
@@ -378,7 +381,13 @@ function FacetGroup({
                   —
                 </span>
               ) : (
-                <span className="shrink-0 tabular-nums">{f.count.toLocaleString("en")}</span>
+                <span
+                  className={`shrink-0 tabular-nums transition-opacity duration-150 ${
+                    updating ? "opacity-50" : ""
+                  }`}
+                >
+                  {f.count.toLocaleString("en")}
+                </span>
               );
             const inner = (
               <>
@@ -446,10 +455,12 @@ export function FacetGroupList({
   groups,
   onToggle,
   loading,
+  updating,
 }: {
   groups: FacetGroupDef[];
   onToggle: (key: string, value: string) => void;
   loading?: boolean;
+  updating?: boolean;
 }) {
   // Groups that cannot discriminate (fewer than two non-zero options) only
   // add noise; hide them until the data distinguishes two options. A group
@@ -458,10 +469,16 @@ export function FacetGroupList({
   return (
     <div
       className="divide-y divide-[var(--border)] [&>*:not(:first-child)]:pt-3 [&>*:not(:last-child)]:pb-3"
-      aria-busy={loading || undefined}
+      aria-busy={loading || updating || undefined}
     >
       {visibleGroups.map((group) => (
-        <FacetGroup key={group.key} group={group} onToggle={onToggle} loading={loading} />
+        <FacetGroup
+          key={group.key}
+          group={group}
+          onToggle={onToggle}
+          loading={loading}
+          updating={updating}
+        />
       ))}
     </div>
   );
@@ -502,7 +519,7 @@ export function QualityToggles({
           onClick={() => onToggle(item.key)}
           aria-pressed={item.on}
           title={item.label}
-          className={`flex min-h-11 w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs lg:min-h-0 ${focus} ${
+          className={`flex min-h-11 w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs transition-[colors,transform] duration-100 active:scale-[0.99] lg:min-h-0 ${focus} ${
             item.on
               ? "border border-[var(--border)] font-medium text-[var(--foreground)]"
               : "border border-dashed border-[var(--border)] text-[var(--muted-foreground)] hover:border-[var(--primary)] hover:text-[var(--foreground)]"
@@ -535,6 +552,7 @@ export function FilterPanel({
   onToggle,
   error,
   onRetry,
+  updating,
 }: {
   /** Undefined while the facets request is in flight: groups render with
    * their known options and em-dash counts, all inert. */
@@ -544,6 +562,8 @@ export function FilterPanel({
   /** The facets request failed; a retry note renders above the groups. */
   error?: boolean;
   onRetry?: () => void;
+  /** Recomputing facet counts for updated filters: buttons remain clickable while counts dim. */
+  updating?: boolean;
 }) {
   const site = useSiteMeta();
   const t = useTranslations("common");
@@ -775,7 +795,7 @@ export function FilterPanel({
           )}
         </div>
       )}
-      <FacetGroupList groups={groups} onToggle={onToggle} loading={loading} />
+      <FacetGroupList groups={groups} onToggle={onToggle} loading={loading} updating={updating} />
     </div>
   );
 }

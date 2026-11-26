@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -46,11 +46,18 @@ export function DirectoryPager({
       }`}
     >
       <div className="flex flex-wrap items-center gap-3">
-        <span aria-live="polite" className="tabular-nums">
-          {total > 0 && shown > 0
-            ? `${from.toLocaleString("en")}–${to.toLocaleString("en")} of ${total.toLocaleString("en")}`
-            : `0 of ${total.toLocaleString("en")}`}
-          {isFetching ? " (updating…)" : ""}
+        <span aria-live="polite" className="inline-flex items-center gap-1.5 tabular-nums">
+          <span>
+            {total > 0 && shown > 0
+              ? `${from.toLocaleString("en")}–${to.toLocaleString("en")} of ${total.toLocaleString("en")}`
+              : `0 of ${total.toLocaleString("en")}`}
+          </span>
+          {isFetching ? (
+            <span className="inline-flex items-center gap-1">
+              <Loader2 aria-hidden className="size-3 animate-spin" />
+              (updating…)
+            </span>
+          ) : null}
         </span>
         {onLimit && (
           <label className="inline-flex items-center gap-1.5">

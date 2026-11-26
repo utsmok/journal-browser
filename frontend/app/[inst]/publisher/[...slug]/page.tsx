@@ -15,6 +15,7 @@ import { ACCESS_TEXT, ApcGlyph, DataIcon, DealGlyph, WorksGlyph } from "@/compon
 import { DetailSummaryPanel } from "@/components/detail-summary";
 import { SectionNav } from "@/components/journal/section-nav";
 import { MoreToggle } from "@/components/journal/shared";
+import { LoadingBar } from "@/components/loading-bar";
 import { OaCompositionBar, OaCompositionLegend } from "@/components/oa-composition";
 import { DetailSkeleton, ErrorPanel } from "@/components/states";
 import { InsetPanel } from "@/components/sub-panel";
@@ -313,10 +314,13 @@ export default function PublisherPage() {
   const backHref = `/${inst}/publisher`;
   const name = params?.slug?.map(decodeURIComponent).join("/") ?? "";
   const { year_from, year_to } = useYearRange();
-  const { data, isPending, isError, error } = usePublisher(name || undefined, {
-    year_from,
-    year_to,
-  });
+  const { data, isPending, isFetching, isPlaceholderData, isError, error } = usePublisher(
+    name || undefined,
+    {
+      year_from,
+      year_to,
+    },
+  );
 
   const [journalPage, setJournalPage] = React.useState(1);
   React.useEffect(() => {
@@ -375,7 +379,12 @@ export default function PublisherPage() {
         backStorageKey="jb-last-publishers"
         backLabel={t("detail.backToList")}
       />
-      <div className="mx-auto max-w-screen-2xl px-4 py-6">
+      <div
+        className={`relative mx-auto max-w-screen-2xl px-4 py-6 transition-opacity duration-150 ${
+          isPlaceholderData ? "opacity-75" : ""
+        }`}
+      >
+        <LoadingBar active={isFetching && !isPending} />
         <header className="mb-4">
           <h1 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl">
             {displayPublisherName(publisher.name)}

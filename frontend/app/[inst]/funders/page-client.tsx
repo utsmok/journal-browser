@@ -1,8 +1,9 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { ActiveFiltersBar, type ActiveFilterChip } from "@/components/active-filters-bar";
@@ -15,6 +16,7 @@ import {
   type FacetValue,
 } from "@/components/filter-panel";
 import { rememberDirectoryUrl } from "@/components/journal/section-nav";
+import { LoadingBar } from "@/components/loading-bar";
 import { SortHead } from "@/components/search/sort-head";
 import { SourceNote } from "@/components/source-note";
 import { ListSkeletonRows } from "@/components/states";
@@ -37,6 +39,7 @@ import { useYearRange } from "@/hooks/use-year-filter";
 import { errorMessage, type FunderListItem, type FunderSearchSort } from "@/lib/api";
 import { countryName } from "@/lib/format";
 import { FUNDER_COLUMN_SORTS } from "@/lib/search-config";
+import { patchSearchParams } from "@/lib/url-params";
 
 import { funderDirectoryParams } from "./params";
 
@@ -59,7 +62,6 @@ function FundersPageInner() {
   const inst = useInstitution();
   const site = useSiteMeta();
   const sp = useSearchParams();
-  const router = useRouter();
   const pathname = usePathname();
   const { year_from, year_to } = useYearRange();
 
@@ -82,27 +84,28 @@ function FundersPageInner() {
     offset,
   } = funderDirectoryParams(sp, { year_from, year_to });
   const [input, setInput] = React.useState(q);
+  const lastCommittedQ = React.useRef(q);
 
   const setParams = React.useCallback(
     (patch: Record<string, string | undefined>) => {
-      const next = new URLSearchParams(sp.toString());
-      for (const [key, value] of Object.entries(patch)) {
-        if (!value) next.delete(key);
-        else next.set(key, value);
-      }
-      if (!("offset" in patch)) next.delete("offset");
-      router.replace(`${pathname}?${next}`, { scroll: false });
+      patchSearchParams(pathname, patch, { drop: "offset" in patch ? [] : ["offset"] });
     },
-    [pathname, router, sp],
+    [pathname],
   );
 
   React.useEffect(() => {
-    setInput(q);
+    if (q !== lastCommittedQ.current) {
+      lastCommittedQ.current = q;
+      setInput(q);
+    }
   }, [q]);
   React.useEffect(() => {
     const timer = setTimeout(() => {
-      if (input !== q) setParams({ q: input || undefined });
-    }, 300);
+      if (input !== q) {
+        lastCommittedQ.current = input;
+        setParams({ q: input || undefined });
+      }
+    }, 250);
     return () => clearTimeout(timer);
   }, [input, q, setParams]);
 
@@ -172,6 +175,7 @@ function FundersPageInner() {
   };
 
   const clearAll = () => {
+    lastCommittedQ.current = "";
     setInput("");
     setParams({
       q: undefined,
@@ -306,6 +310,7 @@ function FundersPageInner() {
             id: "q",
             label: t("search.chipSearch", { value: q }),
             onRemove: () => {
+              lastCommittedQ.current = "";
               setInput("");
               setParams({ q: undefined });
             },
@@ -404,7 +409,9 @@ function FundersPageInner() {
           className="flex max-w-2xl gap-2"
           onSubmit={(event) => {
             event.preventDefault();
-            setParams({ q: input.trim() || undefined });
+            const trimmed = input.trim();
+            lastCommittedQ.current = trimmed;
+            setParams({ q: trimmed || undefined });
           }}
         >
           <div className="relative flex-1">
@@ -430,9 +437,16 @@ function FundersPageInner() {
       </header>
 
       <FilterLayout
-        filters={<FacetGroupList groups={groups} onToggle={toggleFacet} />}
+        filters={
+          <FacetGroupList
+            groups={groups}
+            onToggle={toggleFacet}
+            updating={isFetching && !isPending}
+          />
+        }
         activeCount={chips.length}
         onReset={clearAll}
+        updating={isFetching && !isPending}
         disabled={data == null || !hasVisibleGroups(groups)}
       >
         <ActiveFiltersBar
@@ -443,13 +457,20 @@ function FundersPageInner() {
           removeAriaPrefix={tc("activeFilters.remove")}
         />
 
-        <Card>
+        <Card className="relative overflow-hidden">
+          <LoadingBar active={isFetching} />
           <CardContent className="pt-5">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
-              <p className="text-sm text-[var(--muted-foreground)]">
+              <p className="inline-flex items-center gap-1.5 text-sm text-[var(--muted-foreground)]">
                 <span aria-live="polite">
                   {data ? (total > 0 ? t("search.range", { from, to, total }) : "0") : ""}
                 </span>
+                {isFetching && data ? (
+                  <span className="inline-flex items-center gap-1">
+                    <Loader2 aria-hidden className="size-3 animate-spin" />
+                    {tc("pagination.updating")}
+                  </span>
+                ) : null}
               </p>
               <div className="flex min-w-0 flex-col items-start gap-1 text-sm min-[768px]:flex-row min-[768px]:items-center min-[768px]:gap-2">
                 <label
@@ -500,7 +521,13 @@ function FundersPageInner() {
             ) : (
               <>
                 {/* Stacked mobile cards */}
-                <ul className={isFetching ? "opacity-60 md:hidden" : "md:hidden"}>
+                <ul
+                  className={
+                    isFetching
+                      ? "opacity-60 transition-opacity duration-150 md:hidden"
+                      : "transition-opacity duration-150 md:hidden"
+                  }
+                >
                   {rows.map((f) => (
                     <li
                       key={f.id}
@@ -526,7 +553,13 @@ function FundersPageInner() {
                 </ul>
 
                 {/* Desktop table */}
-                <div className={isFetching ? "hidden opacity-60 md:block" : "hidden md:block"}>
+                <div
+                  className={
+                    isFetching
+                      ? "hidden opacity-60 transition-opacity duration-150 md:block"
+                      : "hidden transition-opacity duration-150 md:block"
+                  }
+                >
                   <Table>
                     <TableHeader>
                       <TableRow>

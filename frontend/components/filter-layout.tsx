@@ -1,6 +1,6 @@
 "use client";
 
-import { SlidersHorizontal, X } from "lucide-react";
+import { Loader2, SlidersHorizontal, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 
@@ -35,6 +35,7 @@ export function FilterLayout({
   resetTitle,
   headerSlot,
   disabled = false,
+  updating = false,
   children,
 }: {
   /** Facet groups shown in the sidebar and the sheet. */
@@ -53,6 +54,8 @@ export function FilterLayout({
   /** Nothing to filter on this page (no data yet, or a mode without
    * filters): no button and no sheet, and the results take the full width. */
   disabled?: boolean;
+  /** Facet counts are refreshing in the background. */
+  updating?: boolean;
   /** The results column. */
   children: React.ReactNode;
 }) {
@@ -135,6 +138,12 @@ export function FilterLayout({
               <span className="flex min-h-11 items-center gap-2 text-base font-semibold min-[960px]:min-h-0 min-[960px]:text-xs min-[960px]:uppercase min-[960px]:tracking-wide min-[960px]:text-[var(--muted-foreground)]">
                 <span id={labelId}>{t("facets.sidebarHeading")}</span>
                 {activeCount > 0 && <span className={countBadge}>{activeCount}</span>}
+                {updating && (
+                  <Loader2
+                    aria-hidden
+                    className="size-3 animate-spin text-[var(--muted-foreground)]"
+                  />
+                )}
               </span>
               {onReset && activeCount > 0 && (
                 <button

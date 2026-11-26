@@ -158,8 +158,13 @@ export function collaborationsRequest(
   };
 }
 
-export function fetchCollaborations(inst: string, p: CollaborationSearchParams, offset: number) {
-  return getRequest<CollaborationSearchResponse>(collaborationsRequest(inst, p, offset));
+export function fetchCollaborations(
+  inst: string,
+  p: CollaborationSearchParams,
+  offset: number,
+  signal?: AbortSignal,
+) {
+  return getRequest<CollaborationSearchResponse>(collaborationsRequest(inst, p, offset), signal);
 }
 
 function collaborationMapRequest(inst: string, p: CollaborationSearchParams): ApiRequest {
@@ -196,10 +201,15 @@ function toCollaborationMap(data: Schemas["CollaborationMapResponse"]) {
   return { items: data.items.map(toPoint), unmapped: data.unmapped };
 }
 
-export function fetchCollaborationMap(inst: string, p: CollaborationSearchParams) {
-  return getRequest<Schemas["CollaborationMapResponse"]>(collaborationMapRequest(inst, p)).then(
-    toCollaborationMap,
-  );
+export function fetchCollaborationMap(
+  inst: string,
+  p: CollaborationSearchParams,
+  signal?: AbortSignal,
+) {
+  return getRequest<Schemas["CollaborationMapResponse"]>(
+    collaborationMapRequest(inst, p),
+    signal,
+  ).then(toCollaborationMap);
 }
 
 export function collaborationRequest(
@@ -213,8 +223,13 @@ export function collaborationRequest(
   };
 }
 
-export function fetchCollaboration(inst: string, ror: string, p: CollaborationSearchParams) {
-  return getRequest<CollaborationDetailResponse>(collaborationRequest(inst, ror, p));
+export function fetchCollaboration(
+  inst: string,
+  ror: string,
+  p: CollaborationSearchParams,
+  signal?: AbortSignal,
+) {
+  return getRequest<CollaborationDetailResponse>(collaborationRequest(inst, ror, p), signal);
 }
 
 export function collaborationWorksRequest(
@@ -236,9 +251,11 @@ export function fetchCollaborationWorks(
   p: CollaborationSearchParams,
   offset: number,
   limit: number = COLLAB_PAGE_SIZE,
+  signal?: AbortSignal,
 ) {
   return getRequest<CollaborationWorksResponse>(
     collaborationWorksRequest(inst, ror, p, offset, limit),
+    signal,
   );
 }
 
@@ -406,10 +423,40 @@ export function errorMessage(t: LabelT, err: unknown): string {
   return t("errors.unknown");
 }
 
+function combinedSignal(
+  signal?: AbortSignal,
+  timeoutMs: number = 30_000,
+): { signal: AbortSignal; cleanup: () => void } {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  if (!signal) return { signal: timeout, cleanup: () => {} };
+  if (typeof AbortSignal.any === "function") {
+    return { signal: AbortSignal.any([signal, timeout]), cleanup: () => {} };
+  }
+  const controller = new AbortController();
+  const abort = () => controller.abort(signal.reason);
+  if (signal.aborted) {
+    controller.abort(signal.reason);
+    return { signal: controller.signal, cleanup: () => {} };
+  }
+  signal.addEventListener("abort", abort, { once: true });
+  const timer = setTimeout(
+    () => controller.abort(new DOMException("TimeoutError", "TimeoutError")),
+    timeoutMs,
+  );
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      signal.removeEventListener("abort", abort);
+      clearTimeout(timer);
+    },
+  };
+}
+
 /** GET helper against the same-origin /api proxy (next.config.mjs rewrites). */
 export async function apiGet<T>(
   path: string,
   params?: Record<string, string | number | boolean | undefined | null>,
+  signal?: AbortSignal,
 ): Promise<T> {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params ?? {})) {
@@ -417,11 +464,12 @@ export async function apiGet<T>(
     search.set(key, String(value));
   }
   const qs = search.toString();
+  const reqSignal = combinedSignal(signal);
   try {
     const res = await fetch(`/api/v1${path}${qs ? `?${qs}` : ""}`, {
       cache: "no-store",
       // A hung backend must surface as an error, not endless skeletons.
-      signal: AbortSignal.timeout(30_000),
+      signal: reqSignal.signal,
     });
     if (!res.ok) {
       console.error(`API ${res.status} on ${path}`);
@@ -430,8 +478,12 @@ export async function apiGet<T>(
     }
     return (await res.json()) as T;
   } catch (err) {
-    if (!(err instanceof ApiError)) console.error(`Fetch failed on ${path}`, err);
+    if (!(err instanceof ApiError) && !signal?.aborted) {
+      console.error(`Fetch failed on ${path}`, err);
+    }
     throw err;
+  } finally {
+    reqSignal.cleanup();
   }
 }
 
@@ -447,8 +499,8 @@ export type ApiQuery = Record<string, string | number | boolean | null | undefin
 export type ApiRequest = { path: string; query?: ApiQuery };
 
 /** apiGet for a request built by one of the *Request builders below. */
-export function getRequest<T>(request: ApiRequest): Promise<T> {
-  return apiGet<T>(request.path, request.query);
+export function getRequest<T>(request: ApiRequest, signal?: AbortSignal): Promise<T> {
+  return apiGet<T>(request.path, request.query, signal);
 }
 
 /** Journal search: full-text and filtered, or "journals like this text". */
@@ -599,11 +651,16 @@ export async function fetchAuthor(
   inst: string,
   pureUuid: string,
   years?: YearParams,
+  signal?: AbortSignal,
 ): Promise<AuthorProfile> {
-  return apiGet<AuthorProfile>(`/${inst}/authors/${encodeURIComponent(pureUuid)}`, {
-    year_from: years?.year_from,
-    year_to: years?.year_to,
-  });
+  return apiGet<AuthorProfile>(
+    `/${inst}/authors/${encodeURIComponent(pureUuid)}`,
+    {
+      year_from: years?.year_from,
+      year_to: years?.year_to,
+    },
+    signal,
+  );
 }
 
 // --- Publishers + org units (browse facets) ---
@@ -745,13 +802,18 @@ export async function fetchPublisher(
   years?: YearParams,
   parts?: PublisherPartsFilter,
   includeGaps: boolean = false,
+  signal?: AbortSignal,
 ): Promise<PublisherDetailResponse> {
-  return apiGet<PublisherDetailResponse>(`/${inst}/publishers/${encodeNamePath(name)}`, {
-    year_from: years?.year_from,
-    year_to: years?.year_to,
-    parts,
-    include_gaps: includeGaps ? undefined : "false",
-  });
+  return apiGet<PublisherDetailResponse>(
+    `/${inst}/publishers/${encodeNamePath(name)}`,
+    {
+      year_from: years?.year_from,
+      year_to: years?.year_to,
+      parts,
+      include_gaps: includeGaps ? undefined : "false",
+    },
+    signal,
+  );
 }
 
 export async function fetchPublisherCrisGaps(
@@ -759,12 +821,17 @@ export async function fetchPublisherCrisGaps(
   name: string,
   years?: YearParams,
   parts?: PublisherPartsFilter,
+  signal?: AbortSignal,
 ): Promise<CrisGapsResponse> {
-  return apiGet<CrisGapsResponse>(`/${inst}/publishers/${encodeNamePath(name)}/cris-gaps`, {
-    year_from: years?.year_from,
-    year_to: years?.year_to,
-    parts,
-  });
+  return apiGet<CrisGapsResponse>(
+    `/${inst}/publishers/${encodeNamePath(name)}/cris-gaps`,
+    {
+      year_from: years?.year_from,
+      year_to: years?.year_to,
+      parts,
+    },
+    signal,
+  );
 }
 
 export function orgUnitsRequest(inst: string, params: OrgUnitSearchParams = {}): ApiRequest {
@@ -794,13 +861,18 @@ export async function fetchOrgUnit(
   years?: YearParams,
   sort?: OrgUnitAuthorSort,
   includeGaps: boolean = false,
+  signal?: AbortSignal,
 ): Promise<OrgUnitDetailResponse> {
-  return apiGet<OrgUnitDetailResponse>(`/${inst}/orgunits/${level}/${encodeNamePath(name)}`, {
-    year_from: years?.year_from,
-    year_to: years?.year_to,
-    sort,
-    include_gaps: includeGaps ? undefined : "false",
-  });
+  return apiGet<OrgUnitDetailResponse>(
+    `/${inst}/orgunits/${level}/${encodeNamePath(name)}`,
+    {
+      year_from: years?.year_from,
+      year_to: years?.year_to,
+      sort,
+      include_gaps: includeGaps ? undefined : "false",
+    },
+    signal,
+  );
 }
 
 export async function fetchOrgUnitCrisGaps(
@@ -809,12 +881,17 @@ export async function fetchOrgUnitCrisGaps(
   name: string,
   years?: YearParams,
   parts?: PublisherPartsFilter,
+  signal?: AbortSignal,
 ): Promise<CrisGapsResponse> {
-  return apiGet<CrisGapsResponse>(`/${inst}/orgunits/${level}/${encodeNamePath(name)}/cris-gaps`, {
-    year_from: years?.year_from,
-    year_to: years?.year_to,
-    parts,
-  });
+  return apiGet<CrisGapsResponse>(
+    `/${inst}/orgunits/${level}/${encodeNamePath(name)}/cris-gaps`,
+    {
+      year_from: years?.year_from,
+      year_to: years?.year_to,
+      parts,
+    },
+    signal,
+  );
 }
 
 export async function fetchJournalCrisGaps(
@@ -822,12 +899,17 @@ export async function fetchJournalCrisGaps(
   issnL: string,
   years?: YearParams,
   parts?: PublisherPartsFilter,
+  signal?: AbortSignal,
 ): Promise<CrisGapsResponse> {
-  return apiGet<CrisGapsResponse>(`/${inst}/journals/${encodeURIComponent(issnL)}/cris-gaps`, {
-    year_from: years?.year_from,
-    year_to: years?.year_to,
-    parts,
-  });
+  return apiGet<CrisGapsResponse>(
+    `/${inst}/journals/${encodeURIComponent(issnL)}/cris-gaps`,
+    {
+      year_from: years?.year_from,
+      year_to: years?.year_to,
+      parts,
+    },
+    signal,
+  );
 }
 
 /** ISSN-Ls per batch request: the endpoint's cap. */
@@ -840,6 +922,7 @@ export async function fetchJournalBatch(
   inst: string,
   issnLs: string[],
   years?: YearParams,
+  signal?: AbortSignal,
 ): Promise<JournalBatchResponse> {
   const slices: string[][] = [];
   for (let i = 0; i < issnLs.length; i += JOURNAL_BATCH_SIZE) {
@@ -847,11 +930,15 @@ export async function fetchJournalBatch(
   }
   const parts = await Promise.all(
     slices.map((slice) =>
-      apiGet<JournalBatchResponse>(`/${inst}/journals/batch`, {
-        issn_l: slice.join(","),
-        year_from: years?.year_from,
-        year_to: years?.year_to,
-      }),
+      apiGet<JournalBatchResponse>(
+        `/${inst}/journals/batch`,
+        {
+          issn_l: slice.join(","),
+          year_from: years?.year_from,
+          year_to: years?.year_to,
+        },
+        signal,
+      ),
     ),
   );
   return {

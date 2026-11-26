@@ -15,7 +15,9 @@ import { EMPTY_COLLAB_FILTERS, writeCollabParams } from "@/components/collaborat
 import { useCollabParams } from "@/components/collaborations/use-collab-params";
 import { FilterLayout } from "@/components/filter-layout";
 import { GapCsvButton } from "@/components/gap-csv-button";
+import { LoadingBar } from "@/components/loading-bar";
 import { MobileDisclosure } from "@/components/mobile-disclosure";
+import { startNavigationProgress } from "@/components/navigation-progress";
 import { ListSkeletonRows } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -69,12 +71,18 @@ function PartnersPageInner() {
 
   // Keep search input synced with URL `q` so refresh & Back nav preserve it.
   const [input, setInput] = React.useState(filters.q ?? "");
+  const lastCommittedQ = React.useRef(filters.q ?? "");
   React.useEffect(() => {
-    setInput(filters.q ?? "");
+    const qVal = filters.q ?? "";
+    if (qVal !== lastCommittedQ.current) {
+      lastCommittedQ.current = qVal;
+      setInput(qVal);
+    }
   }, [filters.q]);
   const debouncedInput = useDebounced(input.trim(), 250);
   React.useEffect(() => {
     if (debouncedInput !== (filters.q ?? "")) {
+      lastCommittedQ.current = debouncedInput;
       update({ q: debouncedInput || undefined });
     }
   }, [debouncedInput, filters.q, update]);
@@ -263,11 +271,14 @@ function PartnersPageInner() {
             onChange={update}
             variant="rows"
             loading={list.isPending}
+            updating={list.isFetching && !list.isPending}
           />
         }
         aboveFilters={searchBox}
         activeCount={facetCount}
+        updating={list.isFetching && !list.isPending}
         onReset={() => {
+          lastCommittedQ.current = "";
           setInput("");
           update(EMPTY_COLLAB_FILTERS);
         }}
@@ -277,6 +288,7 @@ function PartnersPageInner() {
           facets={list.data?.facets}
           onChange={update}
           onResetAll={() => {
+            lastCommittedQ.current = "";
             setInput("");
             update(EMPTY_COLLAB_FILTERS);
           }}
@@ -284,17 +296,26 @@ function PartnersPageInner() {
 
         <MobileDisclosure label={t("overview.toggle")} className="mb-6" lazy>
           {list.data && (
-            <CollaborationOverview
-              data={list.data}
-              trendCsvHref={collaborationTrendCsvHref(inst, params)}
-            />
+            <div
+              className={
+                list.isFetching && !list.isPending
+                  ? "opacity-75 transition-opacity duration-150"
+                  : "transition-opacity duration-150"
+              }
+            >
+              <CollaborationOverview
+                data={list.data}
+                trendCsvHref={collaborationTrendCsvHref(inst, params)}
+              />
+            </div>
           )}
 
           <section aria-labelledby="partners-map-title" className="mt-6">
             <h2 id="partners-map-title" className="text-base font-semibold">
               {t("map.title")}
             </h2>
-            <div className="mt-2 overflow-hidden rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)]">
+            <div className="relative mt-2 overflow-hidden rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)]">
+              <LoadingBar active={map.isFetching && !map.isPending} />
               {map.isError ? (
                 <p
                   role="alert"
@@ -311,9 +332,10 @@ function PartnersPageInner() {
                   activeTypes={filters.type ?? []}
                   onToggleType={toggleMapType}
                   autoFitKey={autoFitKey}
-                  onSelect={(ror) =>
-                    router.push(`/${inst}/collaborations/${encodeURIComponent(ror)}${query}`)
-                  }
+                  onSelect={(ror) => {
+                    startNavigationProgress();
+                    router.push(`/${inst}/collaborations/${encodeURIComponent(ror)}${query}`);
+                  }}
                 />
               )}
             </div>
@@ -352,7 +374,8 @@ function PartnersPageInner() {
               </div>
             )}
             {list.data && (
-              <Card>
+              <Card className="relative overflow-hidden">
+                <LoadingBar active={list.isFetching} />
                 <CardContent className="pt-6">
                   <PartnerTable
                     items={list.data.items}
@@ -360,7 +383,7 @@ function PartnersPageInner() {
                     onSort={(next) => update({ sort: next.sort, dir: next.dir })}
                     inst={inst}
                     query={query}
-                    pending={list.isPlaceholderData}
+                    pending={list.isFetching && !list.isPending}
                   />
                   {total > COLLAB_PAGE_SIZE && (
                     <Pager
@@ -369,6 +392,7 @@ function PartnersPageInner() {
                       total={total}
                       pageSize={COLLAB_PAGE_SIZE}
                       onOffset={setOffset}
+                      isFetching={list.isFetching}
                     />
                   )}
                 </CardContent>

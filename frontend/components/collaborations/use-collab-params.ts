@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import {
@@ -8,19 +8,22 @@ import {
   writeCollabParams,
   type UpdateParams,
 } from "@/components/collaborations/collab-params";
+import { replaceSearchParams } from "@/lib/url-params";
 
 /** `[params, update]`: the filters in the URL and their updater. */
 export function useCollabParams() {
   const sp = useSearchParams();
-  const router = useRouter();
   const pathname = usePathname();
   const params = React.useMemo(() => readCollabParams(sp), [sp]);
   const update: UpdateParams = React.useCallback(
     (patch) => {
-      const qs = writeCollabParams({ ...params, ...patch });
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      const current = readCollabParams(
+        new URLSearchParams(typeof window !== "undefined" ? window.location.search : sp.toString()),
+      );
+      const qs = writeCollabParams({ ...current, ...patch });
+      replaceSearchParams(pathname, new URLSearchParams(qs));
     },
-    [params, pathname, router],
+    [pathname, sp],
   );
   return [params, update] as const;
 }

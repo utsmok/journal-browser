@@ -34,6 +34,7 @@ import { OpenaireCard } from "@/components/journal/openaire-card";
 import { PublicationsCard } from "@/components/journal/publications-card";
 import { SectionNav, useLastSearchHref } from "@/components/journal/section-nav";
 import { UtAuthorshipCard } from "@/components/journal/ut-authorship-card";
+import { LoadingBar } from "@/components/loading-bar";
 import { ShortlistToggle } from "@/components/shortlist/shortlist-toggle";
 import { SourceNote } from "@/components/source-note";
 import { ErrorPanel, JournalDetailSkeleton } from "@/components/states";
@@ -74,10 +75,14 @@ function JournalPageInner() {
   const [openSimilar, setOpenSimilar] = React.useState<Record<string, boolean>>({});
   const [citeOpen, setCiteOpen] = React.useState(false);
   const [altNamesExpanded, setAltNamesExpanded] = React.useState(false);
-  const { data, isPending, isError, error, isPlaceholderData } = useJournal(issnL, funder?.id, {
-    year_from,
-    year_to,
-  });
+  const { data, isPending, isFetching, isError, error, isPlaceholderData } = useJournal(
+    issnL,
+    funder?.id,
+    {
+      year_from,
+      year_to,
+    },
+  );
   const similarQuery = useSimilar(issnL);
   const similar = similarQuery.data;
   const searchParams = useSearchParams();
@@ -314,7 +319,12 @@ function JournalPageInner() {
   return (
     <>
       <SectionNav sections={sections} />
-      <div className="mx-auto max-w-screen-2xl px-4 py-6">
+      <div
+        className={`relative mx-auto max-w-screen-2xl px-4 py-6 transition-opacity duration-150 ${
+          isPlaceholderData ? "opacity-75" : ""
+        }`}
+      >
+        <LoadingBar active={isFetching && !isPending} />
         <header className="mb-4">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="flex min-w-0 flex-wrap items-center gap-2">

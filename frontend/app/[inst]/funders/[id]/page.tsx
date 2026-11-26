@@ -11,6 +11,7 @@ import { CollapsibleCard } from "@/components/collapsible-card";
 import { ACCESS_TEXT, DataIcon, GreenGlyph, LockIcon, WorksGlyph } from "@/components/data-icons";
 import { DetailSummaryPanel } from "@/components/detail-summary";
 import { SectionNav, useLastDirectoryHref } from "@/components/journal/section-nav";
+import { LoadingBar } from "@/components/loading-bar";
 import { MoreToggle } from "@/components/journal/shared";
 import { SourceNote } from "@/components/source-note";
 import { DetailSkeleton, ErrorPanel } from "@/components/states";
@@ -297,7 +298,10 @@ export default function FunderPage() {
   const id = params?.id ? Number(params.id) : undefined;
   const { year_from, year_to } = useYearRange();
   const backHref = useLastDirectoryHref("jb-last-funders", `/${inst}/funders`);
-  const { data, isPending, isError, error } = useFunder(id, { year_from, year_to });
+  const { data, isPending, isFetching, isPlaceholderData, isError, error } = useFunder(id, {
+    year_from,
+    year_to,
+  });
   const [journalPage, setJournalPage] = React.useState(1);
 
   React.useEffect(() => {
@@ -351,7 +355,12 @@ export default function FunderPage() {
         backStorageKey="jb-last-funders"
         backLabel={t("detail.backToList")}
       />
-      <div className="mx-auto max-w-screen-2xl px-4 py-6">
+      <div
+        className={`relative mx-auto max-w-screen-2xl px-4 py-6 transition-opacity duration-150 ${
+          isPlaceholderData ? "opacity-75" : ""
+        }`}
+      >
+        <LoadingBar active={isFetching && !isPending} />
         <header className="mb-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h1 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl">

@@ -14,6 +14,7 @@ import { CrisGapsSection } from "@/components/cris-gaps-section";
 import { ACCESS_TEXT, ApcGlyph, DataIcon, DealGlyph, WorksGlyph } from "@/components/data-icons";
 import { DetailSummaryPanel } from "@/components/detail-summary";
 import { SectionNav } from "@/components/journal/section-nav";
+import { LoadingBar } from "@/components/loading-bar";
 import { OrcidLink } from "@/components/orcid-link";
 import { DetailSkeleton, ErrorPanel } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
@@ -213,7 +214,8 @@ function OrgUnitDetail({
         backStorageKey="jb-last-orgunits"
         backLabel={backLabel}
       />
-      <div className="mx-auto max-w-screen-2xl px-4 py-6">
+      <div className="relative mx-auto max-w-screen-2xl px-4 py-6">
+        <LoadingBar active={isFetching} />
         <header className="mb-4">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl">

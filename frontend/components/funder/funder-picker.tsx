@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, X } from "lucide-react";
+import { Loader2, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import * as React from "react";
@@ -23,7 +23,7 @@ export function FunderPicker({ fullWidth = false }: { fullWidth?: boolean } = {}
   const rootRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
-    const t = setTimeout(() => setDebounced(input), 250);
+    const t = setTimeout(() => setDebounced(input), 150);
     return () => clearTimeout(t);
   }, [input]);
 
@@ -79,7 +79,7 @@ export function FunderPicker({ fullWidth = false }: { fullWidth?: boolean } = {}
           placeholder={t("funder.placeholder")}
           aria-label={t("funder.inputLabel")}
           className={cn(
-            "h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] pl-7 pr-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2",
+            "h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] pl-7 pr-7 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2",
             fullWidth ? "w-full" : "w-40 min-[560px]:w-56",
           )}
         />
@@ -87,6 +87,12 @@ export function FunderPicker({ fullWidth = false }: { fullWidth?: boolean } = {}
           aria-hidden
           className="pointer-events-none absolute left-2 top-2.5 size-3.5 opacity-50"
         />
+        {open && funders.isFetching && (
+          <Loader2
+            aria-hidden
+            className="pointer-events-none absolute right-2 top-2.5 size-3.5 animate-spin text-[var(--muted-foreground)]"
+          />
+        )}
       </div>
       {open && debounced.trim().length >= 2 && (
         <ul

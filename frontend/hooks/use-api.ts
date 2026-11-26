@@ -63,32 +63,14 @@ import { qk } from "@/lib/query-keys";
 import type { InstitutionDirectoryEntry } from "@/lib/admin";
 
 /**
- * Fetch-epoch guard: bumps a ref whenever the serialized params change, so an
- * in-flight response that lands after the params moved on is recognized as
- * stale and discarded instead of feeding the current view.
- */
-function useFetchEpoch(params: JournalSearchParams) {
-  const key = JSON.stringify(params);
-  // Adjusting state during render (React's sanctioned "derive state from
-  // the previous props" pattern): a params change bumps the epoch without
-  // a committed extra render. A ref write here would also mutate on
-  // renders React later throws away.
-  const [state, setState] = React.useState({ key, epoch: 0 });
-  if (state.key !== key) {
-    setState({ key, epoch: state.epoch + 1 });
-  }
-  return state.epoch;
-}
-
-/**
  * Placeholder for detail queries. A stored funder or year lens keys a scoped
  * variant of the query the server rendered; while that variant loads, the
  * unscoped data stays on screen instead of the skeleton. The entity must be
  * the same (the key without its scope): opening another journal still shows
  * the skeleton.
  */
-function keepDataForSameEntity<T>(entityKey: readonly unknown[]) {
-  return (previousData: T | undefined, previousQuery: Query<T> | undefined): T | undefined =>
+function keepDataForSameEntity(entityKey: readonly unknown[]) {
+  return <T>(previousData: T | undefined, previousQuery: Query<T> | undefined): T | undefined =>
     previousQuery && entityKey.every((part, index) => previousQuery.queryKey[index] === part)
       ? previousData
       : undefined;
@@ -146,19 +128,11 @@ function usageFilters(params: JournalSearchParams): Record<string, unknown> | un
 
 export function useJournals(params: JournalSearchParams, semantic?: boolean) {
   const inst = useInstitution();
-  const epoch = useFetchEpoch(params);
   const query = useQuery({
     queryKey: qk.journalsSearch(inst, params, Boolean(semantic)),
-    queryFn: async () => {
-      const at = epoch;
-      const data = await getRequest<JournalSearchResponse>(
-        journalsRequest(inst, params, Boolean(semantic)),
-      );
-      if (at !== epoch) throw new Error("stale fetch discarded");
-      return data;
-    },
+    queryFn: ({ signal }) =>
+      getRequest<JournalSearchResponse>(journalsRequest(inst, params, Boolean(semantic)), signal),
     placeholderData: keepPreviousData,
-    staleTime: 60_000,
   });
   useSearchEvent(query, (data) => ({
     query: params.q ?? "",
@@ -184,10 +158,10 @@ export function useFacets(
   const filters = facetFilters(params);
   return useQuery({
     queryKey: qk.facets(inst, filters),
-    queryFn: () => getRequest<JournalSearchResponse>(facetsRequest(inst, filters)),
+    queryFn: ({ signal }) =>
+      getRequest<JournalSearchResponse>(facetsRequest(inst, filters), signal),
     enabled,
     placeholderData: keepPreviousData,
-    staleTime: 60_000,
   });
 }
 
@@ -201,16 +175,19 @@ export function useJournal(issnL: string | undefined, funderId?: number, years?:
       years?.year_from ?? null,
       years?.year_to ?? null,
     ),
-    queryFn: () =>
-      apiGet<JournalDetailResponse>(`/${inst}/journals/${encodeURIComponent(issnL ?? "")}`, {
-        funder: funderId,
-        year_from: years?.year_from,
-        year_to: years?.year_to,
-        include_gaps: "false",
-      }),
+    queryFn: ({ signal }) =>
+      apiGet<JournalDetailResponse>(
+        `/${inst}/journals/${encodeURIComponent(issnL ?? "")}`,
+        {
+          funder: funderId,
+          year_from: years?.year_from,
+          year_to: years?.year_to,
+          include_gaps: "false",
+        },
+        signal,
+      ),
     enabled: Boolean(issnL),
     placeholderData: keepDataForSameEntity(["journal", inst, issnL ?? ""]),
-    staleTime: 60_000,
   });
 }
 
@@ -219,7 +196,7 @@ export function useAuthor(authorId: string | undefined, years?: YearParams) {
   const inst = useInstitution();
   return useQuery({
     queryKey: qk.author(inst, authorId ?? "", years?.year_from ?? null, years?.year_to ?? null),
-    queryFn: () => fetchAuthor(inst, authorId ?? "", years),
+    queryFn: ({ signal }) => fetchAuthor(inst, authorId ?? "", years, signal),
     enabled: Boolean(authorId),
     placeholderData: keepDataForSameEntity(["author", inst, authorId ?? ""]),
   });
@@ -233,7 +210,7 @@ export function useJournalBatch(issnLs: string[], years?: YearParams) {
   const inst = useInstitution();
   return useQuery({
     queryKey: qk.journalBatch(inst, issnLs, years ?? {}),
-    queryFn: () => fetchJournalBatch(inst, issnLs, years),
+    queryFn: ({ signal }) => fetchJournalBatch(inst, issnLs, years, signal),
     enabled: issnLs.length > 0,
     placeholderData: keepPreviousData,
   });
@@ -253,10 +230,9 @@ export function useJournalCrisGaps(
       years?.year_to ?? null,
       parts ?? null,
     ] as const,
-    queryFn: () => fetchJournalCrisGaps(inst, issnL ?? "", years, parts),
+    queryFn: ({ signal }) => fetchJournalCrisGaps(inst, issnL ?? "", years, parts, signal),
     enabled: Boolean(issnL) && inst !== "" && enabled,
     placeholderData: keepPreviousData,
-    staleTime: 60_000,
   });
 }
 
@@ -269,10 +245,10 @@ export function useSimilar(issnL: string | undefined) {
   const inst = useInstitution();
   return useQuery({
     queryKey: qk.similar(inst, issnL ?? ""),
-    queryFn: () => getRequest<SimilarJournalsBundle>(similarRequest(inst, issnL ?? "")),
+    queryFn: ({ signal }) =>
+      getRequest<SimilarJournalsBundle>(similarRequest(inst, issnL ?? ""), signal),
     enabled: Boolean(issnL),
     retry: false,
-    staleTime: 60_000,
   });
 }
 
@@ -285,11 +261,11 @@ export function useJournalWorks(issnL: string | undefined, page: number, years?:
   const inst = useInstitution();
   return useQuery({
     queryKey: qk.works(inst, issnL ?? "", page, years?.year_from ?? null, years?.year_to ?? null),
-    queryFn: () => getRequest<WorksPage>(journalWorksRequest(inst, issnL ?? "", page, years)),
+    queryFn: ({ signal }) =>
+      getRequest<WorksPage>(journalWorksRequest(inst, issnL ?? "", page, years), signal),
     enabled: Boolean(issnL),
     placeholderData: keepPreviousData,
     retry: false,
-    staleTime: 60_000,
   });
 }
 
@@ -300,10 +276,9 @@ export function useDeals(
   const inst = useInstitution();
   return useQuery({
     queryKey: qk.deals(inst, status),
-    queryFn: () => getRequest<DealOut[]>(dealsRequest(inst, status)),
+    queryFn: ({ signal }) => getRequest<DealOut[]>(dealsRequest(inst, status), signal),
     enabled: enabled && inst !== "",
     placeholderData: keepPreviousData,
-    staleTime: 60_000,
   });
 }
 
@@ -311,7 +286,7 @@ export function useLimitations() {
   const inst = useInstitution();
   return useQuery({
     queryKey: qk.limitations(inst),
-    queryFn: () => getRequest<LimitationOut[]>(limitationsRequest(inst)),
+    queryFn: ({ signal }) => getRequest<LimitationOut[]>(limitationsRequest(inst), signal),
     staleTime: 10 * 60_000,
   });
 }
@@ -320,7 +295,7 @@ export function useLimitations() {
 export function useInstitutionsDirectory() {
   return useQuery({
     queryKey: qk.institutions(),
-    queryFn: () => getRequest<InstitutionDirectoryEntry[]>(institutionsRequest()),
+    queryFn: ({ signal }) => getRequest<InstitutionDirectoryEntry[]>(institutionsRequest(), signal),
     staleTime: 10 * 60_000,
   });
 }
@@ -330,7 +305,7 @@ export function useFreshness(instOverride?: string) {
   const inst = instOverride ?? ctxInst;
   return useQuery({
     queryKey: qk.freshness(inst),
-    queryFn: () => getRequest<FreshnessResponse>(freshnessRequest(inst)),
+    queryFn: ({ signal }) => getRequest<FreshnessResponse>(freshnessRequest(inst), signal),
     // Global pages (landing, /admin) have no institution segment; querying
     // //meta/freshness would just 404.
     enabled: inst !== "",
@@ -342,7 +317,8 @@ export function usePublishers(params: PublisherSearchParams) {
   const inst = useInstitution();
   const query = useQuery({
     queryKey: qk.publishers(inst, params),
-    queryFn: () => getRequest<PublisherSearchResponse>(publishersRequest(inst, params)),
+    queryFn: ({ signal }) =>
+      getRequest<PublisherSearchResponse>(publishersRequest(inst, params), signal),
     placeholderData: keepPreviousData,
   });
   useSearchEvent(query, (data) => ({
@@ -366,7 +342,7 @@ export function usePublisher(
   const inst = useInstitution();
   return useQuery({
     queryKey: qk.publisher(inst, name ?? "", years?.year_from ?? null, years?.year_to ?? null),
-    queryFn: () => fetchPublisher(inst, name ?? "", years, undefined, false),
+    queryFn: ({ signal }) => fetchPublisher(inst, name ?? "", years, undefined, false, signal),
     enabled: Boolean(name),
     placeholderData: keepDataForSameEntity(["publisher", inst, name ?? ""]),
   });
@@ -386,10 +362,9 @@ export function usePublisherCrisGaps(
       years?.year_to ?? null,
       parts ?? null,
     ] as const,
-    queryFn: () => fetchPublisherCrisGaps(inst, name ?? "", years, parts),
+    queryFn: ({ signal }) => fetchPublisherCrisGaps(inst, name ?? "", years, parts, signal),
     enabled: Boolean(name) && inst !== "" && enabled,
     placeholderData: keepPreviousData,
-    staleTime: 60_000,
   });
 }
 
@@ -398,7 +373,8 @@ export function useOrgUnits(params: OrgUnitSearchParams) {
   const inst = useInstitution();
   const query = useQuery({
     queryKey: qk.orgunits(inst, params),
-    queryFn: () => getRequest<OrgUnitSearchResponse>(orgUnitsRequest(inst, params)),
+    queryFn: ({ signal }) =>
+      getRequest<OrgUnitSearchResponse>(orgUnitsRequest(inst, params), signal),
     placeholderData: keepPreviousData,
   });
   useSearchEvent(query, (data) => ({
@@ -419,7 +395,8 @@ export function useAuthorDirectory(
   const inst = useInstitution();
   const query = useQuery({
     queryKey: qk.authors(inst, q ?? null, filters, opts),
-    queryFn: () => getRequest<AuthorSearchResponse>(authorsRequest(inst, q, filters, opts)),
+    queryFn: ({ signal }) =>
+      getRequest<AuthorSearchResponse>(authorsRequest(inst, q, filters, opts), signal),
     placeholderData: keepPreviousData,
   });
   useSearchEvent(query, (data) => ({
@@ -447,7 +424,8 @@ export function useOrgUnit(
       years?.year_to ?? null,
       sort ?? "share",
     ),
-    queryFn: () => fetchOrgUnit(inst, level ?? "faculty", name ?? "", years, sort, false),
+    queryFn: ({ signal }) =>
+      fetchOrgUnit(inst, level ?? "faculty", name ?? "", years, sort, false, signal),
     enabled: Boolean(level && name),
     placeholderData: keepDataForSameEntity(["orgunit", inst, level ?? "faculty", name ?? ""]),
   });
@@ -468,10 +446,10 @@ export function useOrgUnitCrisGaps(
       years?.year_to ?? null,
       parts ?? null,
     ] as const,
-    queryFn: () => fetchOrgUnitCrisGaps(inst, level ?? "faculty", name ?? "", years, parts),
+    queryFn: ({ signal }) =>
+      fetchOrgUnitCrisGaps(inst, level ?? "faculty", name ?? "", years, parts, signal),
     enabled: Boolean(level && name) && inst !== "" && enabled,
     placeholderData: keepPreviousData,
-    staleTime: 60_000,
   });
 }
 
@@ -481,7 +459,8 @@ export function useFunders(q: string | undefined, enabled: boolean) {
   const inst = useInstitution();
   return useQuery({
     queryKey: qk.funders(inst, q ?? ""),
-    queryFn: () => apiGet<FunderSearchResponse>(`/${inst}/funders`, { q, limit: 10 }),
+    queryFn: ({ signal }) =>
+      apiGet<FunderSearchResponse>(`/${inst}/funders`, { q, limit: 10 }, signal),
     enabled: enabled && Boolean(q && q.trim().length >= 2) && inst !== "",
     placeholderData: keepPreviousData,
   });
@@ -492,7 +471,8 @@ export function useFunderDirectory(params: FunderSearchParams) {
   const inst = useInstitution();
   const query = useQuery({
     queryKey: qk.funderDirectory(inst, params),
-    queryFn: () => getRequest<FunderSearchResponse>(funderDirectoryRequest(inst, params)),
+    queryFn: ({ signal }) =>
+      getRequest<FunderSearchResponse>(funderDirectoryRequest(inst, params), signal),
     enabled: inst !== "",
     placeholderData: keepPreviousData,
   });
@@ -508,11 +488,15 @@ export function useFunder(id: number | undefined, years?: YearParams) {
   const inst = useInstitution();
   return useQuery({
     queryKey: qk.funder(inst, id ?? 0, years?.year_from ?? null, years?.year_to ?? null),
-    queryFn: () =>
-      apiGet<FunderDetailResponse>(`/${inst}/funders/${id}`, {
-        year_from: years?.year_from,
-        year_to: years?.year_to,
-      }),
+    queryFn: ({ signal }) =>
+      apiGet<FunderDetailResponse>(
+        `/${inst}/funders/${id}`,
+        {
+          year_from: years?.year_from,
+          year_to: years?.year_to,
+        },
+        signal,
+      ),
     enabled: Boolean(id) && inst !== "",
     placeholderData: keepDataForSameEntity(["funder", inst, id ?? 0]),
   });
@@ -531,7 +515,7 @@ export function useCollaborations(params: CollaborationSearchParams, offset: num
   const inst = useInstitution();
   const query = useQuery({
     queryKey: qk.collaborations(inst, params, offset),
-    queryFn: () => fetchCollaborations(inst, params, offset),
+    queryFn: ({ signal }) => fetchCollaborations(inst, params, offset, signal),
     enabled: inst !== "",
     placeholderData: keepPreviousData,
   });
@@ -548,7 +532,7 @@ export function useCollaborationMap(params: CollaborationSearchParams) {
   const inst = useInstitution();
   return useQuery({
     queryKey: qk.collaborationMap(inst, params),
-    queryFn: () => fetchCollaborationMap(inst, params),
+    queryFn: ({ signal }) => fetchCollaborationMap(inst, params, signal),
     enabled: inst !== "",
     placeholderData: keepPreviousData,
   });
@@ -558,8 +542,9 @@ export function useCollaboration(ror: string | undefined, params: CollaborationS
   const inst = useInstitution();
   return useQuery({
     queryKey: qk.collaboration(inst, ror ?? "", params),
-    queryFn: () => fetchCollaboration(inst, ror ?? "", params),
+    queryFn: ({ signal }) => fetchCollaboration(inst, ror ?? "", params, signal),
     enabled: Boolean(ror) && inst !== "",
+    placeholderData: keepDataForSameEntity(["collaboration", inst, ror ?? ""]),
   });
 }
 
@@ -572,7 +557,7 @@ export function useCollaborationWorks(
   const inst = useInstitution();
   return useQuery({
     queryKey: [...qk.collaborationWorks(inst, ror, params, offset), limit ?? null] as const,
-    queryFn: () => fetchCollaborationWorks(inst, ror, params, offset, limit),
+    queryFn: ({ signal }) => fetchCollaborationWorks(inst, ror, params, offset, limit, signal),
     enabled: inst !== "",
     placeholderData: keepPreviousData,
   });

@@ -132,7 +132,12 @@ export function PartnerTable({
   const empty = items.length === 0;
 
   return (
-    <div className={pending ? "opacity-60" : undefined} aria-busy={pending || undefined}>
+    <div
+      className={
+        pending ? "opacity-60 transition-opacity duration-150" : "transition-opacity duration-150"
+      }
+      aria-busy={pending || undefined}
+    >
       {/* Stacked rows on narrow viewports: seven columns would push the
           counts off-screen behind horizontal scrolling. */}
       <div className="md:hidden">

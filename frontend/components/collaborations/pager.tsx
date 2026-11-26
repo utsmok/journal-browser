@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ export function Pager({
   total,
   pageSize,
   onOffset,
+  isFetching = false,
 }: {
   offset: number;
   /** Rows on the current page. */
@@ -19,16 +20,20 @@ export function Pager({
   total: number;
   pageSize: number;
   onOffset: (offset: number) => void;
+  isFetching?: boolean;
 }) {
   const t = useTranslations("collaborations");
   return (
     <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-      <p className="text-sm text-[var(--muted-foreground)]">
-        {t("range", {
-          from: (offset + 1).toLocaleString("en"),
-          to: (offset + shown).toLocaleString("en"),
-          total: total.toLocaleString("en"),
-        })}
+      <p className="inline-flex items-center gap-1.5 text-sm text-[var(--muted-foreground)]">
+        <span>
+          {t("range", {
+            from: (offset + 1).toLocaleString("en"),
+            to: (offset + shown).toLocaleString("en"),
+            total: total.toLocaleString("en"),
+          })}
+        </span>
+        {isFetching && <Loader2 aria-hidden className="size-3.5 animate-spin" />}
       </p>
       <div className="flex items-center gap-2">
         <Button

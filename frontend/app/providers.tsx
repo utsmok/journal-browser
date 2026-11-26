@@ -19,7 +19,9 @@ export function Providers({
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 60_000,
+            staleTime: 5 * 60_000,
+            gcTime: 15 * 60_000,
+            refetchOnWindowFocus: false,
             retry: 1,
             placeholderData: (data: unknown) => data, // keepPreviousData for lists
           },

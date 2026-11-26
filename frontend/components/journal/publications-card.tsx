@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 
@@ -15,6 +15,7 @@ import { useInstitution } from "@/hooks/use-institution";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { useYearRange } from "@/hooks/use-year-filter";
 import { encodeNamePath } from "@/lib/api";
+import { patchSearchParams } from "@/lib/url-params";
 import { SourceNote } from "@/components/source-note";
 import type { Attribution, OpenalexSource, WorksPage } from "@/lib/api";
 
@@ -44,8 +45,6 @@ export function PublicationsCard({
   const inst = useInstitution();
   const { year_from, year_to } = useYearRange();
   const pathname = usePathname();
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const { data, isPending, isFetching } = worksQuery;
   const works = data?.items ?? [];
   const total = data?.total ?? 0;
@@ -53,20 +52,15 @@ export function PublicationsCard({
   const page = Math.min(requested, pages);
 
   const setPage = (p: number) => {
-    const next = new URLSearchParams(searchParams.toString());
-    if (p > 1) next.set("page", String(p));
-    else next.delete("page");
-    router.replace(`${pathname}?${next}`, { scroll: false });
+    patchSearchParams(pathname, { page: p > 1 ? String(p) : undefined });
   };
 
   // A shared link can point past the last page; fall back to the last one.
   React.useEffect(() => {
     if (data && requested > pages) {
-      const next = new URLSearchParams(searchParams.toString());
-      next.set("page", String(pages));
-      router.replace(`${pathname}?${next}`, { scroll: false });
+      patchSearchParams(pathname, { page: String(pages) });
     }
-  }, [data, requested, pages, pathname, router, searchParams]);
+  }, [data, requested, pages, pathname]);
 
   return (
     <CollapsibleCard
@@ -106,7 +100,13 @@ export function PublicationsCard({
           {t("publications.empty", { name: site.name })}
         </p>
       ) : (
-        <ul className="divide-y divide-[var(--border)]">
+        <ul
+          className={
+            isFetching
+              ? "divide-y divide-[var(--border)] opacity-60 transition-opacity duration-150"
+              : "divide-y divide-[var(--border)] transition-opacity duration-150"
+          }
+        >
           {works.map((w) => {
             const href = doiHref(w.doi ?? null) ?? w.url;
             const oa = w.openaire ?? null;

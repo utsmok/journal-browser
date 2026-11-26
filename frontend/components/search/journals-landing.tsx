@@ -1,7 +1,7 @@
 "use client";
 
 import { flexRender, getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
-import { Compass, HelpCircle, Search, SlidersHorizontal } from "lucide-react";
+import { Compass, HelpCircle, Loader2, Search, SlidersHorizontal } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { notFound, usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -13,6 +13,8 @@ import { FilterLayout } from "@/components/filter-layout";
 import { FilterPanel, QualityToggles } from "@/components/filter-panel";
 import { GuideWizard } from "@/components/guide/guide-wizard";
 import { rememberDirectoryUrl } from "@/components/journal/section-nav";
+import { LoadingBar } from "@/components/loading-bar";
+import { startNavigationProgress } from "@/components/navigation-progress";
 import { OnboardingBanner, useOnboardingState } from "@/components/onboarding-banner";
 import { PageTabs } from "@/components/page-tabs";
 import { FunderPicker } from "@/components/funder/funder-picker";
@@ -44,6 +46,7 @@ import { apcSummary, formatInt } from "@/lib/format";
 import { ApcText } from "@/components/apc-text";
 import { useFunderPrefs } from "@/lib/funder-prefs";
 import { COLUMN_SORTS, PUB_TYPE_LABELS, SEARCH_IN_OPTIONS, SORTS } from "@/lib/search-config";
+import { patchSearchParams, replaceSearchParams } from "@/lib/url-params";
 
 const SEARCH_INPUT_ID = "journal-search";
 
@@ -102,6 +105,7 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
   } = journalsLandingParams(sp, initialView, { funder, yearFrom: year_from, yearTo: year_to });
 
   const [input, setInput] = React.useState(spQ);
+  const lastCommittedQ = React.useRef(spQ);
   const [stack, setStack] = React.useState<string[]>([]);
 
   useSearchShortcut(SEARCH_INPUT_ID);
@@ -144,16 +148,9 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
       } catch {
         // ignore storage errors in restricted browsing contexts
       }
-      const next = new URLSearchParams(sp.toString());
-      next.delete("cursor");
-      next.delete("p");
-      for (const [key, value] of Object.entries(patch)) {
-        if (!value) next.delete(key);
-        else next.set(key, value);
-      }
-      router.replace(`${pathname}?${next}`, { scroll: false });
+      patchSearchParams(pathname, patch, { drop: ["cursor", "p"] });
     },
-    [pathname, router, sp],
+    [pathname],
   );
 
   const moveTo = (nextStack: string[], nextCursor: string | undefined) => {
@@ -163,11 +160,13 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
     } catch {
       // ignore storage errors in restricted browsing contexts
     }
-    const next = new URLSearchParams(sp.toString());
+    const next = new URLSearchParams(
+      typeof window !== "undefined" ? window.location.search : sp.toString(),
+    );
     if (nextCursor) next.set("cursor", nextCursor);
     else next.delete("cursor");
     next.set("p", String(nextStack.length + 1));
-    router.replace(`${pathname}?${next}`, { scroll: false });
+    replaceSearchParams(pathname, next);
   };
 
   const yearsKey = `${year_from ?? ""}-${year_to ?? ""}`;
@@ -179,13 +178,19 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
   }, [yearsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   React.useEffect(() => {
-    setInput(spQ);
+    if (spQ !== lastCommittedQ.current) {
+      lastCommittedQ.current = spQ;
+      setInput(spQ);
+    }
   }, [spQ]);
   React.useEffect(() => {
     if (view !== "browse") return;
     const timer = setTimeout(() => {
-      if (input !== spQ) update({ q: input || undefined });
-    }, 350);
+      if (input !== spQ) {
+        lastCommittedQ.current = input;
+        update({ q: input || undefined });
+      }
+    }, 250);
     return () => clearTimeout(timer);
   }, [input, spQ, update, view]);
 
@@ -471,6 +476,7 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
   const hasFilters = Boolean(spQ) || hasNonQueryFilters;
 
   const clearFilters = () => {
+    lastCommittedQ.current = "";
     setInput("");
     if (funder) setFunder(null);
     update({
@@ -515,6 +521,7 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
             id: "q",
             label: t("toolbar.chipSearch", { value: spQ }),
             onRemove: () => {
+              lastCommittedQ.current = "";
               setInput("");
               update({ q: undefined });
             },
@@ -709,6 +716,7 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
       if (pathname.endsWith("/guide")) return;
       update({ view: "guide" });
     } else if (pathname.endsWith("/guide")) {
+      startNavigationProgress();
       router.push(`/${inst}/`);
     } else {
       update({ view: undefined });
@@ -765,6 +773,7 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
             className="flex max-w-5xl flex-wrap gap-2 min-[960px]:flex-nowrap"
             onSubmit={(event) => {
               event.preventDefault();
+              lastCommittedQ.current = input;
               update({ q: input || undefined });
             }}
           >
@@ -789,6 +798,12 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
                 >
                   /
                 </kbd>
+              )}
+              {input !== "" && (input !== spQ || isFetching) && (
+                <Loader2
+                  aria-hidden
+                  className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 animate-spin text-[var(--muted-foreground)]"
+                />
               )}
             </div>
             {!semanticMode && (
@@ -861,12 +876,14 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
                   onToggle={handleFacetToggle}
                   error={facetsError}
                   onRetry={() => facetsQuery.refetch()}
+                  updating={facetsQuery.isFetching && !facetsQuery.isPending}
                 />
               </>
             }
             activeCount={filterChips.length}
             onReset={hasFilters ? clearFilters : undefined}
             resetTitle={t("toolbar.resetTitle")}
+            updating={facetsQuery.isFetching && !facetsQuery.isPending}
             headerSlot={
               <div>
                 <p className="mb-1.5 text-xs font-semibold text-[var(--foreground)]">
@@ -890,7 +907,8 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
               removeAriaPrefix={tc("activeFilters.remove")}
             />
 
-            <Card>
+            <Card className="relative overflow-hidden">
+              <LoadingBar active={isFetching} />
               <CardContent className="pt-5">
                 <Pagination
                   data={data}
@@ -1003,7 +1021,11 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
                       </p>
                     )}
                     <ul
-                      className={isFetching ? "opacity-60 md:hidden" : "md:hidden"}
+                      className={
+                        isFetching
+                          ? "opacity-60 transition-opacity duration-150 md:hidden"
+                          : "transition-opacity duration-150 md:hidden"
+                      }
                       aria-label={t("table.listAria")}
                     >
                       {rows.map((row) => {
@@ -1087,7 +1109,13 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
                         );
                       })}
                     </ul>
-                    <div className={isFetching ? "hidden opacity-60 md:block" : "hidden md:block"}>
+                    <div
+                      className={
+                        isFetching
+                          ? "hidden opacity-60 transition-opacity duration-150 md:block"
+                          : "hidden transition-opacity duration-150 md:block"
+                      }
+                    >
                       <Table>
                         <caption className="sr-only">{t("table.resultsCaption")}</caption>
                         <TableHeader>
@@ -1119,7 +1147,10 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
                                 onClick={(event) => {
                                   if (event.metaKey || event.ctrlKey)
                                     window.open(href, "_blank", "noopener");
-                                  else router.push(href);
+                                  else {
+                                    startNavigationProgress();
+                                    router.push(href);
+                                  }
                                 }}
                               >
                                 {row.getVisibleCells().map((cell) => (

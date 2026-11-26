@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { authorsRequest, fetchCollaborationMap, getRequest } from "@/lib/api";
+import { apiGet, authorsRequest, fetchCollaborationMap, getRequest } from "@/lib/api";
 
 describe("authorsRequest query building", () => {
   afterEach(() => {
@@ -45,6 +45,21 @@ describe("authorsRequest query building", () => {
 
     await getRequest(authorsRequest("ut"));
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/ut/authors");
+  });
+
+  it("forwards an AbortSignal to fetch and suppresses console.error when aborted by caller", async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      return Promise.reject(new DOMException("Aborted", "AbortError"));
+    });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubGlobal("fetch", fetchMock);
+
+    controller.abort();
+    await expect(apiGet("/ut/journals", undefined, controller.signal)).rejects.toThrow();
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 });
 

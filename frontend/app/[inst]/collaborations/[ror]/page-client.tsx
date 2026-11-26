@@ -23,6 +23,7 @@ import { DetailSummaryPanel } from "@/components/detail-summary";
 import { GapCsvButton } from "@/components/gap-csv-button";
 import { SectionNav } from "@/components/journal/section-nav";
 import { MoreToggle } from "@/components/journal/shared";
+import { LoadingBar } from "@/components/loading-bar";
 import { ErrorPanel, ListSkeletonRows } from "@/components/states";
 import { InsetPanel } from "@/components/sub-panel";
 import { Badge } from "@/components/ui/badge";
@@ -326,7 +327,12 @@ function PartnerPageInner() {
       {sections.length > 0 && (
         <SectionNav sections={sections} backHref={listHref} backLabel={t("detail.back")} />
       )}
-      <div className="mx-auto max-w-screen-2xl px-4 py-6">
+      <div
+        className={`relative mx-auto max-w-screen-2xl px-4 py-6 transition-opacity duration-150 ${
+          detail.isPlaceholderData ? "opacity-75" : ""
+        }`}
+      >
+        <LoadingBar active={detail.isFetching && !detail.isPending} />
         <ActiveFiltersBar
           params={filters}
           onChange={updateFilters}

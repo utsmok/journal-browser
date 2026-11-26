@@ -48,11 +48,13 @@ function FacetSection({
   onToggle,
   variant,
   loading,
+  updating,
 }: {
   group: GroupDef;
   onToggle: (key: CollabMultiKey, value: string) => void;
   variant: "chips" | "rows";
   loading?: boolean;
+  updating?: boolean;
 }) {
   const t = useTranslations("collaborations");
   const [filter, setFilter] = React.useState("");
@@ -84,8 +86,8 @@ function FacetSection({
   const focus =
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2";
   const layout = chips
-    ? "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs"
-    : "flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-xs";
+    ? "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs transition-[colors,transform] duration-100 active:scale-[0.99]"
+    : "flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-xs transition-[colors,transform] duration-100 active:scale-[0.99]";
 
   return (
     <details open={group.defaultOpen} className="group" role="group" aria-label={group.label}>
@@ -148,7 +150,11 @@ function FacetSection({
                     )}
                   </span>
                 </span>
-                <span className="shrink-0 tabular-nums opacity-85">
+                <span
+                  className={`shrink-0 tabular-nums transition-opacity duration-150 ${
+                    updating ? "opacity-45" : "opacity-85"
+                  }`}
+                >
                   {opt.count.toLocaleString("en")}
                 </span>
               </button>
@@ -177,12 +183,14 @@ export function CollaborationFacets({
   onChange,
   variant,
   loading,
+  updating,
 }: {
   params: CollaborationSearchParams;
   facets: CollaborationFacets | null | undefined;
   onChange: UpdateParams;
   variant: "chips" | "rows";
   loading?: boolean;
+  updating?: boolean;
 }) {
   const t = useTranslations("collaborations");
   const labels = useCollabLabels();
@@ -313,7 +321,7 @@ export function CollaborationFacets({
   ];
 
   return (
-    <div className="space-y-3" aria-busy={loading || undefined}>
+    <div className="space-y-3" aria-busy={loading || updating || undefined}>
       {groups.map((group) => (
         <FacetSection
           key={group.key}
@@ -321,6 +329,7 @@ export function CollaborationFacets({
           onToggle={(key, value) => onChange({ [key]: toggleValue(params[key], value) })}
           variant={variant}
           loading={loading}
+          updating={updating}
         />
       ))}
     </div>
