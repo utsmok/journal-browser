@@ -13,6 +13,7 @@ export const SOURCES: SourceRow[] = [
   { id: "pureOai", name: "Pure OAI-PMH" },
   { id: "openaccessNl", name: "openaccess.nl" },
   { id: "jct", name: "JCT (cOAlition S)" },
+  { id: "oaforward", name: "OA Forward registry" },
   { id: "openapc", name: "OpenAPC" },
   { id: "doaj", name: "DOAJ" },
   { id: "scimago", name: "Scimago Journal Rank" },

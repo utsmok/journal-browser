@@ -57,6 +57,7 @@ from .deal_publishers import (
     rejected_sheet,
     withheld,
 )
+from .oaforward import is_oaforward_deal
 from .openaccess_nl import parse_duration
 
 logger = logging.getLogger(__name__)
@@ -88,11 +89,14 @@ def durations_overlap(a: Deal, b: Deal) -> bool:
 
 
 async def _jct_deals(session: AsyncSession) -> list[Deal]:
-    """JCT deals not yet merged into a canonical row (no narrative URL)."""
+    """JCT deals not yet merged into a canonical row (no narrative URL).
+    An institution's own agreement from the OA Forward registry is never
+    a national deal's counterpart, so it stays out of the match."""
     rows = await session.execute(
         select(Deal).where(
             Deal.esac_id.is_not(None),
             Deal.openaccess_nl_url.is_(None),
+            is_oaforward_deal().is_not(True),
         )
     )
     return list(rows.scalars().all())

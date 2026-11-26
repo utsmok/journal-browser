@@ -6,13 +6,13 @@
 # The nightly refresh_wave.sh only derives from stored data plus $0 OpenAlex
 # singletons (list pages and searches cost credits). The sources that create
 # works and coverage (Pure,
-# openaccess.nl, JCT, OpenAPC, DOAJ, JISC) would otherwise run at bootstrap
+# openaccess.nl, JCT, OA Forward, OpenAPC, DOAJ, JISC) would otherwise run at bootstrap
 # only, so new publications and coverage flags never enter a filled
 # database. Every job here is idempotent, so rerunning the wave or any
 # stage is safe.
 #
 # Only free/non-credit routes, by design: the Pure sweep reads the
-# institution's OAI endpoint, the deal sources are two scrapes plus local
+# institution's OAI endpoint, the deal sources are three scrapes plus local
 # ingests, DOAJ and OpenAPC are CSV downloads, and JISC is a keyed API that
 # skips cleanly without JB_JISC_API_KEY. The one OpenAlex consumer,
 # harvest_stats, gates itself on openalex_budget_ok() and stops
@@ -79,6 +79,7 @@ stage_parts() {
 STAGES=(
   "deals-openaccess-nl||scrape_openaccess_nl.py"
   "deals-jct||ingest_jct.py"
+  "deals-oaforward||ingest_oaforward.py"
   "deals-reconcile||reconcile.py||deals-openaccess-nl,deals-jct"
   "deals-issn-l||backfill_issn_l.py||deals-reconcile"
   "openapc||ingest_openapc.py"

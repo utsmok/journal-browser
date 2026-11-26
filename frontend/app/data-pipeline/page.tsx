@@ -65,6 +65,7 @@ const OPENAIRE_CALLS: [string, string, string][] = [
 const DEAL_CALLS: [string, string, string][] = [
   ["deals-openaccess-nl", "calls.dealsOpenaccessRequest", "calls.dealsOpenaccessWrites"],
   ["deals-jct", "calls.dealsJctRequest", "calls.dealsJctWrites"],
+  ["deals-oaforward", "calls.dealsOaforwardRequest", "calls.dealsOaforwardWrites"],
   ["deals-reconcile", "calls.dealsReconcileRequest", "calls.dealsReconcileWrites"],
   ["deals-issn-l", "calls.dealsIssnLRequest", "calls.dealsIssnLWrites"],
 ];

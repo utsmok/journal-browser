@@ -50,6 +50,7 @@
       "openalex-funders": "The funders behind each publication.",
       "openaccess-nl": "Deal terms, conditions, and workflow descriptions.",
       "jct": "Journal lists for transformative agreements, one input to the deal register.",
+      "oaforward": "The institution's own publishing agreements, outside the national deals: publisher, period, and reported terms. The registry has no journal lists.",
       "openapc": "APC price aggregates and per-article cost evidence.",
       "doaj": "The authoritative registry for gold and diamond open access. Whether a journal charges an APC decides gold versus diamond, and the journal URL from DOAJ is the canon homepage. The harvest reads DOAJ's full journal CSV.",
       "jisc-policies": "Policies for green open access, also called self-archiving. They say which article version a publisher allows to be archived where, and under which licence and embargo.",

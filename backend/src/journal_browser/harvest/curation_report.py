@@ -13,6 +13,7 @@ from ..models import (
     Work,
     WorkIdentity,
 )
+from .oaforward import from_oaforward
 from .reconcile import home_institution_id, publisher_names
 
 logger = logging.getLogger(__name__)
@@ -64,7 +65,11 @@ async def render_curation_report(session: AsyncSession) -> Path:
             + "".join(deal_row(d) for d in no_list)
             + "</ul>"
         )
-    jct_only = [d for d in deals if d.esac_id and not d.openaccess_nl_url]
+    jct_only = [
+        d
+        for d in deals
+        if d.esac_id and not d.openaccess_nl_url and not from_oaforward(d.provenance)
+    ]
     home_id = await home_institution_id(session)
     if home_id is not None:
         twente_deal_ids = set(

@@ -58,6 +58,7 @@ const LAYOUT: Record<string, { sources: SourceKey[]; x: number; y: number; jobSu
   publishers: { sources: ["openalex"], x: 40, y: 170 },
   "deals-openaccess-nl": { sources: ["register"], x: 240, y: 70 },
   "deals-jct": { sources: ["register"], x: 440, y: 70 },
+  "deals-oaforward": { sources: ["register"], x: 840, y: 240 },
   openapc: { sources: ["register"], x: 640, y: 70 },
   "deals-reconcile": { sources: ["db"], x: 840, y: 70 },
   "deals-issn-l": { sources: ["db"], x: 40, y: 240 },

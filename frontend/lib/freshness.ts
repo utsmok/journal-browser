@@ -58,6 +58,11 @@ export const SOURCE_INFO: Record<string, SourceInfo> = {
     harvest: "jct",
     url: "https://journalcheckertool.org/transformative-agreements/",
   },
+  oaforward: {
+    name: "OA Forward agreement registry",
+    harvest: "oaforward",
+    url: "https://oaforward.org/portfolio/registry-of-open-publishing-agreements/",
+  },
   openapc: { name: "OpenAPC", harvest: "openapc", url: "https://github.com/OpenAPC/openapc-de" },
   doaj: { name: "DOAJ", harvest: "doaj", url: "https://doaj.org" },
   // The weekly landing of raw records; only the admin card lists it.

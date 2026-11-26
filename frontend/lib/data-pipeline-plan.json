@@ -28,6 +28,12 @@
       "deps": []
     },
     {
+      "id": "deals-oaforward",
+      "band": "global",
+      "script": "ingest_oaforward.py",
+      "deps": []
+    },
+    {
       "id": "openapc",
       "band": "global",
       "script": "ingest_openapc.py",

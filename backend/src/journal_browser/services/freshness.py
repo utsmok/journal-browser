@@ -181,7 +181,7 @@ SOURCES: tuple[Source, ...] = (
         harvest="openalex",
         entities=("work",),
     ),
-    # source_wave.sh: deals-openaccess-nl, deals-jct, openapc and doaj.
+    # source_wave.sh: deals-openaccess-nl, deals-jct, deals-oaforward, openapc and doaj.
     Source(
         "openaccess-nl",
         FreshnessSchedule.WEEKLY,
@@ -189,6 +189,7 @@ SOURCES: tuple[Source, ...] = (
         entities=("deal",),
     ),
     Source("jct", FreshnessSchedule.WEEKLY, harvest="jct", entities=("deal",)),
+    Source("oaforward", FreshnessSchedule.WEEKLY, harvest="oaforward", entities=("deal",)),
     Source("openapc", FreshnessSchedule.WEEKLY, harvest="openapc", entities=("apc_row",)),
     Source("doaj", FreshnessSchedule.WEEKLY, harvest="doaj", entities=("journal",)),
     # source_wave.sh: jisc lands the records. normalize_jisc.py, which

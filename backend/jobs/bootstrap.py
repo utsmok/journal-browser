@@ -40,6 +40,8 @@ GLOBAL_STEPS: list[tuple[str, list[str]]] = [
     ("publishers", ["jobs/harvest_publishers.py"]),
     ("deals-openaccess-nl", ["jobs/scrape_openaccess_nl.py"]),
     ("deals-jct", ["jobs/ingest_jct.py"]),
+    # hosted institutions' own agreements (OA Forward registry)
+    ("deals-oaforward", ["jobs/ingest_oaforward.py"]),
     ("openapc", ["jobs/ingest_openapc.py"]),
     # pattern derivation needs publisher names; matching needs both sources
     ("deals-reconcile", ["jobs/reconcile.py"]),
@@ -57,6 +59,7 @@ GLOBAL_DEPS: dict[str, list[str]] = {
     "publishers": ["journals"],  # lineage resolves source_records host orgs
     "deals-openaccess-nl": [],
     "deals-jct": [],
+    "deals-oaforward": [],
     "openapc": [],  # aggregates are ISSN-keyed, no journals needed
     "deals-reconcile": ["journals", "deals-openaccess-nl", "deals-jct"],
     "deals-issn-l": ["deals-reconcile"],

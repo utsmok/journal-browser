@@ -168,6 +168,7 @@ wave (see "Daily refresh wave" below) repeats a subset of these stages.
 | `harvest_publishers` | OpenAlex | Publisher lineage: `journals.publisher_canonical` groups sub-brands (e.g. IEEE Communications Society) under their root publisher. Ids absent from a response cache as NULL-lineage rows and are retried after a week. Credit-priced only on a fresh install |
 | `scrape_openaccess_nl` | openaccess.nl | Deal pages: narrative, conditions, participation text |
 | `ingest_jct` | cOAlition S JCT public dump | ESAC agreements + journal lists |
+| `ingest_oaforward` | OA Forward registry of open publishing agreements | Agreements a hosted institution signed itself (no journal lists) |
 | `reconcile` | the two above | The deal register; participation per hosted institution (non-participation = no `deal_institutions` row; shared deals are never deleted) |
 | `backfill_issn_l` | issn_map | Links deal journal ISSNs to the canonical ISSN-L |
 | `ingest_openapc` | OpenAPC dataset | APC evidence and per-journal aggregates |
@@ -265,6 +266,14 @@ the JCT/ESAC dump. Rules:
   leaves the deal unlinked — that is correct
   behavior, not a bug (live case: Twente is not in the LWW 2024-2026
   agreement; Groningen is).
+- An agreement your institution signed itself, outside the national deals,
+  comes from the OA Forward registry (`ingest_oaforward`). The job keeps the
+  rows whose licensee is a name of an active institution: its name, its short
+  name, or a name on its ROR record. The registry has no journal list, so a
+  current agreement covers no journals and stays flagged for curation until
+  an admin adds its list in the deal editor. Expired agreements land as
+  `archive`. `reconcile` never merges these rows into a national deal. A newly
+  onboarded institution gets its agreements on the next weekly source wave.
 - `reconcile` merges duplicate sources for one agreement (ESAC code aliases
   map to the openaccess.nl publisher name) and refreshes the search-side
   deal-coverage flags, so rerunning it after any register fix is safe and
@@ -581,7 +590,7 @@ with or without `.py` (`reconcile`, `harvest_doaj.py`); the script prints
 the full list when the name is unknown. The stages, in order:
 
 1. Global deal and reference sources, in bootstrap GLOBAL_STEPS order:
-   `scrape_openaccess_nl`, `ingest_jct`, `reconcile` (publisher-pattern
+   `scrape_openaccess_nl`, `ingest_jct`, `ingest_oaforward`, `reconcile` (publisher-pattern
    coverage re-derives here, so new journals join their deal; needs the two
    deal sources), `backfill_issn_l` (needs `reconcile`; the OpenAIRE match
    needs it), `ingest_openapc`, `harvest_doaj`, `harvest_jisc`.
