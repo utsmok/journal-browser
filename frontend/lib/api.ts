@@ -1,6 +1,6 @@
 import type { components, operations } from "./api-types";
 import type { LabelT } from "./work-type";
-import { trackApiError, trackSearch } from "./usage/tracker";
+import { trackApiError } from "./usage/tracker";
 
 type Schemas = components["schemas"];
 type Operations = operations;
@@ -147,16 +147,27 @@ function collabParams(p: CollaborationSearchParams): Record<string, string | und
   };
 }
 
-export function fetchCollaborations(inst: string, p: CollaborationSearchParams, offset: number) {
-  return apiGet<CollaborationSearchResponse>(`/${inst}/collaborations`, {
-    ...collabParams(p),
-    offset,
-    limit: COLLAB_PAGE_SIZE,
-    include_credits: "false",
-  });
+export function collaborationsRequest(
+  inst: string,
+  p: CollaborationSearchParams,
+  offset: number,
+): ApiRequest {
+  return {
+    path: `/${inst}/collaborations`,
+    query: { ...collabParams(p), offset, limit: COLLAB_PAGE_SIZE, include_credits: "false" },
+  };
 }
 
-export function fetchCollaborationMap(inst: string, p: CollaborationSearchParams) {
+export function fetchCollaborations(inst: string, p: CollaborationSearchParams, offset: number) {
+  return getRequest<CollaborationSearchResponse>(collaborationsRequest(inst, p, offset));
+}
+
+export function collaborationMapRequest(inst: string, p: CollaborationSearchParams): ApiRequest {
+  return { path: `/${inst}/collaborations/map`, query: collabParams(p) };
+}
+
+/** The map endpoint sends compact rows; the page reads named points. */
+export function toCollaborationMap(data: Schemas["CollaborationMapResponse"]) {
   const toPoint = ([
     ror,
     name,
@@ -182,17 +193,41 @@ export function fetchCollaborationMap(inst: string, p: CollaborationSearchParams
     home_corresponding_works,
     oa_share,
   });
-  return apiGet<Schemas["CollaborationMapResponse"]>(
-    `/${inst}/collaborations/map`,
-    collabParams(p),
-  ).then((data) => ({ items: data.items.map(toPoint), unmapped: data.unmapped }));
+  return { items: data.items.map(toPoint), unmapped: data.unmapped };
+}
+
+export function fetchCollaborationMap(inst: string, p: CollaborationSearchParams) {
+  return getRequest<Schemas["CollaborationMapResponse"]>(collaborationMapRequest(inst, p)).then(
+    toCollaborationMap,
+  );
+}
+
+export function collaborationRequest(
+  inst: string,
+  ror: string,
+  p: CollaborationSearchParams,
+): ApiRequest {
+  return {
+    path: `/${inst}/collaborations/${encodeURIComponent(ror)}`,
+    query: { ...collabParams(p), include_works: "false" },
+  };
 }
 
 export function fetchCollaboration(inst: string, ror: string, p: CollaborationSearchParams) {
-  return apiGet<CollaborationDetailResponse>(`/${inst}/collaborations/${encodeURIComponent(ror)}`, {
-    ...collabParams(p),
-    include_works: "false",
-  });
+  return getRequest<CollaborationDetailResponse>(collaborationRequest(inst, ror, p));
+}
+
+export function collaborationWorksRequest(
+  inst: string,
+  ror: string,
+  p: CollaborationSearchParams,
+  offset: number,
+  limit: number = COLLAB_PAGE_SIZE,
+): ApiRequest {
+  return {
+    path: `/${inst}/collaborations/${encodeURIComponent(ror)}/works`,
+    query: { ...collabParams(p), offset, limit },
+  };
 }
 
 export function fetchCollaborationWorks(
@@ -202,9 +237,8 @@ export function fetchCollaborationWorks(
   offset: number,
   limit: number = COLLAB_PAGE_SIZE,
 ) {
-  return apiGet<CollaborationWorksResponse>(
-    `/${inst}/collaborations/${encodeURIComponent(ror)}/works`,
-    { ...collabParams(p), offset, limit },
+  return getRequest<CollaborationWorksResponse>(
+    collaborationWorksRequest(inst, ror, p, offset, limit),
   );
 }
 
@@ -401,6 +435,111 @@ export async function apiGet<T>(
   }
 }
 
+/** Query-string values of a backend GET; null, undefined and "" are dropped. */
+export type ApiQuery = Record<string, string | number | boolean | null | undefined>;
+
+/**
+ * One backend GET as plain data: the path after /api/v1 and its query. The
+ * browser hooks send it with getRequest; a server render sends the same
+ * request with fetchRequest (lib/server-fetch) and seeds the cache under the
+ * hook's key, so the server-rendered and browser-fetched documents match.
+ */
+export type ApiRequest = { path: string; query?: ApiQuery };
+
+/** apiGet for a request built by one of the *Request builders below. */
+export function getRequest<T>(request: ApiRequest): Promise<T> {
+  return apiGet<T>(request.path, request.query);
+}
+
+/** Journal search: full-text and filtered, or "journals like this text". */
+export function journalsRequest(
+  inst: string,
+  params: JournalSearchParams,
+  semantic: boolean,
+): ApiRequest {
+  if (!semantic) return { path: `/${inst}/journals`, query: { ...params } };
+  // Free-text "journals like this description": embeddings, not FTS.
+  // Filter/sort params do not apply to the vector ranking, but the cursor
+  // does: the endpoint pages by offset into its ranking. The eligibility
+  // toggles apply too; both are server-side defaults, so they travel only
+  // when switched off.
+  return {
+    path: `/${inst}/journals/semantic-search`,
+    query: {
+      q: params.q ?? "",
+      limit: params.limit ?? 40,
+      cursor: params.cursor,
+      active: params.active,
+      vouched: params.vouched,
+    },
+  };
+}
+
+/** The filter part of a journal search: facets ignore paging, sort, and the
+ * free text, so a zero-hit query still shows which values exist. */
+export function facetFilters(params: JournalSearchParams): JournalSearchParams {
+  const { cursor: _c, sort: _s, limit: _l, q: _q, search_in: _si, ...filters } = params;
+  return filters;
+}
+
+export function facetsRequest(inst: string, filters: JournalSearchParams): ApiRequest {
+  return { path: `/${inst}/journals`, query: { ...filters, include_facets: true, limit: 1 } };
+}
+
+export function journalWorksRequest(
+  inst: string,
+  issnL: string,
+  page: number,
+  years?: YearParams,
+): ApiRequest {
+  return {
+    path: `/${inst}/journals/${issnL}/works`,
+    query: { page, page_size: 10, year_from: years?.year_from, year_to: years?.year_to },
+  };
+}
+
+export function similarRequest(inst: string, issnL: string): ApiRequest {
+  return { path: `/${inst}/journals/${issnL}/similar` };
+}
+
+export function dealsRequest(inst: string, status: "current" | "archive" | "all"): ApiRequest {
+  return { path: `/${inst}/deals`, query: { status } };
+}
+
+export function limitationsRequest(inst: string): ApiRequest {
+  return { path: `/${inst}/meta/limitations` };
+}
+
+export function freshnessRequest(inst: string): ApiRequest {
+  return { path: `/${inst}/meta/freshness` };
+}
+
+export function institutionsRequest(): ApiRequest {
+  return { path: "/institutions" };
+}
+
+export function funderDirectoryRequest(inst: string, params: FunderSearchParams): ApiRequest {
+  return {
+    path: `/${inst}/funders`,
+    query: {
+      q: params.q || undefined,
+      country: params.country?.join("|"),
+      policy_structured:
+        params.policy_structured === undefined ? undefined : String(params.policy_structured),
+      has_works: params.has_works === undefined ? undefined : String(params.has_works),
+      oa_publishing: params.oa_publishing?.join("|"),
+      green_archiving: params.green_archiving?.join("|"),
+      data_policy: params.data_policy?.join("|"),
+      sort: params.sort,
+      dir: params.dir,
+      offset: params.offset ?? 0,
+      limit: params.limit ?? 50,
+      year_from: params.year_from,
+      year_to: params.year_to,
+    },
+  };
+}
+
 /** POST helper against the same-origin /api proxy. Never logs request bodies. */
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   try {
@@ -431,33 +570,29 @@ export async function recommendJournals(
   return apiPost<RecommendResponse>(`/${inst}/journals/recommend`, req);
 }
 
-export async function fetchAuthors(
+export function authorsRequest(
   inst: string,
   q?: string,
   filters: AuthorSearchFilters = {},
   opts: AuthorFetchOptions = {},
-): Promise<AuthorSearchResponse> {
-  const data = await apiGet<AuthorSearchResponse>(`/${inst}/authors`, {
-    q,
-    limit: opts.limit,
-    faculty: filters.faculty?.join("|"),
-    org: filters.org?.join("|"),
-    has_orcid: filters.has_orcid,
-    works: filters.works?.join("|"),
-    last_pub: filters.last_pub?.join("|"),
-    topic: filters.topic?.join("|"),
-    sort: opts.sort,
-    offset: opts.offset,
-    year_from: opts.year_from,
-    year_to: opts.year_to,
-  });
-  trackSearch({
-    query: q ?? "",
-    results_count: data.total,
-    search_scope: "authors",
-    filters: Object.keys(filters).length ? { ...filters } : undefined,
-  });
-  return data;
+): ApiRequest {
+  return {
+    path: `/${inst}/authors`,
+    query: {
+      q,
+      limit: opts.limit,
+      faculty: filters.faculty?.join("|"),
+      org: filters.org?.join("|"),
+      has_orcid: filters.has_orcid,
+      works: filters.works?.join("|"),
+      last_pub: filters.last_pub?.join("|"),
+      topic: filters.topic?.join("|"),
+      sort: opts.sort,
+      offset: opts.offset,
+      year_from: opts.year_from,
+      year_to: opts.year_to,
+    },
+  };
 }
 
 export async function fetchAuthor(
@@ -567,7 +702,7 @@ export function encodeNamePath(name: string): string {
 }
 
 /** Usage filter dump for directory fetchers: paging keys stripped. */
-function usageDirectoryFilters(params: object): Record<string, unknown> | undefined {
+export function usageDirectoryFilters(params: object): Record<string, unknown> | undefined {
   const {
     q: _q,
     sort: _sort,
@@ -580,35 +715,28 @@ function usageDirectoryFilters(params: object): Record<string, unknown> | undefi
   return Object.keys(rest).length ? rest : undefined;
 }
 
-export async function fetchPublishers(
-  inst: string,
-  params: PublisherSearchParams = {},
-): Promise<PublisherSearchResponse> {
-  const data = await apiGet<PublisherSearchResponse>(`/${inst}/publishers`, {
-    q: params.q,
-    oa_type: params.oa_type?.join("|"),
-    deal: params.deal,
-    quartile: params.quartile?.join("|"),
-    topic: params.topic,
-    size: params.size?.join("|"),
-    // String(false) must survive: false is a meaningful filter value.
-    has_apc: params.has_apc === undefined ? undefined : String(params.has_apc),
-    has_works: params.has_works === undefined ? undefined : String(params.has_works),
-    sort: params.sort,
-    dir: params.dir,
-    offset: params.offset,
-    limit: params.limit,
-    include_facets: params.include_facets ? "true" : undefined,
-    year_from: params.year_from,
-    year_to: params.year_to,
-  });
-  trackSearch({
-    query: params.q ?? "",
-    results_count: data.total,
-    search_scope: "publishers",
-    filters: usageDirectoryFilters(params),
-  });
-  return data;
+export function publishersRequest(inst: string, params: PublisherSearchParams = {}): ApiRequest {
+  return {
+    path: `/${inst}/publishers`,
+    query: {
+      q: params.q,
+      oa_type: params.oa_type?.join("|"),
+      deal: params.deal,
+      quartile: params.quartile?.join("|"),
+      topic: params.topic,
+      size: params.size?.join("|"),
+      // String(false) must survive: false is a meaningful filter value.
+      has_apc: params.has_apc === undefined ? undefined : String(params.has_apc),
+      has_works: params.has_works === undefined ? undefined : String(params.has_works),
+      sort: params.sort,
+      dir: params.dir,
+      offset: params.offset,
+      limit: params.limit,
+      include_facets: params.include_facets ? "true" : undefined,
+      year_from: params.year_from,
+      year_to: params.year_to,
+    },
+  };
 }
 
 export async function fetchPublisher(
@@ -639,31 +767,24 @@ export async function fetchPublisherCrisGaps(
   });
 }
 
-export async function fetchOrgUnits(
-  inst: string,
-  params: OrgUnitSearchParams = {},
-): Promise<OrgUnitSearchResponse> {
-  const data = await apiGet<OrgUnitSearchResponse>(`/${inst}/orgunits`, {
-    level: params.level,
-    q: params.q,
-    faculty: params.faculty?.join("|"),
-    works: params.works?.join("|"),
-    uses_deals: params.uses_deals ? "true" : undefined,
-    sort: params.sort,
-    dir: params.dir,
-    offset: params.offset,
-    limit: params.limit,
-    include_facets: params.include_facets ? "true" : undefined,
-    year_from: params.year_from,
-    year_to: params.year_to,
-  });
-  trackSearch({
-    query: params.q ?? "",
-    results_count: data.total,
-    search_scope: "orgunits",
-    filters: usageDirectoryFilters(params),
-  });
-  return data;
+export function orgUnitsRequest(inst: string, params: OrgUnitSearchParams = {}): ApiRequest {
+  return {
+    path: `/${inst}/orgunits`,
+    query: {
+      level: params.level,
+      q: params.q,
+      faculty: params.faculty?.join("|"),
+      works: params.works?.join("|"),
+      uses_deals: params.uses_deals ? "true" : undefined,
+      sort: params.sort,
+      dir: params.dir,
+      offset: params.offset,
+      limit: params.limit,
+      include_facets: params.include_facets ? "true" : undefined,
+      year_from: params.year_from,
+      year_to: params.year_to,
+    },
+  };
 }
 
 export async function fetchOrgUnit(

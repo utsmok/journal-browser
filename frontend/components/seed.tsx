@@ -18,8 +18,20 @@ export function Seed<T>({
   data: T | null;
   children: ReactNode;
 }) {
-  if (data === null) return children;
+  return <Seeds entries={[{ queryKey, data }]}>{children}</Seeds>;
+}
+
+/** One cache entry for Seeds: the key a page's useQuery reads and its document. */
+export type SeedEntry = { queryKey: QueryKey; data: unknown };
+
+/**
+ * Seed for a page that reads several documents on first paint (a result list
+ * and its facets, say). Null documents are skipped, as in Seed.
+ */
+export function Seeds({ entries, children }: { entries: SeedEntry[]; children: ReactNode }) {
+  const present = entries.filter((entry) => entry.data !== null && entry.data !== undefined);
+  if (present.length === 0) return children;
   const queryClient = new QueryClient();
-  queryClient.setQueryData(queryKey, data);
+  for (const entry of present) queryClient.setQueryData(entry.queryKey, entry.data);
   return <HydrationBoundary state={dehydrate(queryClient)}>{children}</HydrationBoundary>;
 }

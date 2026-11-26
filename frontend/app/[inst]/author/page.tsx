@@ -1,6 +1,5 @@
 "use client";
 
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -31,13 +30,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useAuthorDirectory } from "@/hooks/use-api";
 import { useInstitution } from "@/hooks/use-institution";
 import { useSearchShortcut } from "@/hooks/use-search-shortcut";
 import { useSiteMeta } from "@/hooks/use-site-meta";
 import { useYearRange } from "@/hooks/use-year-filter";
 import {
   errorMessage,
-  fetchAuthors,
   type AuthorFacetBucket,
   type AuthorSearchFilters,
   type AuthorSearchSort,
@@ -179,18 +178,17 @@ function AuthorsView() {
     has_orcid: hasOrcid ?? undefined,
   };
 
-  const { data, isPending, isFetching, isError, error, refetch } = useQuery({
-    queryKey: ["authors", inst, sp.toString(), year_from ?? null, year_to ?? null] as const,
-    queryFn: () =>
-      fetchAuthors(inst, q || undefined, filters, {
-        sort: sort === "works_desc" ? undefined : sort,
-        offset: offset > 0 ? offset : undefined,
-        limit: pageSize === 50 ? undefined : pageSize,
-        year_from,
-        year_to,
-      }),
-    placeholderData: keepPreviousData,
-  });
+  const { data, isPending, isFetching, isError, error, refetch } = useAuthorDirectory(
+    q || undefined,
+    filters,
+    {
+      sort: sort === "works_desc" ? undefined : sort,
+      offset: offset > 0 ? offset : undefined,
+      limit: pageSize === 50 ? undefined : pageSize,
+      year_from,
+      year_to,
+    },
+  );
 
   const rows = data?.items ?? [];
   const disabled = data != null && !data.enabled;

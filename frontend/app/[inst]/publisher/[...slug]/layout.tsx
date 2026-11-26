@@ -4,13 +4,13 @@ import { Seed } from "@/components/seed";
 import { encodeNamePath, type PublisherDetailResponse } from "@/lib/api";
 import { docPage, pageContext } from "@/lib/page-meta";
 import { qk } from "@/lib/query-keys";
-import { fetchForRender } from "@/lib/server-fetch";
+import { fetchOrNotFound } from "@/lib/server-fetch";
 
 type PublisherRoute = { params: Promise<{ inst: string; slug: string[] }> };
 
 /** The publisher document the page reads before a year lens is set. */
 function loadPublisher(inst: string, name: string) {
-  return fetchForRender<PublisherDetailResponse>({
+  return fetchOrNotFound<PublisherDetailResponse>({
     path: `/api/v1/${inst}/publishers/${encodeNamePath(name)}`,
     query: { include_gaps: "false" },
   });

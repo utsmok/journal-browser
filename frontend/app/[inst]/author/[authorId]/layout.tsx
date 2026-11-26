@@ -4,13 +4,13 @@ import { Seed } from "@/components/seed";
 import type { AuthorProfile } from "@/lib/api";
 import { docPage, pageContext } from "@/lib/page-meta";
 import { qk } from "@/lib/query-keys";
-import { fetchForRender } from "@/lib/server-fetch";
+import { fetchOrNotFound } from "@/lib/server-fetch";
 
 type AuthorRoute = { params: Promise<{ inst: string; authorId: string }> };
 
 /** The author document the page reads before a year lens is set. */
 function loadAuthor(inst: string, authorId: string) {
-  return fetchForRender<AuthorProfile>({
+  return fetchOrNotFound<AuthorProfile>({
     path: `/api/v1/${inst}/authors/${encodeURIComponent(authorId)}`,
   });
 }

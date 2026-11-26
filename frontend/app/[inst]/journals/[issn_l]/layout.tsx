@@ -5,13 +5,13 @@ import { SectionMessages } from "@/i18n/section-messages";
 import type { JournalDetailResponse } from "@/lib/api";
 import { docPage, pageContext } from "@/lib/page-meta";
 import { qk } from "@/lib/query-keys";
-import { fetchForRender } from "@/lib/server-fetch";
+import { fetchOrNotFound } from "@/lib/server-fetch";
 
 type JournalRoute = { params: Promise<{ inst: string; issn_l: string }> };
 
 /** The journal document the page reads before a funder or year lens is set. */
 function loadJournal(inst: string, issnL: string) {
-  return fetchForRender<JournalDetailResponse>({
+  return fetchOrNotFound<JournalDetailResponse>({
     path: `/api/v1/${inst}/journals/${issnL}`,
     query: { include_gaps: "false" },
   });

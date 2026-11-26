@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fetchAuthors, fetchCollaborationMap } from "@/lib/api";
+import { authorsRequest, fetchCollaborationMap, getRequest } from "@/lib/api";
 
-describe("fetchAuthors query building", () => {
+describe("authorsRequest query building", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -11,16 +11,18 @@ describe("fetchAuthors query building", () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ total: 0 }), {}));
     vi.stubGlobal("fetch", fetchMock);
 
-    await fetchAuthors(
-      "ut",
-      "smith",
-      { faculty: ["fw", "et"], topic: ["a"] },
-      {
-        sort: "name_asc",
-        year_from: 2020,
-        year_to: 2025,
-        limit: 10,
-      },
+    await getRequest(
+      authorsRequest(
+        "ut",
+        "smith",
+        { faculty: ["fw", "et"], topic: ["a"] },
+        {
+          sort: "name_asc",
+          year_from: 2020,
+          year_to: 2025,
+          limit: 10,
+        },
+      ),
     );
 
     const url = fetchMock.mock.calls[0][0] as string;
@@ -41,7 +43,7 @@ describe("fetchAuthors query building", () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ total: 0 }), {}));
     vi.stubGlobal("fetch", fetchMock);
 
-    await fetchAuthors("ut");
+    await getRequest(authorsRequest("ut"));
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/ut/authors");
   });
 });

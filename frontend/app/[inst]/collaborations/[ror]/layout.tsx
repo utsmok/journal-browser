@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import type { CollaborationDetailResponse } from "@/lib/api";
 import { docPage, pageContext } from "@/lib/page-meta";
-import { fetchForRender } from "@/lib/server-fetch";
+import { fetchOrNotFound } from "@/lib/server-fetch";
 
 type PartnerRoute = { params: Promise<{ inst: string; ror: string }> };
 
@@ -12,7 +12,7 @@ export async function generateMetadata({ params }: PartnerRoute): Promise<Metada
   const path = `/collaborations/${encodeURIComponent(ror)}`;
   const [{ t, short }, doc] = await Promise.all([
     pageContext(inst, "collaborations"),
-    fetchForRender<CollaborationDetailResponse>({
+    fetchOrNotFound<CollaborationDetailResponse>({
       path: `/api/v1/${inst}${path}`,
       query: { include_works: "false" },
     }),

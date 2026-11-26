@@ -1,5 +1,8 @@
 import type {
+  AuthorFetchOptions,
+  AuthorSearchFilters,
   CollaborationSearchParams,
+  FunderSearchParams,
   JournalSearchParams,
   OrgUnitAuthorSort,
   OrgUnitLevel,
@@ -21,6 +24,9 @@ import type {
  */
 export const qk = {
   journals: (i: string, params: JournalSearchParams) => ["journals", i, params] as const,
+  /** The result list: full-text and semantic searches never share an entry. */
+  journalsSearch: (i: string, params: JournalSearchParams, semantic: boolean) =>
+    ["journals", i, params, semantic ? "semantic" : "fts"] as const,
   facets: (i: string, filters: JournalSearchParams) => ["facets", i, filters] as const,
   journal: (
     i: string,
@@ -33,7 +39,13 @@ export const qk = {
     ["journal-batch", i, issnLs, years.year_from ?? null, years.year_to ?? null] as const,
   journalGaps: (i: string, issnL: string) => ["journal-gaps", i, issnL] as const,
   similar: (i: string, issnL: string) => ["similar", i, issnL] as const,
-  works: (i: string, issnL: string, page: number) => ["works", i, issnL, page] as const,
+  works: (
+    i: string,
+    issnL: string,
+    page: number,
+    yearFrom: number | null = null,
+    yearTo: number | null = null,
+  ) => ["works", i, issnL, page, yearFrom, yearTo] as const,
   deals: (i: string, status: "current" | "archive" | "all") => ["deals", i, status] as const,
   limitations: (i: string) => ["limitations", i] as const,
   freshness: (i: string) => ["freshness", i] as const,
@@ -58,6 +70,10 @@ export const qk = {
   orgunitGaps: (i: string, level: OrgUnitLevel, name: string) =>
     ["orgunit-gaps", i, level, name] as const,
   funders: (i: string, q: string) => ["funders", i, q] as const,
+  funderDirectory: (i: string, params: FunderSearchParams) =>
+    ["funders", i, params.q ?? "", params] as const,
+  authors: (i: string, q: string | null, filters: AuthorSearchFilters, opts: AuthorFetchOptions) =>
+    ["authors", i, q, filters, opts] as const,
   funder: (i: string, id: number, yearFrom: number | null = null, yearTo: number | null = null) =>
     ["funder", i, id, yearFrom, yearTo] as const,
   author: (

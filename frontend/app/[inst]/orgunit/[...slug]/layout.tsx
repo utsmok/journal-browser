@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 
 import { Seed } from "@/components/seed";
 import { encodeNamePath, type OrgUnitDetailResponse, type OrgUnitLevel } from "@/lib/api";
 import { docPage, pageContext } from "@/lib/page-meta";
 import { qk } from "@/lib/query-keys";
-import { fetchForRender } from "@/lib/server-fetch";
+import { fetchOrNotFound } from "@/lib/server-fetch";
 
 const LEVELS: OrgUnitLevel[] = ["faculty", "group", "institute"];
 
@@ -20,7 +21,7 @@ function splitSlug(slug: string[]): { level: OrgUnitLevel | undefined; name: str
 
 /** The unit document the page reads before a year lens or author sort is set. */
 function loadOrgUnit(inst: string, level: OrgUnitLevel, name: string) {
-  return fetchForRender<OrgUnitDetailResponse>({
+  return fetchOrNotFound<OrgUnitDetailResponse>({
     path: `/api/v1/${inst}/orgunits/${level}/${encodeNamePath(name)}`,
     query: { include_gaps: "false", sort: "share" },
   });
@@ -47,8 +48,7 @@ export default async function OrgUnitLayout({
 }: OrgUnitRoute & { children: React.ReactNode }) {
   const { inst, slug } = await params;
   const { level, name } = splitSlug(slug);
-  // Any other level renders the page's unknown-type notice.
-  if (!level) return children;
+  if (!level) notFound();
   return (
     <Seed queryKey={qk.orgunit(inst, level, name)} data={await loadOrgUnit(inst, level, name)}>
       {children}

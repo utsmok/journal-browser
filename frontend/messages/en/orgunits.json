@@ -100,7 +100,6 @@
     "showing": "Showing {shown} of {total}"
   },
   "detail": {
-    "unknownType": "Unknown unit type. Use a faculty, group, or institute page.",
     "navOverview": "Overview",
     "navGroups": "Groups",
     "navTrend": "OA over time",

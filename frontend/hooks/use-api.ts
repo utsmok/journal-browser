@@ -7,7 +7,11 @@ import { useInstitution } from "./use-institution";
 import { trackSearch } from "@/lib/usage/tracker";
 import {
   apiGet,
+  authorsRequest,
   COLLAB_MULTI_KEYS,
+  dealsRequest,
+  facetFilters,
+  facetsRequest,
   fetchAuthor,
   fetchCollaboration,
   fetchCollaborationMap,
@@ -17,10 +21,22 @@ import {
   fetchJournalCrisGaps,
   fetchOrgUnit,
   fetchOrgUnitCrisGaps,
-  fetchOrgUnits,
   fetchPublisher,
   fetchPublisherCrisGaps,
-  fetchPublishers,
+  freshnessRequest,
+  funderDirectoryRequest,
+  getRequest,
+  institutionsRequest,
+  journalsRequest,
+  journalWorksRequest,
+  limitationsRequest,
+  orgUnitsRequest,
+  publishersRequest,
+  similarRequest,
+  usageDirectoryFilters,
+  type AuthorFetchOptions,
+  type AuthorSearchFilters,
+  type AuthorSearchResponse,
   type CollaborationSearchParams,
   type CrisGapsResponse,
   type DealOut,
@@ -35,8 +51,10 @@ import {
   type OrgUnitAuthorSort,
   type OrgUnitLevel,
   type OrgUnitSearchParams,
+  type OrgUnitSearchResponse,
   type PublisherPartsFilter,
   type PublisherSearchParams,
+  type PublisherSearchResponse,
   type SimilarJournalsBundle,
   type WorksPage,
   type YearParams,
@@ -76,6 +94,26 @@ function keepDataForSameEntity<T>(entityKey: readonly unknown[]) {
       : undefined;
 }
 
+type SearchEvent = Parameters<typeof trackSearch>[0];
+
+/**
+ * Records one search usage event per result a list shows, whether the
+ * browser fetched it or the server rendered it into the cache. Tracking from
+ * the query function would miss every server-rendered first view. A
+ * placeholder (the previous result kept on screen while the next loads) is
+ * not a result.
+ */
+function useSearchEvent<T>(
+  query: { data: T | undefined; dataUpdatedAt: number; isPlaceholderData: boolean },
+  event: (data: T) => SearchEvent,
+) {
+  const { data, dataUpdatedAt, isPlaceholderData } = query;
+  const record = React.useEffectEvent((shown: T) => trackSearch(event(shown)));
+  React.useEffect(() => {
+    if (data !== undefined && !isPlaceholderData) record(data);
+  }, [data, dataUpdatedAt, isPlaceholderData]);
+}
+
 /** Filter keys stored on a usage search event; paging/sort keys dropped. */
 const FILTER_KEYS = [
   "search_in",
@@ -109,39 +147,27 @@ function usageFilters(params: JournalSearchParams): Record<string, unknown> | un
 export function useJournals(params: JournalSearchParams, semantic?: boolean) {
   const inst = useInstitution();
   const epoch = useFetchEpoch(params);
-  return useQuery({
-    queryKey: [...qk.journals(inst, params), semantic ? "semantic" : "fts"] as const,
+  const query = useQuery({
+    queryKey: qk.journalsSearch(inst, params, Boolean(semantic)),
     queryFn: async () => {
       const at = epoch;
-      const data = semantic
-        ? // Free-text "journals like this description": embeddings, not FTS.
-          // Filter/sort params do not apply to the vector ranking, but the
-          // cursor does: the endpoint pages by offset into its ranking.
-          await apiGet<JournalSearchResponse>(`/${inst}/journals/semantic-search`, {
-            q: params.q ?? "",
-            limit: params.limit ?? 40,
-            cursor: params.cursor,
-            // The eligibility toggles apply to semantic search too; both are
-            // server-side defaults, so they travel only when switched off.
-            active: params.active,
-            vouched: params.vouched,
-          })
-        : await apiGet<JournalSearchResponse>(`/${inst}/journals`, {
-            ...params,
-          });
+      const data = await getRequest<JournalSearchResponse>(
+        journalsRequest(inst, params, Boolean(semantic)),
+      );
       if (at !== epoch) throw new Error("stale fetch discarded");
-      trackSearch({
-        query: params.q ?? "",
-        results_count: data.total,
-        search_scope: "journals",
-        // Filter/sort params do not apply to the semantic ranking.
-        filters: semantic ? undefined : usageFilters(params),
-      });
       return data;
     },
     placeholderData: keepPreviousData,
     staleTime: 60_000,
   });
+  useSearchEvent(query, (data) => ({
+    query: params.q ?? "",
+    results_count: data.total,
+    search_scope: "journals",
+    // Filter/sort params do not apply to the semantic ranking.
+    filters: semantic ? undefined : usageFilters(params),
+  }));
+  return query;
 }
 
 /**
@@ -155,15 +181,10 @@ export function useFacets(
   // Facet counts ignore the free-text query (and scope): a zero-hit query
   // must still show which filter values exist to pivot to, Scopus-style.
   const inst = useInstitution();
-  const { cursor: _c, sort: _s, limit: _l, q: _q, search_in: _si, ...filters } = params;
+  const filters = facetFilters(params);
   return useQuery({
     queryKey: qk.facets(inst, filters),
-    queryFn: () =>
-      apiGet<JournalSearchResponse>(`/${inst}/journals`, {
-        ...filters,
-        include_facets: true,
-        limit: 1,
-      }),
+    queryFn: () => getRequest<JournalSearchResponse>(facetsRequest(inst, filters)),
     enabled,
     placeholderData: keepPreviousData,
     staleTime: 60_000,
@@ -248,7 +269,7 @@ export function useSimilar(issnL: string | undefined) {
   const inst = useInstitution();
   return useQuery({
     queryKey: qk.similar(inst, issnL ?? ""),
-    queryFn: () => apiGet<SimilarJournalsBundle>(`/${inst}/journals/${issnL}/similar`),
+    queryFn: () => getRequest<SimilarJournalsBundle>(similarRequest(inst, issnL ?? "")),
     enabled: Boolean(issnL),
     retry: false,
     staleTime: 60_000,
@@ -263,18 +284,8 @@ export function useSimilar(issnL: string | undefined) {
 export function useJournalWorks(issnL: string | undefined, page: number, years?: YearParams) {
   const inst = useInstitution();
   return useQuery({
-    queryKey: [
-      ...qk.works(inst, issnL ?? "", page),
-      years?.year_from ?? null,
-      years?.year_to ?? null,
-    ] as const,
-    queryFn: () =>
-      apiGet<WorksPage>(`/${inst}/journals/${issnL}/works`, {
-        page,
-        page_size: 10,
-        year_from: years?.year_from,
-        year_to: years?.year_to,
-      }),
+    queryKey: qk.works(inst, issnL ?? "", page, years?.year_from ?? null, years?.year_to ?? null),
+    queryFn: () => getRequest<WorksPage>(journalWorksRequest(inst, issnL ?? "", page, years)),
     enabled: Boolean(issnL),
     placeholderData: keepPreviousData,
     retry: false,
@@ -289,7 +300,7 @@ export function useDeals(
   const inst = useInstitution();
   return useQuery({
     queryKey: qk.deals(inst, status),
-    queryFn: () => apiGet<DealOut[]>(`/${inst}/deals`, { status }),
+    queryFn: () => getRequest<DealOut[]>(dealsRequest(inst, status)),
     enabled: enabled && inst !== "",
     placeholderData: keepPreviousData,
     staleTime: 60_000,
@@ -300,7 +311,7 @@ export function useLimitations() {
   const inst = useInstitution();
   return useQuery({
     queryKey: qk.limitations(inst),
-    queryFn: () => apiGet<LimitationOut[]>(`/${inst}/meta/limitations`),
+    queryFn: () => getRequest<LimitationOut[]>(limitationsRequest(inst)),
     staleTime: 10 * 60_000,
   });
 }
@@ -309,7 +320,7 @@ export function useLimitations() {
 export function useInstitutionsDirectory() {
   return useQuery({
     queryKey: qk.institutions(),
-    queryFn: () => apiGet<InstitutionDirectoryEntry[]>("/institutions"),
+    queryFn: () => getRequest<InstitutionDirectoryEntry[]>(institutionsRequest()),
     staleTime: 10 * 60_000,
   });
 }
@@ -319,7 +330,7 @@ export function useFreshness(instOverride?: string) {
   const inst = instOverride ?? ctxInst;
   return useQuery({
     queryKey: qk.freshness(inst),
-    queryFn: () => apiGet<FreshnessResponse>(`/${inst}/meta/freshness`),
+    queryFn: () => getRequest<FreshnessResponse>(freshnessRequest(inst)),
     // Global pages (landing, /admin) have no institution segment; querying
     // //meta/freshness would just 404.
     enabled: inst !== "",
@@ -329,11 +340,18 @@ export function useFreshness(instOverride?: string) {
 /** Publisher browse list; facets are bundled in the response. */
 export function usePublishers(params: PublisherSearchParams) {
   const inst = useInstitution();
-  return useQuery({
+  const query = useQuery({
     queryKey: qk.publishers(inst, params),
-    queryFn: () => fetchPublishers(inst, params),
+    queryFn: () => getRequest<PublisherSearchResponse>(publishersRequest(inst, params)),
     placeholderData: keepPreviousData,
   });
+  useSearchEvent(query, (data) => ({
+    query: params.q ?? "",
+    results_count: data.total,
+    search_scope: "publishers",
+    filters: usageDirectoryFilters(params),
+  }));
+  return query;
 }
 
 /**
@@ -378,11 +396,39 @@ export function usePublisherCrisGaps(
 /** Org-unit browse list (faculties or research groups). */
 export function useOrgUnits(params: OrgUnitSearchParams) {
   const inst = useInstitution();
-  return useQuery({
+  const query = useQuery({
     queryKey: qk.orgunits(inst, params),
-    queryFn: () => fetchOrgUnits(inst, params),
+    queryFn: () => getRequest<OrgUnitSearchResponse>(orgUnitsRequest(inst, params)),
     placeholderData: keepPreviousData,
   });
+  useSearchEvent(query, (data) => ({
+    query: params.q ?? "",
+    results_count: data.total,
+    search_scope: "orgunits",
+    filters: usageDirectoryFilters(params),
+  }));
+  return query;
+}
+
+/** Author directory listing: facets ride along in the response. */
+export function useAuthorDirectory(
+  q: string | undefined,
+  filters: AuthorSearchFilters,
+  opts: AuthorFetchOptions,
+) {
+  const inst = useInstitution();
+  const query = useQuery({
+    queryKey: qk.authors(inst, q ?? null, filters, opts),
+    queryFn: () => getRequest<AuthorSearchResponse>(authorsRequest(inst, q, filters, opts)),
+    placeholderData: keepPreviousData,
+  });
+  useSearchEvent(query, (data) => ({
+    query: q ?? "",
+    results_count: data.total,
+    search_scope: "authors",
+    filters: { ...filters },
+  }));
+  return query;
 }
 
 export function useOrgUnit(
@@ -444,35 +490,18 @@ export function useFunders(q: string | undefined, enabled: boolean) {
 /** Funder directory listing: paged, faceted, and year-scoped over the canon. */
 export function useFunderDirectory(params: FunderSearchParams) {
   const inst = useInstitution();
-  return useQuery({
-    queryKey: [...qk.funders(inst, params.q ?? ""), params] as const,
-    queryFn: async () => {
-      const data = await apiGet<FunderSearchResponse>(`/${inst}/funders`, {
-        q: params.q || undefined,
-        country: params.country?.join("|"),
-        policy_structured:
-          params.policy_structured === undefined ? undefined : String(params.policy_structured),
-        has_works: params.has_works === undefined ? undefined : String(params.has_works),
-        oa_publishing: params.oa_publishing?.join("|"),
-        green_archiving: params.green_archiving?.join("|"),
-        data_policy: params.data_policy?.join("|"),
-        sort: params.sort,
-        dir: params.dir,
-        offset: params.offset ?? 0,
-        limit: params.limit ?? 50,
-        year_from: params.year_from,
-        year_to: params.year_to,
-      });
-      trackSearch({
-        query: params.q ?? "",
-        results_count: data.total,
-        search_scope: "funders",
-      });
-      return data;
-    },
+  const query = useQuery({
+    queryKey: qk.funderDirectory(inst, params),
+    queryFn: () => getRequest<FunderSearchResponse>(funderDirectoryRequest(inst, params)),
     enabled: inst !== "",
     placeholderData: keepPreviousData,
   });
+  useSearchEvent(query, (data) => ({
+    query: params.q ?? "",
+    results_count: data.total,
+    search_scope: "funders",
+  }));
+  return query;
 }
 
 export function useFunder(id: number | undefined, years?: YearParams) {
@@ -500,21 +529,19 @@ function collabUsageFilters(p: CollaborationSearchParams): Record<string, unknow
  * range of the whole filter set, not only of the page shown. */
 export function useCollaborations(params: CollaborationSearchParams, offset: number) {
   const inst = useInstitution();
-  return useQuery({
+  const query = useQuery({
     queryKey: qk.collaborations(inst, params, offset),
-    queryFn: async () => {
-      const data = await fetchCollaborations(inst, params, offset);
-      trackSearch({
-        query: params.q ?? "",
-        results_count: data.total_partners,
-        search_scope: "collaborations",
-        filters: collabUsageFilters(params),
-      });
-      return data;
-    },
+    queryFn: () => fetchCollaborations(inst, params, offset),
     enabled: inst !== "",
     placeholderData: keepPreviousData,
   });
+  useSearchEvent(query, (data) => ({
+    query: params.q ?? "",
+    results_count: data.total_partners,
+    search_scope: "collaborations",
+    filters: collabUsageFilters(params),
+  }));
+  return query;
 }
 
 export function useCollaborationMap(params: CollaborationSearchParams) {

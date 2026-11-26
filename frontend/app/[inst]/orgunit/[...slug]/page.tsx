@@ -3,11 +3,10 @@
 import { ArrowRight, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { notFound, useParams } from "next/navigation";
 import * as React from "react";
 
 import { DealBadge, OaTypeBadge, QuartileBadge } from "@/components/badges";
-import { BackLink } from "@/components/back-link";
 import { CardPager } from "@/components/card-pager";
 import { orgTypeCssVar } from "@/components/collaborations/labels";
 import { CollapsibleCard } from "@/components/collapsible-card";
@@ -64,15 +63,7 @@ export default function OrgUnitPage() {
     authorSort,
   );
 
-  if (!level)
-    return (
-      <div className="mx-auto max-w-screen-2xl px-4 py-10">
-        <p className="text-[var(--destructive)]">{t("detail.unknownType")}</p>
-        <div className="mt-2">
-          <BackLink href={`/${inst}/orgunit`} label={t("detail.back.faculty")} />
-        </div>
-      </div>
-    );
+  if (!level) notFound();
   if (isPending && !data)
     return (
       <DetailSkeleton
