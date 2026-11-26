@@ -27,7 +27,10 @@ type LoadedDocument = { status: number; body: unknown };
 // backend was unreachable.
 const loadDocument = cache(async (url: string, revalidate: number): Promise<LoadedDocument> => {
   try {
-    const res = await fetch(`${API}${url}`, { next: { revalidate } });
+    const res = await fetch(`${API}${url}`, {
+      next: { revalidate },
+      signal: AbortSignal.timeout(15_000),
+    });
     return { status: res.status, body: res.ok ? await res.json() : null };
   } catch {
     return { status: 0, body: null };

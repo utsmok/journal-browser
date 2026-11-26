@@ -44,10 +44,10 @@ type GreenOaKey = keyof typeof GREEN_OA_KEYS;
 
 const MUTED = "text-[var(--muted-foreground)]";
 
-/** APC as the browse table shows it: the OpenAlex list price, else the range
- * institutions reported to OpenAPC, else nothing. */
+/** APC as the browse table shows it: an OpenAlex or DOAJ list price, else the
+ * range institutions reported to OpenAPC, else nothing. */
 export function apcText(item: JournalBatchItem): string | null {
-  if (item.apc_source === "openalex" && item.apc_price != null) {
+  if ((item.apc_source === "openalex" || item.apc_source === "doaj") && item.apc_price != null) {
     return apcAmount(item.apc_currency, item.apc_price);
   }
   if (item.apc_source === "openapc" && item.apc_low != null) {
@@ -56,6 +56,12 @@ export function apcText(item: JournalBatchItem): string | null {
       : `€${formatApc(item.apc_low)}`;
   }
   return null;
+}
+
+function apcCsvText(item: JournalBatchItem, none: string, paidLabel: string): string {
+  const base = apcText(item);
+  if (!base) return none;
+  return item.apc_source === "openapc" ? `${base} (${paidLabel})` : base;
 }
 
 /** Column names and cell wording, shared by the table and the CSV export. */
@@ -78,6 +84,7 @@ export interface ShortlistLabels {
   yes: string;
   no: string;
   none: string;
+  paid: string;
   noDeal: string;
   unknownPublisher: string;
   dealFallback: (id: number) => string;
@@ -109,6 +116,7 @@ export function useShortlistLabels(): ShortlistLabels {
     yes: t("cells.yes"),
     no: t("cells.no"),
     none: t("cells.none"),
+    paid: tc("apc.paidLabel"),
     noDeal: t("cells.noDeal"),
     unknownPublisher: t("cells.unknownPublisher"),
     dealFallback: (id: number) => t("cells.dealFallback", { id }),
@@ -142,7 +150,7 @@ export function shortlistCsv(rows: ShortlistRow[], text: ShortlistLabels): strin
         text.none,
         text.none,
         text.none,
-        tail,
+        ...(withAdded ? [tail] : []),
       ];
     }
     return [
@@ -155,12 +163,12 @@ export function shortlistCsv(rows: ShortlistRow[], text: ShortlistLabels): strin
         .map((deal) => displayPublisherName(deal.publisher_name) || text.dealFallback(deal.id))
         .join("; "),
       text.oaType(item.oa_type),
-      apcText(item) ?? text.none,
+      apcCsvText(item, text.none, text.paid),
       item.quartile ?? text.none,
       item.works,
       item.is_in_doaj ? text.yes : text.no,
       text.greenOa(item.green_oa),
-      tail,
+      ...(withAdded ? [tail] : []),
     ];
   });
   const header = [
@@ -393,12 +401,25 @@ function JournalRow({
         )}
       </Cell>
       <Cell label={c.apc} className="whitespace-nowrap">
-        <span
-          className={cn("tabular-nums", !apc && MUTED)}
-          title={item?.apc_source === "openalex" ? th("table.listPriceTitle") : undefined}
-        >
-          {apc ?? text.none}
-        </span>
+        {apc ? (
+          <span
+            className="inline-flex items-center gap-1"
+            title={
+              item?.apc_source === "openalex" || item?.apc_source === "doaj"
+                ? th("table.listPriceTitle")
+                : th("table.apcTooltip")
+            }
+          >
+            <span className="tabular-nums">{apc}</span>
+            {item?.apc_source === "openapc" && (
+              <span className="text-[11px] text-[var(--muted-foreground)]">
+                {tc("apc.paidLabel")}
+              </span>
+            )}
+          </span>
+        ) : (
+          <span className={cn("tabular-nums", MUTED)}>{text.none}</span>
+        )}
       </Cell>
       <Cell label={c.quartile} className="whitespace-nowrap">
         {item?.quartile ? (
@@ -411,7 +432,11 @@ function JournalRow({
         <span className="tabular-nums">{item ? formatInt(item.works) : text.none}</span>
       </Cell>
       <Cell label={c.doaj} className="whitespace-nowrap">
-        <span title={tc(item?.is_in_doaj ? "facets.titleDoajYes" : "facets.titleDoajNo")}>
+        <span
+          title={
+            item ? tc(item.is_in_doaj ? "facets.titleDoajYes" : "facets.titleDoajNo") : undefined
+          }
+        >
           {item ? (item.is_in_doaj ? text.yes : text.no) : text.none}
         </span>
       </Cell>
@@ -435,7 +460,7 @@ function JournalRow({
             onClick={() => onRemove(row)}
             aria-label={t("actions.remove", { title })}
             title={t("actions.remove", { title })}
-            className="relative inline-flex size-6 items-center justify-center rounded-[var(--radius)] text-[var(--muted-foreground)] before:absolute before:-inset-2 hover:bg-[var(--muted)] hover:text-[var(--destructive)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+            className="relative inline-flex size-6 items-center justify-center rounded-[var(--radius)] text-[var(--muted-foreground)] before:absolute before:-inset-[10px] hover:bg-[var(--muted)] hover:text-[var(--destructive)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
           >
             <X aria-hidden className="size-4" />
           </button>

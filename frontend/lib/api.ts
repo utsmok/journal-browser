@@ -493,13 +493,13 @@ export function journalWorksRequest(
   years?: YearParams,
 ): ApiRequest {
   return {
-    path: `/${inst}/journals/${issnL}/works`,
+    path: `/${inst}/journals/${encodeURIComponent(issnL)}/works`,
     query: { page, page_size: 10, year_from: years?.year_from, year_to: years?.year_to },
   };
 }
 
 export function similarRequest(inst: string, issnL: string): ApiRequest {
-  return { path: `/${inst}/journals/${issnL}/similar` };
+  return { path: `/${inst}/journals/${encodeURIComponent(issnL)}/similar` };
 }
 
 export function dealsRequest(inst: string, status: "current" | "archive" | "all"): ApiRequest {

@@ -116,8 +116,9 @@ export function addJournal(inst: string, issnL: string, title: string): void {
 }
 
 export function removeJournal(inst: string, issnL: string): void {
+  const canonical = normalizeIssnL(issnL) ?? issnL;
   const current = snapshot(inst);
-  const next = current.filter((entry) => entry.issnL !== issnL);
+  const next = current.filter((entry) => entry.issnL !== canonical);
   if (next.length !== current.length) commit(inst, next);
 }
 
@@ -147,15 +148,18 @@ export function saveJournals(inst: string, journals: ShortlistJournal[]): number
 
 /** Query parameter that carries a shared list: `?j=0034-4257,0376-7388`. */
 export const SHARE_PARAM = "j";
+const MAX_SHARE_ISSNS = 200;
 
-/** ISSN-Ls of a share link, canonical and without duplicates; values that
- * are not ISSNs are dropped. */
+/** ISSN-Ls of a share link, canonical, deduplicated, and capped at 200. */
 export function parseShareIssns(raw: string | null | undefined): string[] {
   if (!raw) return [];
   const issnLs: string[] = [];
   for (const part of raw.split(",")) {
     const canonical = normalizeIssnL(part);
-    if (canonical && !issnLs.includes(canonical)) issnLs.push(canonical);
+    if (canonical && !issnLs.includes(canonical)) {
+      issnLs.push(canonical);
+      if (issnLs.length >= MAX_SHARE_ISSNS) break;
+    }
   }
   return issnLs;
 }
@@ -203,7 +207,7 @@ export function downloadCsv(filename: string, text: string): void {
   link.href = url;
   link.download = filename;
   link.click();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /** `shortlist-ut-2026-11-25.csv` */

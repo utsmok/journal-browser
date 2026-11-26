@@ -31,10 +31,10 @@ function ShortlistCount({ inst, active }: { inst: string; active: boolean }) {
       aria-label={label}
       aria-current={active ? "page" : undefined}
       title={label}
-      className="inline-flex h-8 items-center gap-1.5 rounded-[var(--radius)] px-2 text-sm text-white/90 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+      className="inline-flex min-h-11 items-center gap-1.5 rounded-[var(--radius)] px-2 text-sm text-white/90 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 lg:h-8 lg:min-h-0"
     >
       <Bookmark aria-hidden className="size-4" />
-      <span className="hidden sm:inline">{t("nav.shortlist")}</span>
+      <span>{t("nav.shortlist")}</span>
       {count > 0 && (
         <span aria-hidden className="tabular-nums">
           ({count})

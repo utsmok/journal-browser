@@ -44,6 +44,7 @@
     "curated": "Curated",
     "curationPending": "Curation pending",
     "clear": "Clear filter",
+    "chipSearch": "Search: “{value}”",
     "empty": "No deals match the current filter."
   },
   "section": {
@@ -71,6 +72,7 @@
     "archiveBadgeTitle": "Archived deal: no longer in effect.",
     "curationPending": "Curation pending",
     "descriptionFallback": "{duration} · {count, plural, one {# journal} other {# journals}}",
+    "descriptionFallbackNoCount": "{duration}",
     "journals": "{count, plural, one {# journal} other {# journals}}",
     "oaInYear": "{count, number} OA articles in {year}",
     "capUsage": "Cap usage {year}: {count, number}",

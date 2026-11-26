@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 
 import { Seeds } from "@/components/seed";
 import { SectionMessages } from "@/i18n/section-messages";
@@ -10,10 +11,18 @@ import { fetchOrNotFound, fetchForRender } from "@/lib/server-fetch";
 
 type JournalRoute = { params: Promise<{ inst: string; issn_l: string }> };
 
+function decodeIssnL(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    notFound();
+  }
+}
+
 /** The journal document the page reads before a funder or year lens is set. */
 function loadJournal(inst: string, issnL: string) {
   return fetchOrNotFound<JournalDetailResponse>({
-    path: `/${inst}/journals/${issnL}`,
+    path: `/${inst}/journals/${encodeURIComponent(issnL)}`,
     query: { include_gaps: "false" },
   });
 }
@@ -30,7 +39,7 @@ function loadJournalSections(inst: string, issnL: string) {
 
 export async function generateMetadata({ params }: JournalRoute): Promise<Metadata> {
   const { inst, issn_l } = await params;
-  const issnL = decodeURIComponent(issn_l);
+  const issnL = decodeIssnL(issn_l);
   const [{ t, short }, doc] = await Promise.all([
     pageContext(inst, "journals"),
     loadJournal(inst, issnL),
@@ -48,7 +57,7 @@ export default async function JournalLayout({
   params,
 }: JournalRoute & { children: React.ReactNode }) {
   const { inst, issn_l } = await params;
-  const issnL = decodeURIComponent(issn_l);
+  const issnL = decodeIssnL(issn_l);
   const [[similar, works], journal] = await Promise.all([
     loadJournalSections(inst, issnL),
     loadJournal(inst, issnL),

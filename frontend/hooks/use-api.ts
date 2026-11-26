@@ -202,14 +202,14 @@ export function useJournal(issnL: string | undefined, funderId?: number, years?:
       years?.year_to ?? null,
     ),
     queryFn: () =>
-      apiGet<JournalDetailResponse>(`/${inst}/journals/${issnL}`, {
+      apiGet<JournalDetailResponse>(`/${inst}/journals/${encodeURIComponent(issnL ?? "")}`, {
         funder: funderId,
         year_from: years?.year_from,
         year_to: years?.year_to,
         include_gaps: "false",
       }),
     enabled: Boolean(issnL),
-    placeholderData: keepDataForSameEntity(qk.journal(inst, issnL ?? "")),
+    placeholderData: keepDataForSameEntity(["journal", inst, issnL ?? ""]),
     staleTime: 60_000,
   });
 }
@@ -221,7 +221,7 @@ export function useAuthor(authorId: string | undefined, years?: YearParams) {
     queryKey: qk.author(inst, authorId ?? "", years?.year_from ?? null, years?.year_to ?? null),
     queryFn: () => fetchAuthor(inst, authorId ?? "", years),
     enabled: Boolean(authorId),
-    placeholderData: keepDataForSameEntity(qk.author(inst, authorId ?? "")),
+    placeholderData: keepDataForSameEntity(["author", inst, authorId ?? ""]),
   });
 }
 
@@ -368,7 +368,7 @@ export function usePublisher(
     queryKey: qk.publisher(inst, name ?? "", years?.year_from ?? null, years?.year_to ?? null),
     queryFn: () => fetchPublisher(inst, name ?? "", years, undefined, false),
     enabled: Boolean(name),
-    placeholderData: keepDataForSameEntity(qk.publisher(inst, name ?? "")),
+    placeholderData: keepDataForSameEntity(["publisher", inst, name ?? ""]),
   });
 }
 
@@ -449,7 +449,7 @@ export function useOrgUnit(
     ),
     queryFn: () => fetchOrgUnit(inst, level ?? "faculty", name ?? "", years, sort, false),
     enabled: Boolean(level && name),
-    placeholderData: keepPreviousData,
+    placeholderData: keepDataForSameEntity(["orgunit", inst, level ?? "faculty", name ?? ""]),
   });
 }
 
@@ -514,7 +514,7 @@ export function useFunder(id: number | undefined, years?: YearParams) {
         year_to: years?.year_to,
       }),
     enabled: Boolean(id) && inst !== "",
-    placeholderData: keepDataForSameEntity(qk.funder(inst, id ?? 0)),
+    placeholderData: keepDataForSameEntity(["funder", inst, id ?? 0]),
   });
 }
 

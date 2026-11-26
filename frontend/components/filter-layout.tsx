@@ -68,6 +68,9 @@ export function FilterLayout({
     onClose: close,
     returnFocusTo: buttonRef,
   });
+  React.useEffect(() => {
+    if (sidebar) setOpen(false);
+  }, [sidebar]);
   const panelId = React.useId();
   // With a control above the filters, the sidebar column is the card and
   // the facets sit inside it; otherwise the facets are the card.
@@ -117,14 +120,15 @@ export function FilterLayout({
           <aside
             id={panelId}
             ref={panelRef}
+            tabIndex={sheetOpen ? -1 : undefined}
             role={sheetOpen ? "dialog" : undefined}
             aria-modal={sheetOpen ? true : undefined}
-            aria-labelledby={labelId}
+            aria-labelledby={sheetOpen ? labelId : undefined}
             className={cn(
-              CARD,
+              !columnIsCard && CARD,
               sheetOpen &&
-                "fixed inset-x-0 bottom-0 z-[60] flex max-h-[85dvh] flex-col rounded-t-[var(--radius)] border-t border-[var(--border)] bg-[var(--card)] shadow-[0_-12px_32px_rgba(0,0,0,0.35)]",
-              !sheetOpen && "hidden",
+                "fixed inset-x-0 bottom-0 z-[60] flex max-h-[85dvh] flex-col overscroll-contain rounded-t-[var(--radius)] border-t border-[var(--border)] bg-[var(--card)] shadow-[0_-12px_32px_rgba(0,0,0,0.35)]",
+              !sheetOpen && "hidden min-[960px]:block",
             )}
           >
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-1 min-[960px]:border-b-0 min-[960px]:px-4 min-[960px]:pb-0 min-[960px]:pt-4">
@@ -151,7 +155,7 @@ export function FilterLayout({
                 <X aria-hidden className="size-5" />
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4 min-[960px]:overflow-visible min-[960px]:pt-3">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 min-[960px]:overflow-visible min-[960px]:pt-3">
               {headerSlot && (
                 <div className="mb-3 border-b border-[var(--border)] pb-3">{headerSlot}</div>
               )}

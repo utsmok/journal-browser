@@ -64,6 +64,9 @@ export function ShortlistView({
     () => (shared ? sharedIssnLs : entries.map((entry) => entry.issnL)),
     [shared, sharedIssnLs, entries],
   );
+  React.useEffect(() => {
+    setCopyResult(null);
+  }, [inst, issnLs]);
   const query = useJournalBatch(issnLs, { year_from, year_to });
   const savedByIssn = React.useMemo(
     () => new Map(entries.map((entry) => [entry.issnL, entry])),
@@ -156,28 +159,21 @@ export function ShortlistView({
               )}
             </>
           ) : (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
-                disabled={rows.length === 0}
-                onClick={() => downloadCsv(shortlistCsvFilename(inst), shortlistCsv(rows, labels))}
-              >
-                <Download aria-hidden className="size-3.5" />
-                {t("actions.exportCsv")}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
-                onClick={() => void copyLink()}
-              >
-                <Link2 aria-hidden className="size-3.5" />
-                {t("actions.copyLink")}
-              </Button>
-            </>
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void copyLink()}>
+              <Link2 aria-hidden className="size-3.5" />
+              {t("actions.copyLink")}
+            </Button>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            disabled={rows.length === 0}
+            onClick={() => downloadCsv(shortlistCsvFilename(inst), shortlistCsv(rows, labels))}
+          >
+            <Download aria-hidden className="size-3.5" />
+            {t("actions.exportCsv")}
+          </Button>
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.print()}>
             <Printer aria-hidden className="size-3.5" />
             {t("actions.print")}

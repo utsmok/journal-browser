@@ -3,6 +3,8 @@
 import { ChevronDown } from "lucide-react";
 import * as React from "react";
 
+import { FILTER_SIDEBAR_QUERY } from "@/components/filter-layout";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/utils";
 
 /**
@@ -14,15 +16,20 @@ import { cn } from "@/lib/utils";
 export function MobileDisclosure({
   label,
   className,
+  lazy = false,
   children,
 }: {
   /** Button text, also the accessible name of the section. */
   label: string;
   className?: string;
+  /** Defer mounting children until opened on mobile or visible from 960px. */
+  lazy?: boolean;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = React.useState(false);
+  const desktop = useMediaQuery(FILTER_SIDEBAR_QUERY);
   const panelId = React.useId();
+  const mounted = !lazy || open || desktop;
   return (
     <div className={cn("min-w-0", className)}>
       <button
@@ -39,7 +46,7 @@ export function MobileDisclosure({
         />
       </button>
       <div id={panelId} className={cn("min-[960px]:block", !open && "hidden")}>
-        {children}
+        {mounted ? children : null}
       </div>
     </div>
   );

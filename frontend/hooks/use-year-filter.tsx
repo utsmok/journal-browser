@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import * as React from "react";
 
 import { useInstitutionsDirectory } from "./use-api";
-import { useInstitution } from "./use-institution";
+import { useInstitution, useInstitutionRow } from "./use-institution";
 import { useSiteMeta } from "./use-site-meta";
 import { instFromSegment } from "@/lib/global-segments";
 
@@ -83,7 +83,9 @@ export function YearFilterProvider({ children }: { children: React.ReactNode }) 
 export function useYearBounds(): { start?: number; end?: number } {
   const inst = useYearInst();
   const site = useSiteMeta();
-  const row = useInstitutionsDirectory().data?.find((i) => i.code === inst);
+  const providedRow = useInstitutionRow(inst);
+  const queriedRow = useInstitutionsDirectory().data?.find((i) => i.code === inst);
+  const row = providedRow ?? queriedRow;
   return {
     start: site.windowStart,
     end: row?.data_window_end ?? new Date().getFullYear(),

@@ -35,6 +35,9 @@ export function SiteMenu({ children }: { children: React.ReactNode }) {
   const open = openPath === pathname && !inline;
   const openerRef = React.useRef<HTMLElement | null>(null);
   const close = React.useCallback(() => setOpenPath(null), []);
+  React.useEffect(() => {
+    if (inline) setOpenPath(null);
+  }, [inline]);
   const { panelRef, labelId } = useSheetDialog({
     open,
     modal: !inline,
@@ -71,13 +74,14 @@ export function SiteMenu({ children }: { children: React.ReactNode }) {
       <div
         id={MENU_ID}
         ref={panelRef}
+        tabIndex={open ? -1 : undefined}
         role={open ? "dialog" : undefined}
         aria-modal={open ? true : undefined}
-        aria-labelledby={labelId}
+        aria-labelledby={open ? labelId : undefined}
         className={cn(
           "hidden lg:contents",
           open &&
-            "fixed inset-y-0 right-0 z-[60] flex w-full max-w-sm flex-col gap-6 overflow-y-auto bg-[var(--secondary)] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-2xl",
+            "fixed inset-y-0 right-0 z-[60] flex w-full max-w-sm flex-col gap-6 overflow-y-auto overscroll-contain bg-[var(--secondary)] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-2xl",
         )}
       >
         <div className="flex items-center justify-between gap-2 border-b border-white/15 px-1 pb-2 lg:hidden">

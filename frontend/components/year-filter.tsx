@@ -24,7 +24,9 @@ function useYearScope() {
   const yearScoped =
     !pathname.startsWith(`/${inst}/deals`) &&
     !pathname.startsWith(`/${inst}/about`) &&
-    !pathname.startsWith(`/${inst}/guide`);
+    !pathname.startsWith(`/${inst}/guide`) &&
+    !pathname.startsWith(`/${inst}/docs`) &&
+    !pathname.startsWith(`/${inst}/admin`);
   const active = effectiveYearRange(range, { start, end });
   const last5From = Math.max(start ?? 1900, (end ?? new Date().getFullYear()) - (LAST5_SPAN - 1));
   const isLast5 = active?.to === end && active?.from === last5From;

@@ -282,7 +282,7 @@ function PartnersPageInner() {
           }}
         />
 
-        <MobileDisclosure label={t("overview.toggle")} className="mb-6">
+        <MobileDisclosure label={t("overview.toggle")} className="mb-6" lazy>
           {list.data && (
             <CollaborationOverview
               data={list.data}

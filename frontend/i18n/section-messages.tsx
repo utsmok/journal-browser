@@ -7,6 +7,10 @@ import type { ReactNode } from "react";
  * components read with useTranslations. Server components keep reading every
  * namespace through getTranslations. "common" always rides along: the shell
  * and the shared widgets inside a section read it on every page.
+ *
+ * Note: NextIntlClientProvider replaces parent messages rather than merging,
+ * so a nested SectionMessages defines the full client namespace set for its
+ * subtree ("common" plus `namespaces`).
  */
 export async function SectionMessages({
   namespaces = [],

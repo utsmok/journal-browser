@@ -101,7 +101,7 @@ export function FreshnessTable({
 
   return (
     <>
-      <div className="hidden md:block">
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[40rem] text-sm">
           <caption className="sr-only">{t("freshness.tableCaption")}</caption>
           <thead>

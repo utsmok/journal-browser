@@ -502,7 +502,7 @@ export function QualityToggles({
           onClick={() => onToggle(item.key)}
           aria-pressed={item.on}
           title={item.label}
-          className={`flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs ${focus} ${
+          className={`flex min-h-11 w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs lg:min-h-0 ${focus} ${
             item.on
               ? "border border-[var(--border)] font-medium text-[var(--foreground)]"
               : "border border-dashed border-[var(--border)] text-[var(--muted-foreground)] hover:border-[var(--primary)] hover:text-[var(--foreground)]"

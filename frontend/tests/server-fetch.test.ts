@@ -35,6 +35,9 @@ describe("fetchForRender", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       "http://localhost:8000/api/v1/ut/journals/0034-4257?include_gaps=false",
     );
-    expect(fetchMock.mock.calls[0]?.[1]).toEqual({ next: { revalidate: 300 } });
+    expect(fetchMock.mock.calls[0]?.[1]).toEqual({
+      next: { revalidate: 300 },
+      signal: expect.any(AbortSignal),
+    });
   });
 });

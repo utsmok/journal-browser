@@ -195,7 +195,7 @@ function InstitutionSwitcher({ inst }: { inst: string }) {
       {open && (
         <div
           role="menu"
-          className="absolute left-0 top-full z-50 mt-1.5 w-60 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-1.5 text-[var(--card-foreground)] shadow-lg"
+          className="absolute right-0 top-full z-50 mt-1.5 w-60 max-w-[calc(100vw-2rem)] rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-1.5 text-[var(--card-foreground)] shadow-lg sm:left-0 sm:right-auto"
         >
           {entries.map((entry) => (
             <Link
@@ -254,6 +254,7 @@ export function BrandLink() {
           alt=""
           width={972}
           height={542}
+          priority
           className="h-10 w-auto"
         />
       </Link>

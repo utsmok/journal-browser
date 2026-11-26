@@ -260,7 +260,7 @@ function OpenaireCard({ oa }: { oa: NonNullable<FunderDetailResponse["openaire"]
               >
                 <span className="min-w-0 truncate">{s.name ?? s.level0_id}</span>
                 <span className="shrink-0 tabular-nums text-[var(--muted-foreground)]">
-                  {s.n_projects.toLocaleString()}
+                  {s.n_projects.toLocaleString("en")}
                 </span>
               </li>
             ))}

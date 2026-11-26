@@ -304,7 +304,7 @@ function FundersPageInner() {
       ? [
           {
             id: "q",
-            label: `Search: “${q}”`,
+            label: t("search.chipSearch", { value: q }),
             onRemove: () => {
               setInput("");
               setParams({ q: undefined });

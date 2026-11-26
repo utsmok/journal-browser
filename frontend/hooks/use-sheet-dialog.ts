@@ -107,7 +107,7 @@ export function useSheetDialog({
       document.removeEventListener("keydown", onKeyDown);
       for (const el of inerted) el.removeAttribute("inert");
       root.style.overflow = previousOverflow;
-      if (opener?.isConnected) opener.focus();
+      if (opener?.isConnected && opener.getClientRects().length > 0) opener.focus();
     };
   }, [open, modal, returnFocusTo]);
 

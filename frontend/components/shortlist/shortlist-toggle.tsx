@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
  * Bookmark that puts one journal on the shortlist or takes it off. The label
  * stays the same whether or not the journal is saved and `aria-pressed`
  * carries the state, so screen readers announce a toggle. The empty
- * pseudo-element widens the tap area to 40 px around the 24 px icon.
+ * pseudo-element widens the tap area to 44 px around the 24 px icon.
  */
 export function ShortlistToggle({
   inst,
@@ -40,7 +40,7 @@ export function ShortlistToggle({
         else addJournal(inst, issnL, title);
       }}
       className={cn(
-        "relative inline-flex size-6 shrink-0 items-center justify-center rounded-[var(--radius)] text-[var(--muted-foreground)] before:absolute before:-inset-2 hover:bg-[var(--muted)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
+        "relative inline-flex size-6 shrink-0 items-center justify-center rounded-[var(--radius)] text-[var(--muted-foreground)] before:absolute before:-inset-[10px] hover:bg-[var(--muted)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
         saved && "text-[var(--primary-text)]",
         className,
       )}

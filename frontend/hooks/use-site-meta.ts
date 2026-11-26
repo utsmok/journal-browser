@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import * as React from "react";
 
 import { useInstitution, useInstitutionRow } from "./use-institution";
 import { useFreshness, useInstitutionsDirectory } from "./use-api";
@@ -27,24 +28,27 @@ export function useSiteMeta() {
   // fast) → this stack's JB_* env seed (default institution only). Inside
   // app/[inst] the row is the one the layout fetched for its server render,
   // so the server HTML and the first client render agree.
-  return {
-    name: data?.institution ?? dir?.name ?? seed?.name ?? "Open Journal Browser",
-    short: data?.institution_short ?? dir?.short_name ?? seed?.short ?? "",
-    libraryUrl: data?.library_url ?? dir?.library_url ?? seed?.libraryUrl ?? "",
-    oaGuideUrl: data?.oa_guide_url ?? dir?.oa_guide_url ?? seed?.oaGuideUrl ?? "",
-    supportEmail: data?.support_email ?? dir?.support_email ?? seed?.supportEmail ?? "",
-    // admin_contact is nullable per institution: once the authoritative
-    // freshness data is in, its null must NOT fall through to the default
-    // university's seed value.
-    adminContact: data
-      ? data.admin_contact || null
-      : (dir?.admin_contact ?? seed?.adminContact ?? null),
-    researchPortalUrl:
-      data?.research_portal_url ?? dir?.research_portal_url ?? seed?.researchPortalUrl ?? "",
-    /** First publication year this institution's statistics cover. The
-     * directory row is required per the API contract; undefined only in
-     * the transient no-directory-yet render (no literal year guess here —
-     * the old `?? 2020` was wrong for every real institution). */
-    windowStart: data?.data_window_start ?? dir?.data_window_start,
-  };
+  return React.useMemo(
+    () => ({
+      name: data?.institution ?? dir?.name ?? seed?.name ?? "Open Journal Browser",
+      short: data?.institution_short ?? dir?.short_name ?? seed?.short ?? "",
+      libraryUrl: data?.library_url ?? dir?.library_url ?? seed?.libraryUrl ?? "",
+      oaGuideUrl: data?.oa_guide_url ?? dir?.oa_guide_url ?? seed?.oaGuideUrl ?? "",
+      supportEmail: data?.support_email ?? dir?.support_email ?? seed?.supportEmail ?? "",
+      // admin_contact is nullable per institution: once the authoritative
+      // freshness data is in, its null must NOT fall through to the default
+      // university's seed value.
+      adminContact: data
+        ? data.admin_contact || null
+        : (dir?.admin_contact ?? seed?.adminContact ?? null),
+      researchPortalUrl:
+        data?.research_portal_url ?? dir?.research_portal_url ?? seed?.researchPortalUrl ?? "",
+      /** First publication year this institution's statistics cover. The
+       * directory row is required per the API contract; undefined only in
+       * the transient no-directory-yet render (no literal year guess here —
+       * the old `?? 2020` was wrong for every real institution). */
+      windowStart: data?.data_window_start ?? dir?.data_window_start,
+    }),
+    [data, dir, seed],
+  );
 }

@@ -63,7 +63,9 @@
     "semanticStatusPending": "Match by meaning activates once the query has two characters. Regular search runs until then.",
     "chipSearch": "Search: “{value}”",
     "chipScope": "In: {value}",
-    "chipDealId": "Deal: {name}"
+    "chipDealId": "Deal: {name}",
+    "chipIncludeInactive": "Include inactive journals",
+    "chipIncludeUncurated": "Include uncurated journals"
   },
   "table": {
     "journal": "Journal",

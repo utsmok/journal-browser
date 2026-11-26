@@ -83,17 +83,25 @@ describe("saved journals", () => {
     expect(result.current).toEqual([]);
   });
 
-  it("removes one journal and clears the list", () => {
+  it("removes one journal even with bare lowercase input and clears the list", () => {
     const { result } = renderHook(() => useShortlist("ut"));
     act(() => addJournal("ut", REMOTE_SENSING.issnL, REMOTE_SENSING.title));
     act(() => addJournal("ut", WATER_RESEARCH.issnL, WATER_RESEARCH.title));
 
-    act(() => removeJournal("ut", REMOTE_SENSING.issnL));
+    act(() => removeJournal("ut", "00344257"));
     expect(result.current.map((entry) => entry.issnL)).toEqual([WATER_RESEARCH.issnL]);
 
     act(() => clearShortlist("ut"));
     expect(result.current).toEqual([]);
     expect(window.localStorage.getItem(KEY)).toBe("[]");
+  });
+
+  it("caps parseShareIssns at 200 unique entries", () => {
+    const many = Array.from({ length: 250 }, (_, i) => {
+      const n = String(i + 1000000).padStart(7, "0");
+      return `${n.slice(0, 4)}-${n.slice(4)}X`;
+    }).join(",");
+    expect(parseShareIssns(many)).toHaveLength(200);
   });
 
   it("keeps the list for this page view when storage is blocked", () => {

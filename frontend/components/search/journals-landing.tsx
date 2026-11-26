@@ -40,7 +40,7 @@ import { useSiteMeta } from "@/hooks/use-site-meta";
 import { useYearRange } from "@/hooks/use-year-filter";
 import { encodeNamePath, errorMessage, type JournalListItem } from "@/lib/api";
 import { displayPublisherName } from "@/lib/deal-links";
-import { formatInt } from "@/lib/format";
+import { apcSummary, formatInt } from "@/lib/format";
 import { ApcText } from "@/components/apc-text";
 import { useFunderPrefs } from "@/lib/funder-prefs";
 import { COLUMN_SORTS, PUB_TYPE_LABELS, SEARCH_IN_OPTIONS, SORTS } from "@/lib/search-config";
@@ -129,13 +129,21 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
       return;
     }
     setStack([]);
-    sessionStorage.removeItem("jb-cursor-stack");
+    try {
+      sessionStorage.removeItem("jb-cursor-stack");
+    } catch {
+      // ignore storage errors in restricted browsing contexts
+    }
   }, [filtersKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const update = React.useCallback(
     (patch: Record<string, string | undefined>) => {
       setStack([]);
-      sessionStorage.removeItem("jb-cursor-stack");
+      try {
+        sessionStorage.removeItem("jb-cursor-stack");
+      } catch {
+        // ignore storage errors in restricted browsing contexts
+      }
       const next = new URLSearchParams(sp.toString());
       next.delete("cursor");
       next.delete("p");
@@ -150,7 +158,11 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
 
   const moveTo = (nextStack: string[], nextCursor: string | undefined) => {
     setStack(nextStack);
-    sessionStorage.setItem("jb-cursor-stack", JSON.stringify(nextStack));
+    try {
+      sessionStorage.setItem("jb-cursor-stack", JSON.stringify(nextStack));
+    } catch {
+      // ignore storage errors in restricted browsing contexts
+    }
     const next = new URLSearchParams(sp.toString());
     if (nextCursor) next.set("cursor", nextCursor);
     else next.delete("cursor");
@@ -376,6 +388,7 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
       },
       {
         accessorKey: "apc_low",
+        meta: { columnId: "apc" },
         header: () => (
           <SortHead
             columnId="apc"
@@ -512,7 +525,12 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
       ? [
           {
             id: "search_in",
-            label: t("toolbar.chipScope", { value: pubTypeLabel(searchIn) }),
+            label: t("toolbar.chipScope", {
+              value: (() => {
+                const opt = SEARCH_IN_OPTIONS.find((o) => o.value === searchIn);
+                return opt ? ts(opt.labelKey) : searchIn;
+              })(),
+            }),
             onRemove: () => update({ search_in: undefined }),
           },
         ]
@@ -662,6 +680,24 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
             id: "publisher",
             label: `${tc("facets.groupPublisher")}: ${publisher}`,
             onRemove: () => update({ publisher: undefined }),
+          },
+        ]
+      : []),
+    ...(!active
+      ? [
+          {
+            id: "active",
+            label: t("toolbar.chipIncludeInactive"),
+            onRemove: () => update({ active: undefined }),
+          },
+        ]
+      : []),
+    ...(!vouched
+      ? [
+          {
+            id: "vouched",
+            label: t("toolbar.chipIncludeUncurated"),
+            onRemove: () => update({ vouched: undefined }),
           },
         ]
       : []),
@@ -841,6 +877,11 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
             }
             disabled={semanticMode}
           >
+            {semanticMode && (
+              <div className="mb-3 max-w-md rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-3">
+                <QualityToggles active={active} vouched={vouched} onToggle={toggleQuality} />
+              </div>
+            )}
             <ActiveFiltersBar
               chips={filterChips}
               onClearAll={clearFilters}
@@ -1033,9 +1074,9 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
                             <div className="mt-1 text-xs tabular-nums text-[var(--muted-foreground)]">
                               {t("table.listWorks", {
                                 count: row.works.toLocaleString("en"),
-                                inst: site.short,
+                                inst: instShort,
                               })}
-                              {row.apc_source != null && row.apc_price != null && (
+                              {apcSummary(row).kind !== "none" && (
                                 <>
                                   {" · "}
                                   {t("table.apc")}: <ApcText apc={row} />

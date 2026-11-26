@@ -37,8 +37,12 @@ export function ThemeToggle() {
   const [mode, setMode] = React.useState<Mode>("system");
 
   React.useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    setMode(MODES.includes(stored as Mode) ? (stored as Mode) : "system");
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      setMode(MODES.includes(stored as Mode) ? (stored as Mode) : "system");
+    } catch {
+      // Storage blocked (private mode): keep system default.
+    }
   }, []);
 
   // Follow the OS while in system mode so the theme tracks without a reload.
@@ -52,7 +56,11 @@ export function ThemeToggle() {
 
   const cycle = () => {
     const next = NEXT_MODE[mode];
-    localStorage.setItem(STORAGE_KEY, next);
+    try {
+      localStorage.setItem(STORAGE_KEY, next);
+    } catch {
+      // Storage blocked or full: still apply the theme for this session.
+    }
     apply(next);
     setMode(next);
   };

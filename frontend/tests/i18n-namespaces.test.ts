@@ -93,9 +93,15 @@ const reports: Report[] = walkPages(APP)
   .sort()
   .map((page) => {
     const chain = layoutChain(page);
-    const declared = new Set(["common"]);
+    // SectionMessages replaces parent messages rather than merging, so the
+    // innermost layout in the chain that declares SectionMessages defines the
+    // namespaces shipped to client components ("common" + its list).
+    let declared = new Set(["common"]);
     for (const layout of chain) {
-      for (const match of fs.readFileSync(layout, "utf8").matchAll(DECLARED_RE)) {
+      const matches = [...fs.readFileSync(layout, "utf8").matchAll(DECLARED_RE)];
+      if (matches.length === 0) continue;
+      declared = new Set(["common"]);
+      for (const match of matches) {
         for (const ns of JSON.parse(`[${match[1]}]`) as string[]) declared.add(ns);
       }
     }
