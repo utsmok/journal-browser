@@ -32,6 +32,7 @@ chunk at a time. The one-shot run loaded four whole tables first and the
 import logging
 import time
 from collections import Counter, defaultdict
+from datetime import UTC, datetime
 from operator import itemgetter
 from typing import Any
 
@@ -276,6 +277,22 @@ async def _listing_orcids(session: AsyncSession, institution_id: int) -> dict[st
     return {pk: bare_orcid(raw_orcid) for pk, raw_orcid in (await session.execute(stmt)).all()}
 
 
+def _select_author_sweep_slice(
+    a_ids: list[str], budget: int, *, day_ordinal: int | None = None
+) -> list[str]:
+    """Pick the day's budget-sized slice of author ids, rotating by UTC day
+    so every confirmed author is revisited instead of re-sweeping the first
+    alphabetical slice every night."""
+    all_ids = sorted({i for i in a_ids if i})
+    if budget <= 0 or not all_ids:
+        return []
+    if len(all_ids) <= budget:
+        return all_ids
+    ordinal = day_ordinal if day_ordinal is not None else datetime.now(UTC).date().toordinal()
+    offset = (ordinal * budget) % len(all_ids)
+    return (all_ids[offset:] + all_ids[:offset])[:budget]
+
+
 async def sweep_author_works(
     client, session: AsyncSession, institution, a_ids: list[str]
 ) -> dict[str, Any]:
@@ -303,7 +320,7 @@ async def sweep_author_works(
     # Cursor sweeps paginate only with a key; keyless, the sweep would
     # land one page and finish 'completed' with partial data.
     require_openalex_key("sweep_author_works")
-    ids = sorted({i for i in a_ids if i})[:budget]
+    ids = _select_author_sweep_slice(a_ids, budget)
     stats["queried_authors"] = len(ids)
     window_from = f"{institution.data_window_start}-01-01"
     ingest = IngestSession(session)

@@ -387,8 +387,6 @@ async def harvest_journals_delta(
     }
     if not todo:
         return stats
-    if not await openalex_budget_ok("harvest_journals delta", stats):
-        return stats
     ingest = IngestSession(session)
     await ingest.start_run(SOURCE, ENTITY_TYPE, "delta", {"route": "delta", "per_id": True})
     payloads, failed = await paced_single_gets(
@@ -453,8 +451,6 @@ async def refresh_existing_journals(session: AsyncSession, limit: int | None = N
     # chunk; reruns re-fetch everything anyway.
     chunk_size = 2_000
     for start in range(0, len(todo), chunk_size):
-        if not await openalex_budget_ok("harvest_journals --refresh", stats):
-            break
         chunk = todo[start : start + chunk_size]
         # A fresh client per chunk: one long-lived client's keepalive
         # sockets die during the between-chunk ingest gap (Cloudflare

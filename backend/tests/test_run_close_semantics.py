@@ -81,3 +81,24 @@ async def test_finish_run_bumps_cache_epoch_on_completed_and_failed(db):
     await db.commit()
     second = (await db.execute(epoch)).scalar_one()
     assert second > first, "a failed close must still invalidate caches"
+
+
+async def test_ingest_session_start_run_resets_counters(db):
+    """Reusing one IngestSession across sequential runs (like sweep_author_works)
+    must reset per-run counters on each start_run."""
+    await _seed_epoch(db)
+    ingest = IngestSession(db)
+
+    await ingest.start_run("openalex", "works_stats", "batch-0", {})
+    await ingest.ingest_record("W1", {"id": "W1"})
+    await ingest.record_parse_failure({"source_pk": "bad", "reason": "test"})
+    assert ingest.records_seen == 2
+    assert ingest.parse_failures == 1
+    await ingest.finish_run("completed", {})
+    await db.commit()
+
+    await ingest.start_run("openalex", "works_stats", "batch-1", {})
+    assert ingest.records_seen == 0
+    assert ingest.parse_failures == 0
+    await ingest.finish_run("completed", {})
+    await db.commit()

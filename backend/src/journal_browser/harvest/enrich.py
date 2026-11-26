@@ -20,6 +20,7 @@ import logging
 import os
 from collections.abc import Sequence
 from typing import Any
+from urllib.parse import quote
 
 from bibliofabric.exceptions import (
     APIError,
@@ -68,16 +69,60 @@ def _chunk(items: list[str], size: int) -> list[list[str]]:
     return [items[i : i + size] for i in range(0, len(items), size)]
 
 
+async def _get_work_by_doi(client: Any, doi: str, stats: dict[str, int] | None) -> Any:
+    """Fetch one work by DOI via OpenAlex's $0 ``works/doi%3A...`` path.
+
+    ``aletheca``'s ``WorksClient.normalize_id()`` strips ``https://doi.org/``
+    and ``doi:``, which routes ``client.works.get("https://doi.org/...")`` to
+    ``/works/<bare_doi>`` — billed by OpenAlex as a list/credit lookup ($0.0001)
+    instead of a $0 singleton. Bypassing ``item_path`` when the underlying
+    ``aletheca`` HTTP client is present keeps DOI lookups $0 and watches
+    ``x-ratelimit-cost-usd`` for upstream pricing drift.
+    """
+    if hasattr(client.works, "_client") and hasattr(client.works, "_validate"):
+        clean = doi.strip().lower()
+        for prefix in ("https://doi.org/", "http://doi.org/", "doi:"):
+            clean = clean.removeprefix(prefix)
+        path = f"works/{quote(f'doi:{clean}', safe='')}"
+        response = await client.works._client.request("GET", path)
+        raw_cost = getattr(response, "headers", {}).get("x-ratelimit-cost-usd")
+        if raw_cost is not None:
+            try:
+                cost = float(raw_cost)
+            except ValueError:
+                cost = 0.0
+            if cost > 0:
+                if stats is None or not stats.get("unexpected_singleton_cost"):
+                    logger.warning(
+                        "openalex DOI singleton %s billed $%s (expected $0); "
+                        "pricing drift detected",
+                        clean,
+                        raw_cost,
+                    )
+                if stats is not None:
+                    stats["unexpected_singleton_cost"] = (
+                        stats.get("unexpected_singleton_cost", 0) + 1
+                    )
+        raw_item = client.works._client.unwrapper.item(response.json())
+        return client.works._validate(
+            raw_item,
+            request=getattr(response, "request", None),
+            response=response,
+        )
+    return await client.works.get(f"https://doi.org/{doi}")
+
+
 async def fetch_works_by_doi(
     client: Any, dois: Sequence[str], stats: dict[str, int] | None = None
 ) -> tuple[dict[str, Any | None], set[str], Exception | None]:
-    """One single-entity GET per DOI ($0 on OpenAlex, measured
-    2026-11-20), bounded by a
-    semaphore.
+    """One single-entity ``works/doi%3A...`` GET per DOI ($0 on OpenAlex,
+    live-verified 2026-11-26), bounded by a semaphore.
 
     Returns ({doi: Work-or-None}, errored_dois, first_error). None marks a
     404 miss; any other failure is counted under stats["fetch_errors"],
-    isolated to its DOI, and reported via first_error. A chunk where every
+    isolated to its DOI, and reported via first_error. Any response header
+    reporting ``x-ratelimit-cost-usd > 0`` increments
+    ``stats["unexpected_singleton_cost"]``. A chunk where every
     lookup failed raises loudly: systemic breakage must not masquerade as
     a clean, empty sweep (and work_funders must not prune on it)."""
     sem = asyncio.Semaphore(GET_CONCURRENCY)
@@ -97,7 +142,7 @@ async def fetch_works_by_doi(
             if start > now:
                 await asyncio.sleep(start - now)
             try:
-                return doi, await client.works.get(f"https://doi.org/{doi}"), False, None
+                return doi, await _get_work_by_doi(client, doi, stats), False, None
             except NotFoundError:
                 return doi, None, False, None
             except Exception as exc:

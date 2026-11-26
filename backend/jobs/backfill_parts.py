@@ -134,7 +134,9 @@ async def backfill_dois(
         dois = sorted(institutions_by_doi)
         for at in range(0, len(dois), FETCH_CHUNK):
             chunk = dois[at : at + FETCH_CHUNK]
-            if not await openalex_budget_ok("backfill_parts", stats):
+            if stats.get("unexpected_singleton_cost") and not await openalex_budget_ok(
+                "backfill_parts", stats
+            ):
                 break
             found, errored, first_error = await fetch_works_by_doi(client, chunk, stats)
             if errored:
@@ -220,8 +222,6 @@ async def backfill_parents(session: AsyncSession, institution_id: int | None) ->
         "parents_failed": 0,
     }
     if not pending:
-        return stats
-    if not await openalex_budget_ok("backfill_parts_parents", stats):
         return stats
 
     # One GET per parent W-id: every institution holding the parent gets

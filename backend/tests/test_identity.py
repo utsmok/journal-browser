@@ -20,7 +20,11 @@ from sqlalchemy import delete, select
 from conftest import journal_factory, pair_rows, requires_db
 from journal_browser.config import reset_settings_cache
 from journal_browser.harvest import author_ids
-from journal_browser.harvest.author_ids import openaire_author_orcid, resolve_author_ids
+from journal_browser.harvest.author_ids import (
+    _select_author_sweep_slice,
+    openaire_author_orcid,
+    resolve_author_ids,
+)
 from journal_browser.harvest.authors import SourceData, fetch_local_source, ingest_authors
 from journal_browser.harvest.people_utwente import (
     name_match_tier,
@@ -1667,3 +1671,26 @@ async def test_crossref_orcid_fill_is_person_keyed(db, institution_factory):
     assert by["p-ambig"]["crossref_orcid"] is None
     assert by["p-nora"]["orcid"] == ORCID_FRANK
     assert by["p-nora"]["crossref_orcid"] is None
+
+
+def test_select_author_sweep_slice_rotates_by_day():
+    """When confirmed authors fit within budget, return them all sorted; when
+    there are more than budget, rotate the window cleanly across UTC days so
+    every author is reached without exceeding the nightly cap."""
+    assert _select_author_sweep_slice(["A3", "A1", "A2", "A1"], budget=5, day_ordinal=10) == [
+        "A1",
+        "A2",
+        "A3",
+    ]
+    assert _select_author_sweep_slice(["A1"], budget=0, day_ordinal=10) == []
+
+    pool = [f"A{i}" for i in range(7)]  # sorted: A0..A6
+    day0 = _select_author_sweep_slice(pool, budget=3, day_ordinal=0)
+    day1 = _select_author_sweep_slice(pool, budget=3, day_ordinal=1)
+    day2 = _select_author_sweep_slice(pool, budget=3, day_ordinal=2)
+
+    assert day0 == ["A0", "A1", "A2"]
+    assert day1 == ["A3", "A4", "A5"]
+    assert day2 == ["A6", "A0", "A1"]
+    assert set(day0 + day1 + day2) == set(pool)
+    assert len(set(day2)) == 3

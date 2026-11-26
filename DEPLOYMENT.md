@@ -64,7 +64,7 @@ in citation links on journal pages. Set it in `.env` before the first
 | `JB_PURE_OAI_BASE_URL` | Your repository's anonymous OAI-PMH endpoint (works data) | `https://ris.utwente.nl/ws/oai` |
 | `JB_OPENAIRE_ORG_ID` | OpenAIRE organization id (`openorgs____::...`). **Required**; unset = the OpenAIRE harvest is off. Not derivable from the ROR — look it up at `api.openaire.eu/graph/v1/organizations?legalName=<name>` | unset |
 | `OPENALEX_API_KEY` | Free OpenAlex key. Listing/cursor sweeps (institution stats, the author sweep, `--sweep-all`) refuse to start without it — keyless requests serve only the first cursor page | unset |
-| `JB_OPENALEX_RESERVE_USD` | Daily-budget floor in USD: OpenAlex stages stop cleanly, with a stats note, once the remaining budget falls below it (see `harvest.common.openalex_budget_ok`) | `0.25` |
+| `JB_OPENALEX_RESERVE_USD` | Daily-budget floor in USD: credit-priced list/search OpenAlex stages stop cleanly, with a stats note, once the remaining budget falls below it (see `harvest.common.openalex_budget_ok`; `$0` singleton GET stages run ungated unless upstream pricing drift is detected) | `0.25` |
 | `JB_JISC_API_KEY` | Jisc Open Policy Finder API key; without it the JISC sweep skips cleanly | unset |
 | `JB_CONTACT_EMAIL` | Polite-pool identification sent to OpenAlex, and the contact in the ROR harvest's User-Agent. Set it in `.env`; an empty value sends anonymous requests | empty (the live deployment sets `s.f.abma@utwente.nl`) |
 | `JB_DATA_WINDOW_START` / `JB_DATA_WINDOW_END` | Inclusive publication-year window for the default institution's harvests. `END=0` = open (to now). A smaller window makes a deployment lighter (Groningen runs 2025/2025; additional institutions carry their window on their row) | `2020` / `0` |

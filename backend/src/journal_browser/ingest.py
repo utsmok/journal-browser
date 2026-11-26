@@ -146,6 +146,8 @@ class IngestSession:
         self.entity_type = entity_type
         self.filter_set = filter_set
         self.institution_id = institution_id
+        self.records_seen = 0
+        self.parse_failures = 0
         self._seen_keys.clear()
         # Close stale 'running' rows for this key first. Only the
         # in-process exception path can mark a run 'failed', so a crashed

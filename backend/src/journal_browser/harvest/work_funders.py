@@ -166,8 +166,10 @@ async def harvest_work_funders(session: AsyncSession, *, ttl_days: int = 30) -> 
     fetch_stats: dict[str, int] = {}
     async with AlethecaClient(**client_kwargs) as client:
         for at in range(0, len(works), WORK_CHUNK):
-            if not await openalex_budget_ok("work_funders", stats):
-                break
+            if fetch_stats.get("unexpected_singleton_cost"):
+                stats["unexpected_singleton_cost"] = fetch_stats["unexpected_singleton_cost"]
+                if not await openalex_budget_ok("work_funders", stats):
+                    break
             batch = works[at : at + WORK_CHUNK]
             batch_no = at // WORK_CHUNK + 1
             # works in different institutions may share a DOI
@@ -226,6 +228,8 @@ async def harvest_work_funders(session: AsyncSession, *, ttl_days: int = 30) -> 
                     fetch_stats.get("fetch_errors", 0),
                 )
     stats["fetch_errors"] = fetch_stats.get("fetch_errors", 0)
+    if fetch_stats.get("unexpected_singleton_cost"):
+        stats["unexpected_singleton_cost"] = fetch_stats["unexpected_singleton_cost"]
 
     stats["distinct_funders"] = await session.scalar(
         select(func.count(func.distinct(WorkFunder.funder_openalex_id)))

@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import aletheca
 import httpx
 import pytest
+from bibliofabric.exceptions import NotFoundError
 from jobs.backfill_pure_authors import backfill_pure_work_authors
 from jobs.import_pure_export import import_pure_export
 from sqlalchemy import func, select, text, update
@@ -21,10 +22,11 @@ import journal_browser.harvest.common as harvest_common
 from conftest import journal_factory, requires_db
 from journal_browser.config import get_settings, reset_settings_cache
 from journal_browser.harvest import jisc_opf as jisc
+from journal_browser.harvest import work_funders as work_funders_mod
 from journal_browser.harvest.common import HarvestDataError, openalex_budget_ok
 from journal_browser.harvest.denorm import MATERIALIZE_SQL
 from journal_browser.harvest.doaj import harvest_doaj
-from journal_browser.harvest.enrich import enrich_openalex
+from journal_browser.harvest.enrich import enrich_openalex, fetch_works_by_doi
 from journal_browser.harvest.funders import _upsert as upsert_canon
 from journal_browser.harvest.funders import refresh_funder_links
 from journal_browser.harvest.institution_stats import harvest_institution_stats
@@ -1802,3 +1804,137 @@ async def test_openalex_suite_isolation_survives_key_in_settings(monkeypatch, tm
             assert await harvest_common.openalex_credits_remaining() is None
         finally:
             reset_settings_cache()
+
+
+async def test_fetch_works_by_doi_uses_doi_prefix_and_detects_cost_drift():
+    """DOI singletons must hit ``works/doi%3A...`` (never bare ``works/10...``
+    which OpenAlex bills at $0.0001), handle 404 misses cleanly, and flag
+    upstream pricing drift if ``x-ratelimit-cost-usd`` exceeds zero."""
+    seen_paths: list[str] = []
+    costs = {
+        "works/doi%3A10.1038%2Fnature12373": "0",
+        "works/doi%3A10.1000%2Fpriced": "0.0001",
+    }
+
+    async def _request(method: str, path: str):
+        assert method == "GET"
+        seen_paths.append(path)
+        if path == "works/doi%3A10.1000%2Fmissing":
+            raise NotFoundError("not found")
+        return SimpleNamespace(
+            headers={"x-ratelimit-cost-usd": costs[path]},
+            request=SimpleNamespace(url=f"https://api.openalex.org/{path}"),
+            json=lambda: {"id": f"https://openalex.org/{path}"},
+        )
+
+    fake_works = SimpleNamespace(
+        _client=SimpleNamespace(
+            request=_request,
+            unwrapper=SimpleNamespace(item=lambda body: body),
+        ),
+        _validate=lambda data, **_kw: SimpleNamespace(
+            id=data["id"],
+            model_dump=lambda mode="json": data,
+        ),
+        get=lambda *_a, **_kw: (_ for _ in ()).throw(
+            AssertionError("bare works.get must not be called when _client is present")
+        ),
+    )
+    fake_client = SimpleNamespace(works=fake_works)
+
+    stats_free: dict[str, int] = {}
+    found, errored, first_error = await fetch_works_by_doi(
+        fake_client,
+        ["https://doi.org/10.1038/Nature12373", "10.1000/missing"],
+        stats_free,
+    )
+    assert first_error is None
+    assert errored == set()
+    nature = found["https://doi.org/10.1038/Nature12373"]
+    assert nature is not None
+    assert nature.id == "https://openalex.org/works/doi%3A10.1038%2Fnature12373"
+    assert found["10.1000/missing"] is None
+    assert "unexpected_singleton_cost" not in stats_free
+
+    stats_priced: dict[str, int] = {}
+    found_priced, errored_priced, _ = await fetch_works_by_doi(
+        fake_client, ["10.1000/priced"], stats_priced
+    )
+    assert errored_priced == set()
+    assert found_priced["10.1000/priced"] is not None
+    assert stats_priced["unexpected_singleton_cost"] == 1
+    assert seen_paths == [
+        "works/doi%3A10.1038%2Fnature12373",
+        "works/doi%3A10.1000%2Fmissing",
+        "works/doi%3A10.1000%2Fpriced",
+    ]
+
+
+@requires_db
+async def test_harvest_work_funders_runs_below_reserve_and_stops_on_cost_drift(
+    db, institution_factory, monkeypatch
+):
+    """Below the credit reserve, free DOI singletons still run normally; only
+    if upstream bills > $0 does the reserve gate trip and stop the next chunk."""
+    ut = await institution_factory(code="ut", data_window_start=2020)
+    run = await _run(db, "pure", "works", ut)
+    _mk_work(db, ut, "w-1", run, doi="10.0.0/1", title="one")
+    _mk_work(db, ut, "w-2", run, doi="10.0.0/2", title="two")
+    await db.commit()
+
+    async def _low_remaining() -> float:
+        return 0.05  # well below default 0.25 reserve
+
+    monkeypatch.setattr("journal_browser.harvest.common.openalex_credits_remaining", _low_remaining)
+    monkeypatch.setattr(work_funders_mod, "WORK_CHUNK", 1)
+
+    cost_header = {"value": "0"}
+    requested_paths: list[str] = []
+
+    async def _request(method: str, path: str):
+        assert method == "GET"
+        requested_paths.append(path)
+        return SimpleNamespace(
+            headers={"x-ratelimit-cost-usd": cost_header["value"]},
+            request=SimpleNamespace(url=f"https://api.openalex.org/{path}"),
+            json=lambda: {"id": f"https://openalex.org/{path}", "awards": []},
+        )
+
+    class _FakeClient:
+        def __init__(self, **_kw):
+            self.works = SimpleNamespace(
+                _client=SimpleNamespace(
+                    request=_request,
+                    unwrapper=SimpleNamespace(item=lambda body: body),
+                ),
+                _validate=lambda data, **_kw: SimpleNamespace(
+                    id=data["id"],
+                    awards=[],
+                    model_dump=lambda mode="json": data,
+                ),
+            )
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(work_funders_mod, "AlethecaClient", _FakeClient)
+
+    # First run: $0 cost -> both chunks run despite low daily credits.
+    stats_free = await harvest_work_funders(db, ttl_days=30)
+    assert stats_free["works_attempted"] == 2
+    assert "openalex_reserve_stop" not in stats_free
+    assert "unexpected_singleton_cost" not in stats_free
+    assert requested_paths == ["works/doi%3A10.0.0%2F1", "works/doi%3A10.0.0%2F2"]
+
+    # Second run with pricing drift: chunk 1 bills $0.0001, chunk 2 stops at reserve.
+    await db.execute(update(Work).values(funders_checked_at=None))
+    await db.commit()
+    requested_paths.clear()
+    cost_header["value"] = "0.0001"
+    stats_drift = await harvest_work_funders(db, ttl_days=30)
+    assert stats_drift["unexpected_singleton_cost"] == 1
+    assert stats_drift["openalex_reserve_stop"] == 1
+    assert len(requested_paths) == 1

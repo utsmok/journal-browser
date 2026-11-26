@@ -9,12 +9,15 @@
 # Credit-priced stages run first, while the budget is fresh: the 2026-11-07
 # wave burned ~7h of the fresh daily budget on the then credit-priced
 # oa-colors step, and a 5-second funder crash stopped the remaining stages
-# via the exit gate. Measured 2026-11-20, singleton GETs bill $0; list
-# pages cost $0.0001 and searches $0.001, so only those stages draw the
-# budget. All OpenAlex stages gate on openalex_budget_ok() in harvest code
-# and stop cleanly once the remaining budget falls below the
-# JB_OPENALEX_RESERVE_USD reserve (default 0.25); harvest_publishers only
-# costs credits on a fresh install, when its publisher cache is still empty.
+# via the exit gate. Live-verified 2026-11-26, singleton GETs (including
+# `works/doi%3A...`, working around aletheca's bare-DOI normalization)
+# bill $0, while list pages cost $0.0001 and searches $0.001. Only
+# credit-priced list/search stages (harvest_stats, resolve_author_ids's
+# rotating author-works sweep, and fresh-install harvest_publishers) gate
+# on openalex_budget_ok() and stop cleanly once the remaining budget falls
+# below JB_OPENALEX_RESERVE_USD (default 0.25); $0 singleton stages
+# (backfill_parts, harvest_work_funders, harvest_openalex_funders) run
+# ungated unless upstream pricing drifts above $0.
 #
 # A failing stage names itself and alerts (scripts/lib.sh). The stages that
 # depend on it are skipped, every other stage still runs, and the wave
