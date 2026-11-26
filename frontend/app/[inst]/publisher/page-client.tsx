@@ -161,7 +161,7 @@ function PublishersView() {
     deal,
     quartiles,
     sizes,
-    topic,
+    topics,
     hasApc,
     hasWorks,
     sort,
@@ -177,7 +177,7 @@ function PublishersView() {
     deal !== null ||
     quartiles.length > 0 ||
     sizes.length > 0 ||
-    topic !== "" ||
+    topics.length > 0 ||
     hasApc !== null ||
     hasWorks !== null;
 
@@ -234,8 +234,15 @@ function PublishersView() {
   const total = data?.total ?? 0;
 
   const toggleFacet = (key: string, value: string) => {
-    if (key === "oa_type" || key === "quartile" || key === "size") {
-      const current = key === "oa_type" ? oaTypes : key === "quartile" ? quartiles : sizes;
+    if (key === "oa_type" || key === "quartile" || key === "size" || key === "topic") {
+      const current =
+        key === "oa_type"
+          ? oaTypes
+          : key === "quartile"
+            ? quartiles
+            : key === "size"
+              ? sizes
+              : topics;
       const next = current.includes(value)
         ? current.filter((v) => v !== value)
         : [...current, value];
@@ -245,10 +252,6 @@ function PublishersView() {
     if (key === "deal") {
       const canonical = normalizeDeal(value) ?? undefined;
       setParams({ deal: deal === canonical ? undefined : canonical });
-      return;
-    }
-    if (key === "topic") {
-      setParams({ topic: topic === value ? undefined : value });
       return;
     }
     if (key === "has_works") {
@@ -360,8 +363,8 @@ function PublishersView() {
       defaultOpen: false,
       searchable: true,
       initialVisible: 8,
-      values: facetValues(facets?.topic, topic ? [topic] : [], undefined, 30),
-      activeValues: topic ? [topic] : [],
+      values: facetValues(facets?.topic, topics, undefined, 30),
+      activeValues: topics,
     },
   ].filter((group) => group.values.length > 0);
 
@@ -429,15 +432,11 @@ function PublishersView() {
       }`,
       onRemove: () => toggleFacet("size", v),
     })),
-    ...(topic
-      ? [
-          {
-            id: `topic:${topic}`,
-            label: `${t("facets.topic")}: ${topic}`,
-            onRemove: () => toggleFacet("topic", topic),
-          },
-        ]
-      : []),
+    ...topics.map((v) => ({
+      id: `topic:${v}`,
+      label: `${t("facets.topic")}: ${v}`,
+      onRemove: () => toggleFacet("topic", v),
+    })),
   ];
 
   return (

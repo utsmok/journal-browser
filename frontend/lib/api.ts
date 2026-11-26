@@ -708,7 +708,7 @@ export type PublisherSearchParams = {
   /** Canonical backend value; legacy "none" URLs are normalized client-side. */
   deal?: "covered" | "not_covered";
   quartile?: string[];
-  topic?: string;
+  topic?: string[];
   size?: string[];
   has_apc?: boolean;
   has_works?: boolean;
@@ -780,7 +780,7 @@ export function publishersRequest(inst: string, params: PublisherSearchParams = 
       oa_type: params.oa_type?.join("|"),
       deal: params.deal,
       quartile: params.quartile?.join("|"),
-      topic: params.topic,
+      topic: params.topic?.join("|"),
       size: params.size?.join("|"),
       // String(false) must survive: false is a meaningful filter value.
       has_apc: params.has_apc === undefined ? undefined : String(params.has_apc),

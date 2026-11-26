@@ -1,6 +1,6 @@
 import json
 import warnings
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
 from sqlalchemy import exc as sa_exc
@@ -14,7 +14,12 @@ from .. import funder_fit as funder_fit_mod
 from ..cache import FACET_CACHE, cache_get, cache_put
 from ..concurrency import together
 from .classify import OA_TYPES
-from .query import base_query
+from .query import as_filter_list, base_query
+
+
+def _norm_seq(v: str | Sequence[str] | None) -> tuple[str, ...] | None:
+    parts = as_filter_list(v)
+    return tuple(sorted(parts)) if parts else None
 
 
 def oa_facet(counts: dict[str, int] | None) -> dict[str, int]:
@@ -34,17 +39,17 @@ async def facet_counts(
     deal_id: int | None = None,
     oa: bool | None = None,
     doaj: bool | None = None,
-    quartile: str | None = None,
-    topic: str | None = None,
-    publisher: str | None = None,
+    quartile: str | Sequence[str] | None = None,
+    topic: str | Sequence[str] | None = None,
+    publisher: str | Sequence[str] | None = None,
     has_apc: bool | None = None,
     has_works: bool | None = None,
     oa_types: list[str] | None = None,
-    green_oa: GreenOa | str | None = None,
-    pub_type: str | None = None,
+    green_oa: GreenOa | str | Sequence[GreenOa | str] | None = None,
+    pub_type: str | Sequence[str] | None = None,
     languages: list[str] | None = None,
     funder_struct: dict[str, Any] | None = None,
-    funder_fit_value: str | None = None,
+    funder_fit_value: str | Sequence[str] | None = None,
     year_from: int | None = None,
     year_to: int | None = None,
     active: bool = True,
@@ -79,20 +84,20 @@ async def facet_counts(
                 ("deal_id", deal_id),
                 ("oa", oa),
                 ("doaj", doaj),
-                ("quartile", quartile),
-                ("topic", topic),
-                ("publisher", publisher),
+                ("quartile", _norm_seq(quartile)),
+                ("topic", _norm_seq(topic)),
+                ("publisher", _norm_seq(publisher)),
                 ("has_apc", has_apc),
                 ("has_works", has_works),
                 ("oa_types", tuple(sorted(oa_types)) if oa_types else None),
-                ("green_oa", str(green_oa) if green_oa is not None else None),
-                ("pub_type", pub_type),
+                ("green_oa", _norm_seq(green_oa)),
+                ("pub_type", _norm_seq(pub_type)),
                 ("languages", tuple(sorted(languages)) if languages else None),
                 (
                     "funder_struct",
                     json.dumps(funder_struct, sort_keys=True) if funder_struct else None,
                 ),
-                ("funder_fit_value", funder_fit_value),
+                ("funder_fit_value", _norm_seq(funder_fit_value)),
                 # Global eligibility toggles, not facets: counts only change
                 # when one is off, so the key carries them only then.
                 ("active", None if active else active),
@@ -244,7 +249,10 @@ async def facet_counts(
 
     tasks: list[tuple[str, Callable[[AsyncSession], Awaitable[Any]]]] = [
         ("main", _run_main),
-        ("topic", lambda own: _topic_facet(own, variant_sub("topic") if topic else base)),
+        (
+            "topic",
+            lambda own: _topic_facet(own, variant_sub("topic") if as_filter_list(topic) else base),
+        ),
     ]
 
     # Active own filters need a variant pass (chip shows what selecting it
@@ -274,7 +282,10 @@ async def facet_counts(
             return {"true": dj_true, "false": dj_total - dj_true}
 
         tasks.append(("doaj", _run_doaj))
-    if quartile in {"Q1", "Q2", "Q3", "Q4"}:
+    active_quartiles = [
+        q for q in (as_filter_list(quartile) or []) if q in {"Q1", "Q2", "Q3", "Q4"}
+    ]
+    if active_quartiles:
 
         async def _run_quartile(own: AsyncSession) -> dict[str, int]:
             qt = variant_sub("quartile")
@@ -306,7 +317,7 @@ async def facet_counts(
             return oa_facet(counts)
 
         tasks.append(("oa_type", _run_oa_type))
-    if pub_type:
+    if as_filter_list(pub_type):
 
         async def _run_pub_type(own: AsyncSession) -> dict[str, int]:
             pt = base_sub(pub_type=None)
@@ -348,7 +359,7 @@ async def facet_counts(
             return dict(sorted((counts or {}).items(), key=lambda kv: (-kv[1], kv[0])))
 
         tasks.append(("language", _run_language))
-    if publisher:
+    if as_filter_list(publisher):
 
         async def _run_publisher(own: AsyncSession) -> dict[str, int]:
             pb = base_sub(publisher=None)
@@ -386,7 +397,7 @@ async def facet_counts(
             return {"true": wk_true, "false": wk_total - wk_true}
 
         tasks.append(("works", _run_works))
-    if green_oa:
+    if as_filter_list(green_oa):
 
         async def _run_green_oa(own: AsyncSession) -> dict[str, int]:
             g = variant_sub("green_oa")
@@ -408,7 +419,9 @@ async def facet_counts(
         # are final. Either way one dedicated pass keeps the shared
         # aggregate untouched.
         async def _run_funder_fit(own: AsyncSession) -> dict[str, int]:
-            ff = base_sub(**({"funder_fit_value": None} if funder_fit_value else {}))
+            ff = base_sub(
+                **({"funder_fit_value": None} if as_filter_list(funder_fit_value) else {})
+            )
             counted_ff = (
                 select(ff, func.count().over(partition_by=ff.c.funder_fit).label("n"))
                 .select_from(ff)

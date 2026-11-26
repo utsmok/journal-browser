@@ -1738,13 +1738,22 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "pattern": "^Q[1-4]$"
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "Q1",
+                      "Q2",
+                      "Q3",
+                      "Q4"
+                    ],
+                    "type": "string"
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
+              "maxLength": 32,
               "title": "Quartile"
             }
           },
@@ -1756,7 +1765,7 @@
               "anyOf": [
                 {
                   "type": "string",
-                  "maxLength": 100
+                  "maxLength": 1000
                 },
                 {
                   "type": "null"
@@ -1773,7 +1782,7 @@
               "anyOf": [
                 {
                   "type": "string",
-                  "maxLength": 200
+                  "maxLength": 1000
                 },
                 {
                   "type": "null"
@@ -1841,12 +1850,16 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/GreenOa"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GreenOa"
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
+              "maxLength": 80,
               "title": "Green Oa"
             }
           },
@@ -1858,7 +1871,7 @@
               "anyOf": [
                 {
                   "type": "string",
-                  "maxLength": 40
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -1875,7 +1888,7 @@
               "anyOf": [
                 {
                   "type": "string",
-                  "maxLength": 60
+                  "maxLength": 120
                 },
                 {
                   "type": "null"
@@ -1990,17 +2003,23 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "pattern": "^(compliant|check|no)$"
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "compliant",
+                      "check",
+                      "no"
+                    ],
+                    "type": "string"
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "Funder-fit tier filter",
+              "maxLength": 60,
               "title": "Funder Fit"
-            },
-            "description": "Funder-fit tier filter"
+            }
           },
           {
             "name": "year_from",
@@ -3780,7 +3799,7 @@
               "anyOf": [
                 {
                   "type": "string",
-                  "maxLength": 100
+                  "maxLength": 1000
                 },
                 {
                   "type": "null"

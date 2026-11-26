@@ -1,4 +1,5 @@
 from collections.abc import Mapping, Sequence
+from enum import Enum
 from typing import Any
 
 from sqlalchemy import (
@@ -125,6 +126,17 @@ def normalize_issn(term: str) -> str:
     return term.replace("-", "").replace(" ", "").upper()
 
 
+def as_filter_list(value: str | Sequence[str] | None) -> list[str] | None:
+    """Normalize a scalar or sequence filter value to a non-empty list of strings."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        val = str(value.value) if isinstance(value, Enum) else value
+        return [val] if val else None
+    parts = [str(v.value) if isinstance(v, Enum) else str(v) for v in value if v]
+    return parts or None
+
+
 def base_query(
     *,
     institution_id: int,
@@ -134,17 +146,17 @@ def base_query(
     deal_id: int | None = None,
     oa: bool | None = None,
     doaj: bool | None = None,
-    quartile: str | None = None,
-    topic: str | None = None,
-    publisher: str | None = None,
+    quartile: str | Sequence[str] | None = None,
+    topic: str | Sequence[str] | None = None,
+    publisher: str | Sequence[str] | None = None,
     has_apc: bool | None = None,
     has_works: bool | None = None,
     oa_types: list[str] | None = None,
-    green_oa: GreenOa | str | None = None,
+    green_oa: GreenOa | str | Sequence[GreenOa | str] | None = None,
     fuzzy: bool = False,
     funder_fit: bool | None = None,
-    funder_fit_value: str | None = None,
-    pub_type: str | None = None,
+    funder_fit_value: str | Sequence[str] | None = None,
+    pub_type: str | Sequence[str] | None = None,
     languages: list[str] | None = None,
     year_from: int | None = None,
     year_to: int | None = None,
@@ -320,7 +332,8 @@ def base_query(
         query = query.outerjoin(yearly, yearly.c.issn_l == J.issn_l)
     if oa_types:
         query = query.where(oa_type.in_(oa_types))
-    if funder_fit_value:
+    funder_fit_values = as_filter_list(funder_fit_value)
+    if funder_fit_values:
         query = query.where(
             fit_case(
                 oa_type,
@@ -329,8 +342,7 @@ def base_query(
                 J.jisc_allows_sa_submitted,
                 J.jisc_allows_sa_accepted,
                 J.jisc_allows_sa_published,
-            )
-            == funder_fit_value
+            ).in_(funder_fit_values)
         )
     if q:
         qstr = q.strip()
@@ -398,22 +410,27 @@ def base_query(
         query = query.where(J.is_oa.is_(oa))
     if doaj is not None:
         query = query.where(J.is_in_doaj.is_(doaj))
-    if quartile in {"Q1", "Q2", "Q3", "Q4"}:
-        query = query.where(J.latest_quartile == quartile)
-    if topic:
-        query = query.where(J.topics.contains([{"display_name": topic}]))
-    if publisher:
-        query = query.where(J.publisher_name == publisher)
-    if pub_type:
-        query = query.where(J.type == pub_type)
+    quartiles = [q for q in (as_filter_list(quartile) or []) if q in {"Q1", "Q2", "Q3", "Q4"}]
+    if quartiles:
+        query = query.where(J.latest_quartile.in_(quartiles))
+    topics = as_filter_list(topic)
+    if topics:
+        query = query.where(or_(*[J.topics.contains([{"display_name": t}]) for t in topics]))
+    publishers = as_filter_list(publisher)
+    if publishers:
+        query = query.where(J.publisher_name.in_(publishers))
+    pub_types = as_filter_list(pub_type)
+    if pub_types:
+        query = query.where(J.type.in_(pub_types))
     if languages:
         query = query.where(J.language.in_(languages))
     if has_apc is not None:
         query = query.where(APC_SHOWN if has_apc else ~APC_SHOWN)
     if has_works is not None:
         query = query.where(year_works > 0 if has_works else year_works == 0)
-    if green_oa:
-        query = query.where(GREEN_OA_CONDS[GreenOa(green_oa)])
+    green_oas = as_filter_list(green_oa)
+    if green_oas:
+        query = query.where(or_(*[GREEN_OA_CONDS[GreenOa(g)] for g in green_oas]))
     return query
 
 

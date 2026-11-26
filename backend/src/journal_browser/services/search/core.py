@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import Numeric, String, cast, func, select, tuple_
@@ -22,14 +23,14 @@ async def search_journals(
     deal_id: int | None = None,
     oa: bool | None = None,
     doaj: bool | None = None,
-    quartile: str | None = None,
-    topic: str | None = None,
-    publisher: str | None = None,
+    quartile: str | Sequence[str] | None = None,
+    topic: str | Sequence[str] | None = None,
+    publisher: str | Sequence[str] | None = None,
     has_apc: bool | None = None,
     has_works: bool | None = None,
     oa_types: list[str] | None = None,
-    green_oa: GreenOa | str | None = None,
-    pub_type: str | None = None,
+    green_oa: GreenOa | str | Sequence[GreenOa | str] | None = None,
+    pub_type: str | Sequence[str] | None = None,
     languages: list[str] | None = None,
     sort: SortKey = "relevance",
     dir: str | None = None,
@@ -37,7 +38,7 @@ async def search_journals(
     limit: int = 20,
     include_facets: bool = True,
     funder_struct: dict[str, Any] | None = None,
-    funder_fit: str | None = None,
+    funder_fit: str | Sequence[str] | None = None,
     year_from: int | None = None,
     year_to: int | None = None,
     active: bool = True,

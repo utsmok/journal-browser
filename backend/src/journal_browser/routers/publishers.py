@@ -68,7 +68,7 @@ async def search_publishers(
     oa_type: OaTypeFilter = None,
     deal: DealFilter = None,
     quartile: QuartileFilter = None,
-    topic: Annotated[str | None, Query(max_length=100)] = None,
+    topic: Annotated[str | None, Query(max_length=1000)] = None,
     size: Annotated[str | None, Query(max_length=20)] = None,
     has_apc: bool | None = None,
     has_works: bool | None = None,

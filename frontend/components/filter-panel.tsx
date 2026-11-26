@@ -43,20 +43,20 @@ type FilterSelection = {
   deal: string;
   oa: string | null;
   doaj: string | null;
-  quartile: string;
-  topic: string;
-  publisher: string;
+  quartiles: string[];
+  topics: string[];
+  publishers: string[];
   hasApc: string | null;
   hasWorks: string | null;
-  greenOa: string | null;
-  /** Funder-fit tier; only selectable when a funder is picked. */
-  funderFit: string;
-  /** Multi-select: values OR together (single-select groups do not). */
+  greenOas: string[];
+  /** Funder-fit tiers; only selectable when a funder is picked. */
+  funderFits: string[];
+  /** Multi-select: values OR together. */
   oaTypes: string[];
-  /** OpenAlex venue type ("journal", "book series", ...). */
-  pubType: string;
-  /** Modal journal language (ISO 639-1 code). */
-  language: string;
+  /** OpenAlex venue types ("journal", "book series", ...). */
+  pubTypes: string[];
+  /** Modal journal languages (ISO 639-1 codes). */
+  languages: string[];
 };
 
 export type FacetGroupDef = {
@@ -69,17 +69,19 @@ export type FacetGroupDef = {
   initialVisible?: number;
 };
 
-/** Top N by count, with the active value kept visible even outside the top N. */
+/** Top N by count, with any active values kept visible even outside the top N. */
 function topValues(
   counts: Record<string, number> | undefined,
-  active: string,
+  active: string[],
   limit = 8,
 ): FacetValue[] {
   const values: FacetValue[] = Object.entries(counts ?? {})
     .sort((a, b) => b[1] - a[1])
     .slice(0, limit)
     .map(([value, count]) => ({ value, count }));
-  if (active && !values.some((t) => t.value === active)) values.unshift({ value: active });
+  for (const v of active) {
+    if (v && !values.some((t) => t.value === v)) values.unshift({ value: v });
+  }
   return values;
 }
 
@@ -569,8 +571,8 @@ export function FilterPanel({
   const t = useTranslations("common");
   const ts = useTranslations("search");
   const loading = facets === undefined;
-  const topicValues = topValues(facets?.topic, selection.topic, 30);
-  const publisherValues = topValues(facets?.publisher, selection.publisher, 30);
+  const topicValues = topValues(facets?.topic, selection.topics, 30);
+  const publisherValues = topValues(facets?.publisher, selection.publishers, 30);
 
   // Options with a fixed value list render even before the facets request
   // returns, so the panel keeps its shape and shows — instead of 0.
@@ -586,11 +588,11 @@ export function FilterPanel({
             value,
             label: ts(PUB_TYPE_LABELS[value]),
           }))
-        : topValues(facets?.pub_type, selection.pubType).map((v) => ({
+        : topValues(facets?.pub_type, selection.pubTypes).map((v) => ({
             ...v,
             label: PUB_TYPE_LABELS[v.value] ? ts(PUB_TYPE_LABELS[v.value]) : v.value,
           })),
-      activeValues: selection.pubType ? [selection.pubType] : [],
+      activeValues: selection.pubTypes,
     },
     {
       key: "deal",
@@ -643,11 +645,11 @@ export function FilterPanel({
       defaultOpen: true,
       searchable: true,
       initialVisible: 8,
-      values: topValues(facets?.language, selection.language, 30).map((v) => ({
+      values: topValues(facets?.language, selection.languages, 30).map((v) => ({
         ...v,
         label: ts.has(`languages.${v.value}`) ? ts(`languages.${v.value}`) : v.value,
       })),
-      activeValues: selection.language ? [selection.language] : [],
+      activeValues: selection.languages,
     },
     {
       key: "doaj",
@@ -690,7 +692,7 @@ export function FilterPanel({
         count: facets?.green_oa?.[v],
         label: GREEN_OA_LABEL_KEYS[v] ? t(GREEN_OA_LABEL_KEYS[v]) : v,
       })),
-      activeValues: selection.greenOa ? [selection.greenOa] : [],
+      activeValues: selection.greenOas,
     },
     {
       key: "has_works",
@@ -716,7 +718,7 @@ export function FilterPanel({
     },
     // Only rendered when a funder is selected and its policy is structured
     // (the backend omits the facet otherwise).
-    ...(facets?.funder_fit
+    ...(facets?.funder_fit || selection.funderFits.length > 0
       ? [
           {
             key: "funder_fit",
@@ -724,7 +726,7 @@ export function FilterPanel({
             defaultOpen: true,
             values: ["compliant", "check", "no"].map((v) => ({
               value: v,
-              count: facets.funder_fit?.[v],
+              count: facets?.funder_fit?.[v],
               label:
                 v === "compliant"
                   ? t("facets.funderFitCompliant")
@@ -732,7 +734,7 @@ export function FilterPanel({
                     ? t("facets.funderFitCheck")
                     : t("facets.funderFitNo"),
             })),
-            activeValues: selection.funderFit ? [selection.funderFit] : [],
+            activeValues: selection.funderFits,
           },
         ]
       : []),
@@ -745,7 +747,7 @@ export function FilterPanel({
             searchable: true,
             initialVisible: 8,
             values: topicValues,
-            activeValues: selection.topic ? [selection.topic] : [],
+            activeValues: selection.topics,
           },
         ]
       : []),
@@ -758,7 +760,7 @@ export function FilterPanel({
             searchable: true,
             initialVisible: 8,
             values: publisherValues,
-            activeValues: selection.publisher ? [selection.publisher] : [],
+            activeValues: selection.publishers,
           },
         ]
       : []),
@@ -772,7 +774,7 @@ export function FilterPanel({
         value: q,
         count: facets?.quartile?.[q],
       })),
-      activeValues: selection.quartile ? [selection.quartile] : [],
+      activeValues: selection.quartiles,
     },
   ];
 

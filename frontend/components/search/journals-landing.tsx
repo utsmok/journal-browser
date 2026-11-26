@@ -85,21 +85,21 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
     dealId,
     oa,
     doaj,
-    quartile,
-    topic,
-    publisher,
+    quartiles,
+    topics,
+    publishers,
     hasApc,
     hasWorks,
-    greenOa,
+    greenOas,
     active,
     vouched,
     searchIn,
     oaTypes,
-    pubType,
-    language,
+    pubTypes,
+    languages,
     semanticMode,
     semantic,
-    funderFit,
+    funderFits,
     cursor,
     query,
   } = journalsLandingParams(sp, initialView, { funder, yearFrom: year_from, yearTo: year_to });
@@ -205,16 +205,16 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
     deal,
     oa,
     doaj,
-    quartile,
-    topic,
-    publisher,
+    quartiles,
+    topics,
+    publishers,
     hasApc,
     hasWorks,
-    greenOa,
-    funderFit,
+    greenOas,
+    funderFits,
     oaTypes,
-    pubType,
-    language,
+    pubTypes,
+    languages,
   };
 
   const toggleFilter = (key: string, value: string) =>
@@ -224,12 +224,26 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
   const toggleQuality = (key: "active" | "vouched") =>
     update({ [key]: (key === "active" ? active : vouched) ? "false" : undefined });
 
-  const toggleOaType = (value: string) => {
-    const next = oaTypes.includes(value) ? oaTypes.filter((v) => v !== value) : [...oaTypes, value];
-    update({ oa_type: next.join(",") || undefined });
+  const multiFilters: Record<string, { values: string[]; sep: string }> = {
+    oa_type: { values: oaTypes, sep: "," },
+    language: { values: languages, sep: "," },
+    quartile: { values: quartiles, sep: "|" },
+    topic: { values: topics, sep: "|" },
+    publisher: { values: publishers, sep: "|" },
+    pub_type: { values: pubTypes, sep: "|" },
+    green_oa: { values: greenOas, sep: "|" },
+    funder_fit: { values: funderFits, sep: "|" },
+  };
+  const toggleMulti = (key: string, value: string) => {
+    const entry = multiFilters[key];
+    if (!entry) return toggleFilter(key, value);
+    const next = entry.values.includes(value)
+      ? entry.values.filter((v) => v !== value)
+      : [...entry.values, value];
+    update({ [key]: next.join(entry.sep) || undefined });
   };
   const handleFacetToggle = (key: string, value: string) =>
-    key === "oa_type" ? toggleOaType(value) : toggleFilter(key, value);
+    key in multiFilters ? toggleMulti(key, value) : toggleFilter(key, value);
 
   const cycleSort = (columnId: string) => {
     const spec = COLUMN_SORTS[columnId];
@@ -425,7 +439,7 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
               title={t("table.topicFilterTitle", { topic: v })}
               onClick={(event) => {
                 event.stopPropagation();
-                update({ topic: v });
+                update({ topic: (topics.includes(v) ? topics : [...topics, v]).join("|") });
               }}
             >
               {v}
@@ -434,7 +448,7 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
         },
       },
     ],
-    [site, instShort, inst, update, year_from, year_to, t, pubTypeLabel],
+    [site, instShort, inst, update, year_from, year_to, t, pubTypeLabel, topics],
   );
 
   const rows = data?.items ?? [];
@@ -459,17 +473,17 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
       dealId !== undefined ||
       oa !== null ||
       doaj !== null ||
-      quartile ||
-      topic ||
-      publisher ||
+      quartiles.length > 0 ||
+      topics.length > 0 ||
+      publishers.length > 0 ||
       hasApc !== null ||
       hasWorks !== null ||
-      greenOa !== null ||
+      greenOas.length > 0 ||
       funder ||
-      funderFit ||
+      funderFits.length > 0 ||
       oaTypes.length > 0 ||
-      pubType ||
-      language ||
+      pubTypes.length > 0 ||
+      languages.length > 0 ||
       !active ||
       !vouched,
   );
@@ -576,7 +590,7 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
     ...oaTypes.map((v) => ({
       id: `oa_type:${v}`,
       label: `${tc("facets.groupOaType")}: ${v}`,
-      onRemove: () => toggleOaType(v),
+      onRemove: () => toggleMulti("oa_type", v),
     })),
     ...(doaj !== null
       ? [
@@ -589,35 +603,23 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
           },
         ]
       : []),
-    ...(quartile
-      ? [
-          {
-            id: "quartile",
-            label: `${tc("facets.groupQuartile")}: ${quartile}`,
-            onRemove: () => update({ quartile: undefined }),
-          },
-        ]
-      : []),
-    ...(pubType
-      ? [
-          {
-            id: "pub_type",
-            label: `${tc("facets.groupVenueType")}: ${pubTypeLabel(pubType)}`,
-            onRemove: () => update({ pub_type: undefined }),
-          },
-        ]
-      : []),
-    ...(language
-      ? [
-          {
-            id: "language",
-            label: `${tc("facets.groupLanguage")}: ${
-              ts.has(`languages.${language}`) ? ts(`languages.${language}`) : language
-            }`,
-            onRemove: () => update({ language: undefined }),
-          },
-        ]
-      : []),
+    ...quartiles.map((v) => ({
+      id: `quartile:${v}`,
+      label: `${tc("facets.groupQuartile")}: ${v}`,
+      onRemove: () => toggleMulti("quartile", v),
+    })),
+    ...pubTypes.map((v) => ({
+      id: `pub_type:${v}`,
+      label: `${tc("facets.groupVenueType")}: ${pubTypeLabel(v)}`,
+      onRemove: () => toggleMulti("pub_type", v),
+    })),
+    ...languages.map((v) => ({
+      id: `language:${v}`,
+      label: `${tc("facets.groupLanguage")}: ${
+        ts.has(`languages.${v}`) ? ts(`languages.${v}`) : v
+      }`,
+      onRemove: () => toggleMulti("language", v),
+    })),
     ...(hasApc !== null
       ? [
           {
@@ -642,15 +644,11 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
           },
         ]
       : []),
-    ...(greenOa
-      ? [
-          {
-            id: "green_oa",
-            label: `${tc("facets.groupGreenOa")}: ${greenOa}`,
-            onRemove: () => update({ green_oa: undefined }),
-          },
-        ]
-      : []),
+    ...greenOas.map((v) => ({
+      id: `green_oa:${v}`,
+      label: `${tc("facets.groupGreenOa")}: ${v}`,
+      onRemove: () => toggleMulti("green_oa", v),
+    })),
     ...(funder
       ? [
           {
@@ -663,33 +661,21 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
           },
         ]
       : []),
-    ...(funderFit
-      ? [
-          {
-            id: "funder_fit",
-            label: `${tc("facets.groupFunderFit")}: ${funderFit}`,
-            onRemove: () => update({ funder_fit: undefined }),
-          },
-        ]
-      : []),
-    ...(topic
-      ? [
-          {
-            id: "topic",
-            label: `${tc("facets.groupTopic")}: ${topic}`,
-            onRemove: () => update({ topic: undefined }),
-          },
-        ]
-      : []),
-    ...(publisher
-      ? [
-          {
-            id: "publisher",
-            label: `${tc("facets.groupPublisher")}: ${publisher}`,
-            onRemove: () => update({ publisher: undefined }),
-          },
-        ]
-      : []),
+    ...funderFits.map((v) => ({
+      id: `funder_fit:${v}`,
+      label: `${tc("facets.groupFunderFit")}: ${v}`,
+      onRemove: () => toggleMulti("funder_fit", v),
+    })),
+    ...topics.map((v) => ({
+      id: `topic:${v}`,
+      label: `${tc("facets.groupTopic")}: ${v}`,
+      onRemove: () => toggleMulti("topic", v),
+    })),
+    ...publishers.map((v) => ({
+      id: `publisher:${v}`,
+      label: `${tc("facets.groupPublisher")}: ${v}`,
+      onRemove: () => toggleMulti("publisher", v),
+    })),
     ...(!active
       ? [
           {
@@ -1076,7 +1062,12 @@ export function JournalsLanding({ initialView = "browse" }: { initialView?: "bro
                                     title={t("table.topicFilterTitle", { topic: topicVal })}
                                     onClick={(event) => {
                                       event.stopPropagation();
-                                      update({ topic: topicVal });
+                                      update({
+                                        topic: (topics.includes(topicVal)
+                                          ? topics
+                                          : [...topics, topicVal]
+                                        ).join("|"),
+                                      });
                                     }}
                                   >
                                     {topicVal}

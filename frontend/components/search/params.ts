@@ -30,26 +30,29 @@ export type JournalsLandingParams = {
   dealId: number | undefined;
   oa: string | null;
   doaj: string | null;
-  quartile: string;
-  topic: string;
-  publisher: string;
+  quartiles: string[];
+  topics: string[];
+  publishers: string[];
   hasApc: string | null;
   hasWorks: string | null;
-  greenOa: string | null;
+  greenOas: string[];
   active: boolean;
   vouched: boolean;
   searchIn: JournalsSearchIn;
   oaTypes: string[];
-  pubType: string;
-  language: string;
+  pubTypes: string[];
+  languages: string[];
   semanticMode: boolean;
   /** The semantic request runs only in browse view with a query of 2+ chars. */
   semantic: boolean;
-  funderFit: string;
+  funderFits: string[];
   cursor: string | undefined;
   /** Params object the hooks receive, with the funder and year lens applied. */
   query: JournalSearchParams;
 };
+
+const splitPipe = (raw: string | null): string[] => (raw ?? "").split("|").filter(Boolean);
+const splitEnum = (raw: string | null): string[] => (raw ?? "").split(/[|,]/).filter(Boolean);
 
 export function journalsLandingParams(
   sp: URLSearchParams,
@@ -69,23 +72,23 @@ export function journalsLandingParams(
   const dealId = dealIdRaw && /^\d+$/.test(dealIdRaw) ? Number(dealIdRaw) : undefined;
   const oa = sp.get("oa");
   const doaj = sp.get("doaj");
-  const quartile = sp.get("quartile") ?? "";
-  const topic = sp.get("topic") ?? "";
-  const publisher = sp.get("publisher") ?? "";
+  const quartiles = splitEnum(sp.get("quartile"));
+  const topics = splitPipe(sp.get("topic"));
+  const publishers = splitPipe(sp.get("publisher"));
   const hasApc = sp.get("has_apc");
   const hasWorks = sp.get("has_works");
-  const greenOa = sp.get("green_oa");
+  const greenOas = splitEnum(sp.get("green_oa"));
   // Eligibility toggles: both on by default, URL param only when off so
   // default URLs stay clean.
   const active = sp.get("active") !== "false";
   const vouched = sp.get("vouched") !== "false";
   const searchIn = (sp.get("search_in") ?? "all") as JournalsSearchIn;
-  const oaTypes = (sp.get("oa_type") ?? "").split(",").filter(Boolean);
-  const pubType = sp.get("pub_type") ?? "";
-  const language = sp.get("language") ?? "";
+  const oaTypes = splitEnum(sp.get("oa_type"));
+  const pubTypes = splitPipe(sp.get("pub_type"));
+  const languages = splitEnum(sp.get("language"));
   const semanticMode = sp.get("mode") === "semantic";
   const semantic = view === "browse" && semanticMode && q.trim().length >= 2;
-  const funderFit = sp.get("funder_fit") ?? "";
+  const funderFits = splitEnum(sp.get("funder_fit"));
   const cursor = sp.get("cursor") ?? undefined;
 
   const query: JournalSearchParams = {
@@ -95,17 +98,17 @@ export function journalsLandingParams(
     deal_id: dealId,
     oa: oa === null ? undefined : oa === "true",
     doaj: doaj === null ? undefined : doaj === "true",
-    quartile: quartile || undefined,
-    publisher: publisher || undefined,
+    quartile: quartiles.join("|") || undefined,
+    publisher: publishers.join("|") || undefined,
     has_apc: hasApc === null ? undefined : hasApc === "true",
     has_works: hasWorks === null ? undefined : hasWorks === "true",
-    green_oa: greenOa ?? undefined,
+    green_oa: greenOas.join("|") || undefined,
     funder: lens.funder && !semanticMode ? lens.funder.id : undefined,
-    funder_fit: funderFit || undefined,
-    topic: topic || undefined,
+    funder_fit: funderFits.join("|") || undefined,
+    topic: topics.join("|") || undefined,
     oa_type: oaTypes.join(",") || undefined,
-    pub_type: pubType || undefined,
-    language: language || undefined,
+    pub_type: pubTypes.join("|") || undefined,
+    language: languages.join(",") || undefined,
     year_from: lens.yearFrom ?? undefined,
     year_to: lens.yearTo ?? undefined,
     // Off travels to the API; on stays out (server defaults to on).
@@ -127,21 +130,21 @@ export function journalsLandingParams(
     dealId,
     oa,
     doaj,
-    quartile,
-    topic,
-    publisher,
+    quartiles,
+    topics,
+    publishers,
     hasApc,
     hasWorks,
-    greenOa,
+    greenOas,
     active,
     vouched,
     searchIn,
     oaTypes,
-    pubType,
-    language,
+    pubTypes,
+    languages,
     semanticMode,
     semantic,
-    funderFit,
+    funderFits,
     cursor,
     query,
   };

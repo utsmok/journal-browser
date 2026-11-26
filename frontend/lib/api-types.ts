@@ -6467,13 +6467,13 @@ export interface operations {
                 deal_id?: number | null;
                 oa?: boolean | null;
                 doaj?: boolean | null;
-                quartile?: string | null;
+                quartile?: ("Q1" | "Q2" | "Q3" | "Q4")[] | null;
                 topic?: string | null;
                 publisher?: string | null;
                 has_apc?: boolean | null;
                 has_works?: boolean | null;
                 oa_type?: components["schemas"]["OaType"][] | null;
-                green_oa?: components["schemas"]["GreenOa"] | null;
+                green_oa?: components["schemas"]["GreenOa"][] | null;
                 pub_type?: string | null;
                 /** @description Comma-separated ISO 639-1 codes; unknown values match nothing */
                 language?: string | null;
@@ -6485,8 +6485,7 @@ export interface operations {
                 include_facets?: boolean;
                 /** @description Jisc OPF funder id */
                 funder?: number | null;
-                /** @description Funder-fit tier filter */
-                funder_fit?: string | null;
+                funder_fit?: ("compliant" | "check" | "no")[] | null;
                 /** @description Publication-year range start (clamped to the institution's data window; default: the full window) */
                 year_from?: number | null;
                 /** @description Publication-year range end (clamped to the institution's data window; default: the full window) */

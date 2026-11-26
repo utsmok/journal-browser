@@ -21,6 +21,7 @@ from journal_browser.harvest.denorm import BROWSE_EXCLUDED_SQL, MATERIALIZE_SQL,
 from journal_browser.models import (
     Institution,
     IssnMap,
+    JiscFunder,
     JournalApcAggregate,
     JournalFlags,
     Limitation,
@@ -995,3 +996,144 @@ async def test_semantic_total_exact_and_capped(client, db, institution_factory, 
     page3 = (await client.get(url, params={"q": "wq", "limit": 1, "cursor": "2"})).json()
     assert page3["items"] == []
     assert page3["total"] == 2
+
+
+@requires_db
+async def test_multi_select_facet_filters_and_drop_own_counts(client, db, institution_factory):
+    """Multi-select facets OR values within each dimension, preserve commas inside
+    topic/publisher names via | separation, compute drop-own-dimension facet counts,
+    and reject invalid enum values with 422."""
+    ut = await institution_factory(code="ut")
+    db.add_all(
+        [
+            journal_factory(
+                "1000-0001",
+                title="AI & Robotics Journal",
+                latest_quartile="Q1",
+                topics=[{"display_name": "Artificial Intelligence, Robotics"}],
+                publisher_name="Elsevier, Inc.",
+                type="journal",
+                language="en",
+                jisc_allows_sa_submitted=True,
+                is_in_doaj=True,
+                doaj_has_apc=True,
+            ),
+            journal_factory(
+                "1000-0002",
+                title="Mechanics Series",
+                latest_quartile="Q2",
+                topics=[{"display_name": "Computational Mechanics"}],
+                publisher_name="Springer Nature",
+                type="book series",
+                language="de",
+                jisc_allows_sa_accepted=True,
+            ),
+            journal_factory(
+                "1000-0003",
+                title="Archive Proceedings",
+                latest_quartile="Q3",
+                topics=[{"display_name": "Marine Biology"}],
+                publisher_name="Oxford Press",
+                type="conference",
+                language="nl",
+                jisc_allows_sa_published=True,
+            ),
+            journal_factory(
+                "1000-0004",
+                title="Closed Archive Review",
+                latest_quartile="Q4",
+                topics=[{"display_name": "History"}],
+                publisher_name="Other House",
+                type="journal",
+                language="fr",
+                jisc_oa_prohibited=True,
+            ),
+        ]
+    )
+    await db.flush()
+    db.add_all(
+        [
+            JournalFlags(institution_id=ut.id, issn_l=issn, works_count=5, works_window_plus=10)
+            for issn in ("1000-0001", "1000-0002", "1000-0003", "1000-0004")
+        ]
+    )
+    db.add(
+        JiscFunder(
+            id=955,
+            name="Test Funder",
+            publications_policy={
+                "archiving_policy": {"when": {"when": "at_earliest_opportunity"}},
+            },
+        )
+    )
+    await db.commit()
+
+    url = "/api/v1/ut/journals"
+
+    # Multi-select quartile with | and drop-own-dimension facet counts.
+    r = await client.get(url, params={"quartile": "Q1|Q2", "vouched": "false"})
+    assert r.status_code == 200
+    body = r.json()
+    assert {i["issn_l"] for i in body["items"]} == {"1000-0001", "1000-0002"}
+    assert body["facets"]["quartile"] == {"Q1": 1, "Q2": 1, "Q3": 1, "Q4": 1}
+
+    # Legacy comma separator works for enum filters too.
+    r_csv = await client.get(url, params={"quartile": "Q1,Q3", "vouched": "false"})
+    assert r_csv.status_code == 200
+    assert {i["issn_l"] for i in r_csv.json()["items"]} == {"1000-0001", "1000-0003"}
+
+    # Commas inside topic and publisher values stay intact when pipe-delimited.
+    r_topic = await client.get(
+        url,
+        params={
+            "topic": "Artificial Intelligence, Robotics|Computational Mechanics",
+            "vouched": "false",
+        },
+    )
+    assert r_topic.status_code == 200
+    topic_body = r_topic.json()
+    assert {i["issn_l"] for i in topic_body["items"]} == {"1000-0001", "1000-0002"}
+    assert topic_body["facets"]["topic"]["Marine Biology"] == 1
+
+    r_pub = await client.get(
+        url,
+        params={"publisher": "Elsevier, Inc.|Springer Nature", "vouched": "false"},
+    )
+    assert r_pub.status_code == 200
+    pub_body = r_pub.json()
+    assert {i["issn_l"] for i in pub_body["items"]} == {"1000-0001", "1000-0002"}
+    assert pub_body["facets"]["publisher"]["Oxford Press"] == 1
+
+    # Multi-select pub_type, green_oa, language, and funder_fit.
+    r_pt = await client.get(url, params={"pub_type": "journal|book series", "vouched": "false"})
+    assert r_pt.status_code == 200
+    assert {i["issn_l"] for i in r_pt.json()["items"]} == {
+        "1000-0001",
+        "1000-0002",
+        "1000-0004",
+    }
+
+    r_green = await client.get(url, params={"green_oa": "submitted|accepted", "vouched": "false"})
+    assert r_green.status_code == 200
+    green_body = r_green.json()
+    assert {i["issn_l"] for i in green_body["items"]} == {"1000-0001", "1000-0002"}
+    assert green_body["facets"]["green_oa"]["published"] == 1
+
+    r_lang = await client.get(url, params={"language": "en,nl", "vouched": "false"})
+    assert r_lang.status_code == 200
+    assert {i["issn_l"] for i in r_lang.json()["items"]} == {"1000-0001", "1000-0003"}
+
+    r_fit = await client.get(
+        url, params={"funder": 955, "funder_fit": "compliant|check", "vouched": "false"}
+    )
+    assert r_fit.status_code == 200
+    fit_body = r_fit.json()
+    assert {i["issn_l"] for i in fit_body["items"]} == {"1000-0001", "1000-0002", "1000-0003"}
+    assert fit_body["facets"]["funder_fit"]["no"] == 1
+
+    # Invalid enum multi-select tokens return 422.
+    assert (await client.get(url, params={"quartile": "Q1|Q9"})).status_code == 422
+    assert (await client.get(url, params={"green_oa": "accepted|bogus"})).status_code == 422
+    assert (
+        await client.get(url, params={"funder": 955, "funder_fit": "check|bogus"})
+    ).status_code == 422

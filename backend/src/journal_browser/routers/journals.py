@@ -1,6 +1,7 @@
 """/api/v1/journals: search + detail bundle with per-field attribution."""
 
-from typing import Annotated, Any
+import re
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -72,17 +73,36 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 def _split_csv(v: str | list | None) -> list[str] | None:
     # FastAPI hands list-typed params the assembled list of query values;
-    # the frontend sends one comma-joined key, repeated keys also work.
+    # the frontend sends one delimited key, repeated keys also work.
     if v is None:
         return None
     if isinstance(v, list):
         v = ",".join(v)
-    parts = [s for s in v.split(",") if s]
+    parts = [s for s in re.split(r"[,|]", v) if s]
     return parts or None
 
 
-#: Comma-separated oa_type multi-select, validated against OaType (422).
+def _split_pipe(v: str | None) -> list[str] | None:
+    """Split pipe-delimited multi-select values; commas inside values stay intact."""
+    if v is None:
+        return None
+    parts = [s for s in v.split("|") if s]
+    return parts or None
+
+
+#: Delimited multi-select enum filters, validated at the boundary (422).
 OaTypeFilter = Annotated[list[OaType] | None, BeforeValidator(_split_csv), Query(max_length=60)]
+QuartileFilter = Annotated[
+    list[Literal["Q1", "Q2", "Q3", "Q4"]] | None,
+    BeforeValidator(_split_csv),
+    Query(max_length=32),
+]
+GreenOaFilter = Annotated[list[GreenOa] | None, BeforeValidator(_split_csv), Query(max_length=80)]
+FunderFitFilter = Annotated[
+    list[Literal["compliant", "check", "no"]] | None,
+    BeforeValidator(_split_csv),
+    Query(max_length=60),
+]
 
 
 def _is_ignored(issn_l: str) -> bool:
@@ -197,18 +217,18 @@ async def search_journals(
     ] = None,
     oa: bool | None = None,
     doaj: bool | None = None,
-    quartile: Annotated[str | None, Query(pattern="^Q[1-4]$")] = None,
-    topic: Annotated[str | None, Query(max_length=100)] = None,
-    publisher: Annotated[str | None, Query(max_length=200)] = None,
+    quartile: QuartileFilter = None,
+    topic: Annotated[str | None, Query(max_length=1000)] = None,
+    publisher: Annotated[str | None, Query(max_length=1000)] = None,
     has_apc: bool | None = None,
     has_works: bool | None = None,
     oa_type: OaTypeFilter = None,
-    green_oa: GreenOa | None = None,
-    pub_type: Annotated[str | None, Query(max_length=40)] = None,
+    green_oa: GreenOaFilter = None,
+    pub_type: Annotated[str | None, Query(max_length=200)] = None,
     language: Annotated[
         str | None,
         Query(
-            max_length=60,
+            max_length=120,
             description="Comma-separated ISO 639-1 codes; unknown values match nothing",
         ),
     ] = None,
@@ -218,9 +238,7 @@ async def search_journals(
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     include_facets: bool = True,
     funder: Annotated[int | None, Query(description="Jisc OPF funder id")] = None,
-    funder_fit: Annotated[
-        str | None, Query(pattern="^(compliant|check|no)$", description="Funder-fit tier filter")
-    ] = None,
+    funder_fit: FunderFitFilter = None,
     year_from: Annotated[
         int | None,
         Query(
@@ -264,14 +282,14 @@ async def search_journals(
         deal_id=deal_id,
         oa=oa,
         doaj=doaj,
-        quartile=quartile,
-        topic=topic,
-        publisher=publisher,
+        quartile=list(quartile) if quartile else None,
+        topic=_split_pipe(topic),
+        publisher=_split_pipe(publisher),
         has_apc=has_apc,
         has_works=has_works,
         oa_types=list(oa_type) if oa_type else None,
-        green_oa=green_oa,
-        pub_type=pub_type,
+        green_oa=list(green_oa) if green_oa else None,
+        pub_type=_split_pipe(pub_type),
         languages=_split_csv(language),
         sort=sort,
         dir=dir,
@@ -279,7 +297,7 @@ async def search_journals(
         limit=limit,
         include_facets=include_facets,
         funder_struct=funder_policy,
-        funder_fit=funder_fit if funder_policy is not None else None,
+        funder_fit=list(funder_fit) if (funder_policy is not None and funder_fit) else None,
         year_from=year_range[0] if year_range else None,
         year_to=year_range[1] if year_range else None,
         active=active,

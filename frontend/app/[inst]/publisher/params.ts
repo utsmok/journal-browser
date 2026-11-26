@@ -26,7 +26,7 @@ export type PublisherDirectoryState = {
   deal: "covered" | "not_covered" | null;
   quartiles: string[];
   sizes: string[];
-  topic: string;
+  topics: string[];
   hasApc: "yes" | "no" | null;
   hasWorks: "true" | "false" | null;
   sort: PublisherSearchSort | undefined;
@@ -60,7 +60,7 @@ export function publisherDirectoryParams(
   const deal = dealParam ? normalizeDeal(dealParam) : null;
   const quartiles = paramValues(sp, "quartile");
   const sizes = paramValues(sp, "size");
-  const topic = sp.get("topic") ?? "";
+  const topics = paramValues(sp, "topic");
   const apcParam = sp.get("has_apc");
   const hasApc: "yes" | "no" | null = apcParam === "yes" || apcParam === "no" ? apcParam : null;
   const worksParam = sp.get("has_works");
@@ -82,7 +82,7 @@ export function publisherDirectoryParams(
     deal,
     quartiles,
     sizes,
-    topic,
+    topics,
     hasApc,
     hasWorks,
     sort,
@@ -95,7 +95,7 @@ export function publisherDirectoryParams(
       deal: deal ?? undefined,
       quartile: quartiles.length > 0 ? quartiles : undefined,
       size: sizes.length > 0 ? sizes : undefined,
-      topic: topic || undefined,
+      topic: topics.length > 0 ? topics : undefined,
       has_apc: hasApc === null ? undefined : hasApc === "yes",
       has_works: hasWorks === null ? undefined : hasWorks === "true",
       sort,
