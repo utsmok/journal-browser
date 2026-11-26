@@ -234,24 +234,31 @@ def _name_key(name: str) -> tuple[str, str]:
 
 
 async def _crossref_orcid_lists(
-    session: AsyncSession, institution_id: int
+    session: AsyncSession, institution_id: int, wanted: set[str]
 ) -> dict[str, dict[str, tuple[str, str]]]:
-    """pure_uuid -> {orcid: name key} from stored Crossref work payloads.
+    """person pure_uuid -> {orcid: name key} for roster authors without an
+    own ORCID (wanted), from stored Crossref work payloads.
 
     Payloads land in source_records keyed 'doi:<doi>' (source crossref,
-    entity work) via harvest.enrich.enrich_crossref; each payload's
-    author list contributes its ORCIDs with the name key for matching."""
+    entity work) via harvest.enrich.enrich_crossref; the works a wanted
+    person authored (work_pure_authors) contribute their author lists'
+    ORCIDs with the name key for matching. Person-keyed since 2026-11-25:
+    the map was keyed by work uuid while the only consumer looks up by
+    person uuid, so the fill never fired."""
     rows = (
         await session.stream(
             text(
-                "SELECT w.pure_uuid AS uuid, sr.payload->'author' AS authors "
+                "SELECT wpa.person_uuid AS uuid, sr.payload->'author' AS authors "
                 "FROM works w "
+                "JOIN work_pure_authors wpa ON wpa.work_pure_uuid = w.pure_uuid "
+                " AND wpa.institution_id = :iid "
                 "JOIN source_records sr ON sr.source = 'crossref' "
                 " AND sr.entity_type = 'work' "
                 " AND sr.source_pk = 'doi:' || w.doi_normalized "
-                "WHERE w.institution_id = :iid AND w.doi_normalized IS NOT NULL"
+                "WHERE w.institution_id = :iid AND w.doi_normalized IS NOT NULL "
+                " AND wpa.person_uuid = ANY(:uuids)"
             ),
-            {"iid": institution_id},
+            {"iid": institution_id, "uuids": sorted(wanted)},
             execution_options={"stream_results": True, "max_row_buffer": 500},
         )
     ).mappings()
@@ -417,9 +424,11 @@ async def fetch_local_source(session: AsyncSession, institution: Institution) ->
     # Crossref ORCID corroboration: the stored Crossref work payloads
     # (enrichment ladder rung 2, landed by enrich_crossref) list
     # authors with ORCIDs. For roster authors whose Pure person has none,
-    # a name match against those lists fills crossref_orcid with zero
-    # extra API calls; run enrich_works first so the payloads exist.
-    xr_orcids = await _crossref_orcid_lists(session, institution.id)
+    # a name match against their works' lists fills crossref_orcid with
+    # zero extra API calls; run enrich_works first so the payloads exist.
+    xr_orcids = await _crossref_orcid_lists(
+        session, institution.id, {uuid for uuid in roster if not orcid_by_person.get(uuid)}
+    )
 
     data.authors = []
     for uuid in sorted(roster):

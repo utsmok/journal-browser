@@ -1544,3 +1544,126 @@ async def test_profile_and_missed_csv_agree(client, db, institution_factory, mon
     assert [row["title"] for row in rows_out] == ["Real Gap Work"]
     assert rows_out[0]["openalex_id"] == "W-GAP"
     assert rows_out[0]["in_pure"] == "false"
+
+
+@requires_db
+async def test_crossref_orcid_fill_is_person_keyed(db, institution_factory):
+    """Regression: the corroboration map is keyed by person uuid, bridged
+    through work_pure_authors. It used to be keyed by work uuid while the
+    only consumer looks up person uuids, so crossref_orcid never filled."""
+    inst = await institution_factory(code="ut")
+    run = HarvestRun(
+        source="crossref", entity_type="work", status="completed", config_fingerprint="t"
+    )
+    db.add(run)
+    await db.flush()
+
+    def _person(uuid, first, family, orcid=None):
+        return PurePerson(
+            institution_id=inst.id,
+            uuid=uuid,
+            orcid=orcid,
+            name=f"{first} {family}",
+            payload={"cerif": {"first_names": first, "family_names": family, "affiliations": []}},
+        )
+
+    def _work(uuid, doi):
+        return Work(
+            institution_id=inst.id,
+            pure_uuid=uuid,
+            title=f"Work {uuid}",
+            norm_title=f"work {uuid}",
+            year=2024,
+            doi_normalized=doi,
+            first_seen_run=run.id,
+            last_seen_run=run.id,
+        )
+
+    def _edge(person, work):
+        return WorkPureAuthor(institution_id=inst.id, work_pure_uuid=work, person_uuid=person)
+
+    def _crossref(work_doi, authors):
+        return SourceRecord(
+            harvest_run_id=run.id,
+            source="crossref",
+            entity_type="work",
+            source_pk=f"doi:{work_doi}",
+            payload={"author": authors},
+            content_hash="t",
+        )
+
+    db.add_all(
+        [
+            _person("p-unam", "Mary", "Jansen"),
+            _person("p-ambig", "Nora", "Dekker"),
+            _person("p-nora", "Olive", "Smith", orcid=ORCID_FRANK),
+            _work("w-unam", "10.9999/unam"),
+            _work("w-ambig-a", "10.9999/ambig-a"),
+            _work("w-ambig-b", "10.9999/ambig-b"),
+            _work("w-nora", "10.9999/nora"),
+        ]
+    )
+    await db.flush()  # works first: work_pure_authors carries an FK to them
+    db.add_all(
+        [
+            _edge("p-unam", "w-unam"),
+            _edge("p-ambig", "w-ambig-a"),
+            _edge("p-ambig", "w-ambig-b"),
+            _edge("p-nora", "w-nora"),
+            # Roster admission without org closure: confirmed identity rows.
+            AuthorIdentity(
+                institution_id=inst.id,
+                author_pure_uuid="p-unam",
+                external_id="a-unam",
+                status="confirmed",
+                method="name",
+                n_works=1,
+            ),
+            AuthorIdentity(
+                institution_id=inst.id,
+                author_pure_uuid="p-ambig",
+                external_id="a-ambig",
+                status="confirmed",
+                method="name",
+                n_works=2,
+            ),
+            AuthorIdentity(
+                institution_id=inst.id,
+                author_pure_uuid="p-nora",
+                external_id="a-nora",
+                status="confirmed",
+                method="name",
+                n_works=1,
+            ),
+            # Unambiguous: Mary's own work lists exactly one M. Jansen ORCID
+            # (a differently-named co-author ORCID must not match).
+            _crossref(
+                "10.9999/unam",
+                [
+                    {"ORCID": "0000-0002-3333-3333", "given": "M.", "family": "Jansen"},
+                    {"ORCID": "0000-0002-6666-6666", "given": "X.", "family": "Smith"},
+                ],
+            ),
+            # Ambiguous: two different ORCIDs carry Nora's name key.
+            _crossref(
+                "10.9999/ambig-a",
+                [{"ORCID": "0000-0002-1111-1111", "given": "N.", "family": "Dekker"}],
+            ),
+            _crossref(
+                "10.9999/ambig-b",
+                [{"ORCID": "0000-0002-2222-2222", "given": "N.", "family": "Dekker"}],
+            ),
+            # Olive holds her own ORCID; the fill must not touch her.
+            _crossref(
+                "10.9999/nora", [{"ORCID": "0000-0002-7777-7777", "given": "O.", "family": "Smith"}]
+            ),
+        ]
+    )
+    await db.commit()
+
+    data = await fetch_local_source(db, inst)
+    by = {a["pure_uuid"]: a for a in data.authors}
+    assert by["p-unam"]["crossref_orcid"] == "0000-0002-3333-3333"
+    assert by["p-ambig"]["crossref_orcid"] is None
+    assert by["p-nora"]["orcid"] == ORCID_FRANK
+    assert by["p-nora"]["crossref_orcid"] is None
