@@ -9,6 +9,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -36,7 +37,14 @@ class ApcEvidence(Base):
         BigInteger, ForeignKey("source_records.id"), nullable=True
     )
 
-    __table_args__ = (Index("ix_apc_evidence_issn_period", "issn_l", "period"),)
+    __table_args__ = (
+        Index("ix_apc_evidence_issn_period", "issn_l", "period"),
+        Index(
+            "ix_apc_evidence_source_record_id",
+            "source_record_id",
+            postgresql_where=text("source_record_id IS NOT NULL"),
+        ),
+    )
 
 
 class JournalApcAggregate(Base):

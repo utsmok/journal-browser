@@ -23,7 +23,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Text, bindparam, delete, exists, func, literal, select, tuple_, update
+from sqlalchemy import Text, and_, bindparam, delete, exists, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -182,17 +182,14 @@ async def prune_superseded(
     return stats
 
 
-def _carries(keys: frozenset[str]):
+def _carries(keys: frozenset[str], param_name: str = "keys"):
     """`payload ?| keys`: the payload still has one of the dropped keys."""
-    return SourceRecord.payload.op("?|")(bindparam("keys", sorted(keys), type_=ARRAY(Text)))
+    return SourceRecord.payload.op("?|")(bindparam(param_name, sorted(keys), type_=ARRAY(Text)))
 
 
-def _without(keys: frozenset[str]):
-    """`payload - 'a' - 'b'`: the payload minus its dropped top-level keys."""
-    removed = SourceRecord.payload
-    for key in sorted(keys):
-        removed = removed.op("-")(literal(key, Text))
-    return removed
+def _without(keys: frozenset[str], param_name: str = "drop_keys"):
+    """`payload - text[]`: the payload minus its dropped top-level keys."""
+    return SourceRecord.payload.op("-")(bindparam(param_name, sorted(keys), type_=ARRAY(Text)))
 
 
 async def strip_stored_payloads(
@@ -205,11 +202,12 @@ async def strip_stored_payloads(
     """Remove the PAYLOAD_DROP_KEYS keys from stored payloads that still have one.
 
     Rows written before the ingest projection existed keep those keys until
-    this runs. Every (source, entity_type) group with dropped keys is scanned
-    in id ranges, and only a payload that carries a dropped key is rewritten,
-    so a rerun finds nothing left. id, content_hash and harvested_at stay as
-    they were. Without `apply` nothing is written. `on_batch(group, last_id,
-    rows, bytes_before, bytes_after)` runs after every range.
+    this runs. The table is scanned once in id ranges across every
+    (source, entity_type) group with dropped keys, and only payloads carrying
+    a dropped key are rewritten, so a rerun finds nothing left. id,
+    content_hash and harvested_at stay as they were. Without `apply` nothing
+    is written. `on_batch(group, last_id, rows, bytes_before, bytes_after)`
+    runs after every matching group's range.
 
     Returns the totals. payload_bytes_before and payload_bytes_after are the
     compressed sizes of the rewritten payloads, read from the stored rows.
@@ -221,35 +219,59 @@ async def strip_stored_payloads(
         "rows": 0,
         "payload_bytes_before": 0,
         "payload_bytes_after": 0,
-        "by_source": {},
+        "by_source": {
+            f"{source}/{entity_type}": {
+                "rows": 0,
+                "payload_bytes_before": 0,
+                "payload_bytes_after": 0,
+            }
+            for source, entity_type in sorted(PAYLOAD_DROP_KEYS)
+        },
     }
-    for (source, entity_type), keys in sorted(PAYLOAD_DROP_KEYS.items()):
-        name = f"{source}/{entity_type}"
-        group = stats["by_source"].setdefault(
-            name, {"rows": 0, "payload_bytes_before": 0, "payload_bytes_after": 0}
+    group_specs = sorted(PAYLOAD_DROP_KEYS.items())
+    match_predicate = or_(
+        *(
+            and_(
+                SourceRecord.source == source,
+                SourceRecord.entity_type == entity_type,
+                _carries(keys, f"keys_{idx}"),
+            )
+            for idx, ((source, entity_type), keys) in enumerate(group_specs)
         )
-        after_id = 0
-        while after_id < (max_id or 0):
-            rows = (
-                await session.execute(
-                    select(SourceRecord.id, func.pg_column_size(SourceRecord.payload)).where(
-                        SourceRecord.source == source,
-                        SourceRecord.entity_type == entity_type,
-                        SourceRecord.id > after_id,
-                        SourceRecord.id <= after_id + batch,
-                        _carries(keys),
-                    )
+    )
+    after_id = 0
+    while after_id < (max_id or 0):
+        rows = (
+            await session.execute(
+                select(
+                    SourceRecord.id,
+                    SourceRecord.source,
+                    SourceRecord.entity_type,
+                    func.pg_column_size(SourceRecord.payload),
+                ).where(
+                    SourceRecord.id > after_id,
+                    SourceRecord.id <= after_id + batch,
+                    match_predicate,
                 )
-            ).all()
-            ids = [row[0] for row in rows]
-            before = sum(row[1] for row in rows)
+            )
+        ).all()
+        by_group: dict[tuple[str, str], list[tuple[int, int]]] = {}
+        for row_id, src, etype, size in rows:
+            by_group.setdefault((src, etype), []).append((row_id, size))
+        group_results: dict[str, tuple[int, int, int]] = {}
+        if apply and by_group:
+            await session.execute(select(func.set_config("lock_timeout", LOCK_TIMEOUT, True)))
+        for (source, entity_type), items in sorted(by_group.items()):
+            name = f"{source}/{entity_type}"
+            keys = PAYLOAD_DROP_KEYS[(source, entity_type)]
+            ids = [row_id for row_id, _ in items]
+            before = sum(size for _, size in items)
             after = before
             if apply and ids:
-                await session.execute(select(func.set_config("lock_timeout", LOCK_TIMEOUT, True)))
                 await session.execute(
                     update(SourceRecord)
                     .where(SourceRecord.id.in_(ids))
-                    .values(payload=_without(keys))
+                    .values(payload=_without(keys, f"drop_{source}_{entity_type}"))
                 )
                 after = int(
                     await session.scalar(
@@ -259,16 +281,21 @@ async def strip_stored_payloads(
                     )
                     or 0
                 )
-            if apply:
-                await session.commit()
-            else:
-                await session.rollback()
+            group = stats["by_source"][name]
             group["rows"] += len(ids)
             group["payload_bytes_before"] += before
             group["payload_bytes_after"] += after
-            after_id += batch
-            if on_batch is not None:
-                await on_batch(name, after_id, len(ids), before, after)
+            group_results[name] = (len(ids), before, after)
+        if apply:
+            await session.commit()
+        else:
+            await session.rollback()
+        after_id += batch
+        if on_batch is not None:
+            for (source, entity_type), _keys in group_specs:
+                name = f"{source}/{entity_type}"
+                n_rows, before, after = group_results.get(name, (0, 0, 0))
+                await on_batch(name, after_id, n_rows, before, after)
     for field in ("rows", "payload_bytes_before", "payload_bytes_after"):
         stats[field] = sum(group[field] for group in stats["by_source"].values())
     return stats

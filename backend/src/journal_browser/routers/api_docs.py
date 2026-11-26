@@ -75,9 +75,25 @@ def public_openapi(full: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+_OPENAPI_CACHE: dict[tuple[int, int, int, str], dict[str, Any]] = {}
+
+
 @router.get("/openapi.json")
 async def public_schema(request: Request) -> dict[str, Any]:
-    return public_openapi(request.app.openapi())
+    full = request.app.openapi()
+    settings = get_settings()
+    key = (
+        id(full),
+        settings.rate_limit_per_minute,
+        settings.rate_limit_heavy_per_minute,
+        settings.support_email,
+    )
+    cached = _OPENAPI_CACHE.get(key)
+    if cached is None:
+        cached = public_openapi(full)
+        _OPENAPI_CACHE.clear()
+        _OPENAPI_CACHE[key] = cached
+    return cached
 
 
 @router.get("/api-docs")

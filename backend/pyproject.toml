@@ -111,10 +111,12 @@ name = "shared helpers stay below harvest, services and routers"
 type = "forbidden"
 source_modules = [
     "journal_browser.config",
+    "journal_browser.currency",
     "journal_browser.identifiers",
     "journal_browser.models",
     "journal_browser.queries",
     "journal_browser.topics",
+    "journal_browser.vocab",
 ]
 forbidden_modules = [
     "journal_browser.harvest",

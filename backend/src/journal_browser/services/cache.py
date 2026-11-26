@@ -158,15 +158,23 @@ def swr_schedule(store: dict, key: tuple, factory: Any) -> bool:
 def cache_get(store: dict, key: tuple, ttl_seconds: float) -> Any | None:
     """store[key] when present and fresh, else None."""
     hit = store.get(key)
-    if hit and time.monotonic() - hit[0] < ttl_seconds:
+    if hit is None:
+        return None
+    if time.monotonic() - hit[0] < ttl_seconds:
         del store[key]
         store[key] = (*hit[:3], next(_seq))
         return hit[1]
+    store.pop(key, None)
     return None
 
 
-def cache_put(store: dict, key: tuple, value: Any, max_entries: int = FACET_MAX_ENTRIES) -> None:
-    _touch_and_evict(store, key, (time.monotonic(), value), max_entries)
+def cache_put(store: dict, key: tuple, value: Any, max_entries: int | None = None) -> None:
+    limit = (
+        max_entries
+        if max_entries is not None
+        else (SNAPSHOT_MAX_ENTRIES if store is SNAPSHOT_CACHE else FACET_MAX_ENTRIES)
+    )
+    _touch_and_evict(store, key, (time.monotonic(), value), limit)
 
 
 def invalidate_prefix(prefix: str) -> None:

@@ -131,7 +131,7 @@ class IngestSession:
         self.records_seen: int = 0
         self.parse_failures: int = 0
         self._pending: list[dict[str, Any]] = []
-        self._seen_keys: set[tuple[str, str, str, str]] = set()
+        self._seen_keys: set[tuple[str, str]] = set()
         self._release_lock: weakref.finalize | None = None
 
     async def start_run(
@@ -146,6 +146,7 @@ class IngestSession:
         self.entity_type = entity_type
         self.filter_set = filter_set
         self.institution_id = institution_id
+        self._seen_keys.clear()
         # Close stale 'running' rows for this key first. Only the
         # in-process exception path can mark a run 'failed', so a crashed
         # or killed process leaves its row running forever; a new start of
@@ -217,7 +218,7 @@ class IngestSession:
         self.records_seen += 1
         full = _strip_nuls(payload)
         h = content_hash(full)
-        key = (self.source, self.entity_type, source_pk, h)
+        key = (source_pk, h)
         if key in self._seen_keys:
             return "duplicate", h
         exists = await self.session.scalar(
@@ -279,8 +280,10 @@ class IngestSession:
                 tuple_(SourceRecord.source_pk, SourceRecord.content_hash).in_(list(dedup)),
             )
         )
-        for key in existing.all():
-            dedup.pop(tuple(key), None)
+        for row_key in existing.all():
+            key = (row_key[0], row_key[1])
+            dedup.pop(key, None)
+            self._seen_keys.add(key)
         self._seen_keys.update(dedup)
         self._pending.extend(dedup.values())
         if len(self._pending) >= BATCH_SIZE:

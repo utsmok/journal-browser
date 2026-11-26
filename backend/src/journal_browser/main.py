@@ -185,12 +185,14 @@ async def _warm_snapshots_task() -> None:
             from .services.search import search_journals
             from .services.works_query import clamped_year_range
 
-            async with async_sessionmaker(get_engine(), expire_on_commit=False)() as session:
+            maker = async_sessionmaker(get_engine(), expire_on_commit=False)
+            async with maker() as session:
                 subq = select(Author.institution_id).distinct()
                 rows = await session.scalars(select(Institution).where(Institution.id.in_(subq)))
                 insts = rows.all()
-                cur_year = datetime.now(UTC).year
-                for inst in insts:
+            cur_year = datetime.now(UTC).year
+            for inst in insts:
+                async with maker() as session:
                     fac_res = await orgunits.search_orgunits(
                         session, institution=inst, level="faculty"
                     )
@@ -204,20 +206,23 @@ async def _warm_snapshots_task() -> None:
                     )
                     await search_journals(session, institution_id=inst.id, limit=1)
 
-                    # Warm deals, funders, collaborations, and Last-5-Years presets.
-                    try:
+                # Warm deals, funders, collaborations, and Last-5-Years presets.
+                try:
+                    async with maker() as session:
                         await deals.deals_list(session, inst, "current")
-                    except Exception:
-                        logger.exception("warm deals failed for %s", inst.code)
+                except Exception:
+                    logger.exception("warm deals failed for %s", inst.code)
 
-                    try:
+                try:
+                    async with maker() as session:
                         canon = await funders.canon_links(session)
                         await funders.ut_work_counts(session, inst)
                         await funders.ut_funder_work_counts(session, inst, canon.bare_ids)
-                    except Exception:
-                        logger.exception("warm funders failed for %s", inst.code)
+                except Exception:
+                    logger.exception("warm funders failed for %s", inst.code)
 
-                    try:
+                try:
+                    async with maker() as session:
                         await collaborations.search_collaborations(
                             session,
                             inst,
@@ -231,14 +236,15 @@ async def _warm_snapshots_task() -> None:
                         await collaborations.collaboration_map(
                             session, inst, collaborations.CollaborationFilters()
                         )
-                    except Exception:
-                        logger.exception("warm collaborations failed for %s", inst.code)
+                except Exception:
+                    logger.exception("warm collaborations failed for %s", inst.code)
 
-                    last5_end = min(inst.data_window_end or cur_year, cur_year)
-                    last5_start = max(inst.data_window_start, last5_end - 4)
-                    last5 = clamped_year_range(inst, last5_start, last5_end)
-                    if last5 is not None:
-                        try:
+                last5_end = min(inst.data_window_end or cur_year, cur_year)
+                last5_start = max(inst.data_window_start, last5_end - 4)
+                last5 = clamped_year_range(inst, last5_start, last5_end)
+                if last5 is not None:
+                    try:
+                        async with maker() as session:
                             await publishers.search_publishers(
                                 session, institution_id=inst.id, years=last5, include_facets=False
                             )
@@ -252,30 +258,32 @@ async def _warm_snapshots_task() -> None:
                                 year_from=last5[0],
                                 year_to=last5[1],
                             )
-                        except Exception:
-                            logger.exception("warm last5 failed for %s", inst.code)
+                    except Exception:
+                        logger.exception("warm last5 failed for %s", inst.code)
 
-                    # Warm lightweight detail bundles (include_gaps=False) so first visits are
-                    # instant.
-                    for unit in fac_res.get("items", []):
-                        uname = unit.get("name")
-                        if uname:
-                            try:
+                # Warm lightweight detail bundles (include_gaps=False) so first visits are
+                # instant.
+                for unit in fac_res.get("items", []):
+                    uname = unit.get("name")
+                    if uname:
+                        try:
+                            async with maker() as session:
                                 await orgunits.orgunit_detail(
                                     session, inst, "faculty", uname, include_gaps=False
                                 )
-                            except Exception:
-                                logger.exception("warm faculty detail %s failed", uname)
+                        except Exception:
+                            logger.exception("warm faculty detail %s failed", uname)
 
-                    for pub in pub_res.get("items", [])[:10]:
-                        pname = pub.get("name")
-                        if pname:
-                            try:
+                for pub in pub_res.get("items", [])[:10]:
+                    pname = pub.get("name")
+                    if pname:
+                        try:
+                            async with maker() as session:
                                 await publishers.publisher_detail(
                                     session, inst, pname, include_gaps=False
                                 )
-                            except Exception:
-                                logger.exception("warm publisher detail %s failed", pname)
+                        except Exception:
+                            logger.exception("warm publisher detail %s failed", pname)
 
             logger.info("snapshot warm: %d institution(s)", len(insts))
         except Exception:
@@ -352,7 +360,12 @@ def create_app() -> "FastAPI":
         allow_origins=settings.cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
-        expose_headers=["X-Request-ID"],
+        expose_headers=[
+            "X-Request-ID",
+            "RateLimit-Limit",
+            "RateLimit-Remaining",
+            "Retry-After",
+        ],
     )
     app.add_middleware(RequestObservabilityMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)

@@ -14,10 +14,11 @@ in-range work) at query time — same edge population and author gates as
 the snapshot, data window replaced by the clamped range — while the
 roster and attribute columns stay snapshot."""
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import Numeric, case, cast, func, select, text
+from sqlalchemy import Numeric, case, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
@@ -74,7 +75,6 @@ AUTHOR_SHARE_MIN_WORKS = 4
 DEAL_USAGE_CAP = 8
 TOPICS_PER_ITEM = 3
 TOPICS_PER_DETAIL = 5
-SNAPSHOT_WORK_MEM = "256MB"  # cold-build-only, see _snapshot
 
 LEVELS = ("faculty", "group", "institute")
 SORT_KEYS = ("relevance", "name", "authors", "works", "deal_works")
@@ -270,39 +270,54 @@ async def _unit_topics(
     }
 
 
+_SNAPSHOT_LOCKS: dict[tuple, asyncio.Lock] = {}
+
+
+def _snapshot_lock(key: tuple) -> asyncio.Lock:
+    lock = _SNAPSHOT_LOCKS.get(key)
+    if lock is None:
+        if len(_SNAPSHOT_LOCKS) > 64:
+            for k in [k for k, lk in _SNAPSHOT_LOCKS.items() if not lk.locked()]:
+                _SNAPSHOT_LOCKS.pop(k, None)
+        lock = asyncio.Lock()
+        _SNAPSHOT_LOCKS[key] = lock
+    return lock
+
+
 async def _snapshot(session: AsyncSession, institution: Institution) -> dict[str, dict[str, _Unit]]:
     """Per-level unit aggregates for one institution, cached until the next
     harvest bump or 24h (publishers-snapshot pattern)."""
     cache_key = (
+        "orgunits_snap",
         institution.id,
         await cache_epoch(session),
     )
     hit = cache_get(SNAPSHOT_CACHE, cache_key, SNAPSHOT_TTL)
     if hit is not None:
         return hit
-    snap: dict[str, dict[str, _Unit]] = {}
-    # One-off build: keep the edge-join hash aggregates and sorts in
-    # memory instead of spilling. SET LOCAL dies with the request's
-    # transaction, so the pool is unaffected.
-    await session.execute(text(f"SET LOCAL work_mem = '{SNAPSHOT_WORK_MEM}'"))
-    for level in LEVELS:
-        units = _unit_rows(institution, level)
-        result = await session.execute(select(units))
-        snap[level] = {
-            r.name: _Unit(
-                name=r.name,
-                faculty=r.faculty,
-                n_authors=int(r.n_authors),
-                n_works=int(r.n_works or 0),
-                n_groups=r.n_groups if level == "faculty" else None,
-                deal_works=int(r.deal_works),
-                apc_euro_total=float(r.apc_euro_total),
-                apc_n=int(r.apc_n),
-            )
-            for r in result.all()
-        }
-    cache_put(SNAPSHOT_CACHE, cache_key, snap)
-    return snap
+    async with _snapshot_lock(cache_key):
+        hit = cache_get(SNAPSHOT_CACHE, cache_key, SNAPSHOT_TTL)
+        if hit is not None:
+            return hit
+        snap: dict[str, dict[str, _Unit]] = {}
+        for level in LEVELS:
+            units = _unit_rows(institution, level)
+            result = await session.execute(select(units))
+            snap[level] = {
+                r.name: _Unit(
+                    name=r.name,
+                    faculty=r.faculty,
+                    n_authors=int(r.n_authors),
+                    n_works=int(r.n_works or 0),
+                    n_groups=r.n_groups if level == "faculty" else None,
+                    deal_works=int(r.deal_works),
+                    apc_euro_total=float(r.apc_euro_total),
+                    apc_n=int(r.apc_n),
+                )
+                for r in result.all()
+            }
+        cache_put(SNAPSHOT_CACHE, cache_key, snap)
+        return snap
 
 
 def _scoped_unit_rows(institution: Institution, level: str, year_range: tuple[int, int]) -> Any:

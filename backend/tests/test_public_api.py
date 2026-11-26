@@ -67,7 +67,10 @@ def test_limit_groups():
     assert limit_group("GET", "/api/v1/ut/journals") == "default"
     assert limit_group("GET", "/api/v1/ut/collaborations/partners.csv") == "heavy"
     assert limit_group("GET", "/api/v1/ut/journals/semantic-search") == "heavy"
+    assert limit_group("GET", "/api/v1/ut/journals/semantic-search/") == "heavy"
     assert limit_group("POST", "/api/v1/ut/journals/recommend") == "heavy"
+    assert limit_group("POST", "/api/v1/ut/journals/batch") == "heavy"
+    assert limit_group("GET", "/api/v1/ut/collaborations/map") == "heavy"
     assert limit_group("GET", "/api/v1/ut/journals/1234-5678/similar") == "heavy"
     assert limit_group("POST", "/api/v1/feedback") == "feedback"
     assert limit_group("OPTIONS", "/api/v1/ut/journals") is None
@@ -79,6 +82,19 @@ async def test_oversized_body_rejected_before_the_app(api):
         "/api/v1/feedback",
         content=b"x" * 2_000_001,
         headers={"X-Forwarded-For": "203.0.113.5", "Content-Type": "application/json"},
+    )
+    assert r.status_code == 413
+
+
+async def test_oversized_chunked_body_returns_413(api):
+    async def chunks():
+        for _ in range(5):
+            yield b"x" * 500_000
+
+    r = await api.post(
+        "/api/v1/feedback",
+        content=chunks(),
+        headers={"X-Forwarded-For": "203.0.113.6", "Content-Type": "application/json"},
     )
     assert r.status_code == 413
 
@@ -96,6 +112,8 @@ def test_client_ip_never_falls_back_past_a_bad_header():
     assert client_ip({"x-forwarded-for": "not-an-ip"}, "172.19.0.5") is None
     assert client_ip({"x-forwarded-for": "203.0.113.7, 10.0.0.1"}, None) == "203.0.113.7"
     assert client_ip({}, "10.0.0.2") == "10.0.0.2"
+    # Public peers cannot spoof forwarding headers.
+    assert client_ip({"cf-connecting-ip": "1.2.3.4"}, "93.184.216.34") == "93.184.216.34"
 
 
 async def test_every_admin_route_but_login_needs_a_token(api, monkeypatch):

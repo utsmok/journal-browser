@@ -270,3 +270,18 @@ async def test_openalex_funder_ids_bare_up_and_prefixed_back(mig_db):
     await conn.close()
 
     await _alembic(command.upgrade, "head")  # and 0006 reruns cleanly
+
+    conn = await asyncpg.connect(url.replace("+asyncpg", ""))
+    try:
+        idx_names = {
+            row["indexname"]
+            for row in await conn.fetch(
+                "SELECT indexname FROM pg_indexes WHERE tablename IN "
+                "('source_records', 'apc_evidence', 'authors')"
+            )
+        }
+        assert "ix_source_records_harvest_run_id" in idx_names
+        assert "ix_apc_evidence_source_record_id" in idx_names
+        assert "ix_authors_name_fold_trgm" in idx_names
+    finally:
+        await conn.close()

@@ -583,7 +583,11 @@ def _build_reasons_and_summary(
                 )
             )
             oa_phrase = f"gold open access ({cand.estimated_cost_label})"
-        elif cand.apc_display.price is not None and cand.apc_display.currency:
+        elif (
+            cand.apc_display is not None
+            and cand.apc_display.price is not None
+            and cand.apc_display.currency
+        ):
             reasons.append(
                 RecommendReason(
                     kind="cost",

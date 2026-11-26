@@ -20,6 +20,7 @@ serves a separately cached snapshot whose works counts swap to the
 year-scoped pure_canon stats sums (search.base_query convention).
 """
 
+import asyncio
 import warnings
 from typing import Any
 
@@ -84,7 +85,6 @@ DEAL_DISCREPANCY_CAP = 10
 TOPIC_FACET_LIMIT = 10
 TOPICS_PER_ITEM = 3
 TOPICS_PER_DETAIL = 5
-SNAPSHOT_WORK_MEM = "128MB"  # cold-build-only, see _snapshot
 
 QUARTILES = ("Q1", "Q2", "Q3", "Q4")
 SIZE_BUCKETS = ("1", "2-4", "5-9", "10+")
@@ -287,7 +287,7 @@ def _snapshot_query(institution_id: int, years: tuple[int, int] | None = None) -
     return (
         select(
             agg,
-            func.coalesce(topics5.c.topics, text("'[]'::jsonb")).label("topics"),
+            func.coalesce(topics5.c.topics, text("'{}'::jsonb")).label("topics"),
             func.coalesce(labels.c.labels, text("'[]'::jsonb")).label("labels"),
             func.coalesce(members.c.members, text("'[]'::jsonb")).label("members"),
         )
@@ -298,6 +298,20 @@ def _snapshot_query(institution_id: int, years: tuple[int, int] | None = None) -
     )
 
 
+_SNAPSHOT_LOCKS: dict[tuple, asyncio.Lock] = {}
+
+
+def _snapshot_lock(key: tuple) -> asyncio.Lock:
+    lock = _SNAPSHOT_LOCKS.get(key)
+    if lock is None:
+        if len(_SNAPSHOT_LOCKS) > 64:
+            for k in [k for k, lk in _SNAPSHOT_LOCKS.items() if not lk.locked()]:
+                _SNAPSHOT_LOCKS.pop(k, None)
+        lock = asyncio.Lock()
+        _SNAPSHOT_LOCKS[key] = lock
+    return lock
+
+
 async def _snapshot(
     session: AsyncSession, institution_id: int, years: tuple[int, int] | None = None
 ) -> dict[str, PublisherRow]:
@@ -306,6 +320,7 @@ async def _snapshot(
     (search.facets convention): the year-scoped swap runs at query time,
     so year-scoped snapshots cache separately from the denormalized one."""
     cache_key = (
+        "publishers_snap",
         institution_id,
         hash(tuple(sorted(get_settings().ignored_issns))),
         await cache_epoch(session),
@@ -314,41 +329,41 @@ async def _snapshot(
     hit = cache_get(SNAPSHOT_CACHE, cache_key, SNAPSHOT_TTL)
     if hit is not None:
         return hit
-    snap: dict[str, PublisherRow] = {}
-    # The entries CTE's set-returning join is implicitly lateral in
-    # Postgres; SQLAlchemy mistakes it for a cartesian product.
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore", message=".*cartesian product.*", category=sa_exc.SAWarning
-        )
-        # One-off build: keep the ~400k-entry hash aggregates and sorts
-        # in memory instead of spilling at the 4MB default. SET LOCAL dies
-        # with the request's transaction, so the pool is unaffected.
-        await session.execute(text(f"SET LOCAL work_mem = '{SNAPSHOT_WORK_MEM}'"))
-        result = await session.execute(_snapshot_query(institution_id, years))
-    for r in result.all():
-        topics = sorted(
-            ({"name": name, "n": float(n)} for name, n in (r.topics or {}).items()),
-            key=lambda t: (-t["n"], t["name"]),
-        )
-        labels = frozenset(r.labels or ())
-        snap[r.name] = PublisherRow(
-            name=r.name,
-            n_journals=r.n_journals,
-            n_works=int(r.n_works or 0),
-            deal_journals=r.deal_journals,
-            oa_counts={t: getattr(r, t) for t in OA_TYPES},
-            quartile_counts={q.lower(): getattr(r, q.lower()) for q in QUARTILES},
-            apc_journals=r.apc_journals,
-            eur_min=float(r.eur_min) if r.eur_min is not None else None,
-            eur_max=float(r.eur_max) if r.eur_max is not None else None,
-            topics=topics,
-            labels=labels,
-            labels_lower=frozenset(lab.lower() for lab in labels),
-            members_lower=frozenset(m.lower() for m in (r.members or ())),
-        )
-    cache_put(SNAPSHOT_CACHE, cache_key, snap)
-    return snap
+    async with _snapshot_lock(cache_key):
+        hit = cache_get(SNAPSHOT_CACHE, cache_key, SNAPSHOT_TTL)
+        if hit is not None:
+            return hit
+        snap: dict[str, PublisherRow] = {}
+        # The entries CTE's set-returning join is implicitly lateral in
+        # Postgres; SQLAlchemy mistakes it for a cartesian product.
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", message=".*cartesian product.*", category=sa_exc.SAWarning
+            )
+            result = await session.execute(_snapshot_query(institution_id, years))
+        for r in result.all():
+            topics = sorted(
+                ({"name": name, "n": float(n)} for name, n in (r.topics or {}).items()),
+                key=lambda t: (-t["n"], t["name"]),
+            )
+            labels = frozenset(r.labels or ())
+            snap[r.name] = PublisherRow(
+                name=r.name,
+                n_journals=r.n_journals,
+                n_works=int(r.n_works or 0),
+                deal_journals=r.deal_journals,
+                oa_counts={t: getattr(r, t) for t in OA_TYPES},
+                quartile_counts={q.lower(): getattr(r, q.lower()) for q in QUARTILES},
+                apc_journals=r.apc_journals,
+                eur_min=float(r.eur_min) if r.eur_min is not None else None,
+                eur_max=float(r.eur_max) if r.eur_max is not None else None,
+                topics=topics,
+                labels=labels,
+                labels_lower=frozenset(lab.lower() for lab in labels),
+                members_lower=frozenset(m.lower() for m in (r.members or ())),
+            )
+        cache_put(SNAPSHOT_CACHE, cache_key, snap)
+        return snap
 
 
 def _order_pubs(

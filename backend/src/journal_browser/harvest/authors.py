@@ -234,29 +234,35 @@ def _name_key(name: str) -> tuple[str, str]:
 
 
 async def _crossref_orcid_lists(
-    session: AsyncSession, institution_id: int, wanted: set[str]
+    session: AsyncSession,
+    institution_id: int,
+    wanted: set[str],
+    wanted_keys: dict[str, tuple[str, str]] | None = None,
 ) -> dict[str, dict[str, tuple[str, str]]]:
     """person pure_uuid -> {orcid: name key} for roster authors without an
     own ORCID (wanted), from stored Crossref work payloads.
 
     Payloads land in source_records keyed 'doi:<doi>' (source crossref,
-    entity work) via harvest.enrich.enrich_crossref; the works a wanted
-    person authored (work_pure_authors) contribute their author lists'
-    ORCIDs with the name key for matching. Person-keyed since 2026-11-25:
-    the map was keyed by work uuid while the only consumer looks up by
-    person uuid, so the fill never fired."""
+    entity work) via harvest.enrich.enrich_crossref; the active works a wanted
+    person authored (work_pure_authors) contribute their latest stored
+    Crossref author lists' ORCIDs with the name key for matching."""
+    if not wanted:
+        return {}
     rows = (
         await session.stream(
             text(
-                "SELECT wpa.person_uuid AS uuid, sr.payload->'author' AS authors "
+                "SELECT DISTINCT ON (wpa.person_uuid, sr.source_pk) "
+                "wpa.person_uuid AS uuid, sr.payload->'author' AS authors "
                 "FROM works w "
                 "JOIN work_pure_authors wpa ON wpa.work_pure_uuid = w.pure_uuid "
                 " AND wpa.institution_id = :iid "
                 "JOIN source_records sr ON sr.source = 'crossref' "
                 " AND sr.entity_type = 'work' "
                 " AND sr.source_pk = 'doi:' || w.doi_normalized "
-                "WHERE w.institution_id = :iid AND w.doi_normalized IS NOT NULL "
-                " AND wpa.person_uuid = ANY(:uuids)"
+                "WHERE w.institution_id = :iid AND w.retired_at IS NULL "
+                " AND w.doi_normalized IS NOT NULL "
+                " AND wpa.person_uuid = ANY(:uuids) "
+                "ORDER BY wpa.person_uuid, sr.source_pk, sr.harvested_at DESC, sr.id DESC"
             ),
             {"iid": institution_id, "uuids": sorted(wanted)},
             execution_options={"stream_results": True, "max_row_buffer": 500},
@@ -265,6 +271,8 @@ async def _crossref_orcid_lists(
     out: dict[str, dict[str, tuple[str, str]]] = {}
     async for partition in rows.partitions(500):
         for row in partition:
+            uuid = row["uuid"]
+            target_key = wanted_keys.get(uuid) if wanted_keys is not None else None
             for entry in row["authors"] or []:
                 if not isinstance(entry, dict):
                     continue
@@ -274,7 +282,9 @@ async def _crossref_orcid_lists(
                 listed = _name_key(
                     " ".join(part for part in (entry.get("given"), entry.get("family")) if part)
                 )
-                out.setdefault(row["uuid"], {})[orcid] = listed
+                if wanted_keys is not None and listed != target_key:
+                    continue
+                out.setdefault(uuid, {})[orcid] = listed
     return out
 
 
@@ -426,9 +436,22 @@ async def fetch_local_source(session: AsyncSession, institution: Institution) ->
     # authors with ORCIDs. For roster authors whose Pure person has none,
     # a name match against their works' lists fills crossref_orcid with
     # zero extra API calls; run enrich_works first so the payloads exist.
-    xr_orcids = await _crossref_orcid_lists(
-        session, institution.id, {uuid for uuid in roster if not orcid_by_person.get(uuid)}
-    )
+    wanted_keys = {
+        uuid: _name_key(
+            " ".join(
+                filter(
+                    None,
+                    (
+                        (data.persons[uuid].get("cerif") or {}).get("first_names"),
+                        (data.persons[uuid].get("cerif") or {}).get("family_names"),
+                    ),
+                )
+            )
+        )
+        for uuid in roster
+        if not orcid_by_person.get(uuid)
+    }
+    xr_orcids = await _crossref_orcid_lists(session, institution.id, set(wanted_keys), wanted_keys)
 
     data.authors = []
     for uuid in sorted(roster):

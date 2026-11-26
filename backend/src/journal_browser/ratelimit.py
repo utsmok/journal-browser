@@ -33,8 +33,15 @@ MAX_TRACKED_KEYS = 50_000
 # posts more than a few kilobytes.
 MAX_BODY_BYTES = 2_000_000
 
-# Endpoints that run the embedding model or stream a full CSV export.
-_HEAVY_SUFFIXES = (".csv", "/similar", "/journals/semantic-search", "/journals/recommend")
+# Endpoints that run the embedding model, large batches/maps, or stream a full CSV export.
+_HEAVY_SUFFIXES = (
+    ".csv",
+    "/similar",
+    "/journals/semantic-search",
+    "/journals/recommend",
+    "/journals/batch",
+    "/collaborations/map",
+)
 
 
 def _parse_ip(raw: str | None) -> str | None:
@@ -46,14 +53,26 @@ def _parse_ip(raw: str | None) -> str | None:
         return None
 
 
+def _is_trusted_proxy(peer: str | None) -> bool:
+    if peer is None:
+        return True
+    ip = _parse_ip(peer)
+    if ip is None:
+        return False
+    addr = ipaddress.ip_address(ip)
+    return addr.is_private or addr.is_loopback
+
+
 def client_ip(headers: Mapping[str, str], peer: str | None) -> str | None:
     """The originating client address: CF-Connecting-IP, else the first
-    X-Forwarded-For hop, else the TCP peer. The first header present wins;
-    an unparseable value yields None rather than a proxy's address."""
-    if (cf := headers.get("cf-connecting-ip")) is not None:
-        return _parse_ip(cf)
-    if (xff := headers.get("x-forwarded-for")) is not None:
-        return _parse_ip(xff.split(",")[0])
+    X-Forwarded-For hop, else the TCP peer. Forwarding headers are only
+    honored when the TCP peer is a trusted private/loopback proxy (or
+    None in synthetic unit calls)."""
+    if _is_trusted_proxy(peer):
+        if (cf := headers.get("cf-connecting-ip")) is not None:
+            return _parse_ip(cf)
+        if (xff := headers.get("x-forwarded-for")) is not None:
+            return _parse_ip(xff.split(",")[0])
     return _parse_ip(peer)
 
 
@@ -70,9 +89,10 @@ def limit_group(method: str, path: str) -> str | None:
     """The limit group a request counts against; None = not limited."""
     if not path.startswith("/api/") or method == "OPTIONS":
         return None
-    if method == "POST" and path.rstrip("/") == "/api/v1/feedback":
+    normalized = path.rstrip("/") or "/"
+    if method == "POST" and normalized == "/api/v1/feedback":
         return "feedback"
-    if path.endswith(_HEAVY_SUFFIXES):
+    if normalized.endswith(_HEAVY_SUFFIXES):
         return "heavy"
     return "default"
 
@@ -157,6 +177,7 @@ class RateLimitMiddleware:
             return
 
         limit = _group_limit(group)
+        remaining = 0
         if limit > 0:
             client = client_ip(headers, peer) or "unknown"
             remaining, retry_after = _limiter.hit(group, client, limit)
@@ -174,26 +195,41 @@ class RateLimitMiddleware:
                 )
                 return
 
-            async def send_with_headers(message: Message) -> None:
-                if message["type"] == "http.response.start":
+        sent_early = False
+        downstream_started = False
+
+        async def wrapped_send(message: Message) -> None:
+            nonlocal downstream_started
+            if sent_early:
+                return
+            if message["type"] == "http.response.start":
+                downstream_started = True
+                if limit > 0:
                     out = MutableHeaders(scope=message)
                     out["RateLimit-Limit"] = str(limit)
                     out["RateLimit-Remaining"] = str(remaining)
-                await send(message)
-        else:
-            send_with_headers = send
+            await send(message)
 
         received = 0
 
         async def capped_receive() -> Message:
             # Chunked bodies carry no Content-Length: count them as they
-            # stream and end the request once they pass the cap.
-            nonlocal received
+            # stream and answer 413 once they pass the cap.
+            nonlocal received, sent_early
             message = await receive()
             if message["type"] == "http.request":
                 received += len(message.get("body", b""))
                 if received > MAX_BODY_BYTES:
+                    if not sent_early:
+                        sent_early = True
+                        if not downstream_started:
+                            await _send_error(
+                                send,
+                                413,
+                                f"request body over {MAX_BODY_BYTES} bytes",
+                                {},
+                            )
                     return {"type": "http.disconnect"}
             return message
 
-        await self.app(scope, capped_receive, send_with_headers)
+        await self.app(scope, capped_receive, wrapped_send)

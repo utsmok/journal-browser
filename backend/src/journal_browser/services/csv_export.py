@@ -50,9 +50,12 @@ async def csv_stream(
     result = await session.stream(stmt.execution_options(yield_per=FLUSH_EVERY))
 
     async def lines() -> AsyncIterator[list[str]]:
-        async for partition in result.partitions(FLUSH_EVERY):
-            for row in partition:
-                yield csv_cells(to_row(row))
+        try:
+            async for partition in result.partitions(FLUSH_EVERY):
+                for row in partition:
+                    yield csv_cells(to_row(row))
+        finally:
+            await result.close()
 
     return lines()
 

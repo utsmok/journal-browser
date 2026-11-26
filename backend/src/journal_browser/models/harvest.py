@@ -125,6 +125,7 @@ class SourceRecord(Base):
             "source_pk",
             text("harvested_at DESC"),
         ),
+        Index("ix_source_records_harvest_run_id", "harvest_run_id"),
     )
 
 

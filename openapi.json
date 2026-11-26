@@ -17589,7 +17589,9 @@
                   "funder",
                   "author",
                   "orgunit",
-                  "publisher"
+                  "publisher",
+                  "partner",
+                  "deal"
                 ]
               },
               {

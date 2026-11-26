@@ -169,6 +169,8 @@ async def gather_openalex_authors(
             " AND jsonb_typeof(sr.payload->'authorships') = 'array'"
             " AND jsonb_typeof(a->'author') = 'object'"
             " AND a->'author'->>'id' IS NOT NULL"
+            " ORDER BY COALESCE(a->>'id', a->'author'->>'id'),"
+            " COALESCE(a->'author'->>'orcid', a->>'orcid') NULLS LAST"
         ).execution_options(stream_results=True, max_row_buffer=STREAM_PARTITION),
         {"source": SOURCE, "entity": "work", "iid": institution.id},
     )
@@ -642,6 +644,7 @@ async def _load_persons(
 
 async def _load_openaire_slice(
     session: AsyncSession,
+    institution_id: int,
     chunk: list[str],
     by_doi_oa: dict[str, list[ExtEntry]],
     aid_orcids_oa: dict[str, set[str]],
@@ -652,18 +655,26 @@ async def _load_openaire_slice(
     doi_expr = func.lower(SourceRecord.payload.op("->>")("doi"))
     # Project just the authors array server-side: fetching whole payloads
     # decoded 500k+ OpenAIRE results in Python and OOM-killed the live run.
-    for doi, authors in (
-        await session.execute(
-            select(
-                doi_expr,
-                SourceRecord.payload.op("->")("authors").label("authors"),
-            ).where(
-                SourceRecord.source == "openaire",
-                SourceRecord.entity_type == "work",
-                doi_expr.in_(chunk),
-            )
+    latest_openaire = (
+        select(
+            doi_expr.label("doi"),
+            SourceRecord.payload.op("->")("authors").label("authors"),
         )
-    ).all():
+        .ext(distinct_on(SourceRecord.source_pk))
+        .join(HarvestRun, HarvestRun.id == SourceRecord.harvest_run_id)
+        .where(
+            SourceRecord.source == "openaire",
+            SourceRecord.entity_type == "work",
+            HarvestRun.institution_id == institution_id,
+            doi_expr.in_(chunk),
+        )
+        .order_by(
+            SourceRecord.source_pk,
+            SourceRecord.harvested_at.desc(),
+            SourceRecord.id.desc(),
+        )
+    )
+    for doi, authors in (await session.execute(latest_openaire)).all():
         for a in authors or []:
             if not isinstance(a, dict):
                 continue
@@ -923,7 +934,6 @@ async def resolve_author_ids(
     # decompose_name parses both orders). Ids are OpenAIRE person keys —
     # mostly orcid-derived — stored as separate source='openaire'
     # identity rows so the namespace never mixes with OpenAlex A-ids.
-    by_doi_oa: dict[str, list[ExtEntry]] = defaultdict(list)
     aid_orcids_oa: dict[str, set[str]] = defaultdict(set)
     aid_names_oa: dict[str, Counter] = defaultdict(Counter)
 
@@ -948,7 +958,8 @@ async def resolve_author_ids(
     sliced_works = 0
     for start in range(0, len(active_dois), DOI_SLICE):
         chunk = active_dois[start : start + DOI_SLICE]
-        await _load_openaire_slice(session, chunk, by_doi_oa, aid_orcids_oa, aid_names_oa)
+        by_doi_oa: dict[str, list[ExtEntry]] = defaultdict(list)
+        await _load_openaire_slice(session, iid, chunk, by_doi_oa, aid_orcids_oa, aid_names_oa)
         doi_of_slice = dict(
             (
                 await session.execute(
@@ -1037,7 +1048,7 @@ async def resolve_author_ids(
             continue
         matched.sort(key=itemgetter(0))
         weak[uuid] = ([(entry, method, w) for w, entry, method in matched], weak_id_sets[uuid])
-    del by_doi_oa, weak_id_sets, weak_matches
+    del weak_id_sets, weak_matches
 
     # Corroboration indexes (A-id -> orcids / display names) for the ids
     # the cascade and the weak rung matched. Column-select only the two

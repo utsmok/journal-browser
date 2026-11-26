@@ -4430,7 +4430,7 @@ export interface components {
             /** Referrer */
             referrer?: string | null;
             /** Ref Type */
-            ref_type?: ("journal" | "funder" | "author" | "orgunit" | "publisher") | null;
+            ref_type?: ("journal" | "funder" | "author" | "orgunit" | "publisher" | "partner" | "deal") | null;
             /** Ref Id */
             ref_id?: string | null;
         };

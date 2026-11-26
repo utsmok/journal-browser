@@ -51,22 +51,24 @@ WORKS_SQL = text(
     """
     WITH latest AS (
         SELECT DISTINCT ON (source_pk)
-            source_pk, payload
+            payload -> 'primary_location' -> 'source' ->> 'issn_l' AS issn_l,
+            payload ->> 'display_name' AS work_title,
+            coalesce(payload ->> 'cited_by_count', '0')::int AS cites
         FROM source_records
         WHERE source = 'openalex' AND entity_type = 'works_stats'
         ORDER BY source_pk, harvested_at DESC
     ),
     ranked AS (
         SELECT
-            payload -> 'primary_location' -> 'source' ->> 'issn_l' AS issn_l,
-            payload ->> 'display_name' AS work_title,
+            issn_l,
+            work_title,
             row_number() OVER (
-                PARTITION BY payload -> 'primary_location' -> 'source' ->> 'issn_l'
-                ORDER BY coalesce(payload ->> 'cited_by_count', '0')::int DESC
+                PARTITION BY issn_l
+                ORDER BY cites DESC
             ) AS rn
         FROM latest
-        WHERE payload -> 'primary_location' -> 'source' ->> 'issn_l' IS NOT NULL
-            AND coalesce(payload ->> 'display_name', '') <> ''
+        WHERE issn_l IS NOT NULL
+            AND coalesce(work_title, '') <> ''
     )
     SELECT issn_l, array_agg(work_title ORDER BY rn) AS titles
     FROM ranked
@@ -131,24 +133,29 @@ async def _store(session: AsyncSession, vectors: list[tuple[str, np.ndarray]]) -
 async def _stream_journals(
     session_factory: async_sessionmaker[AsyncSession], limit: int | None
 ) -> AsyncIterator[tuple[str, str | None, Any]]:
-    """(issn_l, title, topics) per journal in table order, through a
-    server-side cursor on its own session: the one-shot .all() materialized
-    every row, topics included, before the first text was built. The
-    cursor needs yield_per: with stream_results and max_row_buffer the
-    process held the whole result (544 MB) by the time the first row
-    arrived."""
-    async with session_factory() as reader:
-        rows = await reader.stream(
-            select(Journal.issn_l, Journal.title, Journal.topics).execution_options(
-                yield_per=STREAM_ROWS
-            )
+    """(issn_l, title, topics) per journal via keyset-paginated short read
+    transactions, avoiding long-lived cursors across model inference."""
+    last_issn: str | None = None
+    yielded = 0
+    while limit is None or yielded < limit:
+        chunk_limit = STREAM_ROWS if limit is None else min(STREAM_ROWS, limit - yielded)
+        stmt = (
+            select(Journal.issn_l, Journal.title, Journal.topics)
+            .order_by(Journal.issn_l)
+            .limit(chunk_limit)
         )
-        n = 0
-        async for issn_l, title, topics in rows:
-            n += 1
+        if last_issn is not None:
+            stmt = stmt.where(Journal.issn_l > last_issn)
+        async with session_factory() as reader:
+            batch_rows = (await reader.execute(stmt)).all()
+        if not batch_rows:
+            break
+        for issn_l, title, topics in batch_rows:
+            last_issn = issn_l
+            yielded += 1
             yield issn_l, title, topics
-            if limit and n >= limit:
-                break
+        if len(batch_rows) < chunk_limit:
+            break
 
 
 async def embed(
@@ -161,7 +168,7 @@ async def embed(
     # Run bookkeeping: one harvest_runs/harvest_state pair per embed run
     # (source local / journal_embeddings), so the step shows up in
     # freshness like every other job; the run closes on every path,
-    # including "nothing to embed".
+    # including "nothing to embed" and errors.
     cleared = 0
     async with session_factory() as session:
         ingest = IngestSession(session)
@@ -189,58 +196,64 @@ async def embed(
             print(f"stored {stored}", flush=True)
             vectors.clear()
 
-        async for issn_l, title, topics in _stream_journals(session_factory, limit):
-            rows += 1
-            content = embed_text(title, topics, works.get(issn_l))
-            if not content:
-                skipped += 1
-                continue
-            keys.append(issn_l)
-            texts.append((issn_l, content))
-            if len(texts) < batch:
-                continue
-            await embed_texts()
-            if len(vectors) >= DB_CHUNK:
+        try:
+            async for issn_l, title, topics in _stream_journals(session_factory, limit):
+                rows += 1
+                content = embed_text(title, topics, works.get(issn_l))
+                if not content:
+                    skipped += 1
+                    continue
+                keys.append(issn_l)
+                texts.append((issn_l, content))
+                if len(texts) < batch:
+                    continue
+                await embed_texts()
+                if len(vectors) >= DB_CHUNK:
+                    await store_vectors()
+            if texts:
+                await embed_texts()
+            if vectors:
                 await store_vectors()
-        if texts:
-            await embed_texts()
-        if vectors:
-            await store_vectors()
-        print(
-            f"embedded {len(keys)} of {rows} journals (skipped: {skipped} without text)",
-            flush=True,
-        )
-
-        # Full runs also retire vectors whose text vanished (e.g. a journal
-        # lost both title and topics): a stale vector would keep ranking it
-        # in semantic results. --limit runs leave the rest of the DB alone.
-        if limit is None:
-            keyset = set(keys)
-            embedded = (
-                (
-                    await session.execute(
-                        select(Journal.issn_l).where(Journal.embedding.is_not(None))
-                    )
-                )
-                .scalars()
-                .all()
+            print(
+                f"embedded {len(keys)} of {rows} journals (skipped: {skipped} without text)",
+                flush=True,
             )
-            stale = [k for k in embedded if k not in keyset]
-            for start in range(0, len(stale), DB_CHUNK):
-                await session.execute(
-                    update(Journal)
-                    .where(Journal.issn_l.in_(stale[start : start + DB_CHUNK]))
-                    .values(embedding=None)
+
+            # Full runs also retire vectors whose text vanished (e.g. a journal
+            # lost both title and topics): a stale vector would keep ranking it
+            # in semantic results. --limit runs leave the rest of the DB alone.
+            if limit is None:
+                keyset = set(keys)
+                embedded = (
+                    (
+                        await session.execute(
+                            select(Journal.issn_l).where(Journal.embedding.is_not(None))
+                        )
+                    )
+                    .scalars()
+                    .all()
                 )
-            if stale:
-                await session.commit()
-                print(f"cleared {len(stale)} stale embeddings", flush=True)
-            cleared = len(stale)
-        await ingest.finish_run(
-            "completed",
-            {"embedded": len(keys), "skipped_no_text": skipped, "cleared_stale": cleared},
-        )
-        await session.commit()
+                stale = [k for k in embedded if k not in keyset]
+                for start in range(0, len(stale), DB_CHUNK):
+                    await session.execute(
+                        update(Journal)
+                        .where(Journal.issn_l.in_(stale[start : start + DB_CHUNK]))
+                        .values(embedding=None)
+                    )
+                if stale:
+                    await session.commit()
+                    print(f"cleared {len(stale)} stale embeddings", flush=True)
+                cleared = len(stale)
+            await ingest.finish_run(
+                "completed",
+                {"embedded": len(keys), "skipped_no_text": skipped, "cleared_stale": cleared},
+            )
+            await session.commit()
+        except Exception as exc:
+            await session.rollback()
+            await ingest.finish_run("failed", {"error": str(exc)})
+            await session.commit()
+            raise
 
 
 def main(limit: int | None, batch: int) -> None:
