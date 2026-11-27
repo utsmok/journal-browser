@@ -146,7 +146,7 @@ wheels = [
 [[package]]
 name = "bibliofabric"
 version = "0.6.0"
-source = { git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Fbibliofabric&tag=aletheca-v0.4.0#876dec46feb8d733f46d0975bc753661031bbc9d" }
+source = { git = "https://github.com/utsmok/bibliofabric?subdirectory=packages%2Fbibliofabric&tag=stavrophora-v0.3.0#876dec46feb8d733f46d0975bc753661031bbc9d" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
@@ -798,7 +798,7 @@ requires-dist = [
     { name = "levenshtein", specifier = ">=0.27.5" },
     { name = "lxml", specifier = ">=6.1.3" },
     { name = "maxminddb", specifier = ">=3.3.0" },
-    { name = "nameparser", specifier = ">=2.8.0,<3" },
+    { name = "nameparser", specifier = ">=2.8.0,<4" },
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "pgvector", specifier = ">=0.5.1" },
     { name = "pydantic", specifier = ">=2.14.1" },
@@ -1382,11 +1382,11 @@ wheels = [
 
 [[package]]
 name = "nameparser"
-version = "2.8.2"
+version = "3.2.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f5/01/162449ee72f7752253476f3bdb0df59609bac6ee974266bfefc2b3b92a57/nameparser-2.8.2.tar.gz", hash = "sha256:7b6e1bee50aa15f1fd192f9152d21608f351db7fed5593eceea5db589bb2fa08", size = 1373630, upload-time = "2026-11-05T07:56:10.527Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/36/b8/f9be5a761a2311e25fd7cd5efdeb57044b5356c5cb128f0df5a6f0fa1538/nameparser-3.2.0.tar.gz", hash = "sha256:bdf442a88959c60df9bb78a63697d47883fc6c1e604e7550dd37cff08dcbe7a6", size = 2228402, upload-time = "2026-11-23T01:16:40.102Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/59/59/5ec114435e7f7b5c59fd8fc99fb14fdcc26a9b49f33afc10dc40189c5ded/nameparser-2.8.2-py3-none-any.whl", hash = "sha256:db5c53dd114511ca82f9ae7e6d85f252eee256b707a6a0e97c40b9e534182f2c", size = 490808, upload-time = "2026-11-05T07:56:09.049Z" },
+    { url = "https://files.pythonhosted.org/packages/dc/8c/7e5cbd49b3c067e72d9493357beb3a3d5464780256ca8beac0b2d4330c9c/nameparser-3.2.0-py3-none-any.whl", hash = "sha256:9321a5793961cc40eca0d6f6da93621e750ac03a22252389864a41652604064f", size = 885499, upload-time = "2026-11-23T01:16:38.409Z" },
 ]
 
 [[package]]
